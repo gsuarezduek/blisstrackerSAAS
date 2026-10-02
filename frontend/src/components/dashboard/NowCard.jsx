@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import api from '../../api/client'
 import { activeSeconds, fmtDuration } from '../../utils/format'
 import { renderRichText } from '../../utils/richText'
@@ -42,6 +42,7 @@ function Meta({ task, onOpenComments }) {
 
 export default function NowCard({ activeTask, suggestion, onUpdate, onOpenComments, onAddTask, dayEnded }) {
   const { members } = useMembers()
+  const navigate = useNavigate()
   const [busy, setBusy] = useState(null) // endpoint en curso
   const [blocking, setBlocking] = useState(false)
   const [reason, setReason] = useState('')
@@ -50,10 +51,18 @@ export default function NowCard({ activeTask, suggestion, onUpdate, onOpenCommen
   useEffect(() => { if (blocking) reasonRef.current?.focus() }, [blocking])
   useEffect(() => { setBlocking(false); setReason('') }, [activeTask?.id])
 
+  // "Empezar" sobre la Task "reserva" de una invitación de Calendario ya aceptada
+  // arranca la reunión real para todos los que aceptaron (ver tasks/lifecycle.controller.js
+  // #startTask) — la respuesta trae `meetingStarted` en vez de la tarea, así que en vez de
+  // reflejarla acá se manda al usuario a Reuniones del proyecto para tomar notas.
   async function call(task, endpoint, body) {
     setBusy(endpoint)
     try {
       const { data } = await api.patch(`/tasks/${task.id}/${endpoint}`, body)
+      if (data.meetingStarted) {
+        navigate(`/my-projects/${data.projectId}?infoTab=reuniones&meeting=${data.meetingId}`)
+        return true
+      }
       onUpdate(data)
       return true
     } catch (err) {

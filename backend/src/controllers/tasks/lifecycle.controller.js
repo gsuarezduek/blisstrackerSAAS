@@ -3,11 +3,13 @@ const { todayString } = require('../../utils/dates')
 const {
   buildRecurrenceParams, firstScheduledDate, spawnInstance,
 } = require('../../services/recurrence.service')
-const { isAdmin } = require('../../lib/projectAccess')
+const { isAdmin, canWrite } = require('../../lib/projectAccess')
 const { resolveMentions } = require('../../lib/mentions')
 const { emitTo } = require('../../lib/socket')
 const { nextOnTaskDone } = require('../../lib/contentCatalog')
 const { maybeAutoFinishMeeting } = require('../../lib/projectMeetingLifecycle')
+const { loadEvent } = require('../../lib/calendarEvents')
+const { startMeetingCore } = require('../calendar.controller')
 const { statusSideEffects, logEvent, loadPiece, formatPiece, emitPieceUpdated } = require('../content.controller')
 const { taskInclude, assertNoActiveTask, handleActiveTaskConflict } = require('./_shared')
 const { sendPushToUser } = require('../../services/pushNotification.service')
@@ -264,15 +266,41 @@ async function create(req, res, next) {
 async function startTask(req, res, next) {
   try {
     const userId = req.user.userId
-    await assertNoActiveTask(userId, req.workspace?.id)
+    const workspaceId = req.workspace.id
+    await assertNoActiveTask(userId, workspaceId)
 
     const existing = await prisma.task.findUnique({ where: { id: Number(req.params.id) } })
     if (!existing || existing.userId !== userId) return res.status(404).json({ error: 'Tarea no encontrada' })
     if (existing.isBacklog) return res.status(400).json({ error: 'Agregá la tarea al día primero para iniciarla.' })
     if (existing.status !== 'PENDING') return res.status(400).json({ error: 'Solo se puede iniciar una tarea pendiente.' })
 
-    const now = new Date()
     const taskId = Number(req.params.id)
+
+    // Si esta Task es la "reserva" de una invitación de Calendario ya aceptada (ver
+    // CalendarEventParticipant.taskId), iniciarla desde acá no debe arrancar solo esta
+    // tarea individual: dispara la reunión real para TODOS los que aceptaron — mismo
+    // flujo que "Iniciar reunión" desde el Calendario, sin tener que ir hasta ahí — y
+    // el frontend redirige a la pestaña Reuniones del proyecto para tomar notas.
+    // Si el usuario no tiene `canWrite` sobre el proyecto (no es admin/miembro del
+    // equipo), se cae al inicio normal de su propia tarea, igual que si no estuviera
+    // vinculada — no vale la pena bloquear con un error acá.
+    const calendarLink = await prisma.calendarEventParticipant.findUnique({
+      where: { taskId }, select: { eventId: true },
+    })
+    if (calendarLink) {
+      const event = await loadEvent(calendarLink.eventId, workspaceId)
+      if (event && event.projectId && !event.realMeetingId && await canWrite(req, event.projectId)) {
+        try {
+          const result = await startMeetingCore(event, { requesterId: userId, workspaceId, tz: req.workspace.timezone })
+          return res.json({ meetingStarted: true, projectId: event.projectId, meetingId: result.meeting.id })
+        } catch (e) {
+          if (e.status) return res.status(e.status).json({ error: e.message })
+          throw e
+        }
+      }
+    }
+
+    const now = new Date()
     const [task] = await prisma.$transaction([
       prisma.task.update({
         where: { id: taskId, userId },

@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, memo } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import api from '../api/client'
 import { renderRichText } from '../utils/richText'
 import { fmtMins, activeMinutes } from '../utils/format'
@@ -62,6 +62,7 @@ function OverflowMenu({ items }) {
 
 function TaskCard({ task, onUpdate, onDelete, activeTask, backlog, future, onAddToToday, onBringToToday, onMoveToBacklog, onOpenComments }) {
   const { members } = useMembers()
+  const navigate = useNavigate()
   const [loading, setLoading] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [showBlock, setShowBlock] = useState(false)
@@ -79,13 +80,24 @@ function TaskCard({ task, onUpdate, onDelete, activeTask, backlog, future, onAdd
   }
 
   // Iniciar / retomar / desbloquear — si hay otra tarea en curso, primero la pausa.
+  // "Iniciar" sobre la Task "reserva" de una invitación de Calendario ya aceptada
+  // arranca la reunión real para todos los que aceptaron (ver tasks/lifecycle.controller.js
+  // #startTask): la respuesta trae `meetingStarted` en vez de la tarea actualizada — esta
+  // Task ya no existe (se reemplazó por las de la reunión), así que se saca de la lista y
+  // se manda al usuario a Reuniones del proyecto para tomar notas.
   function startOrSwitch(endpoint) {
     return run(async () => {
       if (activeTask && activeTask.id !== task.id) {
         const { data: paused } = await api.patch(`/tasks/${activeTask.id}/pause`)
         onUpdate(paused)
       }
-      onUpdate(await patch(endpoint))
+      const data = await patch(endpoint)
+      if (data.meetingStarted) {
+        onDelete?.(task.id)
+        navigate(`/my-projects/${data.projectId}?infoTab=reuniones&meeting=${data.meetingId}`)
+        return
+      }
+      onUpdate(data)
     })
   }
 

@@ -721,11 +721,48 @@ async function respondEventDeclineSeries(req, res, next, existing) {
   } catch (err) { next(err) }
 }
 
+// Núcleo reusable de "Iniciar reunión": crea la ProjectMeeting real + un
+// ProjectMeetingParticipant por cada invitado que ACEPTÓ (los pending/declined no
+// se llevan), arranca sus tareas (startMeetingParticipants) y da de baja las Tasks
+// "reserva" que ya no hacen falta. Asume que el caller ya validó permisos y estado
+// del evento (existe, tiene proyecto, no arrancó). Lanza errores TIPADOS
+// (`err.status`) en vez de responder HTTP directo — la usan tanto el endpoint HTTP
+// de Calendario (`startMeetingFromEvent`) como tasks/lifecycle.controller.js#startTask
+// cuando alguien inicia desde su Dashboard la Task "reserva" de una invitación
+// aceptada, para que ese único click arranque la reunión para todo el mundo en vez
+// de solo la tarea personal de quien la apretó.
+async function startMeetingCore(existing, { requesterId, workspaceId, tz }) {
+  const acceptedUserIds = existing.participants.filter(p => p.status === 'accepted').map(p => p.userId)
+  if (!acceptedUserIds.length) {
+    throw Object.assign(new Error('No hay participantes que hayan aceptado la invitación'), { status: 400 })
+  }
+
+  const meeting = await prisma.projectMeeting.create({
+    data: { projectId: existing.projectId, workspaceId, date: todayString(tz), type: 'internal', title: existing.title },
+  })
+  await prisma.projectMeetingParticipant.createMany({
+    data: acceptedUserIds.map(userId => ({ meetingId: meeting.id, workspaceId, userId })),
+    skipDuplicates: true,
+  })
+  const participants = await prisma.projectMeetingParticipant.findMany({ where: { meetingId: meeting.id } })
+
+  // Puede lanzar {status:409} si alguien del grupo ya tiene otra tarea en curso —
+  // se propaga tal cual, cada caller decide cómo mostrarlo.
+  await startMeetingParticipants(meeting, participants, { requesterId, workspaceId, tz })
+
+  // La reunión real ya les creó su propia Task IN_PROGRESS (ProjectMeetingParticipant.taskId)
+  // — la tarea "reserva" que tenían por haber aceptado la invitación queda de más.
+  const accepted = existing.participants.filter(p => acceptedUserIds.includes(p.userId))
+  for (const p of accepted) await removeTaskIfPending(p)
+
+  await prisma.calendarEvent.update({ where: { id: existing.id }, data: { realMeetingId: meeting.id } })
+
+  const freshEvent = await loadEvent(existing.id, workspaceId)
+  emitTo(`workspace:${workspaceId}`, 'calendar:event:updated', { event: formatEvent(freshEvent) })
+  return { meeting, freshEvent }
+}
+
 // ─── POST /api/calendar/events/:id/start-meeting ────────────────────────────
-// Conecta con el sistema de reuniones existente: crea la ProjectMeeting real +
-// un ProjectMeetingParticipant por cada invitado que ACEPTÓ (los pending/declined
-// no se llevan), y reusa startMeetingParticipants (mismo busy-check y transacción
-// que projectMeetings.controller.js#startMeeting, sin reescribirla).
 async function startMeetingFromEvent(req, res, next) {
   try {
     const workspaceId = req.workspace.id
@@ -738,40 +775,20 @@ async function startMeetingFromEvent(req, res, next) {
     if (existing.realMeetingId) return res.status(409).json({ error: 'La reunión ya fue iniciada' })
     if (!(await canWrite(req, existing.projectId))) return res.status(403).json({ error: 'No tenés acceso a este proyecto' })
 
-    const acceptedUserIds = existing.participants.filter(p => p.status === 'accepted').map(p => p.userId)
-    if (!acceptedUserIds.length) return res.status(400).json({ error: 'No hay participantes que hayan aceptado la invitación' })
-
-    const meeting = await prisma.projectMeeting.create({
-      data: { projectId: existing.projectId, workspaceId, date: todayString(tz), type: 'internal', title: existing.title },
-    })
-    await prisma.projectMeetingParticipant.createMany({
-      data: acceptedUserIds.map(userId => ({ meetingId: meeting.id, workspaceId, userId })),
-      skipDuplicates: true,
-    })
-    const participants = await prisma.projectMeetingParticipant.findMany({ where: { meetingId: meeting.id } })
-
+    let result
     try {
-      await startMeetingParticipants(meeting, participants, { requesterId, workspaceId, tz })
+      result = await startMeetingCore(existing, { requesterId, workspaceId, tz })
     } catch (e) {
       if (e.status) return res.status(e.status).json({ error: e.message })
       throw e
     }
 
-    // La reunión real ya les creó su propia Task IN_PROGRESS (ProjectMeetingParticipant.taskId)
-    // — la tarea "reserva" que tenían por haber aceptado la invitación queda de más.
-    const accepted = existing.participants.filter(p => acceptedUserIds.includes(p.userId))
-    for (const p of accepted) await removeTaskIfPending(p)
-
-    await prisma.calendarEvent.update({ where: { id: existing.id }, data: { realMeetingId: meeting.id } })
-
-    const freshEvent = await loadEvent(existing.id, workspaceId)
-    emitTo(`workspace:${workspaceId}`, 'calendar:event:updated', { event: formatEvent(freshEvent) })
-    res.json({ event: formatEvent(freshEvent), meetingId: meeting.id })
+    res.json({ event: formatEvent(result.freshEvent), meetingId: result.meeting.id })
   } catch (err) { next(err) }
 }
 
 module.exports = {
   listEvents, getAvailability, commonFreeSlots,
   createEvent, getEvent, updateEvent, deleteEvent,
-  respondEvent, startMeetingFromEvent,
+  respondEvent, startMeetingFromEvent, startMeetingCore,
 }

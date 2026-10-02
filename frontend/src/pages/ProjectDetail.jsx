@@ -480,7 +480,11 @@ export default function ProjectDetail() {
               )}
 
               {activeTab === 'reuniones' && (
-                <ProjectMeetings projectId={data.project.id} canEdit={canEditProject} />
+                <ProjectMeetings
+                  projectId={data.project.id}
+                  canEdit={canEditProject}
+                  deepLinkMeetingId={Number(searchParams.get('meeting')) || null}
+                />
               )}
 
               {activeTab === 'archivos' && (
