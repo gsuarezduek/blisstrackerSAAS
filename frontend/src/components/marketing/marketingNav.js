@@ -11,15 +11,21 @@ export const NAV = [
   {
     id: 'geo-seo',
     label: '🤖 GEO / SEO',
+    // 3 sub-pestañas por intención (¿cómo está el sitio? / ¿por qué rankeo? /
+    // ¿qué escribo?). Las que agrupan varias herramientas las muestran como
+    // `views` (selector segmentado dentro del contenido, `?view=`).
     subs: [
-      { id: 'geo',            label: '🤖 GEO' },
-      { id: 'seo',            label: '🔍 SEO' },
-      { id: 'onpage',         label: '🔬 On-Page' },
-      { id: 'keywords',       label: '🔑 Keywords' },
-      { id: 'contenido',      label: '✍️ Content Brief' },
-      { id: 'content-gap',    label: '🆚 Content Gap' },
-      { id: 'plan',           label: '📋 Plan de acción' },
-      { id: 'canibalizacion', label: '⚠️ Canibalización' },
+      { id: 'diagnostico', label: '🩺 Diagnóstico', views: [
+        { id: 'geo',            label: '🤖 GEO' },
+        { id: 'seo',            label: '🔍 SEO' },
+        { id: 'onpage',         label: '🔬 On-Page' },
+        { id: 'canibalizacion', label: '⚠️ Canibalización' },
+      ] },
+      { id: 'keywords',  label: '🔑 Keywords y oportunidades' },
+      { id: 'contenido', label: '✍️ Contenido SEO', views: [
+        { id: 'brief', label: '✍️ Content Brief' },
+        { id: 'gap',   label: '🆚 Content Gap' },
+      ] },
     ],
   },
   {
@@ -48,8 +54,6 @@ export const NAV = [
     subs: [
       { id: 'meta-ads',     label: '📘 Meta Ads' },
       { id: 'google-ads',   label: '🔍 Google Ads' },
-      { id: 'linkedin-ads', label: '💼 LinkedIn Ads', soon: true },
-      { id: 'tiktok-ads',   label: '🎵 TikTok Ads',   soon: true },
     ],
   },
   {
@@ -63,10 +67,10 @@ export const NAV = [
 // visibles" en Preferencias → Módulos → Marketing.
 export const SECTION_DESCRIPTIONS = {
   hoy:        'Recomendaciones top del workspace: objetivos atrasados, hallazgos de SEO/GEO, performance, anuncios e informes pendientes.',
-  'geo-seo':  'Auditoría GEO, SEO on-page, keywords, content briefs, canibalización.',
+  'geo-seo':  'Diagnóstico (GEO, SEO, On-Page, canibalización), keywords y contenido SEO.',
   web:        'Analytics (GA4) y Performance (PageSpeed).',
   rrss:       'Instagram, TikTok, LinkedIn, Facebook, YouTube y Competidores.',
-  anuncios:   'Meta Ads y Google Ads (LinkedIn/TikTok Ads próximamente).',
+  anuncios:   'Meta Ads y Google Ads.',
   informes:   'Informes mensuales para compartir con el cliente.',
 }
 
@@ -77,7 +81,20 @@ export const LEGACY_MAP = {
   web:        { tab: 'web',      sub: 'analytics' },
   anuncios:   { tab: 'anuncios', sub: 'google-ads' },
   contenidos: { tab: 'rrss',     sub: 'instagram' },
-  informes:   { tab: 'informes', sub: 'salud' },
+  informes:   { tab: 'informes' },
+}
+
+// Sub-pestañas viejas de GEO / SEO (antes eran 8 sueltas) → dónde viven ahora.
+// "Plan de acción" se fusionó en Prioridades (mismos hallazgos, ya agregados ahí).
+export const LEGACY_SUB_MAP = {
+  'geo-seo': {
+    geo:            { sub: 'diagnostico', view: 'geo' },
+    seo:            { sub: 'diagnostico', view: 'seo' },
+    onpage:         { sub: 'diagnostico', view: 'onpage' },
+    canibalizacion: { sub: 'diagnostico', view: 'canibalizacion' },
+    'content-gap':  { sub: 'contenido',   view: 'gap' },
+    plan:           { tab: 'hoy' },
+  },
 }
 
 export const VALID_TABS = new Set(NAV.map(n => n.id))

@@ -4,6 +4,8 @@ import api from '../../api/client'
 import LoadingSpinner from '../LoadingSpinner'
 import CreateTaskModal from './CreateTaskModal'
 import BulkCreateTaskModal from './BulkCreateTaskModal'
+import ConnectionsPanel from './ConnectionsPanel'
+import { useWorkspace } from '../../context/WorkspaceContext'
 
 const PRIORITY = {
   high:   { label: 'Alta',  cls: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300' },
@@ -25,8 +27,10 @@ const SOURCE_LABEL = {
  * Panel único "Prioridades": agrega los pendientes accionables de todas las áreas de
  * Marketing habilitadas (SEO/GEO, Objetivos, RRSS, Ads, Informes, Contenido) en un
  * backlog agrupado por sección con tope de 3 por grupo (`data.groups`, calculado en
- * marketingPending.service.js), con el mismo patrón de selección múltiple + creación
- * de tareas en masa que ya prueba ActionPlanTab.jsx.
+ * marketingPending.service.js), con selección múltiple + creación de tareas en masa.
+ * Absorbió al viejo "Plan de acción" de GEO / SEO (sus hallazgos ya venían acá) —
+ * cada grupo se puede expandir para ver todo, no solo el top 3. Arriba, el panel de
+ * Conexiones muestra qué fuentes de datos del proyecto están activas o vencidas.
  */
 export default function PrioridadesTab({ projectId, projects, onSelectProject, onNavigate }) {
   if (!projectId) return <WorkspacePending onSelectProject={onSelectProject} />
@@ -156,13 +160,15 @@ function ProjectPending({ projectId, projects, onNavigate }) {
   const [taskModalItems, setTaskModalItems] = useState(null) // items pendientes de confirmar en el modal
   const [showDismissed, setShowDismissed] = useState(false)
   const [dismissedList, setDismissedList] = useState(null)
+  const [expandedGroups, setExpandedGroups] = useState(() => new Set())
+  const { workspace } = useWorkspace()
 
   const selectedProject = (projects ?? []).find(p => String(p.id) === String(projectId))
 
   const load = useCallback((pid) => {
     if (!pid) return
     setLoading(true); setErr(''); setData(null); setSelected(new Set()); setTaskModalItems(null)
-    setShowDismissed(false); setDismissedList(null)
+    setShowDismissed(false); setDismissedList(null); setExpandedGroups(new Set())
     api.get(`/marketing/projects/${pid}/pending`)
       .then(r => setData(r.data))
       .catch(e => setErr(e.response?.data?.error || 'Error al cargar los pendientes'))
@@ -231,19 +237,36 @@ function ProjectPending({ projectId, projects, onNavigate }) {
     } catch {}
   }
 
-  if (loading) return <LoadingSpinner size="lg" />
+  const connections = (
+    <ConnectionsPanel
+      projectId={projectId}
+      websiteUrl={selectedProject?.websiteUrl}
+      disabledSections={workspace?.marketingDisabledSections || []}
+      onNavigate={onNavigate}
+    />
+  )
+
+  if (loading) return <div className="space-y-5">{connections}<LoadingSpinner size="lg" /></div>
   if (err) return (
-    <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-8 text-center">
-      <div className="text-3xl mb-3">⚠️</div>
-      <p className="text-sm text-gray-600 dark:text-gray-300">{err}</p>
+    <div className="space-y-5">
+      {connections}
+      <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-8 text-center">
+        <div className="text-3xl mb-3">⚠️</div>
+        <p className="text-sm text-gray-600 dark:text-gray-300">{err}</p>
+      </div>
     </div>
   )
   if (!data) return null
 
   const { items, groups, dismissedCount } = data
 
+  function toggleGroup(id) {
+    setExpandedGroups(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
+  }
+
   return (
     <div className="space-y-5">
+      {connections}
       {items.length === 0 ? (
         <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-8 text-center">
           <div className="text-3xl mb-2">✅</div>
@@ -269,17 +292,20 @@ function ProjectPending({ projectId, projects, onNavigate }) {
 
           {/* Grupos por sección */}
           <div className="space-y-4">
-            {groups.map(g => (
+            {groups.map(g => {
+              const open = expandedGroups.has(g.id)
+              const groupItems = open ? items.filter(it => it.section === g.id) : g.items
+              return (
               <div key={g.id} className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden">
                 <div className="px-5 py-3 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between">
                   <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">{g.label}</h3>
                   {g.total > 0 && <span className="text-xs text-gray-400 dark:text-gray-500">{g.total} pendiente{g.total === 1 ? '' : 's'}</span>}
                 </div>
-                {g.items.length === 0 ? (
+                {groupItems.length === 0 ? (
                   <p className="px-5 py-3.5 text-sm text-gray-400 dark:text-gray-500">✅ Sin pendientes en esta sección.</p>
                 ) : (
                   <div className="divide-y divide-gray-100 dark:divide-gray-700">
-                    {g.items.map(it => (
+                    {groupItems.map(it => (
                       <PendingItemRow
                         key={it.key}
                         it={it}
@@ -293,14 +319,17 @@ function ProjectPending({ projectId, projects, onNavigate }) {
                 )}
                 {g.moreCount > 0 && (
                   <button
-                    onClick={() => onNavigate?.({ tab: g.id })}
+                    type="button"
+                    onClick={() => toggleGroup(g.id)}
+                    aria-expanded={open}
                     className="w-full text-left px-5 py-2.5 text-xs font-medium text-primary-600 dark:text-primary-400 hover:underline border-t border-gray-100 dark:border-gray-700"
                   >
-                    Ver los {g.moreCount} restantes en {g.label} →
+                    {open ? 'Mostrar solo los 3 más importantes' : `Ver los ${g.moreCount} restantes`}
                   </button>
                 )}
               </div>
-            ))}
+              )
+            })}
           </div>
         </>
       )}

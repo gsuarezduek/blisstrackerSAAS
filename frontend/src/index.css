@@ -40,3 +40,9 @@
     border-color: rgba(128, 128, 128, 0.22);
   }
 }
+
+@layer utilities {
+  /* Fila con scroll horizontal sin barra visible (tabs en mobile). */
+  .scrollbar-none { scrollbar-width: none; -ms-overflow-style: none; }
+  .scrollbar-none::-webkit-scrollbar { display: none; }
+}

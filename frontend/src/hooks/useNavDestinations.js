@@ -90,6 +90,11 @@ export default function useNavDestinations() {
         for (const sub of group.subs) {
           if (sub.soon) continue
           destinations.push({ to: `/marketing?tab=${group.id}&sub=${sub.id}`, label: `🎯 Marketing · ${sub.label}` })
+          // Herramientas agrupadas dentro de una sub-pestaña (ej. Diagnóstico → GEO,
+          // SEO, On-Page…) siguen encontrándose por su propio nombre.
+          for (const v of sub.views ?? []) {
+            destinations.push({ to: `/marketing?tab=${group.id}&sub=${sub.id}&view=${v.id}`, label: `🎯 Marketing · ${v.label}` })
+          }
         }
       }
     }
