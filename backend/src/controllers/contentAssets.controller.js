@@ -1,6 +1,6 @@
 const prisma = require('../lib/prisma')
 const objectStorage = require('../services/objectStorage.service')
-const { getSetting } = require('../lib/platformSettings')
+const { getEffectiveCategoryLimitMb } = require('../lib/storageBudget')
 const { emitTo } = require('../lib/socket')
 const { validateImageUpload } = require('../lib/imageType')
 const { validateMediaHeader } = require('../lib/mediaType')
@@ -85,9 +85,13 @@ async function assertPendingSlot(pieceId) {
   return null
 }
 
-/** Cuota de storage del workspace (assets ready + pending). 0 = ilimitado. */
+/**
+ * Cuota de storage del workspace (assets ready + pending). 0 = ilimitado.
+ * Usa el override puntual del workspace si lo tiene (SuperAdmin → Workspaces),
+ * si no el default global `contentStorageMaxMbPerWorkspace`.
+ */
 async function assertWithinQuota(workspaceId, extraBytes) {
-  const limitMb = await getSetting('contentStorageMaxMbPerWorkspace')
+  const limitMb = await getEffectiveCategoryLimitMb(workspaceId, 'contentStorageMaxMbOverride', 'contentStorageMaxMbPerWorkspace')
   if (!limitMb) return null
   const limitBytes = limitMb * 1024 * 1024
   const agg = await prisma.contentAsset.aggregate({

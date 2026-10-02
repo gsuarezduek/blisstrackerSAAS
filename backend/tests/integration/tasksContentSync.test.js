@@ -9,6 +9,7 @@ jest.mock('../../src/lib/prisma', () => ({
   eOSTodo:            { updateMany: jest.fn() },
   projectMeetingTodo: { updateMany: jest.fn() },
   projectMeetingParticipant: { findUnique: jest.fn() },
+  calendarEventParticipant:  { findUnique: jest.fn() },
   leadAction:         { updateMany: jest.fn(), findUnique: jest.fn() },
   contentPiece:       { findUnique: jest.fn(), findFirst: jest.fn(), update: jest.fn() },
   contentStatusEvent: { create: jest.fn() },
@@ -56,6 +57,7 @@ function mockBase() {
   prisma.projectMeetingTodo.updateMany.mockResolvedValue({ count: 0 })
   prisma.leadAction.updateMany.mockResolvedValue({ count: 0 })
   prisma.leadAction.findUnique.mockResolvedValue(null)
+  prisma.calendarEventParticipant.findUnique.mockResolvedValue(null) // startTask: no es la Task "reserva" de un evento de Calendario
   prisma.taskSession.updateMany.mockResolvedValue({ count: 1 })
   prisma.task.findFirst.mockResolvedValue(null) // assertNoActiveTask: sin tarea en curso
   prisma.taskSession.create.mockResolvedValue({ id: 1 })

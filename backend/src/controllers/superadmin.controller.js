@@ -77,7 +77,7 @@ async function getWorkspace(req, res, next) {
     const { startOfCurrentMonth } = require('../lib/tokenBudget')
     const { computeWorkspaceStorageUsage } = require('../services/workspaceStorage.service')
 
-    const [workspace, members, projects, tokenStats, monthlyUsageAgg, storageUsage] = await Promise.all([
+    const [workspace, members, projects, tokenStats, monthlyUsageAgg, storageUsage, storageQuotaDefaults] = await Promise.all([
       prisma.workspace.findUnique({
         where: { id },
         include: { subscription: true },
@@ -102,6 +102,7 @@ async function getWorkspace(req, res, next) {
         _sum:  { inputTokens: true, outputTokens: true },
       }),
       computeWorkspaceStorageUsage(id),
+      getSettings(['projectFilesMaxMbPerWorkspace', 'contentStorageMaxMbPerWorkspace', 'chatAttachmentMaxMbPerWorkspace']),
     ])
 
     if (!workspace) return res.status(404).json({ error: 'Workspace no encontrado' })
@@ -122,6 +123,13 @@ async function getWorkspace(req, res, next) {
       monthlyTokenUsed,
       storageUsedBytes: storageUsage.total,
       storageBreakdown: storageUsage,
+      // Defaults globales (PlatformSetting) de cada cuota que SÍ bloquea subidas —
+      // el front los muestra como placeholder cuando el workspace no tiene override.
+      storageQuotaDefaults: {
+        projectFilesMaxMb:   storageQuotaDefaults.projectFilesMaxMbPerWorkspace,
+        contentStorageMaxMb: storageQuotaDefaults.contentStorageMaxMbPerWorkspace,
+        chatAttachmentMaxMb: storageQuotaDefaults.chatAttachmentMaxMbPerWorkspace,
+      },
     })
   } catch (err) { next(err) }
 }
@@ -165,6 +173,52 @@ async function updateStorageLimit(req, res, next) {
       where: { id },
       data:  { storageLimitMb: limit },
       select: { id: true, name: true, storageLimitMb: true },
+    })
+    res.json(workspace)
+  } catch (err) { next(err) }
+}
+
+// body key → columna de Workspace, para updateStorageQuotas de abajo.
+const STORAGE_QUOTA_FIELDS = {
+  projectFilesMaxMb:   'projectFilesMaxMbOverride',
+  contentStorageMaxMb: 'contentStorageMaxMbOverride',
+  chatAttachmentMaxMb: 'chatAttachmentMaxMbOverride',
+}
+
+/**
+ * PATCH /api/superadmin/workspaces/:id/storage-quotas
+ * Override puntual por workspace de las cuotas que SÍ bloquean subidas
+ * (Archivos/Contenido/Chat — a diferencia de storageLimitMb, que es solo
+ * informativo). Body: { projectFilesMaxMb?, contentStorageMaxMb?, chatAttachmentMaxMb? }
+ * — cada campo presente admite `null` (vuelve a usar el default global de
+ * PlatformSetting) o un entero ≥ 0 (0 = ilimitado para ESTE workspace). Solo
+ * se tocan los campos presentes en el body.
+ */
+async function updateStorageQuotas(req, res, next) {
+  try {
+    const id = Number(req.params.id)
+    const data = {}
+    for (const [bodyKey, column] of Object.entries(STORAGE_QUOTA_FIELDS)) {
+      if (!(bodyKey in req.body)) continue
+      const raw = req.body[bodyKey]
+      if (raw === null) { data[column] = null; continue }
+      const n = Number(raw)
+      if (!Number.isInteger(n) || n < 0) {
+        return res.status(400).json({ error: `${bodyKey} debe ser un entero ≥ 0, o null para usar el default global` })
+      }
+      data[column] = n
+    }
+    if (!Object.keys(data).length) return res.status(400).json({ error: 'Nada para actualizar' })
+
+    const workspace = await prisma.workspace.update({
+      where: { id },
+      data,
+      select: {
+        id: true, name: true,
+        projectFilesMaxMbOverride: true,
+        contentStorageMaxMbOverride: true,
+        chatAttachmentMaxMbOverride: true,
+      },
     })
     res.json(workspace)
   } catch (err) { next(err) }
@@ -1035,4 +1089,4 @@ async function getMetrics(req, res, next) {
   } catch (err) { next(err) }
 }
 
-module.exports = { listWorkspaces, getWorkspace, updateWorkspaceStatus, updateTokenLimit, updateStorageLimit, updateWorkspaceBillingExempt, impersonate, getStats, listFeedback, markFeedbackRead, listEmailLogs, getBillingOverview, listPayments, getAiTokenStats, getWhatsappUsageStats, listUsers, toggleUserActive, toggleUserDailyInsight, toggleUserSuperAdmin, getConversionFunnel, getMetrics }
+module.exports = { listWorkspaces, getWorkspace, updateWorkspaceStatus, updateTokenLimit, updateStorageLimit, updateStorageQuotas, updateWorkspaceBillingExempt, impersonate, getStats, listFeedback, markFeedbackRead, listEmailLogs, getBillingOverview, listPayments, getAiTokenStats, getWhatsappUsageStats, listUsers, toggleUserActive, toggleUserDailyInsight, toggleUserSuperAdmin, getConversionFunnel, getMetrics }

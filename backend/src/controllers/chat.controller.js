@@ -8,7 +8,7 @@ const { MESSAGE_INCLUDE } = require('../lib/chatMessageInclude')
 const { sendPushToUser } = require('../services/pushNotification.service')
 const objectStorage = require('../services/objectStorage.service')
 const { validateImageUpload } = require('../lib/imageType')
-const { getSetting } = require('../lib/platformSettings')
+const { getEffectiveCategoryLimitMb } = require('../lib/storageBudget')
 
 const MESSAGE_PAGE_SIZE = 50
 
@@ -29,7 +29,7 @@ function resolveAttachmentKind(mimetype) {
 }
 
 async function assertAttachmentQuota(workspaceId, extraBytes) {
-  const limitMb = await getSetting('chatAttachmentMaxMbPerWorkspace')
+  const limitMb = await getEffectiveCategoryLimitMb(workspaceId, 'chatAttachmentMaxMbOverride', 'chatAttachmentMaxMbPerWorkspace')
   if (!limitMb) return null // 0 = ilimitado
   const agg = await prisma.chatAttachment.aggregate({ where: { workspaceId }, _sum: { sizeBytes: true } })
   if ((agg._sum.sizeBytes || 0) + extraBytes > limitMb * 1024 * 1024) {

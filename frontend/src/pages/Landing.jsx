@@ -8,7 +8,6 @@ import TrustedByBar from '../components/landing/TrustedByBar'
 import SegmentCards from '../components/landing/SegmentCards'
 import ComparisonTable from '../components/landing/ComparisonTable'
 import TestimonialsSection from '../components/landing/TestimonialsSection'
-import FounderBio from '../components/landing/FounderBio'
 import { useTypewriter } from '../hooks/useTypewriter'
 import usePublicPricing from '../hooks/usePublicPricing'
 
@@ -329,7 +328,6 @@ export default function Landing() {
         name: 'BlissTracker',
         url: 'https://blisstracker.app/',
         logo: 'https://blisstracker.app/blisstracker_logo.svg',
-        founder: { '@type': 'Person', name: 'Gastón Suárez Duek' },
         email: 'gaston@blissmkt.ar',
         sameAs: ['https://blissmkt.ar'],
       },
@@ -739,9 +737,6 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* ── Hecho por ── */}
-      <FounderBio />
-
       {/* ── FAQ ── */}
       <section id="faq" className="py-24 px-4 sm:px-6 bg-gray-50">
         <div className="max-w-3xl mx-auto">
@@ -823,7 +818,6 @@ export default function Landing() {
             <div>
               <p className="text-xs font-semibold uppercase tracking-wider text-gray-300 mb-3">Empresa</p>
               <ul className="space-y-2 text-sm">
-                <li><a href="#hecho-por"     className="hover:text-white transition-colors">Sobre el founder</a></li>
                 <li><a href="mailto:gaston@blissmkt.ar" className="hover:text-white transition-colors">Contacto</a></li>
                 <li><a href="https://blissmkt.ar" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">BlissMKT ↗</a></li>
               </ul>
@@ -839,9 +833,8 @@ export default function Landing() {
             </div>
           </div>
 
-          <div className="border-t border-gray-800 mt-10 pt-6 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-gray-500">
+          <div className="border-t border-gray-800 mt-10 pt-6 flex items-center justify-center text-xs text-gray-500">
             <span>&copy; {new Date().getFullYear()} BlissTracker — Todos los derechos reservados</span>
-            <span>Hecho con foco en Buenos Aires</span>
           </div>
         </div>
       </footer>

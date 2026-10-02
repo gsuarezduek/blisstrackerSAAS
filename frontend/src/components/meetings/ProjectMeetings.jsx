@@ -545,7 +545,7 @@ function MeetingCard({ meeting, members, canEdit, expanded, onToggle, onSave, on
 
 const MEETINGS_PAGE_SIZE = 5
 
-export default function ProjectMeetings({ projectId, canEdit }) {
+export default function ProjectMeetings({ projectId, canEdit, deepLinkMeetingId }) {
   const [meetings, setMeetings]       = useState([])
   const [total, setTotal]             = useState(0)
   const [members, setMembers]         = useState([])
@@ -574,13 +574,21 @@ export default function ProjectMeetings({ projectId, canEdit }) {
     api.get(`/projects/${projectId}/meetings`, { params: { take: MEETINGS_PAGE_SIZE } })
       .then(r => {
         if (!alive) return
-        setMeetings(r.data.meetings || [])
-        setTotal(r.data.total ?? (r.data.meetings || []).length)
+        const loaded = r.data.meetings || []
+        setMeetings(loaded)
+        setTotal(r.data.total ?? loaded.length)
         setMembers(r.data.members || [])
+        // Deep-link desde "Iniciar" en el Dashboard (Task "reserva" de Calendario):
+        // abre directo la reunión recién arrancada para tomar notas. Al ser la más
+        // nueva, siempre cae en esta primera página.
+        if (deepLinkMeetingId && loaded.some(m => m.id === deepLinkMeetingId)) {
+          setOpenId(deepLinkMeetingId)
+        }
       })
       .catch(() => { if (alive) setError('No se pudieron cargar las reuniones') })
       .finally(() => { if (alive) setLoading(false) })
     return () => { alive = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId])
 
   async function handleLoadMore() {

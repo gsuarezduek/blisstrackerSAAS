@@ -74,6 +74,10 @@ export function WorkspaceDetailModal({ workspace, onClose, onStatusChange }) {
   const [storageLimit,      setStorageLimit]      = useState('')
   const [savingStorageLimit, setSavingStorageLimit] = useState(false)
   const [savingExempt,  setSavingExempt]  = useState(false)
+  // Cuotas por categoría (las que SÍ bloquean subidas) — string vacío = sin
+  // override, usa el default global de la plataforma.
+  const [quotaDrafts,  setQuotaDrafts]  = useState({ projectFilesMaxMb: '', contentStorageMaxMb: '', chatAttachmentMaxMb: '' })
+  const [savingQuota,  setSavingQuota]  = useState(null) // key de la categoría que se está guardando, o null
   const appDomain = import.meta.env.VITE_APP_DOMAIN || 'blisstracker.app'
 
   useEffect(() => {
@@ -82,6 +86,11 @@ export function WorkspaceDetailModal({ workspace, onClose, onStatusChange }) {
         setDetail(r.data)
         setTokenLimit(String(r.data.monthlyTokenLimit ?? 1000000))
         setStorageLimit(String(r.data.storageLimitMb ?? 20480))
+        setQuotaDrafts({
+          projectFilesMaxMb:   r.data.projectFilesMaxMbOverride   ?? '',
+          contentStorageMaxMb: r.data.contentStorageMaxMbOverride ?? '',
+          chatAttachmentMaxMb: r.data.chatAttachmentMaxMbOverride ?? '',
+        })
         setLoading(false)
       })
       .catch(() => setLoading(false))
@@ -109,6 +118,35 @@ export function WorkspaceDetailModal({ workspace, onClose, onStatusChange }) {
     } catch (err) {
       alert(err.response?.data?.error || 'Error al guardar')
     } finally { setSavingStorageLimit(false) }
+  }
+
+  // Categorías de cuota que SÍ bloquean subidas (a diferencia de storageLimitMb,
+  // que es solo informativo/de alerta) — cada una tiene su propio override
+  // puntual por workspace, columna en Workspace y default global en PlatformSetting.
+  const QUOTA_CATEGORIES = [
+    { key: 'projectFilesMaxMb',   label: 'Archivos (Nube)', breakdownKey: 'archivos' },
+    { key: 'contentStorageMaxMb', label: 'Contenido',       breakdownKey: 'contenido' },
+    { key: 'chatAttachmentMaxMb', label: 'Chat',            breakdownKey: 'chat' },
+  ]
+
+  async function handleSaveQuota(key) {
+    const raw = quotaDrafts[key].trim()
+    if (raw !== '' && (isNaN(parseInt(raw, 10)) || parseInt(raw, 10) < 0)) {
+      return alert('Ingresá un número entero ≥ 0, o dejalo vacío para usar el default global')
+    }
+    const value = raw === '' ? null : parseInt(raw, 10)
+    setSavingQuota(key)
+    try {
+      const { data } = await api.patch(`/superadmin/workspaces/${workspace.id}/storage-quotas`, { [key]: value })
+      setDetail(prev => ({
+        ...prev,
+        projectFilesMaxMbOverride:   data.projectFilesMaxMbOverride,
+        contentStorageMaxMbOverride: data.contentStorageMaxMbOverride,
+        chatAttachmentMaxMbOverride: data.chatAttachmentMaxMbOverride,
+      }))
+    } catch (err) {
+      alert(err.response?.data?.error || 'Error al guardar')
+    } finally { setSavingQuota(null) }
   }
 
   async function handleToggleExempt() {
@@ -196,8 +234,8 @@ export function WorkspaceDetailModal({ workspace, onClose, onStatusChange }) {
                 {savingLimit ? '...' : 'Guardar'}
               </button>
             </div>
-            <div className="flex items-center gap-2">
-              <label className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">Storage (MB):</label>
+            <div className="flex items-center gap-2" title="Solo dispara el aviso de advertencia/crítico in-app — NO bloquea subidas. Para eso, ver 'Cuotas de almacenamiento por categoría' más abajo.">
+              <label className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">Storage total (MB, solo aviso):</label>
               <input
                 type="number"
                 min="0"
@@ -341,6 +379,52 @@ export function WorkspaceDetailModal({ workspace, onClose, onStatusChange }) {
                   <span>Creado: <span className="text-gray-600 dark:text-gray-300">
                     {new Date(detail.createdAt).toLocaleDateString('es-AR', { day: 'numeric', month: 'short', year: 'numeric' })}
                   </span></span>
+                </div>
+              </div>
+
+              {/* Cuotas de almacenamiento por categoría — las que SÍ bloquean subidas */}
+              <div className="bg-gray-50 dark:bg-gray-700/40 rounded-xl p-4 space-y-3">
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Cuotas de almacenamiento por categoría</h3>
+                  <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
+                    Estas SÍ bloquean subidas. Vacío = usa el default global de la plataforma (configurable en SuperAdmin → Configuración).
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  {QUOTA_CATEGORIES.map(({ key, label, breakdownKey }) => {
+                    const usedBytes   = detail.storageBreakdown?.[breakdownKey] ?? 0
+                    const defaultMb   = detail.storageQuotaDefaults?.[key] ?? 0
+                    const override    = quotaDrafts[key].trim()
+                    const effectiveMb = override !== '' ? parseInt(override, 10) : defaultMb
+                    const pct         = effectiveMb > 0 ? Math.round((usedBytes / (effectiveMb * 1024 * 1024)) * 100) : 0
+                    const color       = effectiveMb > 0 && pct >= 100 ? 'text-red-500 dark:text-red-400'
+                                      : effectiveMb > 0 && pct >= 80  ? 'text-amber-500 dark:text-amber-400'
+                                      : 'text-gray-700 dark:text-gray-300'
+                    return (
+                      <div key={key} className="flex items-center justify-between gap-3 py-1.5">
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{label}</p>
+                          <p className={`text-xs ${color}`}>
+                            {fmtBytes(usedBytes)} de {effectiveMb > 0 ? `${fmtBytes(effectiveMb * 1024 * 1024)} (${pct}%)` : 'ilimitado'}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <input
+                            type="number"
+                            min="0"
+                            value={quotaDrafts[key]}
+                            onChange={e => setQuotaDrafts(prev => ({ ...prev, [key]: e.target.value }))}
+                            placeholder={`default (${defaultMb} MB)`}
+                            className="w-36 px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                          />
+                          <button onClick={() => handleSaveQuota(key)} disabled={savingQuota === key}
+                            className="px-3 py-1.5 bg-gray-600 hover:bg-gray-700 disabled:opacity-40 text-white text-xs font-medium rounded-lg transition-colors">
+                            {savingQuota === key ? '...' : 'Guardar'}
+                          </button>
+                        </div>
+                      </div>
+                    )
+                  })}
                 </div>
               </div>
 

@@ -136,7 +136,7 @@ async function startMeetingParticipants(meeting, participants, { requesterId, wo
         if (!workDay) continue
         const task = await tx.task.create({
           data: {
-            description: typeLabel(meeting.type),
+            description: meeting.title || typeLabel(meeting.type),
             projectId:   meeting.projectId,
             userId:      p.userId,
             workDayId:   workDay.id,

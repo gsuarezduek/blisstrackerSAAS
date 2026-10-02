@@ -11,7 +11,7 @@ jest.mock('../../src/services/workspaceStorage.service', () => ({
 const prisma = require('../../src/lib/prisma')
 const { getSettings } = require('../../src/lib/platformSettings')
 const { computeWorkspaceStorageUsage } = require('../../src/services/workspaceStorage.service')
-const { getStorageBudget } = require('../../src/lib/storageBudget')
+const { getStorageBudget, getEffectiveCategoryLimitMb } = require('../../src/lib/storageBudget')
 
 const MB = 1024 * 1024
 
@@ -97,5 +97,44 @@ describe('storageBudget — getStorageBudget', () => {
     const budget = await getStorageBudget(1)
 
     expect(budget.breakdown).toEqual(breakdown)
+  })
+})
+
+describe('storageBudget — getEffectiveCategoryLimitMb', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+    getSettings.mockResolvedValue({ projectFilesMaxMbPerWorkspace: 20480 })
+  })
+
+  it('sin override propio, usa el default global de la plataforma', async () => {
+    prisma.workspace.findUnique.mockResolvedValue({ projectFilesMaxMbOverride: null })
+
+    const limitMb = await getEffectiveCategoryLimitMb(1, 'projectFilesMaxMbOverride', 'projectFilesMaxMbPerWorkspace')
+
+    expect(limitMb).toBe(20480)
+  })
+
+  it('con override propio, lo usa en vez del default global (el fix real de este cambio)', async () => {
+    prisma.workspace.findUnique.mockResolvedValue({ projectFilesMaxMbOverride: 102400 })
+
+    const limitMb = await getEffectiveCategoryLimitMb(1, 'projectFilesMaxMbOverride', 'projectFilesMaxMbPerWorkspace')
+
+    expect(limitMb).toBe(102400)
+  })
+
+  it('override en 0 es ilimitado para ese workspace, aunque el default global no lo sea', async () => {
+    prisma.workspace.findUnique.mockResolvedValue({ projectFilesMaxMbOverride: 0 })
+
+    const limitMb = await getEffectiveCategoryLimitMb(1, 'projectFilesMaxMbOverride', 'projectFilesMaxMbPerWorkspace')
+
+    expect(limitMb).toBe(0)
+  })
+
+  it('workspace no encontrado cae al default global', async () => {
+    prisma.workspace.findUnique.mockResolvedValue(null)
+
+    const limitMb = await getEffectiveCategoryLimitMb(1, 'projectFilesMaxMbOverride', 'projectFilesMaxMbPerWorkspace')
+
+    expect(limitMb).toBe(20480)
   })
 })

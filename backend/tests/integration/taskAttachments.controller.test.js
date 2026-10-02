@@ -17,13 +17,13 @@ jest.mock('../../src/services/objectStorage.service', () => ({
   publicUrl:     jest.fn(key => `https://cdn.example.com/${key}`),
 }))
 
-jest.mock('../../src/lib/platformSettings', () => ({ getSetting: jest.fn() }))
+jest.mock('../../src/lib/platformSettings', () => ({ getSettings: jest.fn() }))
 
 const request = require('supertest')
 const jwt     = require('jsonwebtoken')
 const prisma  = require('../../src/lib/prisma')
 const objectStorage = require('../../src/services/objectStorage.service')
-const { getSetting } = require('../../src/lib/platformSettings')
+const { getSettings } = require('../../src/lib/platformSettings')
 const app     = require('../../src/app')
 
 const SECRET         = process.env.JWT_SECRET
@@ -72,7 +72,7 @@ const dbFile = (over = {}) => ({
 beforeEach(() => {
   jest.clearAllMocks()
   mockBase()
-  getSetting.mockResolvedValue(0) // sin límite de cuota
+  getSettings.mockResolvedValue({ projectFilesMaxMbPerWorkspace: 0 }) // sin límite de cuota
   objectStorage.isConfigured.mockReturnValue(true)
   objectStorage.buildKey.mockReturnValue('files/1/new-uuid.pdf')
   objectStorage.presignPut.mockResolvedValue('https://r2.example.com/presigned-put-url')

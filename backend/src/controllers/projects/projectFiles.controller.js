@@ -12,7 +12,7 @@ const { randomUUID } = require('crypto')
 const archiver = require('archiver')
 const prisma = require('../../lib/prisma')
 const objectStorage = require('../../services/objectStorage.service')
-const { getSetting } = require('../../lib/platformSettings')
+const { getEffectiveCategoryLimitMb } = require('../../lib/storageBudget')
 const { detectImageType } = require('../../lib/imageType')
 const { detectVideoType } = require('../../lib/mediaType')
 const { detectDocumentType } = require('../../lib/documentType')
@@ -114,9 +114,13 @@ async function buildPath(folderId, projectId) {
   return path
 }
 
-/** Cuota de storage del workspace (archivos ready + pending). 0 = ilimitado. */
+/**
+ * Cuota de storage del workspace (archivos ready + pending). 0 = ilimitado.
+ * Usa el override puntual del workspace si lo tiene (SuperAdmin → Workspaces),
+ * si no el default global `projectFilesMaxMbPerWorkspace`.
+ */
 async function assertWithinQuota(workspaceId, extraBytes) {
-  const limitMb = await getSetting('projectFilesMaxMbPerWorkspace')
+  const limitMb = await getEffectiveCategoryLimitMb(workspaceId, 'projectFilesMaxMbOverride', 'projectFilesMaxMbPerWorkspace')
   if (!limitMb) return null
   const limitBytes = limitMb * 1024 * 1024
   const agg = await prisma.projectFile.aggregate({
