@@ -3,6 +3,8 @@ import api from '../../api/client'
 import LoadingSpinner from '../LoadingSpinner'
 import { LEAD_STATUSES, LEAD_ORIGINS } from './salesCatalog'
 import { TRIGGER_TYPES, MERGE_TOKENS, triggerLabel } from './whatsappAutomationCatalog'
+import { X } from 'lucide-react'
+import { Icon } from '../ui/Icon'
 
 const EMPTY_FORM = { name: '', active: true, triggerType: 'no_reply_days', triggerDays: 5, templateId: '', statusFilter: [], originFilter: [], cooldownDays: 14, variableMapping: [] }
 
@@ -131,10 +133,10 @@ export default function WhatsappAutomationManager({ onClose }) {
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
         <div className="p-6 pb-4 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between">
           <div>
-            <h2 className="text-lg font-bold text-gray-900 dark:text-white">⚙️ Automatizaciones de WhatsApp</h2>
+            <h2 className="text-lg font-bold text-gray-900 dark:text-white">Automatizaciones de WhatsApp</h2>
             <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">Criterios que reabren conversaciones vencidas solas, con una plantilla — corren todos los días a las 08:05 ART.</p>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">✕</button>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"><Icon as={X} size={16} /></button>
         </div>
 
         <div className="overflow-y-auto flex-1 p-6">
@@ -174,7 +176,7 @@ export default function WhatsappAutomationManager({ onClose }) {
                   {templates.map(t => <option key={t.id} value={t.id}>{t.name} ({t.status}{t.variableCount ? ` · ${t.variableCount} var.` : ''})</option>)}
                 </select>
                 {selectedTemplate && selectedTemplate.status !== 'APPROVED' && (
-                  <span className="block text-[11px] text-amber-600 dark:text-amber-400 mt-0.5">⚠ Todavía no está aprobada por Meta — la regla se guarda pero no envía nada hasta que se apruebe.</span>
+                  <span className="block text-[11px] text-amber-600 dark:text-amber-400 mt-0.5">Todavía no está aprobada por Meta — la regla se guarda pero no envía nada hasta que se apruebe.</span>
                 )}
               </label>
 

@@ -66,7 +66,7 @@ export default function ProposalBriefStep({ brief, state, onChange }) {
                         return (
                           <button key={opt} type="button" onClick={() => toggleOption(q, opt)}
                             className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${on ? 'bg-primary-600 border-primary-600 text-white' : 'border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:border-primary-400'}`}>
-                            {opt}{q.recommended?.includes(opt) && <span className={`ml-1.5 text-[10px] ${on ? 'opacity-80' : 'text-primary-600'}`}>★ sugerida</span>}
+                            {opt}{q.recommended?.includes(opt) && <span className={`ml-1.5 text-[10px] ${on ? 'opacity-80' : 'text-primary-600'}`}>sugerida</span>}
                           </button>
                         )
                       })}

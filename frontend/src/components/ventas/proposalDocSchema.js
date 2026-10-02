@@ -18,7 +18,7 @@ export const BLOCK_SPECS = {
     blank: () => ({ type: 'callout', heading: '', label: '', text: '' }),
   },
   before_after: {
-    label: 'Antes → Después', icon: '⇄',
+    label: 'Antes → Después',
     fields: [f('heading', 'Título de sección'), f('fromLabel', 'Etiqueta "antes"'), f('from', 'Antes'), f('toLabel', 'Etiqueta "después"'), f('to', 'Después'), f('note', 'Nota', 'area')],
     blank: () => ({ type: 'before_after', heading: '', fromLabel: 'Hoy', from: '', toLabel: 'Hacia dónde vamos', to: '', note: '' }),
   },
@@ -58,7 +58,7 @@ export const BLOCK_SPECS = {
     blank: () => ({ type: 'steps', heading: '', intro: '', variant: 'numbered', items: [{ title: '', text: '' }], outro: '' }),
   },
   services: {
-    label: 'Servicios', icon: '🛠',
+    label: 'Servicios', icon: '≡',
     hint: 'Los servicios y la etiqueta de qué planes los incluyen salen de los planes. Acá editás el texto de cada uno.',
     fields: [
       f('heading', 'Título de sección'), f('intro', 'Introducción', 'area'),

@@ -132,7 +132,7 @@ export default function PortalHome({ meta, pendingCount, onNavigate, onReview, b
     <div className="space-y-6 sm:space-y-8">
       <div>
         <h1 className="text-2xl sm:text-3xl font-semibold text-gray-900 tracking-tight">
-          {name ? `Hola, ${name}` : 'Hola'} <span aria-hidden="true">👋</span>
+          {name ? `Hola, ${name}` : 'Hola'}
         </h1>
         <p className="text-sm sm:text-base text-gray-500 mt-1">Este es el espacio de {projectName || 'tu proyecto'}.</p>
       </div>

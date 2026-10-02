@@ -584,14 +584,14 @@ export default function ProjectsTab() {
                             onClick={() => setTeamProject(p)}
                             className="text-xs px-3 py-1.5 rounded-lg font-medium bg-primary-50 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400 hover:bg-primary-100 dark:hover:bg-primary-900/50 transition-colors"
                           >
-                            👥 {p.members.length > 0 ? `Equipo (${p.members.length})` : 'Equipo'}
+                            {p.members.length > 0 ? `Equipo (${p.members.length})` : 'Equipo'}
                           </button>
                           {hoursEnabled && (
                             <button
                               onClick={() => setHoursProject(p)}
                               className="text-xs px-3 py-1.5 rounded-lg font-medium bg-primary-50 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400 hover:bg-primary-100 dark:hover:bg-primary-900/50 transition-colors"
                             >
-                              ⏱️ {p.monthlyHours != null ? `Horas (${p.monthlyHours}h)` : 'Horas'}
+                              {p.monthlyHours != null ? `Horas (${p.monthlyHours}h)` : 'Horas'}
                             </button>
                           )}
                           <button

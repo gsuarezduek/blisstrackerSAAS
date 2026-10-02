@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react'
 import api from '../../api/client'
 import LoadingSpinner from '../LoadingSpinner'
 import ConfirmModal from '../ConfirmModal'
+import { Trash2, X } from 'lucide-react'
+import { Icon } from '../ui/Icon'
 
 const CATEGORIES = [
   { value: 'UTILITY', label: 'Utility (recordatorios, actualizaciones — revisión más simple)' },
@@ -102,12 +104,12 @@ export default function WhatsappTemplateManager({ onClose }) {
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={onClose}>
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-xl max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
         <div className="p-6 pb-4 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between">
-          <h2 className="text-lg font-bold text-gray-900 dark:text-white">📄 Plantillas de WhatsApp</h2>
+          <h2 className="text-lg font-bold text-gray-900 dark:text-white">Plantillas de WhatsApp</h2>
           <div className="flex items-center gap-3">
             <button onClick={handleSync} disabled={syncing} className="text-xs text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 disabled:opacity-50">
-              {syncing ? 'Sincronizando…' : '↻ Sincronizar'}
+              {syncing ? 'Sincronizando…' : 'Sincronizar'}
             </button>
-            <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">✕</button>
+            <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"><Icon as={X} size={16} /></button>
           </div>
         </div>
 
@@ -215,7 +217,7 @@ export default function WhatsappTemplateManager({ onClose }) {
                         aria-label="Borrar plantilla"
                         className="text-gray-300 hover:text-red-500 dark:text-gray-600 dark:hover:text-red-400 transition-colors"
                       >
-                        🗑
+                        <Icon as={Trash2} size={15} />
                       </button>
                     </div>
                   </div>

@@ -149,7 +149,7 @@ export default function PipelineTab({ onOpenLead }) {
             onClick={() => setShowArchived(s => !s)}
             className="text-xs font-medium text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
           >
-            {showArchived ? '← Volver al pipeline' : '🗄 Ver archivados'}
+            {showArchived ? '← Volver al pipeline' : 'Ver archivados'}
           </button>
         </div>
         {showArrows && (
@@ -175,7 +175,7 @@ export default function PipelineTab({ onOpenLead }) {
                 </div>
                 <div className="flex items-center gap-3 shrink-0">
                   <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">{l.estimatedValue ? fmtMoney(l.estimatedValue, l.currency) : ''}</span>
-                  <button onClick={() => unarchive(l.id)} className="text-xs font-medium text-primary-600 hover:underline">↩️ Desarchivar</button>
+                  <button onClick={() => unarchive(l.id)} className="text-xs font-medium text-primary-600 hover:underline">Desarchivar</button>
                 </div>
               </div>
             ))}
@@ -214,7 +214,7 @@ export default function PipelineTab({ onOpenLead }) {
                       >
                         <div className="font-medium text-sm text-gray-900 dark:text-white truncate">{l.company?.name || '—'}</div>
                         {l.title && <div className="text-xs text-gray-500 dark:text-gray-400 truncate">{l.title}</div>}
-                        {col.key === 'perdido' && l.lostReason && <div className="text-xs text-red-500 dark:text-red-400 truncate mt-0.5" title={l.lostReason}>✕ {l.lostReason}</div>}
+                        {col.key === 'perdido' && l.lostReason && <div className="text-xs text-red-500 dark:text-red-400 truncate mt-0.5" title={l.lostReason}>{l.lostReason}</div>}
                         <div className="flex items-center justify-between mt-2">
                           <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">{l.estimatedValue ? fmtMoney(l.estimatedValue, l.currency) : ''}</span>
                           {l.owner && <span className="text-[11px] text-gray-400 truncate max-w-[90px]" title={l.owner.name}>{l.owner.name}</span>}

@@ -6,6 +6,8 @@ import LoadingSpinner from './LoadingSpinner'
 import { useProjectFileUpload, fmtMb, MAX_FILE_BYTES } from './projectFilesUpload'
 import { fmtBytes, iconFor } from '../lib/fileIcons'
 import ContentFilePiecesModal from './contenido/ContentFilePiecesModal'
+import { CalendarDays, Folder, FolderOpen, Link2, Search, Trash2, X } from 'lucide-react'
+import { Icon } from './ui/Icon'
 
 // ─── Modales chicos (nueva carpeta / renombrar / mover / confirmar borrado) ───
 
@@ -30,7 +32,7 @@ function NewFolderModal({ projectId, parentId, onClose, onCreated }) {
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={onClose}>
       <form onSubmit={handleCreate} className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-sm p-5" onClick={e => e.stopPropagation()}>
-        <p className="text-sm font-bold text-gray-900 dark:text-white mb-3">📁 Nueva carpeta</p>
+        <p className="text-sm font-bold text-gray-900 dark:text-white mb-3">Nueva carpeta</p>
         <input
           autoFocus value={name} onChange={e => setName(e.target.value)} placeholder="Nombre de la carpeta"
           className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
@@ -68,7 +70,7 @@ function RenameModal({ projectId, item, onClose, onRenamed }) {
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={onClose}>
       <form onSubmit={handleSave} className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-sm p-5" onClick={e => e.stopPropagation()}>
-        <p className="text-sm font-bold text-gray-900 dark:text-white mb-3">✏️ Renombrar</p>
+        <p className="text-sm font-bold text-gray-900 dark:text-white mb-3">Renombrar</p>
         <input
           autoFocus value={name} onChange={e => setName(e.target.value)}
           className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
@@ -130,7 +132,7 @@ function MoveModal({ projectId, items, onClose, onMoved }) {
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md flex flex-col max-h-[80vh]" onClick={e => e.stopPropagation()}>
         <div className="px-5 pt-5 pb-3 border-b dark:border-gray-700 flex items-center justify-between gap-3">
           <p className="text-sm font-bold text-gray-900 dark:text-white truncate">
-            📂 Mover {items.length > 1 ? `${items.length} elementos` : `"${items[0].name}"`}
+            Mover {items.length > 1 ? `${items.length} elementos` : `"${items[0].name}"`}
           </p>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 text-xl leading-none shrink-0">×</button>
         </div>
@@ -153,7 +155,7 @@ function MoveModal({ projectId, items, onClose, onMoved }) {
                   key={f.id} onClick={() => setFolderId(f.id)}
                   className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 text-sm text-left text-gray-700 dark:text-gray-200"
                 >
-                  <span>📁</span><span className="truncate">{f.name}</span>
+                  <Icon as={Folder} size={15} className="text-amber-500" /><span className="truncate">{f.name}</span>
                 </button>
               ))}
             </div>
@@ -220,7 +222,7 @@ function ShareFolderModal({ projectId, item, onClose, onChanged }) {
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={onClose}>
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md p-5" onClick={e => e.stopPropagation()}>
-        <p className="text-sm font-bold text-gray-900 dark:text-white mb-1">🔗 Compartir "{item.name}"</p>
+        <p className="text-sm font-bold text-gray-900 dark:text-white mb-1">Compartir "{item.name}"</p>
         <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
           Cualquiera con este link puede ver y descargar el contenido de esta carpeta (y sus subcarpetas), sin necesidad de una cuenta.
         </p>
@@ -231,13 +233,13 @@ function ShareFolderModal({ projectId, item, onClose, onChanged }) {
             <div className="flex items-center gap-2">
               <input readOnly value={link} onFocus={e => e.target.select()} className="flex-1 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-2 text-xs" />
               <button onClick={handleCopy} className="text-sm px-3 py-2 rounded-lg bg-primary-600 hover:bg-primary-700 text-white font-medium shrink-0">
-                {copied ? '✓ Copiado' : 'Copiar'}
+                {copied ? 'Copiado' : 'Copiar'}
               </button>
             </div>
             {error && <p className="text-xs text-red-500 dark:text-red-400 mt-2">{error}</p>}
             <div className="flex justify-between items-center mt-4">
               <button onClick={handleRevoke} disabled={revoking} className="text-xs text-red-500 dark:text-red-400 hover:text-red-600 disabled:opacity-50">
-                {revoking ? 'Desactivando…' : '🚫 Dejar de compartir'}
+                {revoking ? 'Desactivando…' : 'Dejar de compartir'}
               </button>
               <button onClick={onClose} className="text-sm px-3 py-1.5 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">Cerrar</button>
             </div>
@@ -267,12 +269,12 @@ function CopyLinkModal({ projectId, item, onClose }) {
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={onClose}>
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md p-5" onClick={e => e.stopPropagation()}>
-        <p className="text-sm font-bold text-gray-900 dark:text-white mb-1">🔗 Enlace a "{item.name}"</p>
+        <p className="text-sm font-bold text-gray-900 dark:text-white mb-1">Enlace a "{item.name}"</p>
         <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">Pegalo en la descripción o un comentario de una tarea — cualquiera del equipo lo abre directo en este archivo.</p>
         <div className="flex items-center gap-2">
           <input readOnly value={link} onFocus={e => e.target.select()} className="flex-1 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-2 text-xs" />
           <button onClick={handleCopy} className="text-sm px-3 py-2 rounded-lg bg-primary-600 hover:bg-primary-700 text-white font-medium shrink-0">
-            {copied ? '✓ Copiado' : 'Copiar'}
+            {copied ? 'Copiado' : 'Copiar'}
           </button>
         </div>
         <div className="flex justify-end mt-4">
@@ -298,7 +300,7 @@ function ConfirmDeleteModal({ items, onClose, onConfirm }) {
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={onClose}>
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-sm p-5" onClick={e => e.stopPropagation()}>
         <p className="text-sm font-bold text-gray-900 dark:text-white mb-2">
-          🗑️ Eliminar {items.length > 1 ? `${items.length} elementos` : (items[0].type === 'folder' ? 'carpeta' : 'archivo')}
+          Eliminar {items.length > 1 ? `${items.length} elementos` : (items[0].type === 'folder' ? 'carpeta' : 'archivo')}
         </p>
         <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
           {items.length > 1
@@ -372,7 +374,7 @@ function TrashModal({ projectId, isAdmin, onClose, onRestored }) {
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={onClose}>
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-lg flex flex-col max-h-[80vh]" onClick={e => e.stopPropagation()}>
         <div className="px-5 pt-5 pb-3 border-b dark:border-gray-700 flex items-center justify-between gap-3">
-          <p className="text-sm font-bold text-gray-900 dark:text-white">🗑️ Papelera</p>
+          <p className="text-sm font-bold text-gray-900 dark:text-white">Papelera</p>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 text-xl leading-none shrink-0">×</button>
         </div>
         <div className="overflow-y-auto px-3 py-2 flex-1 min-h-[160px]">
@@ -382,7 +384,7 @@ function TrashModal({ projectId, isAdmin, onClose, onRestored }) {
             <div className="space-y-0.5">
               {items.map(it => (
                 <div key={it.id} className="flex items-center gap-2 px-2.5 py-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                  <span className="text-xl shrink-0">{it.type === 'folder' ? '📁' : iconFor(it.mimeType)}</span>
+                  <Icon as={it.type === 'folder' ? Folder : iconFor(it.mimeType)} size={20} className={it.type === 'folder' ? 'text-amber-500' : 'text-gray-400'} />
                   <div className="flex-1 min-w-0">
                     <p className="text-sm text-gray-700 dark:text-gray-200 truncate">{it.name}</p>
                     <p className="text-[11px] text-gray-400 dark:text-gray-500 truncate">
@@ -393,7 +395,7 @@ function TrashModal({ projectId, isAdmin, onClose, onRestored }) {
                     onClick={() => handleRestore(it)} disabled={restoringId === it.id || purgingId === it.id}
                     className="text-xs px-2.5 py-1.5 rounded-lg border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50 shrink-0"
                   >
-                    {restoringId === it.id ? 'Restaurando…' : '↩️ Restaurar'}
+                    {restoringId === it.id ? 'Restaurando…' : 'Restaurar'}
                   </button>
                   {isAdmin && (
                     confirmPurgeId === it.id ? (
@@ -417,7 +419,7 @@ function TrashModal({ projectId, isAdmin, onClose, onRestored }) {
                         title="Eliminar definitivamente ahora, sin esperar la limpieza automática"
                         className="text-xs px-2.5 py-1.5 rounded-lg border border-red-200 dark:border-red-900/50 text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50 shrink-0"
                       >
-                        🗑️ Eliminar
+                        Eliminar
                       </button>
                     )
                   )}
@@ -449,13 +451,13 @@ function ItemCard({ item, projectId, menuOpen, onOpenMenu, onOpen, onRename, onM
           {isImage && item.url ? (
             <img src={item.url} alt="" className="w-full h-full object-cover" />
           ) : (
-            <span className="text-3xl">{isFolder ? '📁' : iconFor(item.mimeType)}</span>
+            <Icon as={isFolder ? Folder : iconFor(item.mimeType)} size={30} className={isFolder ? 'text-amber-500' : 'text-gray-400'} />
           )}
           {isFolder && item.isPublic && (
             <span
               className="absolute bottom-0.5 right-0.5 text-[9px] bg-primary-600 text-white rounded-full w-4 h-4 flex items-center justify-center leading-none"
               title="Carpeta compartida por link público"
-            >🔗</span>
+            ><Icon as={Link2} size={10} /></span>
           )}
         </div>
         <span className="text-xs text-gray-700 dark:text-gray-200 truncate w-full">{item.name}</span>
@@ -474,7 +476,7 @@ function ItemCard({ item, projectId, menuOpen, onOpenMenu, onOpen, onRename, onM
           title={`Ir a la pieza: ${item.contentPieces.map(p => p.title).join(', ')}`}
           className="block w-full text-center text-[10px] text-primary-600 dark:text-primary-400 hover:underline truncate px-1 mt-0.5"
         >
-          📅 {item.contentPieces.length === 1 ? item.contentPieces[0].title : `${item.contentPieces.length} piezas`}
+          <Icon as={CalendarDays} size={10} className="inline align-[-1px] mr-0.5" />{item.contentPieces.length === 1 ? item.contentPieces[0].title : `${item.contentPieces.length} piezas`}
         </Link>
       )}
 
@@ -505,28 +507,28 @@ function ItemCard({ item, projectId, menuOpen, onOpenMenu, onOpen, onRename, onM
           <div className="fixed inset-0 z-40" onClick={() => onOpenMenu(null)} />
           <div className="absolute top-7 right-1 z-50 w-48 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg py-1 text-sm">
             {isPreviewable && (
-              <button onClick={() => { onOpenMenu(null); onOpen(item) }} className="w-full text-left px-3 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200">👁️ Ver</button>
+              <button onClick={() => { onOpenMenu(null); onOpen(item) }} className="w-full text-left px-3 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200">Ver</button>
             )}
-            <button onClick={() => { onOpenMenu(null); onRename(item) }} className="w-full text-left px-3 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200">✏️ Renombrar</button>
-            <button onClick={() => { onOpenMenu(null); onMove(item) }} className="w-full text-left px-3 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200">📂 Mover</button>
+            <button onClick={() => { onOpenMenu(null); onRename(item) }} className="w-full text-left px-3 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200">Renombrar</button>
+            <button onClick={() => { onOpenMenu(null); onMove(item) }} className="w-full text-left px-3 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200">Mover</button>
             {isFolder && onShare && (
               <button onClick={() => { onOpenMenu(null); onShare(item) }} className="w-full text-left px-3 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200">
-                🔗 {item.isPublic ? 'Compartido' : 'Compartir'}
+                {item.isPublic ? 'Compartido' : 'Compartir'}
               </button>
             )}
             {!isFolder && (
               <>
                 <button onClick={() => { onOpenMenu(null); onDownload(item) }} className="w-full text-left px-3 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200">⬇️ Descargar</button>
-                <button onClick={() => { onOpenMenu(null); onCopyLink(item) }} className="w-full text-left px-3 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200">🔗 Copiar enlace</button>
+                <button onClick={() => { onOpenMenu(null); onCopyLink(item) }} className="w-full text-left px-3 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200">Copiar enlace</button>
                 {onLinkToContent && (
-                  <button onClick={() => { onOpenMenu(null); onLinkToContent(item) }} className="w-full text-left px-3 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200">📅 Contenido</button>
+                  <button onClick={() => { onOpenMenu(null); onLinkToContent(item) }} className="w-full text-left px-3 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200">Contenido</button>
                 )}
                 {onCreateTask && (
-                  <button onClick={() => { onOpenMenu(null); onCreateTask(item) }} className="w-full text-left px-3 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200">➕ Crear tarea</button>
+                  <button onClick={() => { onOpenMenu(null); onCreateTask(item) }} className="w-full text-left px-3 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200">Crear tarea</button>
                 )}
               </>
             )}
-            <button onClick={() => { onOpenMenu(null); onDelete(item) }} className="w-full text-left px-3 py-1.5 hover:bg-red-50 dark:hover:bg-red-900/20 text-red-600 dark:text-red-400">🗑️ Eliminar</button>
+            <button onClick={() => { onOpenMenu(null); onDelete(item) }} className="w-full text-left px-3 py-1.5 hover:bg-red-50 dark:hover:bg-red-900/20 text-red-600 dark:text-red-400">Eliminar</button>
           </div>
         </>
       )}
@@ -788,7 +790,7 @@ export default function ProjectFiles({ projectId, deepLinkFileId, onCreateTaskFr
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="text-sm text-gray-500 dark:text-gray-400 flex items-center gap-1 flex-wrap min-w-0">
           <button onClick={() => setFolderId(null)} className={`hover:text-primary-600 dark:hover:text-primary-400 ${!folderId ? 'font-semibold text-gray-800 dark:text-gray-100' : ''}`}>
-            🏠 Raíz
+            Raíz
           </button>
           {path.map((p, i) => (
             <span key={p.id} className="flex items-center gap-1 min-w-0">
@@ -808,13 +810,13 @@ export default function ProjectFiles({ projectId, deepLinkFileId, onCreateTaskFr
             className="text-sm px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 font-medium"
             title="Papelera"
           >
-            🗑️
+            <Icon as={Trash2} size={15} />
           </button>
           <button
             onClick={() => setModal({ type: 'newFolder' })}
             className="text-sm px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 font-medium"
           >
-            📁 Nueva carpeta
+            Nueva carpeta
           </button>
           <button
             onClick={() => inputRef.current?.click()}
@@ -834,11 +836,11 @@ export default function ProjectFiles({ projectId, deepLinkFileId, onCreateTaskFr
         <div className="relative flex-1 min-w-[180px] max-w-xs">
           <input
             value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
-            placeholder="🔍 Buscar en todo el proyecto…"
+            placeholder="Buscar en todo el proyecto…"
             className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg pl-3 pr-7 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
           />
           {searchQuery && (
-            <button onClick={() => setSearchQuery('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-sm">✕</button>
+            <button onClick={() => setSearchQuery('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-sm"><Icon as={X} size={16} /></button>
           )}
         </div>
         {searchResults === null && (
@@ -859,15 +861,15 @@ export default function ProjectFiles({ projectId, deepLinkFileId, onCreateTaskFr
             onClick={() => handleBulkDownload([...folders, ...files].filter(it => selectedIds.has(it.id)))}
             disabled={downloadingZip}
             className="text-gray-600 dark:text-gray-300 hover:text-primary-700 dark:hover:text-primary-300 disabled:opacity-50"
-          >{downloadingZip ? '⏳ Preparando…' : '⬇️ Descargar'}</button>
+          >{downloadingZip ? 'Preparando…' : '⬇️ Descargar'}</button>
           <button
             onClick={() => setModal({ type: 'bulkMove', items: [...folders, ...files].filter(it => selectedIds.has(it.id)) })}
             className="text-gray-600 dark:text-gray-300 hover:text-primary-700 dark:hover:text-primary-300"
-          >📂 Mover</button>
+          >Mover</button>
           <button
             onClick={() => setModal({ type: 'bulkDelete', items: [...folders, ...files].filter(it => selectedIds.has(it.id)) })}
             className="text-red-600 dark:text-red-400 hover:text-red-700"
-          >🗑️ Eliminar</button>
+          >Eliminar</button>
           <button onClick={() => setSelectedIds(new Set())} className="ml-auto text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">Cancelar</button>
         </div>
       )}
@@ -890,7 +892,7 @@ export default function ProjectFiles({ projectId, deepLinkFileId, onCreateTaskFr
                   <div className="w-16 h-1.5 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden shrink-0">
                     <div className="h-full bg-primary-500 transition-all" style={{ width: `${it.status === 'uploading' ? it.progress : 100}%` }} />
                   </div>
-                  <button onClick={() => cancel(it.id)} className="text-gray-400 hover:text-red-500 shrink-0" title="Cancelar">✕</button>
+                  <button onClick={() => cancel(it.id)} className="text-gray-400 hover:text-red-500 shrink-0" title="Cancelar"><Icon as={X} size={16} /></button>
                 </>
               )}
             </div>
@@ -904,7 +906,7 @@ export default function ProjectFiles({ projectId, deepLinkFileId, onCreateTaskFr
           <LoadingSpinner className="py-16" />
         ) : searchResults.length === 0 ? (
           <div className="text-center py-16 text-gray-400">
-            <p className="text-3xl mb-2">🔍</p>
+            <p className="mb-2"><Icon as={Search} size={28} className="inline-block text-gray-300 dark:text-gray-600" /></p>
             <p>Sin resultados para "{searchQuery}".</p>
           </div>
         ) : (
@@ -925,7 +927,7 @@ export default function ProjectFiles({ projectId, deepLinkFileId, onCreateTaskFr
                 onShare={it => setModal({ type: 'share', item: it })}
                 onCreateTask={onCreateTaskFromFile ? it => onCreateTaskFromFile(it, fileDeepLink(projectId, it)) : null}
                 onLinkToContent={contenidoEnabled ? it => setModal({ type: 'linkContent', item: it }) : null}
-                caption={item.path.length ? `🏠 / ${item.path.map(p => p.name).join(' / ')}` : '🏠 Raíz'}
+                caption={item.path.length ? `Raíz / ${item.path.map(p => p.name).join(' / ')}` : 'Raíz'}
               />
             ))}
           </div>
@@ -934,7 +936,7 @@ export default function ProjectFiles({ projectId, deepLinkFileId, onCreateTaskFr
         <LoadingSpinner className="py-16" />
       ) : folders.length === 0 && files.length === 0 ? (
         <div className="text-center py-16 text-gray-400">
-          <p className="text-3xl mb-2">🗂️</p>
+          <p className="mb-2"><Icon as={FolderOpen} size={28} className="inline-block text-gray-300 dark:text-gray-600" /></p>
           <p>Todavía no hay nada acá.</p>
           <p className="text-xs mt-1">Arrastrá archivos a esta ventana o usá "Subir archivos".</p>
         </div>

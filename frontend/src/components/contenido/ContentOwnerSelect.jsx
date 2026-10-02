@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { avatarUrl } from '../../utils/avatarUrl'
+import { Handshake } from 'lucide-react'
+import { Icon } from '../ui/Icon'
 
 // Mismo patrón visual/interacción que PersonSearchSelect.jsx (Calendario):
 // botón con avatar + nombre que despliega buscador + lista — a diferencia de
@@ -63,7 +65,7 @@ export default function ContentOwnerSelect({ members = [], clientContacts = [], 
         className="w-full flex items-center gap-2 px-2.5 py-1.5 text-sm rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
       >
         {ownerContact ? (
-          <span className="w-5 h-5 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 flex items-center justify-center text-xs shrink-0">🤝</span>
+          <span className="w-5 h-5 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 flex items-center justify-center shrink-0" title="Contacto del cliente"><Icon as={Handshake} size={12} /></span>
         ) : owner ? (
           <img src={avatarUrl(owner.avatar)} alt="" className="w-5 h-5 rounded-full object-cover shrink-0" />
         ) : (
@@ -108,7 +110,7 @@ export default function ContentOwnerSelect({ members = [], clientContacts = [], 
                     className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors ${
                       ownerContact?.id === c.id ? 'bg-primary-50 dark:bg-primary-900/20' : ''}`}
                   >
-                    <span className="w-5 h-5 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 flex items-center justify-center text-xs shrink-0">🤝</span>
+                    <span className="w-5 h-5 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 flex items-center justify-center shrink-0" title="Contacto del cliente"><Icon as={Handshake} size={12} /></span>
                     <span className="text-gray-700 dark:text-gray-300 truncate">{c.name}</span>
                   </button>
                 ))}

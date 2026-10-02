@@ -161,7 +161,7 @@ export default function WhatsappLeadCard({ leadId, lead, onChanged }) {
   return (
     <div className={card}>
       <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100 dark:border-gray-700">
-        <h3 className="text-sm font-bold text-gray-900 dark:text-white">💬 WhatsApp</h3>
+        <h3 className="text-sm font-bold text-gray-900 dark:text-white">WhatsApp</h3>
         {conversation && (
           <div className="flex items-center gap-2">
             {!conversation.isBlocked && (
@@ -180,7 +180,7 @@ export default function WhatsappLeadCard({ leadId, lead, onChanged }) {
                   : 'bg-gray-50 dark:bg-gray-700/40 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
               }`}
             >
-              {conversation.isBlocked ? '✅ Desbloquear' : '🚫 Spam'}
+              {conversation.isBlocked ? 'Desbloquear' : 'Spam'}
             </button>
             <select
               value={assignedToId}

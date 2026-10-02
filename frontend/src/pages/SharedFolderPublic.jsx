@@ -3,6 +3,8 @@ import { useParams } from 'react-router-dom'
 import axios from 'axios'
 import LoadingSpinner from '../components/LoadingSpinner'
 import { fmtBytes, iconFor } from '../lib/fileIcons'
+import { Folder, FolderOpen, Search, X } from 'lucide-react'
+import { Icon } from '../components/ui/Icon'
 
 const API = import.meta.env.VITE_API_URL || ''
 
@@ -34,7 +36,7 @@ function ItemCard({ item, onOpen }) {
         {isImage && item.url ? (
           <img src={item.url} alt="" className="w-full h-full object-cover" />
         ) : (
-          <span className="text-3xl">{isFolder ? '📁' : iconFor(item.mimeType)}</span>
+          <Icon as={isFolder ? Folder : iconFor(item.mimeType)} size={30} className={isFolder ? 'text-amber-500' : 'text-gray-400'} />
         )}
       </div>
       <span className="text-xs text-gray-700 truncate w-full">{item.name}</span>
@@ -168,7 +170,7 @@ export default function SharedFolderPublic() {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
         <div className="text-center max-w-sm">
-          <p className="text-4xl mb-4">🗂️</p>
+          <p className="mb-4"><Icon as={FolderOpen} size={32} className="inline-block text-gray-300 dark:text-gray-600" /></p>
           <p className="text-lg font-semibold text-gray-800 mb-2">Este link no está disponible</p>
           <p className="text-sm text-gray-500">Puede haber sido desactivado, o la carpeta ya no existe.</p>
         </div>
@@ -183,14 +185,14 @@ export default function SharedFolderPublic() {
           {(workspace?.name || projectName) && (
             <p className="text-xs text-gray-400">{workspace?.name}{projectName ? ` · ${projectName}` : ''}</p>
           )}
-          <h1 className="text-xl font-bold text-gray-900">📁 {rootName || 'Carpeta compartida'}</h1>
+          <h1 className="text-xl font-bold text-gray-900">{rootName || 'Carpeta compartida'}</h1>
         </div>
 
         <div className="space-y-3">
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <div className="text-sm text-gray-500 flex items-center gap-1 flex-wrap min-w-0">
               <button onClick={() => setFolderId(null)} className={`hover:text-primary-600 ${!folderId ? 'font-semibold text-gray-800' : ''}`}>
-                🏠 {rootName || 'Raíz'}
+                {rootName || 'Raíz'}
               </button>
               {path.map((p, i) => (
                 <span key={p.id} className="flex items-center gap-1 min-w-0">
@@ -204,11 +206,11 @@ export default function SharedFolderPublic() {
             <div className="relative flex-1 min-w-[180px] max-w-xs">
               <input
                 value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
-                placeholder="🔍 Buscar acá…"
+                placeholder="Buscar acá…"
                 className="w-full border border-gray-300 rounded-lg pl-3 pr-7 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
               />
               {searchQuery && (
-                <button onClick={() => setSearchQuery('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-sm">✕</button>
+                <button onClick={() => setSearchQuery('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-sm"><Icon as={X} size={16} /></button>
               )}
             </div>
           </div>
@@ -220,7 +222,7 @@ export default function SharedFolderPublic() {
               <LoadingSpinner className="py-16" />
             ) : searchResults.length === 0 ? (
               <div className="text-center py-16 text-gray-400">
-                <p className="text-3xl mb-2">🔍</p>
+                <p className="mb-2"><Icon as={Search} size={28} className="inline-block text-gray-300 dark:text-gray-600" /></p>
                 <p>Sin resultados para "{searchQuery}".</p>
               </div>
             ) : (
@@ -232,7 +234,7 @@ export default function SharedFolderPublic() {
             <LoadingSpinner className="py-16" />
           ) : folders.length === 0 && files.length === 0 ? (
             <div className="text-center py-16 text-gray-400">
-              <p className="text-3xl mb-2">🗂️</p>
+              <p className="mb-2"><Icon as={FolderOpen} size={28} className="inline-block text-gray-300 dark:text-gray-600" /></p>
               <p>No hay nada acá.</p>
             </div>
           ) : (

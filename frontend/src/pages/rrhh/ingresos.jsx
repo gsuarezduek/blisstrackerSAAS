@@ -6,8 +6,10 @@ import ConfirmModal from '../../components/ConfirmModal'
 import RoleBadge from '../../components/RoleBadge'
 import { useWorkspace } from '../../context/WorkspaceContext'
 import { TZ, todayBA, todayStr, fmtDate, fmtTime, minutesFromMidnight, minsToTime } from './shared'
+import { Monitor, Pencil, Search, Smartphone, Tablet, Trash2, X } from 'lucide-react'
+import { Icon } from '../../components/ui/Icon'
 
-const DEVICE_ICON  = { mobile: '📱', tablet: '📱', desktop: '💻' }
+const DEVICE_ICON  = { mobile: Smartphone, tablet: Tablet, desktop: Monitor }
 const DEVICE_LABEL = { mobile: 'Celular', tablet: 'Tablet', desktop: 'Computadora' }
 
 export function dateShortcuts() {
@@ -234,7 +236,7 @@ export function TabIngresos({ users }) {
       {!loading && byUser.length > 0 && (
         <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
           <div className="relative w-full sm:w-64">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">🔍</span>
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm"><Icon as={Search} size={14} /></span>
             <input
               type="text"
               value={personSearch}
@@ -248,7 +250,7 @@ export function TabIngresos({ users }) {
                 className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-sm"
                 aria-label="Limpiar búsqueda"
               >
-                ✕
+                <Icon as={X} size={16} />
               </button>
             )}
           </div>
@@ -288,14 +290,14 @@ export function TabIngresos({ users }) {
 
       {!loading && logins.length === 0 && (
         <div className="text-center py-16 text-gray-400">
-          <p className="text-3xl mb-3">🔍</p>
+          <p className="mb-3"><Icon as={Search} size={28} className="inline-block text-gray-300 dark:text-gray-600" /></p>
           <p className="font-medium">Sin ingresos en el período</p>
         </div>
       )}
 
       {!loading && logins.length > 0 && visibleByUser.length === 0 && (
         <div className="text-center py-16 text-gray-400">
-          <p className="text-3xl mb-3">🔍</p>
+          <p className="mb-3"><Icon as={Search} size={28} className="inline-block text-gray-300 dark:text-gray-600" /></p>
           <p className="font-medium">Ninguna persona coincide con la búsqueda</p>
         </div>
       )}
@@ -375,7 +377,7 @@ export function TabIngresos({ users }) {
                       <>
                         <p className="text-sm font-semibold text-gray-800 dark:text-gray-200 flex-shrink-0">{fmtTime(l.loginAt)}</p>
                         {l.deviceType && (
-                          <span title={DEVICE_LABEL[l.deviceType]} className="text-sm flex-shrink-0">{DEVICE_ICON[l.deviceType]}</span>
+                          <span title={DEVICE_LABEL[l.deviceType]} className="flex-shrink-0 text-gray-400"><Icon as={DEVICE_ICON[l.deviceType]} size={13} /></span>
                         )}
                         <span className={`text-xs px-1.5 py-0.5 rounded font-medium flex-shrink-0 ${
                           l.method === 'google'
@@ -383,9 +385,9 @@ export function TabIngresos({ users }) {
                             : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400'
                         }`}>{l.method === 'google' ? 'Google' : 'Email'}</span>
                         <button onClick={() => startEdit(l)} disabled={isBusy} title="Editar hora"
-                          className="text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 flex-shrink-0 disabled:opacity-50">✏️</button>
+                          className="text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 flex-shrink-0 disabled:opacity-50"><Icon as={Pencil} size={15} /></button>
                         <button onClick={() => setLoginToDelete(l)} disabled={isBusy} title="Eliminar ingreso"
-                          className="text-gray-400 hover:text-red-600 dark:hover:text-red-400 flex-shrink-0 disabled:opacity-50">🗑️</button>
+                          className="text-gray-400 hover:text-red-600 dark:hover:text-red-400 flex-shrink-0 disabled:opacity-50"><Icon as={Trash2} size={15} /></button>
                       </>
                     )}
                   </div>

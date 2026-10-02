@@ -24,7 +24,7 @@ export default function ContentTaskHistory({ tasks }) {
   return (
     <div className="sm:col-span-2">
       <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5">
-        🧵 Tramos de trabajo ({tasks.length})
+        Tramos de trabajo ({tasks.length})
       </p>
       <div className="space-y-1">
         {tasks.map(t => {

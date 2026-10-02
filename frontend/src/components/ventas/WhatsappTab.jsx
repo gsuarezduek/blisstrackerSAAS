@@ -13,6 +13,8 @@ import WhatsappBotConfigModal from './WhatsappBotConfigModal'
 import WhatsappTemplateManager from './WhatsappTemplateManager'
 import WhatsappAutomationManager from './WhatsappAutomationManager'
 import HowToButton from '../HowToButton'
+import { Ban, MessageCircle, Search, X } from 'lucide-react'
+import { Icon } from '../ui/Icon'
 
 const SESSION_WINDOW_MS = 24 * 60 * 60 * 1000
 
@@ -199,7 +201,7 @@ export default function WhatsappTab({ onOpenLead }) {
   if (!account) {
     return (
       <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-8 text-center">
-        <p className="text-5xl mb-4">💬</p>
+        <p className="mb-4"><Icon as={MessageCircle} size={40} className="inline-block text-gray-300 dark:text-gray-600" /></p>
         <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Todavía no hay un WhatsApp conectado</h3>
         <p className="text-sm text-gray-500 dark:text-gray-400 mb-4 max-w-md mx-auto">
           {user?.isAdmin
@@ -222,7 +224,7 @@ export default function WhatsappTab({ onOpenLead }) {
     <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl overflow-hidden">
       <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/60">
         <span className="text-sm text-gray-600 dark:text-gray-300 flex items-center gap-1.5">
-          📞 {account.displayPhoneNumber || account.phoneNumberId}
+          {account.displayPhoneNumber || account.phoneNumberId}
           {!account.pluginId && (
             <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400">
               Falta Plugin ID — no se puede responder
@@ -234,13 +236,13 @@ export default function WhatsappTab({ onOpenLead }) {
           {(user?.isAdmin || user?.isSales) && (
             <>
               <button onClick={() => setShowBotConfig(true)} className={`text-xs ${botConfig?.enabled ? 'text-primary-600 dark:text-primary-400' : 'text-gray-400 hover:text-primary-600 dark:hover:text-primary-400'}`}>
-                🤖 Bot{botConfig?.enabled ? ' (activo)' : ''}
+                Bot{botConfig?.enabled ? ' (activo)' : ''}
               </button>
               <button onClick={() => setShowTemplates(true)} className="text-xs text-gray-400 hover:text-primary-600 dark:hover:text-primary-400">
-                📄 Plantillas
+                Plantillas
               </button>
               <button onClick={() => setShowAutomation(true)} className="text-xs text-gray-400 hover:text-primary-600 dark:hover:text-primary-400">
-                ⚙️ Automatizaciones
+                Automatizaciones
               </button>
             </>
           )}
@@ -286,7 +288,7 @@ export default function WhatsappTab({ onOpenLead }) {
         <div className="w-72 flex-shrink-0 border-r border-gray-100 dark:border-gray-700 flex flex-col">
           <div className="px-3 py-2 border-b border-gray-100 dark:border-gray-700 flex-shrink-0 flex items-center gap-1.5">
             <div className="relative flex-1 min-w-0">
-              <span className="absolute inset-y-0 left-2.5 flex items-center text-gray-400 text-sm pointer-events-none">🔍</span>
+              <span className="absolute inset-y-0 left-2.5 flex items-center text-gray-400 text-sm pointer-events-none"><Icon as={Search} size={14} /></span>
               <input
                 type="text"
                 value={search}
@@ -300,7 +302,7 @@ export default function WhatsappTab({ onOpenLead }) {
                   className="absolute inset-y-0 right-2 flex items-center text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-xs"
                   title="Limpiar búsqueda"
                 >
-                  ✕
+                  <Icon as={X} size={16} />
                 </button>
               )}
             </div>
@@ -313,7 +315,7 @@ export default function WhatsappTab({ onOpenLead }) {
                   : 'text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-600 dark:hover:text-gray-300'
               }`}
             >
-              {viewingBlocked ? '←' : '🚫'}
+              {viewingBlocked ? '←' : <Icon as={Ban} size={15} />}
             </button>
           </div>
           {loadingConversations && conversations.length === 0 ? (
@@ -342,7 +344,7 @@ export default function WhatsappTab({ onOpenLead }) {
                     {activeConversation?.contact?.name || activeConversation?.contactName || activeConversation?.phoneE164}
                   </p>
                   <p className="text-xs text-gray-400 dark:text-gray-500 truncate">
-                    {activeConversation?.contact?.company?.name ? `🏢 ${activeConversation.contact.company.name} · ` : ''}
+                    {activeConversation?.contact?.company?.name ? `${activeConversation.contact.company.name} · ` : ''}
                     {activeConversation?.phoneE164}
                   </p>
                 </div>
@@ -364,7 +366,7 @@ export default function WhatsappTab({ onOpenLead }) {
                           : 'bg-gray-50 dark:bg-gray-700/40 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
                       }`}
                     >
-                      {activeConversation.isBlocked ? '✅ Desbloquear' : '🚫 Marcar como spam'}
+                      {activeConversation.isBlocked ? 'Desbloquear' : 'Marcar como spam'}
                     </button>
                   )}
                   {activeConversation?.leadId && (
@@ -372,7 +374,7 @@ export default function WhatsappTab({ onOpenLead }) {
                       onClick={() => onOpenLead?.(activeConversation.leadId)}
                       className="shrink-0 text-xs px-2.5 py-1.5 rounded-lg bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-400 hover:bg-primary-100 dark:hover:bg-primary-900/40 font-medium"
                     >
-                      🔗 Abrir lead
+                      Abrir lead
                     </button>
                   )}
                 </div>

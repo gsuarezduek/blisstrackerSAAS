@@ -132,14 +132,14 @@ export function TabHoy({ users, lastLoginsMap, dashStats, peopleScore, pending, 
       if (u.birthday) {
         const b = new Date(u.birthday.slice(0, 10) + 'T12:00:00')
         const days = daysUntilNextOccurrence(b.getMonth(), b.getDate())
-        if (days <= HORIZON) out.push({ key: `b-${u.id}`, user: u, days, icon: '🎂', text: `Cumple años · ${fmtDateShort(u.birthday)}` })
+        if (days <= HORIZON) out.push({ key: `b-${u.id}`, user: u, days, text: `Cumple años · ${fmtDateShort(u.birthday)}` })
       }
       const created = new Date(u.createdAt)
       const days = daysUntilNextOccurrence(created.getMonth(), created.getDate())
       const anniversary = new Date(today.getFullYear(), created.getMonth(), created.getDate())
       const years = today.getFullYear() - created.getFullYear() + (days > 0 && anniversary < today ? 1 : 0)
       if (days <= HORIZON && years >= 1) {
-        out.push({ key: `a-${u.id}`, user: u, days, icon: '🎉', text: `${years} ${years === 1 ? 'año' : 'años'} en ${workspace?.name ?? 'el equipo'}` })
+        out.push({ key: `a-${u.id}`, user: u, days, text: `${years} ${years === 1 ? 'año' : 'años'} en ${workspace?.name ?? 'el equipo'}` })
       }
     }
     return out.sort((a, b) => a.days - b.days)
@@ -216,7 +216,7 @@ export function TabHoy({ users, lastLoginsMap, dashStats, peopleScore, pending, 
             <CardHeader title="Para resolver" count={pending.loading ? null : items.length}
               action={<TextButton onClick={() => onNavigate('ausencias', 'solicitudes')}>Ver historial</TextButton>} />
             {flash && (
-              <p role="status" className="mx-4 mb-2 text-sm text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-900/20 rounded-lg px-3 py-2">✓ {flash}</p>
+              <p role="status" className="mx-4 mb-2 text-sm text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-900/20 rounded-lg px-3 py-2">{flash}</p>
             )}
             {pending.loading ? (
               <div className="px-4 pb-4 space-y-3">
@@ -242,7 +242,7 @@ export function TabHoy({ users, lastLoginsMap, dashStats, peopleScore, pending, 
           {/* Avisos del día */}
           <div>
             <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2 px-1">Avisos de hoy</h3>
-            <AttentionBanner items={attentionItems} emptyLabel="✅ Sin avisos: el equipo está en orden." />
+            <AttentionBanner items={attentionItems} emptyLabel="Sin avisos: el equipo está en orden." />
           </div>
         </div>
 
@@ -287,7 +287,7 @@ export function TabHoy({ users, lastLoginsMap, dashStats, peopleScore, pending, 
                       <Avatar user={c.user} size="sm" />
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-gray-800 dark:text-gray-200 truncate">{c.user.name}</p>
-                        <p className="text-xs text-gray-500 dark:text-gray-400 truncate"><span aria-hidden="true">{c.icon}</span> {c.text}</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{c.text}</p>
                       </div>
                       <span className={`text-xs flex-shrink-0 ${c.days === 0 ? 'font-semibold text-primary-600 dark:text-primary-400' : 'text-gray-500 dark:text-gray-400'}`}>{relativeDay(c.days)}</span>
                     </li>

@@ -2,6 +2,8 @@ import { useState } from 'react'
 import api from '../../api/client'
 import ConfirmModal from '../../components/ConfirmModal'
 import { fmtDate } from './shared'
+import { Pencil, Trash2 } from 'lucide-react'
+import { Icon } from '../../components/ui/Icon'
 
 // Piezas del legajo reutilizadas por la ficha de Personas (rrhh/personas.jsx) y
 // por el panel de admin del perfil (components/profile/AdminUserPanel.jsx).
@@ -62,7 +64,7 @@ export function LoginDaysModal({ user, summary, onChanged, onClose }) {
       >
         <div className="flex items-start justify-between gap-3 px-5 pt-5 pb-3 border-b border-gray-100 dark:border-gray-700">
           <div>
-            <p className="text-sm font-bold text-gray-900 dark:text-white">🕐 Primer ingreso por día</p>
+            <p className="text-sm font-bold text-gray-900 dark:text-white">Primer ingreso por día</p>
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
               {user.name} · promedio {summary.avgLoginTime}
               {showLate && ` · horario ${summary.workStartTime}`}
@@ -102,9 +104,9 @@ export function LoginDaysModal({ user, summary, onChanged, onClose }) {
                           : <span className="text-xs font-medium text-green-600 dark:text-green-400">a horario</span>
                       )}
                       <button onClick={() => startEdit(d)} disabled={isBusy} title="Editar hora"
-                        className="text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 disabled:opacity-50">✏️</button>
+                        className="text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 disabled:opacity-50"><Icon as={Pencil} size={15} /></button>
                       <button onClick={() => setLoginToDelete(d)} disabled={isBusy} title="Eliminar ingreso"
-                        className="text-gray-400 hover:text-red-600 dark:hover:text-red-400 disabled:opacity-50">🗑️</button>
+                        className="text-gray-400 hover:text-red-600 dark:hover:text-red-400 disabled:opacity-50"><Icon as={Trash2} size={15} /></button>
                     </span>
                   )}
                 </div>

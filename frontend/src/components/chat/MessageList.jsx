@@ -7,6 +7,7 @@ import MessageReactionPicker from './MessageReactionPicker'
 import { groupReactions } from './reactions'
 import { chatAttachmentUrl } from '../../utils/chatAttachmentUrl'
 import { fmtBytes, iconFor } from '../../lib/fileIcons'
+import { Icon } from '../ui/Icon'
 
 const GROUP_WINDOW_MS = 5 * 60 * 1000
 
@@ -32,7 +33,7 @@ function AttachmentContent({ attachment }) {
       rel="noreferrer"
       className="mt-1 flex items-center gap-2 max-w-[260px] bg-black/5 dark:bg-white/10 rounded-lg px-2.5 py-2 hover:bg-black/10 dark:hover:bg-white/20 transition-colors"
     >
-      <span className="text-xl flex-shrink-0">{iconFor(attachment.mimeType)}</span>
+      <Icon as={iconFor(attachment.mimeType)} size={20} className="text-gray-400" />
       <span className="min-w-0">
         <span className="block text-xs font-medium truncate">{attachment.fileName || 'Archivo'}</span>
         {attachment.sizeBytes ? <span className="block text-[10px] opacity-70">{fmtBytes(attachment.sizeBytes)}</span> : null}

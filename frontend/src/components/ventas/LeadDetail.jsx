@@ -16,6 +16,8 @@ import WhatsappLeadCard from './WhatsappLeadCard'
 import LeadNotes from './LeadNotes'
 import CollapsibleSectionHeader from './CollapsibleSectionHeader'
 import { LEAD_STATUSES, originLabel, statusMeta } from './salesCatalog'
+import { Archive, ArchiveRestore, ArrowRightLeft, CalendarDays, CircleCheck, Dot, FileText, Lightbulb, Megaphone, MessageCircle, PartyPopper, Pin, Rocket, Search, Sparkles, StickyNote, UserRound, X } from 'lucide-react'
+import { Icon } from '../ui/Icon'
 
 const input = 'w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500'
 const card = 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-5'
@@ -23,11 +25,11 @@ const sectionTitle = 'text-xs font-semibold text-gray-400 dark:text-gray-500 upp
 
 // Iconos por tipo de evento del timeline automático.
 const EVENT_ICON = {
-  lead_created: '✨', status_changed: '🔀', owner_changed: '👤', note_added: '📝',
-  next_action_set: '📌', next_action_added: '📌', next_action_done: '✅',
-  proposal_created: '📄', research_run: '🔎', diagnostic_report_created: '📣',
-  converted_to_client: '🎉', project_created: '🚀',
-  archived: '🗄', unarchived: '↩️', whatsapp_message: '💬', whatsapp_insight: '🧠',
+  lead_created: Sparkles, status_changed: ArrowRightLeft, owner_changed: UserRound, note_added: StickyNote,
+  next_action_set: Pin, next_action_added: Pin, next_action_done: CircleCheck,
+  proposal_created: FileText, research_run: Search, diagnostic_report_created: Megaphone,
+  converted_to_client: PartyPopper, project_created: Rocket,
+  archived: Archive, unarchived: ArchiveRestore, whatsapp_message: MessageCircle, whatsapp_insight: Lightbulb,
 }
 
 function fmtDateTime(d) {
@@ -47,7 +49,7 @@ function BotBadge() {
       title="Completado automáticamente por el bot de WhatsApp — para revisar"
       className="ml-1.5 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300 align-middle whitespace-nowrap"
     >
-      🤖 bot
+      bot
     </span>
   )
 }
@@ -221,7 +223,7 @@ export default function LeadDetail({ leadId, team, companies, onBack, onChanged 
           <div className="flex items-center gap-3">
             <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{c?.name || 'Lead'}</h1>
             <StatusBadge status={lead.status} title={lead.status === 'perdido' ? lead.lostReason : undefined} />
-            {lead.archived && <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300" title={lead.archivedReason || undefined}>🗄 Archivado</span>}
+            {lead.archived && <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300" title={lead.archivedReason || undefined}>Archivado</span>}
             <HowToButton topic="ventas.leadDetail" />
           </div>
           {lead.title && <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{lead.title}</p>}
@@ -229,12 +231,12 @@ export default function LeadDetail({ leadId, team, companies, onBack, onChanged 
         <div className="flex flex-wrap gap-2 items-center">
           {!lead.convertedProjectId
             ? ['propuesta', 'ganado'].includes(lead.status)
-              ? <button onClick={() => setShowConvert(true)} className="bg-green-600 hover:bg-green-700 text-white rounded-xl px-4 py-2 text-sm font-semibold">🚀 Crear proyecto</button>
-              : <span title="El lead debe estar en Propuesta o Ganado para convertirlo en proyecto" className="text-xs text-gray-400 dark:text-gray-500 px-3 py-2">🚀 Crear proyecto (requiere Propuesta o Ganado)</span>
-            : <span className="inline-flex items-center gap-1 text-sm text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/20 rounded-xl px-3 py-2 font-medium">✓ Proyecto: {lead.convertedProject?.name}</span>}
+              ? <button onClick={() => setShowConvert(true)} className="bg-green-600 hover:bg-green-700 text-white rounded-xl px-4 py-2 text-sm font-semibold">Crear proyecto</button>
+              : <span title="El lead debe estar en Propuesta o Ganado para convertirlo en proyecto" className="text-xs text-gray-400 dark:text-gray-500 px-3 py-2">Crear proyecto (requiere Propuesta o Ganado)</span>
+            : <span className="inline-flex items-center gap-1 text-sm text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/20 rounded-xl px-3 py-2 font-medium">Proyecto: {lead.convertedProject?.name}</span>}
           <button onClick={() => setShowEdit(true)} className="border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-xl px-3 py-2 text-sm font-medium">Editar</button>
           <button onClick={toggleArchive} className="border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-xl px-3 py-2 text-sm font-medium">
-            {lead.archived ? '↩️ Desarchivar' : '🗄 Archivar'}
+            {lead.archived ? 'Desarchivar' : 'Archivar'}
           </button>
           <button onClick={() => setConfirmDelete(true)} className="border border-red-300 dark:border-red-800 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl px-3 py-2 text-sm font-medium">Eliminar</button>
         </div>
@@ -372,7 +374,7 @@ export default function LeadDetail({ leadId, team, companies, onBack, onChanged 
                 </select>
               </div>
               {na.dueAt && (
-                <p className="text-[11px] text-gray-400">📌 Además se crea una tarea futura para el responsable, con fecha {fmtDate(na.dueAt)}.</p>
+                <p className="text-[11px] text-gray-400">Además se crea una tarea futura para el responsable, con fecha {fmtDate(na.dueAt)}.</p>
               )}
               <button onClick={addAction} disabled={!na.title.trim() || savingAction} className="w-full bg-primary-600 hover:bg-primary-700 disabled:opacity-50 text-white rounded-lg py-2 text-sm font-semibold">
                 {savingAction ? 'Agregando...' : 'Agregar acción'}
@@ -389,14 +391,14 @@ export default function LeadDetail({ leadId, team, companies, onBack, onChanged 
                   <div className="min-w-0">
                     <div className="font-medium text-gray-900 dark:text-white">{a.title}</div>
                     <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                      {a.dueAt ? `📅 ${fmtDate(a.dueAt)}` : 'Sin fecha'}
+                      {a.dueAt ? <><Icon as={CalendarDays} size={12} className="inline align-[-2px] mr-1" />{fmtDate(a.dueAt)}</> : 'Sin fecha'}
                       {a.owner ? ` · ${a.owner.name}` : ''}
-                      {a.taskId ? ' · 🔗 tarea creada' : ''}
+                      {a.taskId ? ' · tarea creada' : ''}
                     </div>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
-                    <button onClick={() => resolveAction(a.id)} className="text-xs font-medium text-green-600 hover:underline">✓ Resolver</button>
-                    <button onClick={() => deleteAction(a.id)} className="text-xs text-gray-400 hover:text-red-500">✕</button>
+                    <button onClick={() => resolveAction(a.id)} className="text-xs font-medium text-green-600 hover:underline">Resolver</button>
+                    <button onClick={() => deleteAction(a.id)} className="text-xs text-gray-400 hover:text-red-500"><Icon as={X} size={16} /></button>
                   </div>
                 </li>
               ))}
@@ -425,7 +427,7 @@ export default function LeadDetail({ leadId, team, companies, onBack, onChanged 
         <WhatsappLeadCard leadId={leadId} lead={lead} onChanged={load} />
         <div className={card}>
           <CollapsibleSectionHeader
-            title="🕘 Historial"
+            title="Historial"
             hasContent={lead.activities.length > 0}
             open={timelineOpen}
             onToggle={() => setTimelineOpen(o => !o)}
@@ -441,7 +443,7 @@ export default function LeadDetail({ leadId, team, companies, onBack, onChanged 
             {lead.activities.length === 0 && <li className="text-sm text-gray-400">Sin actividad todavía.</li>}
             {lead.activities.map(a => (
               <li key={a.id} className="flex gap-3">
-                <div className="shrink-0 text-lg leading-none mt-0.5">{a.kind === 'note' ? '📝' : (EVENT_ICON[a.type] || '•')}</div>
+                <div className="shrink-0 mt-0.5 w-6 h-6 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 flex items-center justify-center"><Icon as={a.kind === 'note' ? StickyNote : (EVENT_ICON[a.type] || Dot)} size={13} /></div>
                 <div className="flex-1 min-w-0">
                   <div className={`text-sm ${a.kind === 'note' ? 'text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-300'}`}>
                     {a.kind === 'event' && <span className="font-medium">{a.user?.name || 'Sistema'} </span>}

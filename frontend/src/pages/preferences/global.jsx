@@ -7,6 +7,8 @@ import LoadingSpinner from '../../components/LoadingSpinner'
 import ConfirmModal from '../../components/ConfirmModal'
 import { fmtBytes } from '../../lib/fileIcons'
 import { Toggle } from './shared'
+import { TriangleAlert } from 'lucide-react'
+import { Icon } from '../../components/ui/Icon'
 
 const TIMEZONES = [
   { value: 'America/Argentina/Buenos_Aires', label: 'Buenos Aires (UTC-3)' },
@@ -244,8 +246,8 @@ export default function GlobalTab({ loaded }) {
                   <div className="w-full h-2.5 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
                     <div className={`h-full rounded-full transition-all duration-500 ${barColor}`} style={{ width: `${monthPct}%` }} />
                   </div>
-                  {monthPct >= 95 && <p className="text-xs text-red-500 mt-1.5">🚫 Límite mensual alcanzado — las funcionalidades de IA están deshabilitadas.</p>}
-                  {monthPct >= 90 && monthPct < 95 && <p className="text-xs text-amber-600 dark:text-amber-400 mt-1.5">⚠️ Cerca del límite mensual — quedan {fmtN(limit - aiUsage.month.total)} tokens.</p>}
+                  {monthPct >= 95 && <p className="text-xs text-red-500 mt-1.5">Límite mensual alcanzado — las funcionalidades de IA están deshabilitadas.</p>}
+                  {monthPct >= 90 && monthPct < 95 && <p className="text-xs text-amber-600 dark:text-amber-400 mt-1.5">Cerca del límite mensual — quedan {fmtN(limit - aiUsage.month.total)} tokens.</p>}
                 </div>
 
                 {/* Botón desplegable */}
@@ -338,9 +340,9 @@ export default function GlobalTab({ loaded }) {
           chat:             'Chat',
         }
         const STATUS_COPY = {
-          warning:  { color: 'bg-amber-400', text: 'text-amber-600 dark:text-amber-400', msg: '⚠️ Te estás acercando al límite de almacenamiento del workspace.' },
-          critical: { color: 'bg-red-500',   text: 'text-red-500',                       msg: '⚠️ Estás muy cerca del límite de almacenamiento del workspace.' },
-          exceeded: { color: 'bg-red-500',   text: 'text-red-500',                       msg: '🚫 Se alcanzó el límite de almacenamiento del workspace.' },
+          warning:  { color: 'bg-amber-400', text: 'text-amber-600 dark:text-amber-400', msg: 'Te estás acercando al límite de almacenamiento del workspace.' },
+          critical: { color: 'bg-red-500',   text: 'text-red-500',                       msg: 'Estás muy cerca del límite de almacenamiento del workspace.' },
+          exceeded: { color: 'bg-red-500',   text: 'text-red-500',                       msg: 'Se alcanzó el límite de almacenamiento del workspace.' },
         }
         // El color/mensaje sale del `status` que ya calculó el backend (contra
         // storageWarningPct/storageCriticalPct de SuperAdmin) — a diferencia del
@@ -412,7 +414,7 @@ export default function GlobalTab({ loaded }) {
                       ))}
                     </div>
                     <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-2">
-                      Solo incluye Archivos y Contenido (lo atribuible a un proyecto puntual) — imágenes de RRSS y WhatsApp no se pueden asociar a un proyecto específico. Lo marcado "en papelera" es basura recuperable: abrí el proyecto → Nube → 🗑️ Papelera para verla y, si sos admin, eliminarla ya mismo (si no, se borra sola a los 30 días).
+                      Solo incluye Archivos y Contenido (lo atribuible a un proyecto puntual) — imágenes de RRSS y WhatsApp no se pueden asociar a un proyecto específico. Lo marcado "en papelera" es basura recuperable: abrí el proyecto → Nube → Papelera para verla y, si sos admin, eliminarla ya mismo (si no, se borra sola a los 30 días).
                     </p>
                   </div>
                 )}
@@ -530,7 +532,7 @@ export default function GlobalTab({ loaded }) {
                       disabled={digestTest.sending}
                       className="text-xs font-medium px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 transition-colors"
                     >
-                      {digestTest.sending ? 'Enviando…' : '✉️ Enviar ahora a mi correo'}
+                      {digestTest.sending ? 'Enviando…' : 'Enviar ahora a mi correo'}
                     </button>
                     {digestTest.msg && (
                       <span className={`text-xs ${digestTest.error ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>{digestTest.msg}</span>
@@ -611,7 +613,7 @@ export default function GlobalTab({ loaded }) {
                           disabled={lateTest.sending}
                           className="px-4 py-2 text-sm font-medium rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-60 transition-colors"
                         >
-                          {lateTest.sending ? 'Enviando…' : '✉️ Probar ahora'}
+                          {lateTest.sending ? 'Enviando…' : 'Probar ahora'}
                         </button>
                         <span className="text-xs text-gray-500 dark:text-gray-400">Te envía este email a tu casilla para ver cómo llega.</span>
                       </div>
@@ -638,7 +640,7 @@ export default function GlobalTab({ loaded }) {
           {deletionRequest && !deletionRequest.cancelledAt && (
             <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-2xl p-5">
               <div className="flex items-start gap-3">
-                <span className="text-red-500 text-xl flex-shrink-0">⚠️</span>
+                <span className="text-red-500 flex-shrink-0"><Icon as={TriangleAlert} size={20} className="inline-block text-amber-500" /></span>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-red-700 dark:text-red-400 mb-1">
                     Este workspace está programado para eliminarse
@@ -729,7 +731,7 @@ export default function GlobalTab({ loaded }) {
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
           <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl max-w-md w-full p-6">
             <div className="flex items-center gap-3 mb-4">
-              <span className="text-2xl">⚠️</span>
+              <span><Icon as={TriangleAlert} size={24} className="inline-block text-amber-500" /></span>
               <h2 className="text-lg font-bold text-gray-900 dark:text-white">Eliminar workspace</h2>
             </div>
             <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-4 mb-5">

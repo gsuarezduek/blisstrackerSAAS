@@ -2,6 +2,8 @@ import { useState, useRef, useEffect } from 'react'
 import { useMentionAutocomplete } from '../chat/useMentionAutocomplete'
 import { renderRichText } from '../../utils/richText'
 import { avatarUrl } from '../../utils/avatarUrl'
+import { Handshake } from 'lucide-react'
+import { Icon } from '../ui/Icon'
 
 function formatWhen(iso) {
   const d = new Date(iso)
@@ -80,7 +82,7 @@ export default function ContentCommentThread({ comments, visibility, postVisibil
               {c.author.isTeam ? (
                 <img src={avatarUrl(c.author.avatar)} alt="" className="w-7 h-7 rounded-full object-cover border border-gray-200 dark:border-gray-600 shrink-0" />
               ) : (
-                <div className="w-7 h-7 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-600 dark:text-amber-300 flex items-center justify-center text-xs font-bold shrink-0">🤝</div>
+                <div className="w-7 h-7 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-600 dark:text-amber-300 flex items-center justify-center shrink-0" title="Cliente"><Icon as={Handshake} size={14} /></div>
               )}
               <div className="min-w-0 flex-1">
                 <div className="flex items-baseline gap-1.5">

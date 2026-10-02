@@ -187,7 +187,7 @@ export default function TeamTab() {
       {/* ── Invitar por email (acción principal) ─────────────────────────── */}
       <div className="bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-xl p-4 mb-6">
         <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200 mb-3 flex items-center gap-2">
-          ✉️ Invitar al equipo
+          Invitar al equipo
         </h3>
         <form onSubmit={handleInvite} className="grid grid-cols-2 gap-3">
           <div className="col-span-2">
@@ -281,7 +281,7 @@ export default function TeamTab() {
                   {(u.extraRoles || []).map(r => <RoleBadge key={r} role={r} />)}
                   {u.workStartTime && (
                     <span className="text-xs px-2 py-1 rounded-full font-medium bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
-                      🕒 {u.workStartTime}{u.workEndTime ? `–${u.workEndTime}` : ''}
+                      {u.workStartTime}{u.workEndTime ? `–${u.workEndTime}` : ''}
                     </span>
                   )}
                   <button

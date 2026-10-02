@@ -32,7 +32,7 @@ export default function ProposalsPanel({ leadId, companyName, currency, onChange
   return (
     <div className={card}>
       <div className="flex items-center justify-between mb-3">
-        <h3 className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide">📄 Propuestas</h3>
+        <h3 className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide">Propuestas</h3>
         <button onClick={() => setModal({})} className="bg-primary-600 hover:bg-primary-700 text-white rounded-lg px-3 py-1.5 text-xs font-semibold">+ Nueva propuesta</button>
       </div>
 

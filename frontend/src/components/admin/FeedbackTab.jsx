@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react'
 import api from '../../api/client'
 import RoleBadge from '../RoleBadge'
 import LoadingSpinner from '../LoadingSpinner'
+import { MessageCircle } from 'lucide-react'
+import { Icon } from '../ui/Icon'
 
 function timeAgo(dateStr) {
   const diff = Math.floor((Date.now() - new Date(dateStr)) / 1000)
@@ -53,8 +55,8 @@ export default function FeedbackTab() {
         {[
           { id: 'all', label: 'Todos' },
           { id: 'unread', label: `Sin leer (${unreadCount})` },
-          { id: 'SUGGESTION', label: '💡 Sugerencias' },
-          { id: 'BUG', label: '🐛 Errores' },
+          { id: 'SUGGESTION', label: 'Sugerencias' },
+          { id: 'BUG', label: 'Errores' },
         ].map(f => (
           <button
             key={f.id}
@@ -74,7 +76,7 @@ export default function FeedbackTab() {
 
       {!loading && filtered.length === 0 && (
         <div className="text-center py-12 text-gray-400">
-          <p className="text-3xl mb-2">💬</p>
+          <p className="mb-2"><Icon as={MessageCircle} size={28} className="inline-block text-gray-300 dark:text-gray-600" /></p>
           <p>{filter === 'unread' ? 'No hay mensajes sin leer' : 'No hay mensajes todavía'}</p>
         </div>
       )}
@@ -95,7 +97,7 @@ export default function FeedbackTab() {
                     ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400'
                     : 'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400'
                 }`}>
-                  {f.type === 'BUG' ? '🐛 Error' : '💡 Sugerencia'}
+                  {f.type === 'BUG' ? 'Error' : 'Sugerencia'}
                 </span>
 
                 {/* Message */}

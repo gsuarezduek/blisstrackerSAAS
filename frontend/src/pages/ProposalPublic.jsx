@@ -5,6 +5,8 @@ import DOMPurify from 'dompurify'
 import { exportProposalPdf } from '../components/ventas/proposalPdf'
 import ProposalDocView from '../components/ventas/ProposalDocView'
 import '../components/situation-editor.css'
+import { FileText } from 'lucide-react'
+import { Icon } from '../components/ui/Icon'
 
 const API = import.meta.env.VITE_API_URL || ''
 
@@ -43,7 +45,7 @@ export default function ProposalPublic() {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
         <div className="text-center max-w-sm">
-          <p className="text-4xl mb-4">📄</p>
+          <p className="mb-4"><Icon as={FileText} size={32} className="inline-block text-gray-300 dark:text-gray-600" /></p>
           <p className="text-lg font-semibold text-gray-800 mb-2">Propuesta no disponible</p>
           <p className="text-sm text-gray-500">{error || 'No se encontró la propuesta.'}</p>
         </div>
@@ -111,7 +113,7 @@ export default function ProposalPublic() {
             className="px-4 py-2 text-sm font-medium rounded-xl text-white"
             style={{ backgroundColor: accent }}
           >
-            🖨️ Descargar PDF
+            Descargar PDF
           </button>
         </div>
 

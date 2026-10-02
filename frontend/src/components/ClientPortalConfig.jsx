@@ -10,20 +10,20 @@ const API = import.meta.env.VITE_API_URL || ''
 // Mismas claves que SECTION_KEYS en backend/src/controllers/monthlyReport.controller.js
 // (labels/iconos espejo de SECTION_CATALOG en marketing/InformesTabParts.jsx).
 const LIVE_SECTIONS = [
-  { key: 'objectives',  label: 'Objetivos',                              icon: '🎯' },
-  { key: 'analytics',   label: 'Analítica web (GA4)',                    icon: '📊' },
-  { key: 'performance', label: 'Performance web',                        icon: '⚡' },
-  { key: 'geo',         label: 'Presencia en IA (GEO)',                  icon: '🤖' },
-  { key: 'seo',         label: 'Rendimiento del sitio (Search Console)', icon: '🔍' },
-  { key: 'keywords',    label: 'Posicionamiento SEO (keywords)',         icon: '🔑' },
-  { key: 'instagram',   label: 'Instagram',                              icon: '📸' },
-  { key: 'tiktok',      label: 'TikTok',                                 icon: '🎵' },
-  { key: 'linkedin',    label: 'LinkedIn',                               icon: '💼' },
-  { key: 'facebook',    label: 'Facebook',                               icon: '👍' },
-  { key: 'metaAds',     label: 'Meta Ads',                               icon: '📣' },
-  { key: 'googleAds',   label: 'Google Ads',                             icon: '🔎' },
-  { key: 'competitors', label: 'Competidores',                           icon: '🏁' },
-  { key: 'tasks',       label: 'Trabajo realizado',                      icon: '✅' },
+  { key: 'objectives',  label: 'Objetivos'},
+  { key: 'analytics',   label: 'Analítica web (GA4)'},
+  { key: 'performance', label: 'Performance web'},
+  { key: 'geo',         label: 'Presencia en IA (GEO)'},
+  { key: 'seo',         label: 'Rendimiento del sitio (Search Console)'},
+  { key: 'keywords',    label: 'Posicionamiento SEO (keywords)'},
+  { key: 'instagram',   label: 'Instagram'},
+  { key: 'tiktok',      label: 'TikTok'},
+  { key: 'linkedin',    label: 'LinkedIn'},
+  { key: 'facebook',    label: 'Facebook'},
+  { key: 'metaAds',     label: 'Meta Ads'},
+  { key: 'googleAds',   label: 'Google Ads'},
+  { key: 'competitors', label: 'Competidores'},
+  { key: 'tasks',       label: 'Trabajo realizado'},
 ]
 
 // Configuración del portal de cliente (Info → antes de Equipo). Acceso externo,
@@ -151,7 +151,7 @@ export default function ClientPortalConfig({ projectId, canEdit, filesEnabled })
         </div>
         {canEdit && !editing && (
           <button onClick={openEdit} className="text-xs text-primary-600 dark:text-primary-400 hover:underline font-medium">
-            {portal ? '✏️ Editar' : '+ Configurar acceso'}
+            {portal ? 'Editar' : '+ Configurar acceso'}
           </button>
         )}
       </div>
@@ -316,7 +316,7 @@ export default function ClientPortalConfig({ projectId, canEdit, filesEnabled })
                       : 'border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400'}`}
                 >
                   <input type="checkbox" className="hidden" checked={draft.liveSections.includes(s.key)} onChange={() => toggleSection(s.key)} />
-                  {s.icon} {s.label}
+                  {s.label}
                 </label>
               ))}
             </div>

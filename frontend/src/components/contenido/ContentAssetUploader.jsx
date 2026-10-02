@@ -1,5 +1,7 @@
 import { useState, useRef, useCallback } from 'react'
 import api from '../../api/client'
+import { Cloud, Link2, Upload, X } from 'lucide-react'
+import { Icon } from '../ui/Icon'
 
 // Mismos topes que el backend (content.controller.js valida de nuevo, esto es
 // solo para dar feedback instantáneo sin ida y vuelta al servidor).
@@ -257,7 +259,7 @@ export default function ContentAssetUploader({ projectId, pieceId, onUploaded, d
           title={`PNG, JPG, WEBP, GIF (hasta ${fmtMb(MAX_BYTES.image)}) · MP4, MOV, WEBM (hasta ${fmtMb(MAX_BYTES.video)})`}
           className={`${CARD_BASE} ${disabled ? CARD_DISABLED : dragOver ? CARD_ACTIVE : CARD_ENABLED}`}
         >
-          <span className="text-xl">📤</span>
+          <Icon as={Upload} size={20} />
           <p className="text-xs font-semibold text-gray-600 dark:text-gray-300">
             {dragOver ? 'Soltá para subir' : 'Desde tu computadora'}
           </p>
@@ -280,7 +282,7 @@ export default function ContentAssetUploader({ projectId, pieceId, onUploaded, d
           onSubmit={handleAddLink}
           className={`${CARD_BASE} ${disabled ? CARD_DISABLED : 'border-gray-200 dark:border-gray-700 cursor-default'}`}
         >
-          <span className="text-xl">🔗</span>
+          <Icon as={Link2} size={20} />
           <p className="text-xs font-semibold text-gray-600 dark:text-gray-300">Link externo</p>
           <div className="w-full flex items-center gap-1">
             <input
@@ -310,7 +312,7 @@ export default function ContentAssetUploader({ projectId, pieceId, onUploaded, d
             title={libraryDisabled ? 'No disponible con la pieza publicada' : undefined}
             className={`${CARD_BASE} ${disabled || libraryDisabled ? CARD_DISABLED : CARD_ENABLED}`}
           >
-            <span className="text-xl">☁️</span>
+            <Icon as={Cloud} size={20} />
             <p className="text-xs font-semibold text-gray-600 dark:text-gray-300">Nube de BlissTracker</p>
             <p className="text-[11px] text-gray-400 dark:text-gray-500 leading-tight">
               Archivo ya subido al proyecto
@@ -334,11 +336,11 @@ export default function ContentAssetUploader({ projectId, pieceId, onUploaded, d
                   <div className="w-16 h-1.5 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden shrink-0">
                     <div className="h-full bg-primary-500 transition-all" style={{ width: `${it.status === 'uploading' ? it.progress : 100}%` }} />
                   </div>
-                  <button onClick={() => cancel(it.id)} className="text-gray-400 hover:text-red-500 shrink-0" title="Cancelar">✕</button>
+                  <button onClick={() => cancel(it.id)} className="text-gray-400 hover:text-red-500 shrink-0" title="Cancelar"><Icon as={X} size={16} /></button>
                 </>
               )}
               {it.status === 'error' && (
-                <button onClick={() => removeItem(it.id)} className="text-gray-400 hover:text-gray-600 shrink-0">✕</button>
+                <button onClick={() => removeItem(it.id)} className="text-gray-400 hover:text-gray-600 shrink-0"><Icon as={X} size={16} /></button>
               )}
             </div>
           ))}

@@ -3,6 +3,8 @@ import ContentNetworkChips from './ContentNetworkChips'
 import ContentStarButton from './ContentStarButton'
 import { OPEN_STATUSES, STATUS_BADGE } from './contentCatalog'
 import { formatDateTime } from './dateHelpers'
+import { Handshake } from 'lucide-react'
+import { Icon } from '../ui/Icon'
 
 /**
  * Kanban por estado. Drag & drop HTML5 nativo, mismo patrón que
@@ -110,7 +112,7 @@ export default function ContentKanbanView({ pieces, canEdit, onMove, onStar, onO
                           className="text-[11px] text-gray-400 truncate max-w-[90px] shrink-0"
                           title={p.ownerContact ? `Cliente: ${p.ownerContact.name}` : p.owner.name}
                         >
-                          {p.ownerContact ? `🤝 ${p.ownerContact.name}` : p.owner.name}
+                          {p.ownerContact ? <><Icon as={Handshake} size={12} className="inline align-[-2px] mr-1" />{p.ownerContact.name}</> : p.owner.name}
                         </span>
                       )}
                     </div>

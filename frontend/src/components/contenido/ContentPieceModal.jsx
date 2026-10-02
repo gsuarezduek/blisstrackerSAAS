@@ -18,6 +18,8 @@ import useContentSocket from './useContentSocket'
 import { CONTENT_STATUSES, CONTENT_TYPES, CONTENT_NETWORKS } from './contentCatalog'
 import { toLocalInput } from './dateHelpers'
 import { fmtBytes, iconFor } from '../../lib/fileIcons'
+import { Link2, Trash2, X } from 'lucide-react'
+import { Icon } from '../ui/Icon'
 
 const LABEL = 'text-xs font-medium text-gray-500 dark:text-gray-400 mb-1 block'
 const INPUT = 'w-full px-2.5 py-1.5 text-sm rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 disabled:opacity-60 disabled:cursor-not-allowed'
@@ -245,7 +247,7 @@ export default function ContentPieceModal({ piece, members = [], clientContacts 
                 }
                 className="flex items-center gap-1 h-8 px-2.5 rounded-lg text-xs font-medium border border-primary-200 dark:border-primary-800 text-primary-600 dark:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/20 disabled:opacity-40 disabled:cursor-not-allowed transition-colors whitespace-nowrap"
               >
-                📋 {sendingToDashboard ? 'Enviando…' : 'Enviar al dashboard'}
+                {sendingToDashboard ? 'Enviando…' : 'Enviar al dashboard'}
               </button>
             )}
             {canEdit && (
@@ -254,14 +256,14 @@ export default function ContentPieceModal({ piece, members = [], clientContacts 
                 title="Eliminar pieza"
                 className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
               >
-                🗑
+                <Icon as={Trash2} size={15} />
               </button>
             )}
             <button
               onClick={onClose}
               className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
             >
-              ✕
+              <Icon as={X} size={16} />
             </button>
           </div>
         </div>
@@ -335,7 +337,7 @@ export default function ContentPieceModal({ piece, members = [], clientContacts 
                           rel="noopener noreferrer"
                           className="flex flex-col items-center gap-2 text-gray-300 hover:text-white transition-colors px-4 text-center"
                         >
-                          <span className="text-4xl">🔗</span>
+                          <Icon as={Link2} size={32} className="text-gray-400" />
                           <span className="text-sm break-all">{activeAsset.fileName || activeAsset.url}</span>
                         </a>
                       )
@@ -371,7 +373,7 @@ export default function ContentPieceModal({ piece, members = [], clientContacts 
                 {/* Archivos del proyecto ya vinculados — lista aparte de las tarjetas de arriba */}
                 {piece.files.length > 0 && (
                   <div className="pt-1">
-                    <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5">📎 Vinculados desde Nube</p>
+                    <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5">Vinculados desde Nube</p>
                     {filesError && <p className="text-xs text-red-600 dark:text-red-400 mb-1.5">{filesError}</p>}
                     <div className="space-y-1">
                       {piece.files.map(link => (
@@ -388,7 +390,7 @@ export default function ContentPieceModal({ piece, members = [], clientContacts 
                                 className="w-7 h-7 rounded object-cover shrink-0"
                               />
                             ) : (
-                              <span className="text-base shrink-0">{iconFor(link.file.mimeType)}</span>
+                              <Icon as={iconFor(link.file.mimeType)} size={15} className="text-gray-400" />
                             )}
                             <span className="min-w-0 flex-1">
                               <span className="block text-sm text-gray-700 dark:text-gray-200 truncate">{link.file.name}</span>
@@ -403,7 +405,7 @@ export default function ContentPieceModal({ piece, members = [], clientContacts 
                               className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 transition-opacity shrink-0 text-sm"
                               title="Desvincular"
                             >
-                              ✕
+                              <Icon as={X} size={16} />
                             </button>
                           )}
                         </div>
@@ -457,14 +459,14 @@ export default function ContentPieceModal({ piece, members = [], clientContacts 
                         ? 'bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400'
                         : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300'}`}>
                     {piece.currentTask.status === 'COMPLETED' ? (
-                      '✅ Tramo completado'
+                      'Tramo completado'
                     ) : piece.currentTask.status === 'IN_PROGRESS' ? (
                       <>
                         <span className="w-1.5 h-1.5 rounded-full bg-primary-500 animate-pulse" />
                         {(piece.owner?.name ?? 'Alguien') + ' está trabajando en esto ahora'}
                       </>
                     ) : (
-                      '⏳ En el dashboard de ' + (piece.owner?.name ?? '—')
+                      'En el dashboard de ' + (piece.owner?.name ?? '—')
                     )}
                   </span>
                 </div>

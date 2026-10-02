@@ -7,6 +7,8 @@ import ContentStarButton from './ContentStarButton'
 import ContentOwnerSelect from './ContentOwnerSelect'
 import { CONTENT_STATUSES, statusMeta, statusBadgeClass, typeLabel } from './contentCatalog'
 import { toLocalInput, formatDateTime as formatDate } from './dateHelpers'
+import { Handshake, Pencil, Trash2 } from 'lucide-react'
+import { Icon } from '../ui/Icon'
 
 const CELL   = 'px-3 py-2 text-sm align-middle'
 const HEAD   = 'px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 select-none'
@@ -74,7 +76,7 @@ function TitleCell({ piece, canEdit, onSave, onOpen }) {
               title="Renombrar"
               className="opacity-0 group-hover:opacity-100 text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 shrink-0 transition-opacity"
             >
-              ✏️
+              <Icon as={Pencil} size={15} />
             </button>
           )}
         </div>
@@ -85,7 +87,7 @@ function TitleCell({ piece, canEdit, onSave, onOpen }) {
             className="mt-0.5 text-xs italic text-amber-700/90 dark:text-amber-400/90 truncate"
             title={`${piece.lastClientComment.author}: "${piece.lastClientComment.body}"`}
           >
-            🤝 {piece.lastClientComment.author}: «{piece.lastClientComment.body}»
+            {piece.lastClientComment.author}: «{piece.lastClientComment.body}»
           </p>
         )}
       </div>
@@ -308,7 +310,7 @@ export default function ContentTableView({ pieces, members, clientContacts = [],
                     />
                   ) : (
                     <span className="text-sm text-gray-600 dark:text-gray-400">
-                      {p.ownerContact ? `🤝 ${p.ownerContact.name}` : p.owner?.name ?? '—'}
+                      {p.ownerContact ? <><Icon as={Handshake} size={12} className="inline align-[-2px] mr-1" />{p.ownerContact.name}</> : p.owner?.name ?? '—'}
                     </span>
                   )}
                 </td>
@@ -321,7 +323,7 @@ export default function ContentTableView({ pieces, members, clientContacts = [],
                       title="Eliminar pieza"
                       className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-600 dark:text-gray-600 dark:hover:text-red-400 transition-all"
                     >
-                      🗑
+                      <Icon as={Trash2} size={15} />
                     </button>
                   )}
                 </td>

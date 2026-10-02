@@ -14,7 +14,7 @@ describe('ProposalBriefStep', () => {
     render(<ProposalBriefStep brief={brief} state={initialBriefState(brief)} onChange={() => {}} />)
     expect(screen.getByText('Es una carnicería que se transforma')).toBeTruthy()
     expect(screen.getByText(/¿Qué plan recomendamos\?/)).toBeTruthy()
-    expect(screen.getByText(/★ sugerida/)).toBeTruthy()
+    expect(screen.getByText(/sugerida/)).toBeTruthy()
     expect(screen.getByText('Cantidad de sucursales')).toBeTruthy()
     expect(screen.getByText('Historia de expansión / lanzamiento')).toBeTruthy()
   })

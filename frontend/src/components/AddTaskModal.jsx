@@ -534,7 +534,7 @@ export default function AddTaskModal({ onAdd, onClose, lockedProject, defaultPro
               <div className="space-y-1">
                 {pendingFiles.map((f, i) => (
                   <div key={`${f.name}-${i}`} className="group flex items-center gap-2 text-sm px-2 py-1 rounded-lg bg-gray-50 dark:bg-gray-700/40">
-                    <span className="flex-shrink-0">{iconFor(f.type)}</span>
+                    <Icon as={iconFor(f.type)} size={15} className="text-gray-400" />
                     <span className="flex-1 min-w-0 truncate text-gray-700 dark:text-gray-300">{f.name}</span>
                     <span className="flex-shrink-0 text-xs text-gray-400 dark:text-gray-500">{fmtBytes(f.size)}</span>
                     <button

@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback } from 'react'
 import api from '../../api/client'
 import LoadingSpinner from '../LoadingSpinner'
 import { fmtBytes, iconFor } from '../../lib/fileIcons'
+import { Folder } from 'lucide-react'
+import { Icon } from '../ui/Icon'
 
 /**
  * "📂 Seleccionar archivo del proyecto" — navegador de carpetas del repositorio
@@ -68,7 +70,7 @@ export default function ContentFileBrowserModal({ projectId, linkedFileIds, onLi
         disabled={linked || linkingId === file.id}
         className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 text-sm text-left disabled:cursor-default"
       >
-        <span className="text-lg shrink-0">{iconFor(file.mimeType)}</span>
+        <Icon as={iconFor(file.mimeType)} size={17} className="text-gray-400" />
         <span className="min-w-0 flex-1">
           <span className="block text-gray-700 dark:text-gray-200 truncate">{file.name}</span>
           <span className="block text-[11px] text-gray-400 dark:text-gray-500 truncate">
@@ -76,7 +78,7 @@ export default function ContentFileBrowserModal({ projectId, linkedFileIds, onLi
           </span>
         </span>
         {linked ? (
-          <span className="text-xs text-primary-600 dark:text-primary-400 shrink-0">✓ Vinculado</span>
+          <span className="text-xs text-primary-600 dark:text-primary-400 shrink-0">Vinculado</span>
         ) : linkingId === file.id ? (
           <span className="text-xs text-gray-400 shrink-0">Vinculando…</span>
         ) : (
@@ -90,7 +92,7 @@ export default function ContentFileBrowserModal({ projectId, linkedFileIds, onLi
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[60] p-4" onClick={onClose}>
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md flex flex-col max-h-[80vh]" onClick={e => e.stopPropagation()}>
         <div className="px-5 pt-5 pb-3 border-b dark:border-gray-700 flex items-center justify-between gap-3 shrink-0">
-          <p className="text-sm font-bold text-gray-900 dark:text-white">📂 Seleccionar archivo del proyecto</p>
+          <p className="text-sm font-bold text-gray-900 dark:text-white">Seleccionar archivo del proyecto</p>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 text-xl leading-none shrink-0">×</button>
         </div>
 
@@ -98,14 +100,14 @@ export default function ContentFileBrowserModal({ projectId, linkedFileIds, onLi
           <input
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
-            placeholder="🔍 Buscar en todo el proyecto…"
+            placeholder="Buscar en todo el proyecto…"
             className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
           />
         </div>
 
         {searchResults === null && (
           <div className="px-5 py-2.5 text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1 flex-wrap border-b dark:border-gray-700 mt-2">
-            <button onClick={() => setFolderId(null)} className={`hover:text-primary-600 dark:hover:text-primary-400 ${!folderId ? 'font-semibold text-gray-700 dark:text-gray-200' : ''}`}>🏠 Raíz</button>
+            <button onClick={() => setFolderId(null)} className={`hover:text-primary-600 dark:hover:text-primary-400 ${!folderId ? 'font-semibold text-gray-700 dark:text-gray-200' : ''}`}>Raíz</button>
             {path.map(p => (
               <span key={p.id} className="flex items-center gap-1">
                 <span>/</span>
@@ -126,7 +128,7 @@ export default function ContentFileBrowserModal({ projectId, linkedFileIds, onLi
             ) : (
               <div className="space-y-0.5">
                 {searchResults.map(f => (
-                  <FileRow key={f.id} file={f} caption={f.path.length ? `🏠 / ${f.path.map(p => p.name).join(' / ')}` : '🏠 Raíz'} />
+                  <FileRow key={f.id} file={f} caption={f.path.length ? `Raíz / ${f.path.map(p => p.name).join(' / ')}` : 'Raíz'} />
                 ))}
               </div>
             )
@@ -141,7 +143,7 @@ export default function ContentFileBrowserModal({ projectId, linkedFileIds, onLi
                   key={f.id} onClick={() => setFolderId(f.id)}
                   className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 text-sm text-left text-gray-700 dark:text-gray-200"
                 >
-                  <span>📁</span><span className="truncate">{f.name}</span>
+                  <Icon as={Folder} size={15} className="text-gray-400" /><span className="truncate">{f.name}</span>
                 </button>
               ))}
               {files.map(f => <FileRow key={f.id} file={f} />)}

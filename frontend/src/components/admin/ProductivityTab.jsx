@@ -8,6 +8,8 @@ import RoleBadge from '../RoleBadge'
 import UserLink from '../UserLink'
 import DateRangeFilter from '../DateRangeFilter'
 import HowToButton from '../HowToButton'
+import { Clock, Palmtree, Search, X } from 'lucide-react'
+import { Icon } from '../ui/Icon'
 
 // Arma los query params de período para cualquier request de Productividad, a partir del
 // modo elegido en PeriodSelector. `customRange` solo importa cuando mode === 'custom'.
@@ -171,7 +173,7 @@ function AttendanceCell({ att }) {
     <span className="inline-flex items-center gap-1.5">
       <span className={`tabular-nums ${color}`} title={`${daysPresent} de ${expectedDays} días hábiles esperados`}>{daysPresent}/{expectedDays}</span>
       {lateDays > 0 && (
-        <span className="text-[10px] px-1 py-0.5 rounded bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400" title="Tardanzas en el período">⏰{lateDays}</span>
+        <span className="text-[10px] px-1 py-0.5 rounded bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400" title="Tardanzas en el período"><Icon as={Clock} size={10} className="inline align-[-1px] mr-0.5" />{lateDays}</span>
       )}
     </span>
   )
@@ -204,14 +206,14 @@ function HoursAttendanceBlock({ att }) {
         <span className="tabular-nums">
           <strong>{daysPresent}/{expectedDays}</strong> días háb.
           {absentDays > 0 && <span className="text-red-600 dark:text-red-400"> · {absentDays} sin act.</span>}
-          {leaveDays > 0 && <span className="text-gray-400 dark:text-gray-500"> · 🌴{leaveDays}</span>}
+          {leaveDays > 0 && <span className="text-gray-400 dark:text-gray-500" title="Días de licencia"> · <Icon as={Palmtree} size={11} className="inline align-[-1px] mr-0.5" />{leaveDays}</span>}
         </span>
       </li>
       <li className="flex justify-between gap-2">
         <span className="text-gray-500 dark:text-gray-400">Tardanzas</span>
         {hasSchedule
           ? (lateDays > 0
-              ? <strong className="text-amber-600 dark:text-amber-400">⏰ {lateDays}</strong>
+              ? <strong className="text-amber-600 dark:text-amber-400">{lateDays}</strong>
               : <span className="text-green-600 dark:text-green-400">sin tardanzas</span>)
           : <span className="text-gray-400 dark:text-gray-500">sin horario</span>}
       </li>
@@ -688,7 +690,7 @@ function SummaryBar({ members, filter, onFilter }) {
     <div className={`border rounded-xl px-4 py-3 mb-4 ${wrapperCls}`}>
       <p className="text-sm text-gray-600 dark:text-gray-300 mb-2">
         {needAttention === 0
-          ? <>✅ Nadie necesita atención inmediata.</>
+          ? <>Nadie necesita atención inmediata.</>
           : <><strong className="text-gray-900 dark:text-white">{needAttention}</strong> {needAttention === 1 ? 'persona necesita' : 'personas necesitan'} atención.</>}
       </p>
       <div className="flex flex-wrap gap-2">
@@ -706,7 +708,7 @@ function SummaryBar({ members, filter, onFilter }) {
         ))}
         {filter && (
           <button onClick={() => onFilter(null)} className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 px-2 py-1">
-            ✕ quitar filtro
+            quitar filtro
           </button>
         )}
       </div>
@@ -777,7 +779,7 @@ function ByPersonView({ data, loading, setData, mode, customRange }) {
 
       {/* Buscador de personas */}
       <div className="mb-4 relative max-w-xs">
-        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500 pointer-events-none">🔍</span>
+        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500 pointer-events-none"><Icon as={Search} size={14} /></span>
         <input
           type="text"
           value={query}
@@ -791,7 +793,7 @@ function ByPersonView({ data, loading, setData, mode, customRange }) {
             className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-sm"
             aria-label="Limpiar búsqueda"
           >
-            ✕
+            <Icon as={X} size={16} />
           </button>
         )}
       </div>

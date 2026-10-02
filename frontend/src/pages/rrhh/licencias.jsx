@@ -70,9 +70,9 @@ export function EditModal({ request, onClose, onDone }) {
             <label className="text-xs font-medium text-gray-500 dark:text-gray-400 block mb-2">Estado</label>
             <div className="flex gap-2">
               {[
-                ['approved', '✅ Aprobada', 'green'],
-                ['rejected', '❌ Rechazada', 'red'],
-                ['pending',  '⏳ Pendiente', 'yellow'],
+                ['approved', 'Aprobada', 'green'],
+                ['rejected', 'Rechazada', 'red'],
+                ['pending',  'Pendiente', 'yellow'],
               ].map(([v, l]) => (
                 <label key={v} className={`flex-1 flex items-center justify-center gap-1.5 cursor-pointer border-2 rounded-xl px-2 py-2 text-xs font-medium transition-all ${
                   status === v

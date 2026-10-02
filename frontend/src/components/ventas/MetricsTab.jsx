@@ -108,7 +108,7 @@ export default function MetricsTab() {
       {/* WhatsApp (Fase 6 del plan) — solo si el workspace tiene el módulo habilitado */}
       {m.whatsapp && (
         <div className={card}>
-          <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200 mb-4">💬 WhatsApp — este mes</h3>
+          <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200 mb-4">WhatsApp — este mes</h3>
           <div className="flex flex-wrap gap-3">
             <div className="border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-3 min-w-[120px]">
               <div className="text-lg font-bold text-gray-900 dark:text-white">{m.whatsapp.conversationsActive}</div>

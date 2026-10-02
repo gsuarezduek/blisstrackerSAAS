@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react'
 import api from '../../api/client'
 import RoleBadge from '../RoleBadge'
 import { fmtMins, monthsInRange } from '../../utils/format'
+import { ChartColumn } from 'lucide-react'
+import { Icon } from '../ui/Icon'
 
 function thisWeekRange() {
   const now = new Date()
@@ -150,7 +152,7 @@ export default function ReportsTab() {
 
       {data.length === 0 && !loading && (
         <div className="text-center py-12 text-gray-400">
-          <p className="text-3xl mb-2">📊</p>
+          <p className="mb-2"><Icon as={ChartColumn} size={28} className="inline-block text-gray-300 dark:text-gray-600" /></p>
           <p>No hay datos para el período seleccionado</p>
         </div>
       )}

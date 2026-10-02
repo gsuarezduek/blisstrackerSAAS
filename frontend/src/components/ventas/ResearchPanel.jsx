@@ -126,7 +126,7 @@ export default function ResearchPanel({ leadId, companyName, onChanged }) {
   return (
     <div className={card}>
       <CollapsibleSectionHeader
-        title="🔎 Investigación de la empresa (IA)"
+        title="Investigación de la empresa (IA)"
         hasContent={hasContent}
         open={open}
         onToggle={() => setOpen(o => !o)}
@@ -178,10 +178,10 @@ export default function ResearchPanel({ leadId, companyName, onChanged }) {
               de mandar la propuesta. Exportable a PDF con el logo/marca del workspace. */}
           <div className="pt-3 mt-1 border-t border-gray-100 dark:border-gray-700">
             <div className="flex items-center justify-between mb-2">
-              <h4 className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide">📣 Informe para el cliente</h4>
+              <h4 className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide">Informe para el cliente</h4>
               <button onClick={generateReport} disabled={genReport}
                 className="text-xs font-semibold text-primary-600 hover:underline disabled:opacity-60">
-                {genReport ? 'Generando…' : research.reportHtml ? '🔄 Regenerar' : '✨ Generar con IA'}
+                {genReport ? 'Generando…' : research.reportHtml ? 'Regenerar' : 'Generar con IA'}
               </button>
             </div>
 
@@ -197,8 +197,8 @@ export default function ResearchPanel({ leadId, companyName, onChanged }) {
                 <div className="situation-content text-sm text-gray-700 dark:text-gray-300 max-h-40 overflow-y-auto border border-gray-100 dark:border-gray-700 rounded-lg p-3"
                   dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(research.reportHtml) }} />
                 <div className="flex gap-2">
-                  <button onClick={downloadReportPdf} className="border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 font-medium rounded-lg px-3 py-1.5 text-xs">🖨️ PDF</button>
-                  <button onClick={startEditReport} className="border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 font-medium rounded-lg px-3 py-1.5 text-xs">✏️ Editar</button>
+                  <button onClick={downloadReportPdf} className="border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 font-medium rounded-lg px-3 py-1.5 text-xs">PDF</button>
+                  <button onClick={startEditReport} className="border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 font-medium rounded-lg px-3 py-1.5 text-xs">Editar</button>
                 </div>
               </div>
             )}

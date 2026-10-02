@@ -30,13 +30,13 @@ function StatusSelect({ status, saving, onChange, title }) {
 }
 
 const STAT_CARDS = [
-  { key: 'totalLeads',          label: 'Leads nuevos (mes)',    icon: '📇', accent: 'text-gray-900 dark:text-white' },
-  { key: 'proposalsThisMonth',  label: 'Propuestas del mes',    icon: '📄', accent: 'text-gray-900 dark:text-white' },
-  { key: 'inProposal',          label: 'Por cerrar (Propuesta)', icon: '⏳', accent: 'text-amber-600 dark:text-amber-400' },
-  { key: 'wonThisMonth',        label: 'Ganados este mes',      icon: '🏆', accent: 'text-green-600 dark:text-green-400' },
-  { key: 'lostThisMonth',       label: 'Perdidos este mes',     icon: '💔', accent: 'text-red-600 dark:text-red-400' },
-  { key: 'actionsTodayCount',   label: 'Acciones para hoy',     icon: '📅', accent: 'text-blue-600 dark:text-blue-400' },
-  { key: 'actionsOverdueCount', label: 'Acciones vencidas',     icon: '🔴', accent: 'text-red-600 dark:text-red-400' },
+  { key: 'totalLeads',          label: 'Leads nuevos (mes)', accent: 'text-gray-900 dark:text-white' },
+  { key: 'proposalsThisMonth',  label: 'Propuestas del mes', accent: 'text-gray-900 dark:text-white' },
+  { key: 'inProposal',          label: 'Por cerrar (Propuesta)', accent: 'text-amber-600 dark:text-amber-400' },
+  { key: 'wonThisMonth',        label: 'Ganados este mes', accent: 'text-green-600 dark:text-green-400' },
+  { key: 'lostThisMonth',       label: 'Perdidos este mes', accent: 'text-red-600 dark:text-red-400' },
+  { key: 'actionsTodayCount',   label: 'Acciones para hoy', accent: 'text-blue-600 dark:text-blue-400' },
+  { key: 'actionsOverdueCount', label: 'Acciones vencidas', accent: 'text-red-600 dark:text-red-400' },
 ]
 
 const input = 'border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500'
@@ -72,12 +72,12 @@ function ActionRow({ a, onOpenLead, overdue }) {
   )
 }
 
-function ActionsPanel({ title, icon, items, onOpenLead, overdue }) {
+function ActionsPanel({ title, items, onOpenLead, overdue }) {
   return (
     <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl overflow-hidden">
       <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700">
         <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">
-          {icon} {title} <span className="font-normal text-gray-400">({items.length})</span>
+          {title} <span className="font-normal text-gray-400">({items.length})</span>
         </h3>
       </div>
       {items.length === 0 ? (
@@ -194,7 +194,6 @@ export default function DashboardTab({ team, onOpenLead, onDataChange }) {
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3">
         {STAT_CARDS.map(c => (
           <div key={c.key} className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-4">
-            <div className="text-lg mb-1">{c.icon}</div>
             <div className={`text-2xl font-bold ${c.accent}`}>{dash?.cards?.[c.key] ?? 0}</div>
             <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 leading-tight">{c.label}</div>
           </div>
@@ -203,8 +202,8 @@ export default function DashboardTab({ team, onOpenLead, onDataChange }) {
 
       {/* Acciones del equipo — hoy y vencidas, de todos los responsables (no solo las propias) */}
       <div className="grid sm:grid-cols-2 gap-4">
-        <ActionsPanel title="Acciones de hoy" icon="📅" items={dash?.actionsToday || []} onOpenLead={onOpenLead} />
-        <ActionsPanel title="Acciones vencidas" icon="🔴" items={dash?.actionsOverdue || []} onOpenLead={onOpenLead} overdue />
+        <ActionsPanel title="Acciones de hoy" items={dash?.actionsToday || []} onOpenLead={onOpenLead} />
+        <ActionsPanel title="Acciones vencidas" items={dash?.actionsOverdue || []} onOpenLead={onOpenLead} overdue />
       </div>
 
       {/* Barra de filtros + acción */}
@@ -239,7 +238,7 @@ export default function DashboardTab({ team, onOpenLead, onDataChange }) {
             onClick={() => setFilter('archived', filters.archived ? '' : 'true')}
             className={`rounded-xl px-3 py-2 text-sm font-medium border ${filters.archived ? 'bg-gray-700 text-white border-gray-700 dark:bg-gray-600 dark:border-gray-600' : 'border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'}`}
           >
-            🗄 {filters.archived ? 'Viendo archivados' : 'Ver archivados'}
+            {filters.archived ? 'Viendo archivados' : 'Ver archivados'}
           </button>
         </div>
       </div>
@@ -293,7 +292,7 @@ export default function DashboardTab({ team, onOpenLead, onDataChange }) {
                     <td className="px-4 py-3 text-gray-600 dark:text-gray-300" title={l.lastActivityAt ? new Date(l.lastActivityAt).toLocaleString('es-AR') : undefined}>{fmtDate(l.lastActivityAt)}</td>
                     {filters.archived && (
                       <td className="px-4 py-3 text-right" onClick={e => e.stopPropagation()}>
-                        <button onClick={() => unarchive(l.id)} className="text-xs font-medium text-primary-600 hover:underline">↩️ Desarchivar</button>
+                        <button onClick={() => unarchive(l.id)} className="text-xs font-medium text-primary-600 hover:underline">Desarchivar</button>
                       </td>
                     )}
                   </tr>

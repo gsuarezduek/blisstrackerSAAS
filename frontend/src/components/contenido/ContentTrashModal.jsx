@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import api from '../../api/client'
 import { fmtBytes } from '../../lib/fileIcons'
+import { X } from 'lucide-react'
+import { Icon } from '../ui/Icon'
 
 function timeAgo(iso) {
   const days = Math.floor((Date.now() - new Date(iso).getTime()) / (24 * 60 * 60 * 1000))
@@ -70,12 +72,12 @@ export default function ContentTrashModal({ projectId, isAdmin, onClose, onResto
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-700 shrink-0">
-          <h2 className="text-lg font-bold text-gray-900 dark:text-white">🗑 Papelera</h2>
+          <h2 className="text-lg font-bold text-gray-900 dark:text-white">Papelera</h2>
           <button
             onClick={onClose}
             className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
           >
-            ✕
+            <Icon as={X} size={16} />
           </button>
         </div>
 
@@ -109,7 +111,7 @@ export default function ContentTrashModal({ projectId, isAdmin, onClose, onResto
                       disabled={restoringId === p.id || purgingId === p.id}
                       className="px-3 py-1.5 text-xs font-medium rounded-lg bg-primary-600 hover:bg-primary-700 disabled:opacity-40 text-white transition-colors"
                     >
-                      {restoringId === p.id ? 'Restaurando…' : '↩️ Restaurar'}
+                      {restoringId === p.id ? 'Restaurando…' : 'Restaurar'}
                     </button>
                     {isAdmin && (
                       confirmPurgeId === p.id ? (
@@ -136,7 +138,7 @@ export default function ContentTrashModal({ projectId, isAdmin, onClose, onResto
                           title="Eliminar definitivamente ahora, sin esperar la limpieza automática"
                           className="px-2.5 py-1.5 text-xs font-medium rounded-lg border border-red-200 dark:border-red-900/50 text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-40 transition-colors"
                         >
-                          🗑️ Eliminar
+                          Eliminar
                         </button>
                       )
                     )}

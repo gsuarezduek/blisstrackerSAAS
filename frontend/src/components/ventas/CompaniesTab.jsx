@@ -76,7 +76,7 @@ export default function CompaniesTab({ onDataChange, focusCompanyId }) {
 
       {companies.length === 0 ? (
         <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl">
-          <EmptyState icon="🏢" message="No hay empresas cargadas." />
+          <EmptyState message="No hay empresas cargadas." />
         </div>
       ) : (
         <div className="space-y-3">

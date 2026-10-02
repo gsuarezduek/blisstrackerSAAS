@@ -1,5 +1,7 @@
 import { useRef, useState } from 'react'
 import WhatsappTemplateModal from './WhatsappTemplateModal'
+import { Paperclip, X } from 'lucide-react'
+import { Icon } from '../ui/Icon'
 
 function fmtBytes(n) {
   if (n < 1024 * 1024) return `${Math.round(n / 1024)} KB`
@@ -63,14 +65,14 @@ export default function WhatsappMessageInput({ onSend, onSendMedia, onReopen, wi
       <div className="px-4 py-3 border-t border-gray-100 dark:border-gray-700 flex-shrink-0 bg-amber-50 dark:bg-amber-900/20">
         <div className="flex items-center justify-between gap-3">
           <p className="text-xs text-amber-700 dark:text-amber-400">
-            ⏱️ Pasaron más de 24hs desde el último mensaje del contacto — WhatsApp ya no permite texto libre. Hace falta una plantilla aprobada para reabrir la conversación.
+            Pasaron más de 24hs desde el último mensaje del contacto — WhatsApp ya no permite texto libre. Hace falta una plantilla aprobada para reabrir la conversación.
           </p>
           {onReopen && (
             <button
               onClick={() => setShowReopen(true)}
               className="shrink-0 text-xs px-2.5 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-medium"
             >
-              🔄 Reabrir
+              Reabrir
             </button>
           )}
         </div>
@@ -87,12 +89,12 @@ export default function WhatsappMessageInput({ onSend, onSendMedia, onReopen, wi
   return (
     <div className="px-3 py-2.5 border-t border-gray-100 dark:border-gray-700 flex-shrink-0">
       {error && (
-        <p className="text-xs text-red-600 dark:text-red-400 mb-1.5">⚠️ {error}</p>
+        <p className="text-xs text-red-600 dark:text-red-400 mb-1.5">{error}</p>
       )}
       {file && (
         <div className="flex items-center gap-2 mb-1.5 bg-gray-100 dark:bg-gray-700 rounded-lg px-2.5 py-1.5 text-xs text-gray-600 dark:text-gray-300">
-          <span className="flex-1 truncate">📎 {file.name} <span className="text-gray-400">({fmtBytes(file.size)})</span></span>
-          <button onClick={() => setFile(null)} className="text-gray-400 hover:text-red-500 flex-shrink-0" title="Quitar archivo">✕</button>
+          <span className="flex-1 truncate">{file.name} <span className="text-gray-400">({fmtBytes(file.size)})</span></span>
+          <button onClick={() => setFile(null)} className="text-gray-400 hover:text-red-500 flex-shrink-0" title="Quitar archivo"><Icon as={X} size={16} /></button>
         </div>
       )}
       <div className="flex items-end gap-2">
@@ -104,7 +106,7 @@ export default function WhatsappMessageInput({ onSend, onSendMedia, onReopen, wi
           className="w-9 h-9 flex-shrink-0 flex items-center justify-center rounded-full text-gray-400 hover:text-primary-600 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-40 transition-colors"
           title="Adjuntar archivo"
         >
-          📎
+          <Icon as={Paperclip} size={16} />
         </button>
         <textarea
           ref={textareaRef}

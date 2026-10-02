@@ -4,6 +4,8 @@ import { Link } from 'react-router-dom'
 import { avatarUrl } from '../../utils/avatarUrl'
 import LoadingSpinner from '../../components/LoadingSpinner'
 import { minsToTime } from './shared'
+import { Inbox } from 'lucide-react'
+import { Icon } from '../../components/ui/Icon'
 
 // Piezas compartidas de la sección "Hoy" de RRHH (ver hoy.jsx): tarjeta de People
 // Score, modales de lista de personas / horas del equipo e historial de métricas.
@@ -33,7 +35,7 @@ export function PeopleScoreCard({ peopleScore }) {
     <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-4">
       <div className="flex items-center justify-between mb-3">
         <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
-          🧭 Salud del equipo
+          Salud del equipo
         </p>
         <Link to="/admin/eos?tab=personas"
           className="text-xs font-medium text-primary-600 dark:text-primary-400 hover:underline shrink-0">
@@ -89,7 +91,7 @@ export function PeopleListModal({ title, subtitle, people, onClose }) {
         </div>
         <div className="overflow-y-auto px-5 py-3">
           {people.length === 0
-            ? <p className="text-sm text-gray-400 dark:text-gray-500 py-6 text-center">Nadie 🎉</p>
+            ? <p className="text-sm text-gray-400 dark:text-gray-500 py-6 text-center">Nadie</p>
             : <div className="divide-y divide-gray-100 dark:divide-gray-700">
                 {people.map(p => (
                   <div key={p.id} className="flex items-center gap-2.5 py-2">
@@ -113,7 +115,7 @@ export function TeamHoursModal({ teamHours, onClose }) {
       <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 w-full max-w-md max-h-[80vh] flex flex-col shadow-xl" onClick={e => e.stopPropagation()}>
         <div className="flex items-start justify-between gap-3 px-5 pt-5 pb-3 border-b border-gray-100 dark:border-gray-700">
           <div>
-            <p className="text-sm font-bold text-gray-900 dark:text-white">🕗 Horas disponibles del equipo</p>
+            <p className="text-sm font-bold text-gray-900 dark:text-white">Horas disponibles del equipo</p>
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{totalHours} h/día · {count} de {total} con horario</p>
           </div>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 text-xl leading-none">×</button>
@@ -158,7 +160,7 @@ export function TeamHoursModal({ teamHours, onClose }) {
 export const METRIC_HISTORY = {
   activeMembers: {
     metric: 'activeMembers',
-    icon: '👥',
+
     title: 'Personas activas',
     footer: 'Integrantes activos del workspace · se guarda una captura por mes',
     fmt: v => `${v}`,
@@ -167,7 +169,7 @@ export const METRIC_HISTORY = {
   },
   tenure: {
     metric: 'tenure',
-    icon: '📅',
+
     title: 'Antigüedad promedio',
     footer: 'Antigüedad promedio del equipo activo · se guarda una captura por mes',
     fmt: v => (v < 1 ? `${Math.round(v * 12)}m` : `${v.toFixed(1)}a`),
@@ -176,7 +178,7 @@ export const METRIC_HISTORY = {
   },
   projectsPerPerson: {
     metric: 'projectsPerPerson',
-    icon: '📁',
+
     title: 'Proyectos por persona',
     footer: 'Proyectos activos ÷ equipo activo · se guarda una captura por mes',
     fmt: v => `${v}`,
@@ -185,7 +187,7 @@ export const METRIC_HISTORY = {
   },
   avgLoginTime: {
     metric: 'avgLoginTime',
-    icon: '🕐',
+
     title: 'Horario promedio de ingreso',
     footer: 'Promedio mensual del primer ingreso · solo quienes tienen horario',
     barMode: 'range', // la hora del día se escala dentro del rango del período (más legible que desde 0)
@@ -195,7 +197,7 @@ export const METRIC_HISTORY = {
   },
   punctuality: {
     metric: 'punctuality',
-    icon: '⏰',
+
     title: 'Puntualidad del equipo',
     footer: '% de llegadas a horario · promedio mensual',
     fmt: v => `${v}%`,
@@ -248,7 +250,7 @@ export function MetricHistoryModal({ config, current, onClose }) {
       >
         <div className="flex items-start justify-between gap-3 px-5 pt-5 pb-3 border-b border-gray-100 dark:border-gray-700">
           <div>
-            <p className="text-sm font-bold text-gray-900 dark:text-white">{config.icon} {config.title}</p>
+            <p className="text-sm font-bold text-gray-900 dark:text-white">{config.title}</p>
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
               Evolución mensual · {year ? `año ${year}` : 'últimos 12 meses'}
             </p>
@@ -273,7 +275,7 @@ export function MetricHistoryModal({ config, current, onClose }) {
             <LoadingSpinner className="py-10" />
           ) : !hasAny ? (
             <div className="text-center py-10 text-gray-400">
-              <p className="text-3xl mb-2">📭</p>
+              <p className="mb-2"><Icon as={Inbox} size={28} className="inline-block text-gray-300 dark:text-gray-600" /></p>
               <p className="text-sm font-medium">Todavía no hay historial</p>
               <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
                 Se guarda una captura por mes. {config.currentText(current)}

@@ -68,10 +68,10 @@ export default function WhatsappTemplateModal({ onClose, onSend }) {
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={onClose}>
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md p-6" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-1">
-          <h2 className="text-lg font-bold text-gray-900 dark:text-white">🔄 Reabrir con plantilla</h2>
+          <h2 className="text-lg font-bold text-gray-900 dark:text-white">Reabrir con plantilla</h2>
           {user?.isAdmin && (
             <button onClick={handleSync} disabled={syncing} className="text-xs text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 disabled:opacity-50">
-              {syncing ? 'Sincronizando…' : '↻ Sincronizar'}
+              {syncing ? 'Sincronizando…' : 'Sincronizar'}
             </button>
           )}
         </div>

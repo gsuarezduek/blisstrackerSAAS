@@ -658,7 +658,7 @@ export default function TaskCommentsModal({ task, onClose, onCommentAdded, onTas
               <div className="mt-1.5 space-y-1">
                 {attachments.map(f => (
                   <div key={f.id} className="group flex items-center gap-2 text-sm px-2 py-1 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700">
-                    <span className="flex-shrink-0">{iconFor(f.mimeType)}</span>
+                    <Icon as={iconFor(f.mimeType)} size={15} className="text-gray-400" />
                     <button
                       type="button"
                       onClick={() => handleDownloadAttachment(f)}

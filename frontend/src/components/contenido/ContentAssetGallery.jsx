@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import ConfirmModal from '../ConfirmModal'
 import { findDriveEmbeds, driveThumbnailUrl } from '../../utils/driveEmbed'
+import { Film, Link2, Play, X } from 'lucide-react'
+import { Icon } from '../ui/Icon'
 
 function formatDuration(sec) {
   if (!sec && sec !== 0) return null
@@ -23,7 +25,7 @@ function LinkThumb({ url }) {
   const [broken, setBroken] = useState(false)
   const drive = !broken ? findDriveEmbeds(url)[0] : null
   const thumb = drive ? driveThumbnailUrl(drive) : null
-  if (!thumb) return <div className="w-full h-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-xl">🔗</div>
+  if (!thumb) return <div className="w-full h-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-gray-400"><Icon as={Link2} size={20} /></div>
   return <img src={thumb} alt="" onError={() => setBroken(true)} className="w-full h-full object-cover" />
 }
 
@@ -85,7 +87,7 @@ export default function ContentAssetGallery({ assets, activeId, onSelectActive, 
               a.posterUrl ? (
                 <img src={a.posterUrl} alt="" className="w-full h-full object-cover" />
               ) : (
-                <div className="w-full h-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-xl">🎬</div>
+                <div className="w-full h-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-gray-400"><Icon as={Film} size={20} /></div>
               )
             ) : a.kind === 'link' ? (
               <LinkThumb url={a.url} />
@@ -94,7 +96,7 @@ export default function ContentAssetGallery({ assets, activeId, onSelectActive, 
             )}
 
             {a.kind === 'video' && (
-              <span className="absolute top-1 left-1 text-[9px] bg-black/60 text-white px-1 rounded">🎬{duration ? ` ${duration}` : ''}</span>
+              <span className="absolute top-1 left-1 text-[9px] bg-black/60 text-white px-1 rounded inline-flex items-center gap-0.5"><Icon as={Play} size={8} />{duration ? ` ${duration}` : ''}</span>
             )}
 
             {canEdit && (
@@ -103,7 +105,7 @@ export default function ContentAssetGallery({ assets, activeId, onSelectActive, 
                 className="absolute top-0.5 right-0.5 w-5 h-5 flex items-center justify-center rounded-full bg-black/50 text-white text-xs opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600"
                 title="Eliminar"
               >
-                ✕
+                <Icon as={X} size={16} />
               </button>
             )}
 

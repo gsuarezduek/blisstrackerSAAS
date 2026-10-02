@@ -18,7 +18,7 @@ export default function LeadNotes({ leadId, initialContent, canEdit = true }) {
   return (
     <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-4">
       <CollapsibleSectionHeader
-        title="📝 Notas de reunión"
+        title="Notas de reunión"
         hasContent={hasHtmlContent(initialContent)}
         open={open}
         onToggle={() => setOpen(o => !o)}

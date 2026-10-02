@@ -1,6 +1,8 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import LoadingSpinner from '../LoadingSpinner'
 import { whatsappMediaUrl } from '../../utils/whatsappMediaUrl'
+import { FileText, TriangleAlert } from 'lucide-react'
+import { Icon } from '../ui/Icon'
 
 function timeLabel(iso) {
   return new Date(iso).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Argentina/Buenos_Aires' })
@@ -46,7 +48,7 @@ function MediaContent({ media }) {
       href={url} target="_blank" rel="noreferrer"
       className="flex items-center gap-2 bg-black/5 dark:bg-white/10 rounded-lg px-2.5 py-2 mb-1 hover:bg-black/10 dark:hover:bg-white/20 transition-colors"
     >
-      <span className="text-xl">📄</span>
+      <span><Icon as={FileText} size={20} className="inline-block text-gray-300 dark:text-gray-600" /></span>
       <span className="min-w-0">
         <span className="block text-xs font-medium truncate max-w-[180px]">{media.fileName || 'Documento'}</span>
         {media.sizeBytes ? <span className="block text-[10px] opacity-70">{fmtBytes(media.sizeBytes)}</span> : null}
@@ -58,7 +60,7 @@ function MediaContent({ media }) {
 // ✓ enviado · ✓✓ entregado · ✓✓ (azul) leído · ⚠️ falló — mismo lenguaje visual
 // que WhatsApp, para que el equipo lo lea de un vistazo.
 function StatusTicks({ status }) {
-  if (status === 'failed') return <span title="Falló el envío">⚠️</span>
+  if (status === 'failed') return <span title="Falló el envío" className="text-red-400"><Icon as={TriangleAlert} size={12} className="inline" /></span>
   if (status === 'read')   return <span className="text-sky-400" title="Leído">✓✓</span>
   if (status === 'delivered') return <span title="Entregado">✓✓</span>
   return <span title="Enviado">✓</span>
@@ -146,13 +148,13 @@ export default function WhatsappMessageList({ messages, loading, loadingMore, ha
                 }`}
               >
                 {out && m.senderType === 'bot' && (
-                  <span className="block text-[10px] font-semibold uppercase tracking-wide opacity-75 mb-0.5">🤖 Bot</span>
+                  <span className="block text-[10px] font-semibold uppercase tracking-wide opacity-75 mb-0.5">Bot</span>
                 )}
                 {out && m.senderType === 'user' && m.senderUser && (
                   <span className="block text-[10px] font-semibold opacity-75 mb-0.5">{m.senderUser.name}</span>
                 )}
                 {out && m.senderType === 'app_echo' && (
-                  <span className="block text-[10px] font-semibold uppercase tracking-wide opacity-75 mb-0.5" title="Enviado a mano desde la app/WhatsApp Web del número, no desde BlissTracker">📱 WhatsApp</span>
+                  <span className="block text-[10px] font-semibold uppercase tracking-wide opacity-75 mb-0.5" title="Enviado a mano desde la app/WhatsApp Web del número, no desde BlissTracker">WhatsApp</span>
                 )}
                 {m.reactionEmoji ? (
                   <p className="whitespace-pre-wrap break-words leading-snug">

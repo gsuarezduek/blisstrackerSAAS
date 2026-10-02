@@ -340,7 +340,7 @@ export default function RolesTab() {
       {deleteError && <p className="mb-4 text-sm text-red-500">{deleteError}</p>}
 
       {roles.length === 0 && (
-        <EmptyState icon="🏷️" message="No hay roles creados todavía" />
+        <EmptyState message="No hay roles creados todavía" />
       )}
 
       <div className="space-y-3">
@@ -643,7 +643,7 @@ export default function RolesTab() {
                       <div className="flex items-center gap-2 mb-1 flex-wrap">
                         <p className="text-base font-semibold text-gray-900 dark:text-white">{role.label}</p>
                         <span className="text-xs font-mono text-gray-400 dark:text-gray-500">{role.name}</span>
-                        {wasSaved && <span className="text-xs text-green-600 dark:text-green-400 font-medium">✓ Guardado</span>}
+                        {wasSaved && <span className="text-xs text-green-600 dark:text-green-400 font-medium">Guardado</span>}
                       </div>
                       {exp ? (
                         <div className="space-y-2 mt-2">
@@ -718,7 +718,7 @@ export default function RolesTab() {
                     <div className="mt-3 pt-3 border-t border-gray-100 dark:border-gray-700">
                       <div className="flex items-center justify-between gap-2">
                         <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">
-                          ⚙️ Procesos asociados{roleProcesses.length > 0 ? ` (${roleProcesses.length})` : ''}
+                          Procesos asociados{roleProcesses.length > 0 ? ` (${roleProcesses.length})` : ''}
                         </p>
                         <button
                           onClick={() => setAssocRole(role)}

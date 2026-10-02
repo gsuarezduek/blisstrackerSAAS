@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback } from 'react'
 import axios from 'axios'
 import LoadingSpinner from '../LoadingSpinner'
 import { fmtBytes, iconFor } from '../../lib/fileIcons'
+import { Folder, FolderOpen, Search, X } from 'lucide-react'
+import { Icon } from '../ui/Icon'
 
 const API = import.meta.env.VITE_API_URL || ''
 
@@ -32,7 +34,7 @@ function ItemCard({ item, onOpen }) {
         {isImage && item.url ? (
           <img src={item.url} alt="" className="w-full h-full object-cover" />
         ) : (
-          <span className="text-3xl">{isFolder ? '📁' : iconFor(item.mimeType)}</span>
+          <Icon as={isFolder ? Folder : iconFor(item.mimeType)} size={30} className={isFolder ? 'text-amber-500' : 'text-gray-400'} />
         )}
       </div>
       <span className="text-xs text-gray-700 truncate w-full">{item.name}</span>
@@ -170,7 +172,7 @@ export default function ClientFilesTab({ slug, token, requireReauth }) {
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="text-sm text-gray-500 flex items-center gap-1 flex-wrap min-w-0">
           <button onClick={() => setFolderId(null)} className={`hover:text-primary-600 ${!folderId ? 'font-semibold text-gray-800' : ''}`}>
-            🏠 Raíz
+            Raíz
           </button>
           {path.map((p, i) => (
             <span key={p.id} className="flex items-center gap-1 min-w-0">
@@ -184,11 +186,11 @@ export default function ClientFilesTab({ slug, token, requireReauth }) {
         <div className="relative flex-1 min-w-[180px] max-w-xs">
           <input
             value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
-            placeholder="🔍 Buscar en todo el proyecto…"
+            placeholder="Buscar en todo el proyecto…"
             className="w-full border border-gray-300 rounded-lg pl-3 pr-7 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
           />
           {searchQuery && (
-            <button onClick={() => setSearchQuery('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-sm">✕</button>
+            <button onClick={() => setSearchQuery('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-sm"><Icon as={X} size={16} /></button>
           )}
         </div>
       </div>
@@ -200,7 +202,7 @@ export default function ClientFilesTab({ slug, token, requireReauth }) {
           <LoadingSpinner className="py-16" />
         ) : searchResults.length === 0 ? (
           <div className="text-center py-16 text-gray-400">
-            <p className="text-3xl mb-2">🔍</p>
+            <p className="mb-2"><Icon as={Search} size={28} className="inline-block text-gray-300 dark:text-gray-600" /></p>
             <p>Sin resultados para "{searchQuery}".</p>
           </div>
         ) : (
@@ -212,7 +214,7 @@ export default function ClientFilesTab({ slug, token, requireReauth }) {
         <LoadingSpinner className="py-16" />
       ) : folders.length === 0 && files.length === 0 ? (
         <div className="text-center py-16 text-gray-400">
-          <p className="text-3xl mb-2">🗂️</p>
+          <p className="mb-2"><Icon as={FolderOpen} size={28} className="inline-block text-gray-300 dark:text-gray-600" /></p>
           <p>Todavía no hay archivos acá.</p>
         </div>
       ) : (

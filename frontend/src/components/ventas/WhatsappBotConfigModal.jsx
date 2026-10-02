@@ -1,13 +1,15 @@
 import { useState, useEffect, useCallback } from 'react'
 import api from '../../api/client'
+import { X } from 'lucide-react'
+import { Icon } from '../ui/Icon'
 
 const TABS = [
   { id: 'personalidad', label: 'Personalidad' },
-  { id: 'seguridad',    label: '🛡️ Reglas de seguridad' },
-  { id: 'ejemplos',     label: '💬 Ejemplos' },
-  { id: 'documentos',   label: '📄 Documentos' },
-  { id: 'calidad',      label: '📊 Calidad' },
-  { id: 'probar',       label: '🧪 Probar' },
+  { id: 'seguridad',    label: 'Reglas de seguridad' },
+  { id: 'ejemplos',     label: 'Ejemplos' },
+  { id: 'documentos',   label: 'Documentos' },
+  { id: 'calidad',      label: 'Calidad' },
+  { id: 'probar',       label: 'Probar' },
 ]
 
 function fmtBytes(n) {
@@ -62,7 +64,7 @@ function WordChipsInput({ words, onChange, placeholder }) {
           {words.map((w, i) => (
             <span key={`${w}-${i}`} className="group inline-flex items-center gap-1 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-full px-2.5 py-1 text-xs">
               {w}
-              <button type="button" onClick={() => remove(i)} className="text-gray-400 hover:text-red-600 dark:hover:text-red-400">✕</button>
+              <button type="button" onClick={() => remove(i)} className="text-gray-400 hover:text-red-600 dark:hover:text-red-400"><Icon as={X} size={16} /></button>
             </span>
           ))}
         </div>
@@ -223,13 +225,13 @@ function CorrectionControl({ corrected, onSubmit }) {
   const [draft, setDraft] = useState('')
 
   if (corrected) {
-    return <span className="text-[11px] text-green-600 dark:text-green-400 mt-1">✓ Se agregó como ejemplo</span>
+    return <span className="text-[11px] text-green-600 dark:text-green-400 mt-1">Se agregó como ejemplo</span>
   }
 
   if (!open) {
     return (
       <button type="button" onClick={() => setOpen(true)} className="text-[11px] text-gray-400 hover:text-red-500 mt-1">
-        👎 No me gusta
+        No me gusta
       </button>
     )
   }
@@ -263,7 +265,7 @@ function TestPanel({ messages, input, setInput, loading, error, onSend, onCorrec
     <div className="flex flex-col h-full">
       <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">
         Probá el bot con la configuración actual del formulario (aunque no la hayas guardado todavía) — no se manda nada por
-        WhatsApp real ni se guarda en ninguna conversación. Si una respuesta no te gusta, marcala con 👎 y decile qué hubieras
+        WhatsApp real ni se guarda en ninguna conversación. Si una respuesta no te gusta, marcala con y decile qué hubieras
         respondido vos: se agrega como ejemplo en la pestaña Ejemplos.
       </p>
       <div className="flex-1 min-h-[320px] overflow-y-auto space-y-2 bg-gray-50 dark:bg-gray-900/30 rounded-xl p-3 mb-3">
@@ -274,7 +276,7 @@ function TestPanel({ messages, input, setInput, loading, error, onSend, onCorrec
               <div className={`rounded-2xl px-3 py-2 text-sm ${m.role === 'cliente' ? 'bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-100' : 'bg-primary-600 text-white'}`}>
                 {m.text}
                 {m.escalate && (
-                  <div className="mt-1 text-[11px] font-semibold text-amber-200" title={m.escalateReason}>🚩 Esto pasaría a un humano</div>
+                  <div className="mt-1 text-[11px] font-semibold text-amber-200" title={m.escalateReason}>Esto pasaría a un humano</div>
                 )}
               </div>
               {m.role === 'bot' && (
@@ -435,8 +437,8 @@ export default function WhatsappBotConfigModal({ config, onClose, onSaved }) {
       >
         <div className="px-6 pt-5 pb-0 shrink-0">
           <div className="flex items-start justify-between gap-3">
-            <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-1">🤖 Bot de WhatsApp</h2>
-            <button type="button" onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">✕</button>
+            <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-1">Bot de WhatsApp</h2>
+            <button type="button" onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"><Icon as={X} size={16} /></button>
           </div>
           <label className="flex items-center gap-2 cursor-pointer mb-2">
             <input type="checkbox" checked={enabled} onChange={e => setEnabled(e.target.checked)} className="w-4 h-4 rounded" />

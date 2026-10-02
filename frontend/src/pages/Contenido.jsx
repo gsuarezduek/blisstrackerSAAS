@@ -16,15 +16,17 @@ import useContentSocket from '../components/contenido/useContentSocket'
 import { useFeatureFlag } from '../hooks/useFeatureFlag'
 import { useAuth } from '../context/AuthContext'
 import api from '../api/client'
+import { CalendarDays, Lock, X } from 'lucide-react'
+import { Icon } from '../components/ui/Icon'
 
 // Vistas del calendario de contenido. Igual que Marketing.jsx, el estado de
 // navegación vive 100% en la URL (?view=&projectId=&month=&piece=…): así los
 // deep-links de notificaciones y emails funcionan sin estado extra y sobreviven
 // a un refresh.
 const VIEWS = [
-  { id: 'calendario', label: '📅 Calendario' },
-  { id: 'tabla',      label: '📋 Tabla' },
-  { id: 'kanban',     label: '🗂 Kanban' },
+  { id: 'calendario', label: 'Calendario' },
+  { id: 'tabla',      label: 'Tabla' },
+  { id: 'kanban',     label: 'Kanban' },
 ]
 const VALID_VIEWS = new Set(VIEWS.map(v => v.id))
 const MONTH_RE = /^\d{4}-\d{2}$/
@@ -275,7 +277,7 @@ export default function Contenido() {
     if (!projectId) {
       return (
         <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-10 text-center">
-          <div className="text-4xl mb-4">📅</div>
+          <div className="mb-4"><Icon as={CalendarDays} size={32} className="inline-block text-gray-300 dark:text-gray-600" /></div>
           <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-2">Elegí un proyecto</h3>
           <p className="text-sm text-gray-400 dark:text-gray-500 max-w-sm mx-auto">
             El calendario de contenido se organiza por proyecto. Seleccioná uno arriba para ver o planificar sus piezas.
@@ -293,7 +295,7 @@ export default function Contenido() {
         {error && (
           <div className="mb-3 px-3 py-2 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 flex items-center justify-between gap-3">
             <p className="text-sm text-red-700 dark:text-red-300">{error}</p>
-            <button onClick={() => setError(null)} className="text-red-400 hover:text-red-600 text-sm shrink-0">✕</button>
+            <button onClick={() => setError(null)} className="text-red-400 hover:text-red-600 text-sm shrink-0"><Icon as={X} size={16} /></button>
           </div>
         )}
 
@@ -368,7 +370,7 @@ export default function Contenido() {
                   title="Quitar el filtro de proyecto"
                   className="flex-shrink-0 p-2 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
                 >
-                  ✕
+                  <Icon as={X} size={16} />
                 </button>
               )}
             </div>
@@ -385,7 +387,7 @@ export default function Contenido() {
 
         {!moduleAllowed ? (
           <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-10 text-center">
-            <div className="text-4xl mb-4">🔒</div>
+            <div className="mb-4"><Icon as={Lock} size={32} className="inline-block text-gray-300 dark:text-gray-600" /></div>
             <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-2">Sección no disponible</h3>
             <p className="text-sm text-gray-400 dark:text-gray-500 max-w-sm mx-auto">
               {enabled
@@ -430,7 +432,7 @@ export default function Contenido() {
                     : 'Avisa por email a los contactos del portal que pueden aprobar'}
                   className="px-3 py-1.5 rounded-lg text-sm font-medium bg-amber-500 hover:bg-amber-600 disabled:opacity-40 disabled:cursor-not-allowed text-white transition-colors inline-flex items-center gap-1.5"
                 >
-                  📨 {requestingApproval ? 'Enviando…' : 'Pedir aprobación'}
+                  {requestingApproval ? 'Enviando…' : 'Pedir aprobación'}
                   {summary?.awaitingClient ? ` (${summary.awaitingClient})` : ''}
                 </button>
                 {approvalMsg && (
@@ -453,7 +455,7 @@ export default function Contenido() {
                       ? 'border-primary-300 dark:border-primary-700 bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-300'
                       : 'border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'}`}
                 >
-                  📣 Publicadas
+                  Publicadas
                   {summary?.byStatus?.publicado ? ` (${summary.byStatus.publicado})` : ''}
                 </button>
                 <button
@@ -461,7 +463,7 @@ export default function Contenido() {
                   title="Piezas eliminadas, recuperables durante 30 días"
                   className="px-3 py-1.5 rounded-lg text-sm font-medium border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors inline-flex items-center gap-1.5"
                 >
-                  🗑 Papelera
+                  Papelera
                 </button>
               </div>
             )}
@@ -501,7 +503,7 @@ export default function Contenido() {
         title="Enviar al dashboard"
         message={
           dashboardPromptError
-            ? `⚠️ ${dashboardPromptError}`
+            ? dashboardPromptError
             : dashboardPrompt ? `¿Querés crear ya la tarea para que ${dashboardPrompt.ownerName} la vea en su dashboard?` : ''
         }
         confirmLabel={dashboardPromptError ? 'Reintentar' : 'Enviar'}

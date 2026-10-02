@@ -13,6 +13,8 @@ import WhatsappTab from '../components/ventas/WhatsappTab'
 import LeadDetail from '../components/ventas/LeadDetail'
 import LeadModal from '../components/ventas/LeadModal'
 import SalesTeamModal from '../components/ventas/SalesTeamModal'
+import { Lock } from 'lucide-react'
+import { Icon } from '../components/ui/Icon'
 
 const BASE_TABS = [
   { id: 'dashboard', label: 'Dashboard' },
@@ -75,7 +77,7 @@ export default function Ventas() {
         <Navbar />
         <main className="max-w-6xl mx-auto px-4 py-8">
           <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-8 text-center">
-            <p className="text-5xl mb-4">🔒</p>
+            <p className="mb-4"><Icon as={Lock} size={40} className="inline-block text-gray-300 dark:text-gray-600" /></p>
             <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Sección no disponible</h2>
             <p className="text-sm text-gray-500 dark:text-gray-400">El módulo de Ventas no está habilitado para este workspace.</p>
           </div>
@@ -95,7 +97,7 @@ export default function Ventas() {
           </div>
           <div className="flex flex-wrap gap-2 shrink-0">
             {user?.isAdmin && (
-              <button onClick={() => setShowConfig(true)} className="border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-xl px-4 py-2 text-sm font-medium">⚙️ Configuración</button>
+              <button onClick={() => setShowConfig(true)} className="border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-xl px-4 py-2 text-sm font-medium">Configuración</button>
             )}
             <button onClick={() => setShowNewLead(true)} className="bg-primary-600 hover:bg-primary-700 text-white font-semibold rounded-xl px-4 py-2 text-sm transition-colors">+ Nuevo lead</button>
           </div>

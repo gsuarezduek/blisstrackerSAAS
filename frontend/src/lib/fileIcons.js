@@ -1,6 +1,7 @@
 // Helpers de presentación para el repositorio de Archivos (ProjectFile) —
 // compartidos entre la vista de equipo (ProjectFiles.jsx) y la vista de solo
 // lectura del portal de cliente (portal/ClientFilesTab.jsx).
+import { File, FileArchive, FileAudio, FileImage, FileSpreadsheet, FileText, FileVideo, Presentation } from 'lucide-react'
 
 export function fmtBytes(n) {
   if (n == null) return ''
@@ -10,16 +11,17 @@ export function fmtBytes(n) {
   return `${(n / (1024 * 1024 * 1024)).toFixed(1)} GB`
 }
 
+// Ícono de línea (lucide) según el tipo de archivo — se renderiza con <Icon as={iconFor(mime)} />.
 export function iconFor(mimeType) {
-  if (!mimeType) return '📎'
-  if (mimeType.startsWith('image/')) return '🖼️'
-  if (mimeType.startsWith('video/')) return '🎬'
-  if (mimeType.startsWith('audio/')) return '🎵'
-  if (mimeType === 'application/pdf') return '📕'
-  if (mimeType.includes('word')) return '📝'
-  if (mimeType.includes('sheet') || mimeType.includes('excel')) return '📊'
-  if (mimeType.includes('presentation') || mimeType.includes('powerpoint')) return '📈'
-  if (mimeType.includes('zip') || mimeType.includes('compressed') || mimeType.includes('rar') || mimeType.includes('tar')) return '📦'
-  if (mimeType.startsWith('text/')) return '📄'
-  return '📎'
+  if (!mimeType) return File
+  if (mimeType.startsWith('image/')) return FileImage
+  if (mimeType.startsWith('video/')) return FileVideo
+  if (mimeType.startsWith('audio/')) return FileAudio
+  if (mimeType === 'application/pdf') return FileText
+  if (mimeType.includes('word')) return FileText
+  if (mimeType.includes('sheet') || mimeType.includes('excel')) return FileSpreadsheet
+  if (mimeType.includes('presentation') || mimeType.includes('powerpoint')) return Presentation
+  if (mimeType.includes('zip') || mimeType.includes('compressed') || mimeType.includes('rar') || mimeType.includes('tar')) return FileArchive
+  if (mimeType.startsWith('text/')) return FileText
+  return File
 }

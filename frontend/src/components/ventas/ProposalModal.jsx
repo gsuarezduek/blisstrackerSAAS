@@ -223,7 +223,7 @@ export default function ProposalModal({ leadId, companyName, currency: defaultCu
               </button>
               <button onClick={analyze} disabled={generating || analyzing} className="flex-1 bg-primary-600 hover:bg-primary-700 disabled:opacity-60 text-white font-semibold rounded-xl py-2.5 text-sm flex items-center justify-center gap-2">
                 {analyzing && <span className="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />}
-                {analyzing ? 'Analizando el caso…' : '🔎 Continuar: revisar el caso con IA'}
+                {analyzing ? 'Analizando el caso…' : 'Continuar: revisar el caso con IA'}
               </button>
             </div>
           </div>
@@ -236,7 +236,7 @@ export default function ProposalModal({ leadId, companyName, currency: defaultCu
               <button onClick={() => setStep('form')} disabled={generating} className="border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-60 font-medium rounded-xl py-2.5 px-4 text-sm">← Volver</button>
               <button onClick={() => generate({ useBriefing: true })} disabled={generating} className="flex-1 bg-primary-600 hover:bg-primary-700 disabled:opacity-60 text-white font-semibold rounded-xl py-2.5 text-sm flex items-center justify-center gap-2">
                 {generating && <span className="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />}
-                {generating ? (quality === 'max' ? 'Generando con IA (1-2 min)…' : 'Generando con IA…') : '✨ Generar propuesta'}
+                {generating ? (quality === 'max' ? 'Generando con IA (1-2 min)…' : 'Generando con IA…') : 'Generar propuesta'}
               </button>
             </div>
           </div>
@@ -260,7 +260,7 @@ export default function ProposalModal({ leadId, companyName, currency: defaultCu
             {doc ? (
               <div>
                 <div className="flex gap-1 mb-3 border-b border-gray-200 dark:border-gray-700">
-                  {[['preview', '👁 Vista previa'], ['edit', '✏️ Editar bloques']].map(([k, l]) => (
+                  {[['preview', 'Vista previa'], ['edit', 'Editar bloques']].map(([k, l]) => (
                     <button key={k} type="button" onClick={() => setTab(k)}
                       className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px ${tab === k ? 'border-primary-600 text-primary-700 dark:text-primary-300' : 'border-transparent text-gray-500 hover:text-gray-800 dark:hover:text-gray-200'}`}>
                       {l}
@@ -285,14 +285,14 @@ export default function ProposalModal({ leadId, companyName, currency: defaultCu
             )}
             <div className="flex flex-wrap gap-2 pt-1">
               <button onClick={onClose} className="border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 font-medium rounded-xl py-2.5 px-4 text-sm">Cerrar</button>
-              <button onClick={() => exportProposalPdf({ ...proposal, title, content, doc, signatureId }, { companyName })} className="border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 font-medium rounded-xl py-2.5 px-4 text-sm">🖨️ PDF</button>
+              <button onClick={() => exportProposalPdf({ ...proposal, title, content, doc, signatureId }, { companyName })} className="border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 font-medium rounded-xl py-2.5 px-4 text-sm">PDF</button>
               <button
                 onClick={copyPublicLink}
                 disabled={proposal?.status !== 'confirmed'}
                 title={proposal?.status !== 'confirmed' ? 'Confirmá la propuesta para habilitar el link' : 'Copiar link público de solo lectura para el cliente'}
                 className="border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 font-medium rounded-xl py-2.5 px-4 text-sm disabled:opacity-40"
               >
-                {copied ? '✓ Copiado' : '🔗 Link'}
+                {copied ? 'Copiado' : 'Link'}
               </button>
               <button onClick={() => save(false)} disabled={saving} className="flex-1 bg-primary-600 hover:bg-primary-700 disabled:opacity-60 text-white font-semibold rounded-xl py-2.5 text-sm">{saving ? 'Guardando…' : 'Guardar'}</button>
               <button onClick={() => save(true)} disabled={saving} className="bg-green-600 hover:bg-green-700 disabled:opacity-60 text-white font-semibold rounded-xl py-2.5 px-4 text-sm">Confirmar</button>

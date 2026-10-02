@@ -164,7 +164,7 @@ function BenefitRequestModal({ bank, onClose, onCreated }) {
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md border border-gray-200 dark:border-gray-700">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700">
-          <p className="font-semibold text-gray-900 dark:text-white">{meta.icon} Solicitar {meta.label.toLowerCase()}</p>
+          <p className="font-semibold text-gray-900 dark:text-white">Solicitar {meta.label.toLowerCase()}</p>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
           </button>
@@ -670,7 +670,7 @@ export default function MyProfile() {
         {rrhhEnabled && (
         <div className="bg-white dark:bg-gray-800 rounded-2xl border dark:border-gray-700 p-6">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-base font-semibold text-gray-900 dark:text-white">🏖️ Vacaciones</h2>
+            <h2 className="text-base font-semibold text-gray-900 dark:text-white">Vacaciones</h2>
             <button
               onClick={() => setVacRequestOpen(true)}
               className="flex items-center gap-1.5 text-xs font-medium bg-primary-600 hover:bg-primary-700 text-white px-3 py-1.5 rounded-lg transition-colors"
@@ -771,7 +771,7 @@ export default function MyProfile() {
         {rrhhEnabled && (
         <div className="bg-white dark:bg-gray-800 rounded-2xl border dark:border-gray-700 p-6">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-base font-semibold text-gray-900 dark:text-white">🎁 Horas libres y días home</h2>
+            <h2 className="text-base font-semibold text-gray-900 dark:text-white">Horas libres y días home</h2>
             <button
               onClick={() => setBenefitHistoryOpen(v => !v)}
               className="text-xs text-primary-600 dark:text-primary-400 hover:underline font-medium flex items-center gap-1"
@@ -789,7 +789,7 @@ export default function MyProfile() {
                   <p className="text-4xl font-bold text-primary-600 dark:text-primary-400">
                     {benefitsData?.balances?.[bank] ?? '—'}
                   </p>
-                  <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{meta.icon} {meta.unit} disponibles</p>
+                  <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{meta.unit} disponibles</p>
                 </div>
                 <button
                   onClick={() => setBenefitRequestBank(bank)}
@@ -809,7 +809,7 @@ export default function MyProfile() {
                 : benefitsData.adjustments.map(adj => (
                     <div key={adj.id} className="flex items-start gap-3 px-4 py-3 text-xs">
                       <div className="flex-1 min-w-0">
-                        <p className="text-gray-700 dark:text-gray-200">{BENEFIT_BANKS[adj.bank]?.icon} {adj.description}</p>
+                        <p className="text-gray-700 dark:text-gray-200">{adj.description}</p>
                         <p className="text-gray-400 dark:text-gray-500 mt-0.5">
                           {new Date(adj.createdAt).toLocaleDateString('es-AR', { day: 'numeric', month: 'short', year: 'numeric' })}
                         </p>
@@ -834,7 +834,7 @@ export default function MyProfile() {
                     <div key={req.id} className="flex items-start gap-3 rounded-xl border border-gray-200 dark:border-gray-700 px-4 py-3">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-sm font-medium text-gray-800 dark:text-gray-200">{meta?.icon} {req.amount} {meta?.unit}</span>
+                          <span className="text-sm font-medium text-gray-800 dark:text-gray-200">{req.amount} {meta?.unit}</span>
                           <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${REQUEST_STATUS[req.status]?.color}`}>
                             {REQUEST_STATUS[req.status]?.label}
                           </span>

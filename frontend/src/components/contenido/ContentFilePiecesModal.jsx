@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import api from '../../api/client'
+import { X } from 'lucide-react'
+import { Icon } from '../ui/Icon'
 
 /**
  * Modal abierto desde el menú ⋯ de un archivo en Archivos ("📅 Contenido") —
@@ -50,14 +52,14 @@ export default function ContentFilePiecesModal({ projectId, file, onClose }) {
       >
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-700 shrink-0">
           <div className="min-w-0">
-            <h2 className="text-lg font-bold text-gray-900 dark:text-white">📅 Contenido</h2>
+            <h2 className="text-lg font-bold text-gray-900 dark:text-white">Contenido</h2>
             <p className="text-xs text-gray-400 dark:text-gray-500 truncate">{file.name}</p>
           </div>
           <button
             onClick={onClose}
             className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors shrink-0"
           >
-            ✕
+            <Icon as={X} size={16} />
           </button>
         </div>
 

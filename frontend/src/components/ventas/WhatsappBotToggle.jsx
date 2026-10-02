@@ -29,7 +29,7 @@ export default function WhatsappBotToggle({ conversationId, botEnabled, workspac
         }`}
         title={botEnabled ? 'El bot responde automáticamente los mensajes entrantes' : 'Un humano tomó el control — el bot no responde acá'}
       >
-        {botEnabled ? '🤖 Bot' : '🙋 Vos'}
+        {botEnabled ? 'Bot' : 'Vos'}
       </span>
       <button
         onClick={toggle}
