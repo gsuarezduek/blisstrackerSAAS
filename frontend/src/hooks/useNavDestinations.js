@@ -11,7 +11,7 @@ import { NAV as MARKETING_NAV } from '../components/marketing/marketingNav'
 //
 // Además de las pantallas principales, cada módulo con sub-pestañas (RRHH, EOS,
 // Marketing, Ventas, Contenido, Calendario, Admin) suma un destino por sub-pestaña con label
-// "Módulo · Sub-pestaña" (ej. "👥 RRHH · 📊 Productividad") — así escribir el
+// "Módulo · Sub-pestaña" (ej. "RRHH · Productividad") — así escribir el
 // nombre del módulo ("EOS") matchea el destino principal Y todas sus sub-pestañas
 // (aparecen agrupadas por el propio orden del array, `scoreMatch` empata en el
 // mismo índice), y escribir directamente el nombre de una sub-pestaña ("Productividad")
@@ -48,18 +48,18 @@ export default function useNavDestinations() {
     { to: '/realtime', label: 'Actividad' },
     ...(!isAdmin ? [{ to: '/my-reports', label: 'Mis Reportes' }] : []),
 
-    ...(ventasAllowed ? [{ to: ventasBase, label: '💰 Ventas' }] : []),
-    ...(marketingAllowed ? [{ to: '/marketing', label: '🎯 Marketing' }] : []),
-    ...(contenidoAllowed ? [{ to: '/contenido', label: '📅 Contenido' }] : []),
-    ...(rrhhAllowed ? [{ to: '/admin/rrhh', label: '👥 RRHH' }] : []),
-    ...(calendarioAllowed ? [{ to: '/calendario', label: '🗓️ Calendario' }] : []),
+    ...(ventasAllowed ? [{ to: ventasBase, label: 'Ventas' }] : []),
+    ...(marketingAllowed ? [{ to: '/marketing', label: 'Marketing' }] : []),
+    ...(contenidoAllowed ? [{ to: '/contenido', label: 'Contenido' }] : []),
+    ...(rrhhAllowed ? [{ to: '/admin/rrhh', label: 'RRHH' }] : []),
+    ...(calendarioAllowed ? [{ to: '/calendario', label: 'Calendario' }] : []),
 
     // Administración — mismo gate isAdmin que el dropdown en Navbar.jsx (líneas 398/571).
     ...(isAdmin ? [
-      { to: '/reports', label: '📈 Reportes' },
-      ...(eosEnabled ? [{ to: '/admin/eos', label: '🔷 EOS' }] : []),
-      ...(gamificationEnabled ? [{ to: '/admin/gamification', label: '🏆 Gamification' }] : []),
-      { to: '/admin', label: '⚙️ Panel' },
+      { to: '/reports', label: 'Reportes' },
+      ...(eosEnabled ? [{ to: '/admin/eos', label: 'EOS' }] : []),
+      ...(gamificationEnabled ? [{ to: '/admin/gamification', label: 'Gamification' }] : []),
+      { to: '/admin', label: 'Panel' },
     ] : []),
 
     { to: '/profile', label: 'Mi Perfil' },
@@ -77,7 +77,7 @@ export default function useNavDestinations() {
       { id: 'empresas',  label: 'Empresas' },
       ...(whatsappEnabled ? [{ id: 'whatsapp', label: 'WhatsApp' }] : []),
     ]
-    for (const t of tabs) destinations.push({ to: `${ventasBase}?tab=${t.id}`, label: `💰 Ventas · ${t.label}` })
+    for (const t of tabs) destinations.push({ to: `${ventasBase}?tab=${t.id}`, label: `Ventas · ${t.label}` })
   }
 
   if (marketingAllowed) {
@@ -85,15 +85,15 @@ export default function useNavDestinations() {
     for (const group of MARKETING_NAV) {
       if (disabledSections.includes(group.id)) continue
       if (group.subs.length === 0) {
-        destinations.push({ to: `/marketing?tab=${group.id}`, label: `🎯 Marketing · ${group.label}` })
+        destinations.push({ to: `/marketing?tab=${group.id}`, label: `Marketing · ${group.label}` })
       } else {
         for (const sub of group.subs) {
           if (sub.soon) continue
-          destinations.push({ to: `/marketing?tab=${group.id}&sub=${sub.id}`, label: `🎯 Marketing · ${sub.label}` })
+          destinations.push({ to: `/marketing?tab=${group.id}&sub=${sub.id}`, label: `Marketing · ${sub.label}` })
           // Herramientas agrupadas dentro de una sub-pestaña (ej. Diagnóstico → GEO,
           // SEO, On-Page…) siguen encontrándose por su propio nombre.
           for (const v of sub.views ?? []) {
-            destinations.push({ to: `/marketing?tab=${group.id}&sub=${sub.id}&view=${v.id}`, label: `🎯 Marketing · ${v.label}` })
+            destinations.push({ to: `/marketing?tab=${group.id}&sub=${sub.id}&view=${v.id}`, label: `Marketing · ${v.label}` })
           }
         }
       }
@@ -102,58 +102,58 @@ export default function useNavDestinations() {
 
   if (contenidoAllowed) {
     const views = [
-      { id: 'calendario', label: '📅 Calendario' },
-      { id: 'tabla',      label: '📋 Tabla' },
-      { id: 'kanban',     label: '🗂 Kanban' },
+      { id: 'calendario', label: 'Calendario' },
+      { id: 'tabla',      label: 'Tabla' },
+      { id: 'kanban',     label: 'Kanban' },
     ]
-    for (const v of views) destinations.push({ to: `/contenido?view=${v.id}`, label: `📅 Contenido · ${v.label}` })
+    for (const v of views) destinations.push({ to: `/contenido?view=${v.id}`, label: `Contenido · ${v.label}` })
   }
 
   if (calendarioAllowed) {
     const views = [
-      { id: 'semana', label: '🗓️ Mi semana' },
-      { id: 'equipo', label: '👥 Equipo' },
-      { id: 'mes',    label: '📅 Mes' },
+      { id: 'semana', label: 'Mi semana' },
+      { id: 'equipo', label: 'Equipo' },
+      { id: 'mes',    label: 'Mes' },
     ]
-    for (const v of views) destinations.push({ to: `/calendario?view=${v.id}`, label: `🗓️ Calendario · ${v.label}` })
+    for (const v of views) destinations.push({ to: `/calendario?view=${v.id}`, label: `Calendario · ${v.label}` })
   }
 
   if (rrhhAllowed) {
     const tabs = [
-      { to: '/admin/rrhh',                                label: '✅ Hoy · Para resolver' },
-      { to: '/admin/rrhh?tab=personas',                   label: '👤 Personas' },
-      { to: '/admin/rrhh?tab=ausencias&view=calendario',  label: '🏖️ Ausencias · Calendario del equipo' },
-      { to: '/admin/rrhh?tab=ausencias&view=solicitudes', label: '🏖️ Ausencias · Solicitudes' },
-      { to: '/admin/rrhh?tab=ausencias&view=saldos',      label: '🎁 Ausencias · Saldos (vacaciones, horas libres, días home)' },
-      { to: '/admin/rrhh?tab=asistencia',                 label: '🕐 Asistencia' },
-      ...(productivityEnabled ? [{ to: '/admin/rrhh?tab=productividad', label: '📊 Productividad' }] : []),
+      { to: '/admin/rrhh',                                label: 'Hoy · Para resolver' },
+      { to: '/admin/rrhh?tab=personas',                   label: 'Personas' },
+      { to: '/admin/rrhh?tab=ausencias&view=calendario',  label: 'Ausencias · Calendario del equipo' },
+      { to: '/admin/rrhh?tab=ausencias&view=solicitudes', label: 'Ausencias · Solicitudes' },
+      { to: '/admin/rrhh?tab=ausencias&view=saldos',      label: 'Ausencias · Saldos (vacaciones, horas libres, días home)' },
+      { to: '/admin/rrhh?tab=asistencia',                 label: 'Asistencia' },
+      ...(productivityEnabled ? [{ to: '/admin/rrhh?tab=productividad', label: 'Productividad' }] : []),
     ]
-    for (const t of tabs) destinations.push({ to: t.to, label: `👥 RRHH · ${t.label}` })
+    for (const t of tabs) destinations.push({ to: t.to, label: `RRHH · ${t.label}` })
   }
 
   if (isAdmin && eosEnabled) {
     const tabs = [
-      { id: 'vision',      label: '🧭 Visión' },
-      { id: 'personas',    label: '👥 Personas' },
-      { id: 'datos',       label: '📊 Datos' },
-      { id: 'asuntos',     label: '🔍 Asuntos' },
-      { id: 'procesos',    label: '⚙️ Procesos' },
-      { id: 'traccion',    label: '🚀 Tracción' },
-      { id: 'evaluacion',  label: '📋 Evaluación' },
+      { id: 'vision',      label: 'Visión' },
+      { id: 'personas',    label: 'Personas' },
+      { id: 'datos',       label: 'Datos' },
+      { id: 'asuntos',     label: 'Asuntos' },
+      { id: 'procesos',    label: 'Procesos' },
+      { id: 'traccion',    label: 'Tracción' },
+      { id: 'evaluacion',  label: 'Evaluación' },
     ]
-    for (const t of tabs) destinations.push({ to: `/admin/eos?tab=${t.id}`, label: `🔷 EOS · ${t.label}` })
+    for (const t of tabs) destinations.push({ to: `/admin/eos?tab=${t.id}`, label: `EOS · ${t.label}` })
   }
 
   if (isAdmin) {
     const tabs = [
-      { id: 'projects', label: '📁 Proyectos' },
-      { id: 'team',     label: '👥 Equipo' },
-      { id: 'services', label: '🛠 Servicios' },
-      { id: 'roles',    label: '🏷 Roles' },
-      { id: 'legajo',   label: '📋 Legajo' },
-      { id: 'empresa',  label: '🏢 Empresa' },
+      { id: 'projects', label: 'Proyectos' },
+      { id: 'team',     label: 'Equipo' },
+      { id: 'services', label: 'Servicios' },
+      { id: 'roles',    label: 'Roles' },
+      { id: 'legajo',   label: 'Legajo' },
+      { id: 'empresa',  label: 'Empresa' },
     ]
-    for (const t of tabs) destinations.push({ to: `/admin?tab=${t.id}`, label: `⚙️ Panel · ${t.label}` })
+    for (const t of tabs) destinations.push({ to: `/admin?tab=${t.id}`, label: `Panel · ${t.label}` })
   }
 
   return destinations

@@ -5,6 +5,8 @@ import { activeSeconds, fmtDuration } from '../../utils/format'
 import { renderRichText } from '../../utils/richText'
 import useMembers from '../../hooks/useMembers'
 import StarButton from './StarButton'
+import { Repeat, CalendarDays, MessageSquare, Paperclip } from 'lucide-react'
+import { Icon } from '../ui/Icon'
 
 // Tarjeta "Ahora" — arriba de todo del Dashboard. Responde la primera pregunta del
 // día: ¿en qué estoy trabajando? Con una tarea en curso muestra el cronómetro en vivo
@@ -27,15 +29,15 @@ function Meta({ task, onOpenComments }) {
   return (
     <div className="flex items-center gap-x-3 gap-y-1 flex-wrap text-sm text-gray-500 dark:text-gray-400">
       <Link to={`/my-projects/${task.project.id}`} className="font-medium text-gray-700 dark:text-gray-300 hover:text-primary-600">{task.project.name}</Link>
-      {task.recurrenceId && <span>🔁 Recurrente</span>}
+      {task.recurrenceId && <span className="inline-flex items-center gap-1"><Icon as={Repeat} size={14} />Recurrente</span>}
       {task.contentPiece && (
-        <Link to={`/contenido?projectId=${task.project.id}&piece=${task.contentPiece.id}`} className="text-sky-700 dark:text-sky-300 hover:underline">📅 Contenido</Link>
+        <Link to={`/contenido?projectId=${task.project.id}&piece=${task.contentPiece.id}`} className="inline-flex items-center gap-1 text-sky-700 dark:text-sky-300 hover:underline"><Icon as={CalendarDays} size={14} />Contenido</Link>
       )}
       {task.createdBy && <span>De {task.createdBy.name.split(' ')[0]}</span>}
-      <button type="button" onClick={() => onOpenComments(task)} className="hover:text-primary-600">
-        💬 {comments > 0 ? comments : 'Comentar'}
+      <button type="button" onClick={() => onOpenComments(task)} className="inline-flex items-center gap-1 hover:text-primary-600">
+        <Icon as={MessageSquare} size={14} />{comments > 0 ? comments : 'Comentar'}
       </button>
-      {files > 0 && <button type="button" onClick={() => onOpenComments(task)} className="hover:text-primary-600">📎 {files}</button>}
+      {files > 0 && <button type="button" onClick={() => onOpenComments(task)} className="inline-flex items-center gap-1 hover:text-primary-600" title="Adjuntos"><Icon as={Paperclip} size={14} />{files}</button>}
     </div>
   )
 }
@@ -79,7 +81,7 @@ export default function NowCard({ activeTask, suggestion, onUpdate, onOpenCommen
   if (dayEnded) {
     return (
       <div className="rounded-2xl border border-green-200 dark:border-green-900 bg-green-50 dark:bg-green-900/20 px-6 py-5">
-        <p className="text-base font-semibold text-green-800 dark:text-green-300">Jornada finalizada ✓</p>
+        <p className="text-base font-semibold text-green-800 dark:text-green-300">Jornada finalizada</p>
         <p className="text-sm text-green-700/80 dark:text-green-400/80 mt-0.5">Lo que quedó pendiente pasa automáticamente a mañana.</p>
       </div>
     )

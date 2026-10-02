@@ -7,6 +7,8 @@ import RoleBadge from '../../components/RoleBadge'
 import { linkify } from '../../utils/linkify'
 import { fmtMins, activeMinutes } from '../../utils/format'
 import { Card, CardHeader, TextButton, Avatar, EmptyNote } from './ui'
+import { Repeat } from 'lucide-react'
+import { Icon } from '../../components/ui/Icon'
 
 // Pestaña "Resumen" — lo primero que se ve al entrar a un proyecto. Responde
 // "¿cómo está esta cuenta?" sin recorrer pestañas: la situación escrita por el
@@ -143,7 +145,7 @@ function NextMeetingCard({ projectId, timezone }) {
       <Link to={`/calendario?event=${next.id}`} className="block px-4 pb-4 group">
         <div className="flex items-center gap-2 flex-wrap">
           <p className="text-sm font-semibold text-gray-900 dark:text-white group-hover:text-primary-600 dark:group-hover:text-primary-400">
-            {next.recurrenceId ? '🔁 ' : ''}{next.title}
+            {next.recurrenceId && <Icon as={Repeat} size={13} className="inline mr-1 align-[-2px] text-gray-400" label="Recurrente" />}{next.title}
           </p>
           {isToday && <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-primary-100 text-primary-700 dark:bg-primary-900/30 dark:text-primary-400">Hoy</span>}
         </div>
@@ -200,7 +202,7 @@ function LastMeetingCard({ projectId, goTab }) {
                 {open.length > 3 && <li className="text-xs text-gray-400 pl-3.5">y {open.length - 3} más</li>}
               </ul>
             ) : (mt.todos || []).length > 0 ? (
-              <p className="mt-2 text-xs text-green-700 dark:text-green-400">✓ Todos los pendientes de esta reunión están resueltos</p>
+              <p className="mt-2 text-xs text-green-700 dark:text-green-400">Todos los pendientes de esta reunión están resueltos</p>
             ) : null}
           </button>
         )

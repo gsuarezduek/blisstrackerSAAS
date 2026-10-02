@@ -12,6 +12,7 @@ import { useAuth } from '../context/AuthContext'
 import api from '../api/client'
 import SetupHintCard from './SetupHintCard'
 import { moduleMeta } from '../lib/moduleCatalog'
+import { Users } from 'lucide-react'
 
 export default function SetupChecklist() {
   const { user } = useAuth()
@@ -30,7 +31,7 @@ export default function SetupChecklist() {
 
   if (!checklist.team.done) {
     items.push({
-      key: 'team', icon: '👥', label: 'Invitá a tu equipo',
+      key: 'team', icon: Users, label: 'Invitá a tu equipo',
       hint: 'BlissTracker se siente distinto con tu equipo adentro. Invitalos por email, sin gestión de contraseñas.',
       to: '/admin?tab=team', ctaLabel: 'Invitar equipo →',
     })

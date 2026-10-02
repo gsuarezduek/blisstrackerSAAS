@@ -3,6 +3,7 @@ import api from '../../api/client'
 import { useAuth } from '../../context/AuthContext'
 import { useGoogleIntegration } from '../../hooks/useGoogleIntegration'
 import SetupHintCard from '../SetupHintCard'
+import { Globe } from 'lucide-react'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const fmtNum = n => (n ?? 0).toLocaleString('es-AR')
@@ -80,7 +81,7 @@ function DomainRatingCard({ projectId }) {
   // Sin URL configurada: no hay Domain Rating posible → invitación a completarla.
   if (data && !data.hasUrl) return (
     <SetupHintCard
-      icon="🌐"
+      icon={Globe}
       label="Domain Rating no disponible"
       hint="Agregá la URL del sitio para medir el Domain Rating (autoridad del dominio según Ahrefs)."
       to={`/my-projects/${projectId}?infoTab=info`}

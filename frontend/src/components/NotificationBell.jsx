@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom'
 import api from '../api/client'
 import { avatarUrl } from '../utils/avatarUrl'
 import { useAuth } from '../context/AuthContext'
+import { Lock, LockOpen, Handshake, AtSign, MessageSquare, Eye, Bell, Check, TriangleAlert, Trash2, Plus, Briefcase, CalendarDays, Smartphone, Hand, Palmtree, Trophy, Pencil, UserRound } from 'lucide-react'
+import { Icon } from './ui/Icon'
 
 // Cada filtro define un predicado `match`. Un filtro `muted` no destaca: no suma al
 // badge de la campana ni muestra badge en su icono (son informativos / de fondo).
@@ -15,13 +17,13 @@ const isFollowedCompleted = n => n.type === 'COMPLETED' && (n.relation === 'foll
 // TASK_MENTION agrupa también LEAD_ASSIGNED, CHAT_MENTION y CONTENT_MENTION
 // (misma idea: "te mencionaron/asignaron algo" — el mismo ícono @ para cualquier mención).
 const FILTERS = [
-  { key: 'BLOCKED',      label: '🔒', title: 'Bloqueos',                  match: n => n.type === 'BLOCKED' || n.type === 'UNBLOCKED' },
-  { key: 'CLIENT',       label: '🤝', title: 'Actividad del cliente',     match: n => n.type === 'CONTENT_APPROVED' || n.type === 'CONTENT_CHANGES_REQUESTED' || n.type === 'PORTAL_CLIENT_LOGIN' },
-  { key: 'TASK_MENTION', label: '@',  title: 'Asignaciones y menciones',  match: n => n.type === 'TASK_MENTION' || n.type === 'LEAD_ASSIGNED' || n.type === 'CHAT_MENTION' || n.type === 'CONTENT_MENTION' || n.type === 'WHATSAPP_MESSAGE' || n.type === 'CALENDAR_INVITE' },
-  { key: 'TASK_COMMENT', label: '💬', title: 'Comentarios',               match: n => n.type === 'TASK_COMMENT' },
-  { key: 'FOLLOWED',     label: '👁', title: 'Seguidas y delegadas',      match: n => isFollowedCompleted(n) || n.type === 'TASK_DELETED' },
-  { key: 'OTHER',        label: '🔔', title: 'Otras',                     match: n => ['VACATION_REQUEST', 'ADDED_TO_PROJECT', 'VACATION_REVIEWED', 'GAME_LAUNCHED', 'BENEFIT_REQUEST', 'BENEFIT_REVIEWED', 'CALENDAR_RESPONSE', 'LEGAJO_UPDATED'].includes(n.type) },
-  { key: 'COMPLETED',    label: '✓',  title: 'Completadas',               match: n => n.type === 'COMPLETED' && !isFollowedCompleted(n), muted: true },
+  { key: 'BLOCKED',      icon: Lock, title: 'Bloqueos',                  match: n => n.type === 'BLOCKED' || n.type === 'UNBLOCKED' },
+  { key: 'CLIENT',       icon: Handshake, title: 'Actividad del cliente',     match: n => n.type === 'CONTENT_APPROVED' || n.type === 'CONTENT_CHANGES_REQUESTED' || n.type === 'PORTAL_CLIENT_LOGIN' },
+  { key: 'TASK_MENTION', icon: AtSign, title: 'Asignaciones y menciones',  match: n => n.type === 'TASK_MENTION' || n.type === 'LEAD_ASSIGNED' || n.type === 'CHAT_MENTION' || n.type === 'CONTENT_MENTION' || n.type === 'WHATSAPP_MESSAGE' || n.type === 'CALENDAR_INVITE' },
+  { key: 'TASK_COMMENT', icon: MessageSquare, title: 'Comentarios',               match: n => n.type === 'TASK_COMMENT' },
+  { key: 'FOLLOWED',     icon: Eye, title: 'Seguidas y delegadas',      match: n => isFollowedCompleted(n) || n.type === 'TASK_DELETED' },
+  { key: 'OTHER',        icon: Bell, title: 'Otras',                     match: n => ['VACATION_REQUEST', 'ADDED_TO_PROJECT', 'VACATION_REVIEWED', 'GAME_LAUNCHED', 'BENEFIT_REQUEST', 'BENEFIT_REVIEWED', 'CALENDAR_RESPONSE', 'LEGAJO_UPDATED'].includes(n.type) },
+  { key: 'COMPLETED',    icon: Check, title: 'Completadas',               match: n => n.type === 'COMPLETED' && !isFollowedCompleted(n), muted: true },
 ]
 
 // El filtro (único) al que pertenece una notificación; los predicados son disjuntos.
@@ -186,7 +188,7 @@ export default function NotificationBell() {
                         : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
                     }`}
                   >
-                    <span>{f.label}</span>
+                    <Icon as={f.icon} size={15} />
                     {badge > 0 && (
                       <span className="absolute -top-1 -right-1 min-w-[1rem] h-4 px-1 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center leading-none">
                         {badge > 9 ? '9+' : badge}
@@ -211,7 +213,7 @@ export default function NotificationBell() {
           <div className="max-h-80 overflow-y-auto">
             {filtered.length === 0 ? (
               <div className="text-center py-10 text-gray-400 dark:text-gray-500">
-                <p className="text-2xl mb-2">🔔</p>
+                <Icon as={Bell} size={28} strokeWidth={1.5} className="mx-auto mb-2" />
                 <p className="text-sm">
                   {notifications.length === 0
                     ? 'Sin notificaciones todavía'
@@ -338,51 +340,51 @@ export default function NotificationBell() {
                             className="w-7 h-7 rounded-full object-cover border border-gray-200 dark:border-gray-600"
                           />
                         ) : (
-                          <div className="w-7 h-7 rounded-full bg-gray-100 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 flex items-center justify-center text-sm">
-                            {isContentApproved ? '✅' : isContentChanges ? '✏️' : isPortalLogin ? '👋' : isWhatsappMessage ? '📱' : '🤝'}
+                          <div className="w-7 h-7 rounded-full bg-gray-100 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 flex items-center justify-center text-gray-500 dark:text-gray-400">
+                            <Icon as={isContentApproved ? Check : isContentChanges ? Pencil : isPortalLogin ? UserRound : isWhatsappMessage ? Smartphone : Handshake} size={14} />
                           </div>
                         )}
                         {isBlocked && (
-                          <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-red-500 rounded-full flex items-center justify-center text-white text-[8px] leading-none">⚠</span>
+                          <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-red-500 rounded-full flex items-center justify-center text-white text-[8px] leading-none"><Icon as={TriangleAlert} size={9} strokeWidth={2.75} /></span>
                         )}
                         {isUnblocked && (
-                          <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-green-500 rounded-full flex items-center justify-center text-white text-[8px] leading-none">🔓</span>
+                          <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-green-500 rounded-full flex items-center justify-center text-white text-[8px] leading-none"><Icon as={LockOpen} size={9} strokeWidth={2.75} /></span>
                         )}
                         {isTaskDeleted && (
-                          <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-red-500 rounded-full flex items-center justify-center text-white text-[8px] leading-none">🗑</span>
+                          <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-red-500 rounded-full flex items-center justify-center text-white text-[8px] leading-none"><Icon as={Trash2} size={9} strokeWidth={2.75} /></span>
                         )}
                         {isAddedProject && (
-                          <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-green-500 rounded-full flex items-center justify-center text-white text-[8px] leading-none">＋</span>
+                          <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-green-500 rounded-full flex items-center justify-center text-white text-[8px] leading-none"><Icon as={Plus} size={9} strokeWidth={2.75} /></span>
                         )}
                         {isComment && (
-                          <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-blue-500 rounded-full flex items-center justify-center text-white text-[8px] leading-none">💬</span>
+                          <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-blue-500 rounded-full flex items-center justify-center text-white text-[8px] leading-none"><Icon as={MessageSquare} size={9} strokeWidth={2.75} /></span>
                         )}
                         {isMention && (
-                          <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-purple-500 rounded-full flex items-center justify-center text-white font-bold text-[8px] leading-none">@</span>
+                          <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-purple-500 rounded-full flex items-center justify-center text-white font-bold text-[8px] leading-none"><Icon as={AtSign} size={9} strokeWidth={2.75} /></span>
                         )}
                         {isLeadAssigned && (
-                          <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-purple-500 rounded-full flex items-center justify-center text-white text-[8px] leading-none">💼</span>
+                          <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-purple-500 rounded-full flex items-center justify-center text-white text-[8px] leading-none"><Icon as={Briefcase} size={9} strokeWidth={2.75} /></span>
                         )}
                         {isChatMention && (
-                          <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-purple-500 rounded-full flex items-center justify-center text-white text-[8px] leading-none">💬</span>
+                          <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-purple-500 rounded-full flex items-center justify-center text-white text-[8px] leading-none"><Icon as={MessageSquare} size={9} strokeWidth={2.75} /></span>
                         )}
                         {isContentMention && (
-                          <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-purple-500 rounded-full flex items-center justify-center text-white text-[8px] leading-none">📅</span>
+                          <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-purple-500 rounded-full flex items-center justify-center text-white text-[8px] leading-none"><Icon as={CalendarDays} size={9} strokeWidth={2.75} /></span>
                         )}
                         {isWhatsappMessage && (
-                          <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-purple-500 rounded-full flex items-center justify-center text-white text-[8px] leading-none">📱</span>
+                          <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-purple-500 rounded-full flex items-center justify-center text-white text-[8px] leading-none"><Icon as={Smartphone} size={9} strokeWidth={2.75} /></span>
                         )}
                         {isVacationAction && (
-                          <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-amber-500 rounded-full flex items-center justify-center text-[8px] leading-none">🙋</span>
+                          <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-amber-500 rounded-full flex items-center justify-center text-white text-[8px] leading-none"><Icon as={Hand} size={9} strokeWidth={2.75} /></span>
                         )}
                         {n.type === 'VACATION_REVIEWED' && (
-                          <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-amber-500 rounded-full flex items-center justify-center text-[8px] leading-none">🏖</span>
+                          <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-amber-500 rounded-full flex items-center justify-center text-white text-[8px] leading-none"><Icon as={Palmtree} size={9} strokeWidth={2.75} /></span>
                         )}
                         {isGameLaunched && (
-                          <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-amber-500 rounded-full flex items-center justify-center text-[8px] leading-none">🏆</span>
+                          <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-amber-500 rounded-full flex items-center justify-center text-white text-[8px] leading-none"><Icon as={Trophy} size={9} strokeWidth={2.75} /></span>
                         )}
                         {isCompleted && (
-                          <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-gray-400 dark:bg-gray-500 rounded-full flex items-center justify-center text-white text-[8px] leading-none">✓</span>
+                          <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-gray-400 dark:bg-gray-500 rounded-full flex items-center justify-center text-white text-[8px] leading-none"><Icon as={Check} size={9} strokeWidth={2.75} /></span>
                         )}
                       </div>
                       <div className="flex-1 min-w-0">

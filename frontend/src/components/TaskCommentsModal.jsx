@@ -11,6 +11,8 @@ import MessageReactionPicker from './chat/MessageReactionPicker'
 import { groupReactions } from './chat/reactions'
 import { useTaskFileUpload } from './taskFileUpload'
 import { fmtBytes, iconFor } from '../lib/fileIcons'
+import { Eye, Paperclip, MessageSquare, SmilePlus } from 'lucide-react'
+import { Icon } from './ui/Icon'
 
 function timeAgo(dateStr) {
   const diff = Math.floor((Date.now() - new Date(dateStr)) / 1000)
@@ -413,7 +415,7 @@ export default function TaskCommentsModal({ task, onClose, onCommentAdded, onTas
                     : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600'
                 }`}
               >
-                <span>{following ? '👁️' : '👁'}</span>
+                <Icon as={Eye} size={13} />
                 {following ? 'Siguiendo' : 'Seguir'}
               </button>
               <button
@@ -608,16 +610,16 @@ export default function TaskCommentsModal({ task, onClose, onCommentAdded, onTas
 
             {/* Tiempo trabajado / duración */}
             {task.status === 'IN_PROGRESS' && task.startedAt && (
-              <span className="text-xs text-blue-500">⏱ {fmtMins(activeMinutes(task))} en curso</span>
+              <span className="text-xs text-blue-500">{fmtMins(activeMinutes(task))} en curso</span>
             )}
             {task.status === 'PAUSED' && (
-              <span className="text-xs text-yellow-600">⏸ {fmtMins(activeMinutes(task))} trabajadas</span>
+              <span className="text-xs text-yellow-600">{fmtMins(activeMinutes(task))} trabajadas</span>
             )}
             {task.status === 'COMPLETED' && completedDuration(task) && (
-              <span className="text-xs text-green-600">✓ {completedDuration(task)}</span>
+              <span className="text-xs text-green-600">{completedDuration(task)} trabajadas</span>
             )}
             {task.status === 'BLOCKED' && task.blockedReason && (
-              <span className="text-xs text-red-500">🔒 {task.blockedReason}</span>
+              <span className="text-xs text-red-500">Motivo: {task.blockedReason}</span>
             )}
           </div>
 
@@ -645,9 +647,9 @@ export default function TaskCommentsModal({ task, onClose, onCommentAdded, onTas
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                className="text-xs font-medium text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300"
+                className="text-xs font-medium text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 inline-flex items-center gap-1"
               >
-                📎 Adjuntar archivo
+                <Icon as={Paperclip} size={13} />Adjuntar archivo
               </button>
               <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handlePickFiles} />
             </div>
@@ -678,7 +680,7 @@ export default function TaskCommentsModal({ task, onClose, onCommentAdded, onTas
                 ))}
                 {uploadQueue.map(item => (
                   <div key={item.id} className="flex items-center gap-2 text-sm px-2 py-1 rounded-lg">
-                    <span className="flex-shrink-0">📎</span>
+                    <Icon as={Paperclip} size={14} className="text-gray-400" />
                     <span className="flex-1 min-w-0 truncate text-gray-500 dark:text-gray-400">{item.name}</span>
                     <span className="flex-shrink-0 text-xs text-gray-400 dark:text-gray-500">
                       {item.status === 'error' ? (item.error || 'Error') : `${item.progress}%`}
@@ -699,7 +701,7 @@ export default function TaskCommentsModal({ task, onClose, onCommentAdded, onTas
           {loading && <LoadingSpinner size="sm" className="py-6" />}
           {!loading && comments.length === 0 && (
             <div className="text-center py-8">
-              <p className="text-2xl mb-2">💬</p>
+              <Icon as={MessageSquare} size={24} strokeWidth={1.5} className="mx-auto mb-2 text-gray-300 dark:text-gray-600" />
               <p className="text-sm text-gray-400 dark:text-gray-500">Sin comentarios todavía. Sé el primero.</p>
             </div>
           )}
@@ -747,7 +749,7 @@ export default function TaskCommentsModal({ task, onClose, onCommentAdded, onTas
                   title="Reaccionar"
                   className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-all rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"
                 >
-                  🙂
+                  <Icon as={SmilePlus} size={15} />
                 </button>
                 {reactingId === c.id && (
                   <MessageReactionPicker

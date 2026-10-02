@@ -16,6 +16,8 @@ import InfoTab, { TeamModal } from './project-detail/info'
 import OverviewTab from './project-detail/overview'
 import AccesosTab from './project-detail/accesos'
 import { AvatarStack } from './project-detail/ui'
+import { TriangleAlert } from 'lucide-react'
+import { Icon } from '../components/ui/Icon'
 
 // Nombres viejos de pestañas que siguen llegando por links guardados/notificaciones
 // (`?infoTab=info` desde Marketing para cargar el sitio web, `reportes`).
@@ -317,7 +319,7 @@ export default function ProjectDetail() {
 
         {error && (
           <div className="text-center py-16 text-gray-400">
-            <p className="text-4xl mb-3">⚠️</p>
+            <Icon as={TriangleAlert} size={32} strokeWidth={1.5} className="mx-auto mb-3" />
             <p>{error}</p>
           </div>
         )}
@@ -388,7 +390,6 @@ export default function ProjectDetail() {
                     onClick={() => navigate(`/marketing?tab=hoy&projectId=${data.project.id}`)}
                     className="flex items-center gap-1.5 px-3 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 text-sm font-medium text-gray-700 dark:text-gray-200 rounded-xl transition-colors"
                   >
-                    <span className="text-base leading-none">🎯</span>
                     Marketing
                   </button>
                 )}
@@ -398,7 +399,6 @@ export default function ProjectDetail() {
                     className="flex items-center gap-1.5 px-3 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 text-sm font-medium text-gray-700 dark:text-gray-200 rounded-xl transition-colors"
                     title="Calendario de contenido"
                   >
-                    <span className="text-base leading-none">📅</span>
                     Contenido
                   </button>
                 )}

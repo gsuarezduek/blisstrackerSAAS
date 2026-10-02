@@ -3,6 +3,8 @@ import LoadingSpinner from '../components/LoadingSpinner'
 import { avatarUrl } from '../utils/avatarUrl'
 import UserLink from '../components/UserLink'
 import { completedMinutes, fmtMins, completedDuration } from '../utils/format'
+import { MessageSquare, X, Check, TriangleAlert, Target, CircleCheck, Lightbulb, ThumbsUp, ThumbsDown, ChevronDown } from 'lucide-react'
+import { Icon } from '../components/ui/Icon'
 
 function fmtShortDate(iso) {
   if (!iso) return null
@@ -61,21 +63,21 @@ function TrackedTaskRow({ task: t, onClick, onRemove, removeTitle, isNew }) {
           {(t._count?.comments ?? 0) > 0 && (
             <>
               <span className="text-xs text-gray-300 dark:text-gray-600">·</span>
-              <span className="text-xs text-gray-400 dark:text-gray-500">💬 {t._count.comments}</span>
+              <span className="inline-flex items-center gap-1 text-xs text-gray-400 dark:text-gray-500"><Icon as={MessageSquare} size={12} />{t._count.comments}</span>
             </>
           )}
         </div>
         {/* Metadatos: creación, finalización, duración — o, para un aviso de eliminación, quién y cuándo la borró */}
         <div className="flex items-center gap-x-2 gap-y-0.5 mt-1 flex-wrap text-[11px] text-gray-400 dark:text-gray-500">
           {isDeletedNotice ? (
-            <span>🗑️ Eliminada por {t.deletedBy?.name} · {fmtShortDate(t.deletedAt)}</span>
+            <span>Eliminada por {t.deletedBy?.name} · {fmtShortDate(t.deletedAt)}</span>
           ) : (
             <>
-              {t.createdAt && <span>📅 {fmtShortDate(t.createdAt)}</span>}
+              {t.createdAt && <span>Creada {fmtShortDate(t.createdAt)}</span>}
               {t.completedAt && (
                 <>
                   <span className="text-gray-300 dark:text-gray-600">·</span>
-                  <span>✓ {fmtShortDate(t.completedAt)}</span>
+                  <span>Completada {fmtShortDate(t.completedAt)}</span>
                 </>
               )}
               {dur && (
@@ -96,7 +98,7 @@ function TrackedTaskRow({ task: t, onClick, onRemove, removeTitle, isNew }) {
         title={removeTitle}
         className="flex-shrink-0 text-gray-300 dark:text-gray-600 hover:text-red-500 dark:hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity p-1 -m-1"
       >
-        ✕
+        <Icon as={X} size={14} />
       </button>
     </div>
   )
@@ -133,7 +135,7 @@ export const CompletedTaskRow = memo(function CompletedTaskRow({ task: t, varian
 
   return (
     <div className="flex items-center gap-3 px-4 py-3 group">
-      <span className={`flex-shrink-0 text-sm ${isHistory ? 'text-gray-300 dark:text-gray-600' : 'text-green-500'}`}>✓</span>
+      <Icon as={Check} size={15} strokeWidth={2.25} className={isHistory ? 'text-gray-300 dark:text-gray-600' : 'text-green-500'} />
       <div className="flex-1 min-w-0">
         <p
           onClick={() => onOpenComments(t)}
@@ -156,7 +158,7 @@ export const CompletedTaskRow = memo(function CompletedTaskRow({ task: t, varian
             title="Ver comentarios"
             className="flex items-center gap-1 text-xs text-gray-400 dark:text-gray-500 hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
           >
-            💬{(t._count?.comments ?? 0) > 0 ? ` ${t._count.comments}` : ''}
+            <Icon as={MessageSquare} size={13} />{(t._count?.comments ?? 0) > 0 ? t._count.comments : ''}
           </button>
           {editingDur ? (
             <>
@@ -178,8 +180,8 @@ export const CompletedTaskRow = memo(function CompletedTaskRow({ task: t, varian
                 <span className="text-xs text-gray-400">min</span>
                 <button
                   onMouseDown={() => { cancelRef.current = true; setEditingDur(false) }}
-                  className="text-xs text-gray-400 hover:text-gray-600 leading-none"
-                >✕</button>
+                  className="text-gray-400 hover:text-gray-600 leading-none"
+                ><Icon as={X} size={13} /></button>
               </span>
             </>
           ) : (
@@ -224,7 +226,7 @@ export function DailyInsightBlock({ loading, insight, dismissed, expanded, onTog
     positive: 'text-green-700 dark:text-green-400',
     neutral:  'text-gray-600 dark:text-gray-400',
   }
-  const toneIcon = { warning: '⚠️', alert: '🎯', positive: '✅', neutral: '💡' }
+  const toneIcon = { warning: TriangleAlert, alert: Target, positive: CircleCheck, neutral: Lightbulb }
 
   if (loading) {
     return (
@@ -246,16 +248,14 @@ export function DailyInsightBlock({ loading, insight, dismissed, expanded, onTog
         className="flex items-center gap-2.5 px-4 py-3 cursor-pointer select-none"
         onClick={onToggleExpanded}
       >
-        <span className="text-base flex-shrink-0">{toneIcon[tone]}</span>
+        <Icon as={toneIcon[tone] ?? Lightbulb} size={17} className={toneText[tone]} />
         <p className={`text-sm font-semibold leading-snug flex-1 min-w-0 ${toneText[tone]}`}>{insight.titulo}</p>
         <button
           onClick={e => { e.stopPropagation(); onDismiss() }}
           className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors flex-shrink-0 text-base leading-none px-1"
           title="Cerrar"
-        >×</button>
-        <span className={`text-gray-400 flex-shrink-0 transition-transform duration-200 ${expanded ? 'rotate-180' : ''}`}>
-          ▾
-        </span>
+        ><Icon as={X} size={16} /></button>
+        <Icon as={ChevronDown} size={16} className={`text-gray-400 transition-transform duration-200 ${expanded ? 'rotate-180' : ''}`} />
       </div>
 
       {/* Expanded content */}
@@ -264,12 +264,12 @@ export function DailyInsightBlock({ loading, insight, dismissed, expanded, onTog
           <p className={`text-sm leading-snug ${toneText[tone]} opacity-90`}>{insight.mensaje}</p>
           {insight.alertaRol && (
             <p className="text-xs mt-2 leading-snug text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg px-2.5 py-1.5">
-              <span className="font-medium">⚠️ Rol:</span> {insight.alertaRol}
+              <span className="font-medium">Rol:</span> {insight.alertaRol}
             </p>
           )}
           {insight.alertaGTD && (
             <p className="text-xs mt-2 leading-snug text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg px-2.5 py-1.5">
-              <span className="font-medium">📝 GTD:</span> {insight.alertaGTD}
+              <span className="font-medium">GTD:</span> {insight.alertaGTD}
             </p>
           )}
           {insight.sugerencia && (
@@ -283,12 +283,12 @@ export function DailyInsightBlock({ loading, insight, dismissed, expanded, onTog
                 onClick={() => onFeedback(insight.feedback === 'up' ? null : 'up')}
                 className={`text-sm px-2 py-0.5 rounded-lg transition-colors ${insight.feedback === 'up' ? 'bg-green-200 dark:bg-green-800 text-green-700 dark:text-green-300' : 'text-gray-400 hover:text-green-600 hover:bg-green-50 dark:hover:bg-green-900/30'}`}
                 title="Útil"
-              >👍</button>
+              ><Icon as={ThumbsUp} size={14} /></button>
               <button
                 onClick={() => onFeedback(insight.feedback === 'down' ? null : 'down')}
                 className={`text-sm px-2 py-0.5 rounded-lg transition-colors ${insight.feedback === 'down' ? 'bg-red-200 dark:bg-red-800 text-red-700 dark:text-red-300' : 'text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30'}`}
                 title="No útil"
-              >👎</button>
+              ><Icon as={ThumbsDown} size={14} /></button>
             </div>
             <div className="flex items-center gap-2">
               {cooldown && (
@@ -341,7 +341,7 @@ export function SeguimientoSection({
           </span>
           {seguimientoBlockedCount > 0 && (
             <span className="text-xs bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400 rounded-full px-2 py-0.5 font-medium">
-              ⚠ {seguimientoBlockedCount} bloqueada{seguimientoBlockedCount > 1 ? 's' : ''}
+              {seguimientoBlockedCount} bloqueada{seguimientoBlockedCount > 1 ? 's' : ''}
             </span>
           )}
         </div>

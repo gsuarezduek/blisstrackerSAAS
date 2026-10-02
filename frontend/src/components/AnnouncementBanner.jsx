@@ -1,14 +1,16 @@
 import { useState, useEffect } from 'react'
 import api from '../api/client'
 import { linkify } from '../utils/linkify'
+import { Info, Sparkles, TriangleAlert, Wrench } from 'lucide-react'
+import { Icon } from './ui/Icon'
 
 const DISMISSED_KEY = 'bliss_dismissed_announcements'
 
 const TYPE_STYLES = {
-  info:        { bar: 'bg-blue-500',    bg: 'bg-blue-50 dark:bg-blue-900/20',    text: 'text-blue-800 dark:text-blue-200',    border: 'border-blue-200 dark:border-blue-700',    icon: 'ℹ️' },
-  feature:     { bar: 'bg-primary-500', bg: 'bg-primary-50 dark:bg-primary-900/20', text: 'text-primary-800 dark:text-primary-200', border: 'border-primary-200 dark:border-primary-700', icon: '✨' },
-  warning:     { bar: 'bg-yellow-500',  bg: 'bg-yellow-50 dark:bg-yellow-900/20', text: 'text-yellow-800 dark:text-yellow-200', border: 'border-yellow-200 dark:border-yellow-700',  icon: '⚠️' },
-  maintenance: { bar: 'bg-red-500',     bg: 'bg-red-50 dark:bg-red-900/20',      text: 'text-red-800 dark:text-red-200',      border: 'border-red-200 dark:border-red-700',      icon: '🔧' },
+  info:        { bar: 'bg-blue-500',    bg: 'bg-blue-50 dark:bg-blue-900/20',    text: 'text-blue-800 dark:text-blue-200',    border: 'border-blue-200 dark:border-blue-700',    icon: Info },
+  feature:     { bar: 'bg-primary-500', bg: 'bg-primary-50 dark:bg-primary-900/20', text: 'text-primary-800 dark:text-primary-200', border: 'border-primary-200 dark:border-primary-700', icon: Sparkles },
+  warning:     { bar: 'bg-yellow-500',  bg: 'bg-yellow-50 dark:bg-yellow-900/20', text: 'text-yellow-800 dark:text-yellow-200', border: 'border-yellow-200 dark:border-yellow-700',  icon: TriangleAlert },
+  maintenance: { bar: 'bg-red-500',     bg: 'bg-red-50 dark:bg-red-900/20',      text: 'text-red-800 dark:text-red-200',      border: 'border-red-200 dark:border-red-700',      icon: Wrench },
 }
 
 function getDismissed() {
@@ -46,7 +48,7 @@ export default function AnnouncementBanner() {
           <div key={ann.id} className={`relative flex items-start gap-3 px-4 py-3 border-b ${s.bg} ${s.border} ${s.text}`}>
             {/* Barra lateral de color */}
             <div className={`absolute left-0 top-0 bottom-0 w-1 ${s.bar} rounded-r-sm`} />
-            <span className="flex-shrink-0 ml-2 text-base leading-none mt-0.5">{s.icon}</span>
+            <Icon as={s.icon} size={17} className="ml-2 mt-0.5" />
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold leading-tight">{ann.title}</p>
               <p className="text-sm opacity-90 mt-0.5 leading-snug">{linkify(ann.body)}</p>

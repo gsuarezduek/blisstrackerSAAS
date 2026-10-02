@@ -6,6 +6,8 @@ import { avatarUrl } from '../utils/avatarUrl'
 import HowToButton from './HowToButton'
 import { useTaskFileUpload, MAX_FILE_BYTES, fmtMb } from './taskFileUpload'
 import { fmtBytes, iconFor } from '../lib/fileIcons'
+import { TriangleAlert, Lightbulb, Paperclip, Repeat, CalendarDays } from 'lucide-react'
+import { Icon } from './ui/Icon'
 
 const MONTH_NAMES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
 
@@ -37,7 +39,7 @@ function ProjectCombobox({ projects, value, onChange, userId }) {
       else others.push(p)
     }
     return [
-      { label: '⭐ Favoritos',      items: fav },
+      { label: 'Favoritos', items: fav },
       { label: 'Mis proyectos',     items: mine },
       { label: 'Otros proyectos',   items: others },
     ].filter(g => g.items.length > 0)
@@ -455,7 +457,7 @@ export default function AddTaskModal({ onAdd, onClose, lockedProject, defaultPro
             </div>
             {showGtdWarning && gtdWarning && (
               <div className="mt-2 flex gap-2 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-300 dark:border-amber-700 p-3">
-                <span className="text-amber-500 flex-shrink-0 mt-0.5">⚠️</span>
+                <Icon as={TriangleAlert} size={15} className="text-amber-500 mt-0.5" />
                 <div className="text-xs text-amber-800 dark:text-amber-300">
                   <p className="font-medium mb-1">Sugerencia GTD</p>
                   <p>{gtdWarning}</p>
@@ -464,7 +466,7 @@ export default function AddTaskModal({ onAdd, onClose, lockedProject, defaultPro
             )}
             {alertaGTD && (
               <div className="mt-2 flex gap-2 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 p-3">
-                <span className="text-blue-500 flex-shrink-0 mt-0.5 text-base">💡</span>
+                <Icon as={Lightbulb} size={15} className="text-blue-500 mt-0.5" />
                 <div className="text-xs text-blue-800 dark:text-blue-300">
                   <p className="font-medium mb-1">Tu coach de hoy detectó tareas vagas</p>
                   <p className="whitespace-pre-wrap">{alertaGTD}</p>
@@ -520,9 +522,9 @@ export default function AddTaskModal({ onAdd, onClose, lockedProject, defaultPro
                 <button
                   type="button"
                   onClick={() => pendingFileInputRef.current?.click()}
-                  className="text-xs font-medium text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300"
+                  className="text-xs font-medium text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 inline-flex items-center gap-1"
                 >
-                  📎 Adjuntar archivo
+                  <Icon as={Paperclip} size={13} />Adjuntar archivo
                 </button>
               )}
               <input ref={pendingFileInputRef} type="file" multiple className="hidden" onChange={handlePickPendingFiles} />
@@ -551,7 +553,7 @@ export default function AddTaskModal({ onAdd, onClose, lockedProject, defaultPro
               <div className="space-y-1">
                 {uploadQueue.map(item => (
                   <div key={item.id} className="flex items-center gap-2 text-sm px-2 py-1 rounded-lg bg-gray-50 dark:bg-gray-700/40">
-                    <span className="flex-shrink-0">📎</span>
+                    <Icon as={Paperclip} size={14} className="text-gray-400" />
                     <span className="flex-1 min-w-0 truncate text-gray-600 dark:text-gray-300">{item.name}</span>
                     <span className={`flex-shrink-0 text-xs ${item.status === 'error' ? 'text-red-500' : 'text-gray-400 dark:text-gray-500'}`}>
                       {item.status === 'error' ? (item.error || 'Error') : `${item.progress}%`}
@@ -601,7 +603,7 @@ export default function AddTaskModal({ onAdd, onClose, lockedProject, defaultPro
                     : 'border-gray-200 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'
                 }`}
               >
-                🔁 Tarea recurrente
+                <span className="inline-flex items-center justify-center gap-1.5"><Icon as={Repeat} size={13} />Tarea recurrente</span>
               </button>
               <button
                 type="button"
@@ -612,7 +614,7 @@ export default function AddTaskModal({ onAdd, onClose, lockedProject, defaultPro
                     : 'border-gray-200 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'
                 }`}
               >
-                📅 Tarea futura
+                <span className="inline-flex items-center justify-center gap-1.5"><Icon as={CalendarDays} size={13} />Tarea futura</span>
               </button>
               <HowToButton topic="tarea.recurrente" />
             </div>
@@ -733,7 +735,7 @@ export default function AddTaskModal({ onAdd, onClose, lockedProject, defaultPro
                   onChange={e => setScheduledTime(e.target.checked ? '09:00' : '')}
                   className="rounded"
                 />
-                🗓️ Bloquear horario en el Calendario
+                Bloquear horario en el Calendario
               </label>
               {scheduledTime && (
                 <div className="mt-2">

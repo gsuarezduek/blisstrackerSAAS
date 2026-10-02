@@ -129,7 +129,7 @@ export default function GlobalShortcuts() {
   function handleAdd(task) {
     // Avisamos a la página activa (ej. Dashboard) para que refresque su lista.
     window.dispatchEvent(new CustomEvent('bliss:task-created', { detail: task }))
-    setToast('Tarea creada ✓')
+    setToast('Tarea creada')
     setTimeout(() => setToast(''), 2500)
   }
 
