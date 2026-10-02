@@ -39,7 +39,14 @@ model Workspace {
   // Feature flags: keys que este workspace optó por desactivar (aunque estén habilitados globalmente o en su lista)
   disabledFeatureKeys           String    @default("[]")
   monthlyTokenLimit             Int       @default(1000000) // Límite mensual de tokens de IA (configurable desde SuperAdmin)
-  storageLimitMb                Int       @default(20480) // Límite de almacenamiento (MB) del workspace (configurable desde SuperAdmin). 0 = ilimitado
+  storageLimitMb                Int       @default(20480) // Límite de almacenamiento (MB) del workspace (configurable desde SuperAdmin). 0 = ilimitado. INFORMATIVO/de alerta — no bloquea subidas, ver *MaxMbOverride abajo
+  // Override puntual por workspace de las cuotas que SÍ bloquean subidas (ver assertWithinQuota
+  // en projectFiles/contentAssets/chat controllers). null = usa el default global de PlatformSetting
+  // (projectFilesMaxMbPerWorkspace/contentStorageMaxMbPerWorkspace/chatAttachmentMaxMbPerWorkspace).
+  // 0 = ilimitado para ESTE workspace. Configurable desde SuperAdmin → Workspaces.
+  projectFilesMaxMbOverride      Int?
+  contentStorageMaxMbOverride    Int?
+  chatAttachmentMaxMbOverride    Int?
   attendanceTrackingEnabled     Boolean   @default(true) // Seguimiento de horarios y puntualidad en RRHH. OFF = oculta puntualidad/tardanzas (ej: equipos full freelance sin horarios)
   productivityEnabled           Boolean   @default(true) // Muestra la sección de Productividad (nav + página) para los admins
   productivityDigestEnabled     Boolean   @default(true) // Aviso semanal por mail a admins/owners con las personas en alerta de Productividad

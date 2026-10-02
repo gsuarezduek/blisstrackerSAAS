@@ -25,14 +25,14 @@ jest.mock('../../src/services/objectStorage.service', () => ({
 }))
 
 jest.mock('../../src/lib/platformSettings', () => ({
-  getSetting: jest.fn(),
+  getSettings: jest.fn(),
 }))
 
 const request = require('supertest')
 const jwt     = require('jsonwebtoken')
 const prisma  = require('../../src/lib/prisma')
 const objectStorage = require('../../src/services/objectStorage.service')
-const { getSetting } = require('../../src/lib/platformSettings')
+const { getSettings } = require('../../src/lib/platformSettings')
 const app     = require('../../src/app')
 
 const SECRET         = process.env.JWT_SECRET
@@ -70,7 +70,7 @@ function mockBase({ workspaceRole = 'admin', flagOn = true } = {}) {
 
 // Sin cuota (0 = ilimitado) y sin límites de slot por default; cada test ajusta lo que necesita.
 function mockNoQuotaLimit() {
-  getSetting.mockResolvedValue(0)
+  getSettings.mockResolvedValue({ contentStorageMaxMbPerWorkspace: 0 })
 }
 
 const dbAsset = (over = {}) => ({
@@ -173,7 +173,7 @@ describe('POST /assets/presign', () => {
   it('413 STORAGE_QUOTA_EXCEEDED con la cuota del workspace llena', async () => {
     mockBase()
     prisma.contentAsset.count.mockResolvedValue(0)
-    getSetting.mockResolvedValue(1) // 1 MB de cuota
+    getSettings.mockResolvedValue({ contentStorageMaxMbPerWorkspace: 1 }) // 1 MB de cuota
     prisma.contentAsset.aggregate.mockResolvedValue({ _sum: { sizeBytes: 1024 * 1024 - 100 } }) // casi al límite
 
     const res = await req('post', `${BASE}/presign`).send({ kind: 'image', mimeType: 'image/png', sizeBytes: 1000 })
@@ -187,7 +187,7 @@ describe('POST /assets/presign', () => {
     mockBase()
     prisma.contentAsset.count.mockResolvedValue(0)
     prisma.contentAsset.create.mockResolvedValue(dbAsset())
-    getSetting.mockResolvedValue(0)
+    getSettings.mockResolvedValue({ contentStorageMaxMbPerWorkspace: 0 })
 
     const res = await req('post', `${BASE}/presign`).send({ kind: 'image', mimeType: 'image/png', sizeBytes: 1000 })
 

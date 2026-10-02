@@ -44,4 +44,25 @@ async function getStorageBudget(workspaceId) {
   }
 }
 
-module.exports = { getStorageBudget }
+/**
+ * Resuelve el límite efectivo (MB) de UNA categoría de storage (Archivos/
+ * Contenido/Chat) para un workspace: su override puntual si lo tiene seteado
+ * (0 incluido = ilimitado para ese workspace), si no el default global de
+ * PlatformSetting. Comparte la resolución `override ?? global` que usan los
+ * 3 `assertWithinQuota`/`assertAttachmentQuota` que SÍ bloquean subidas —
+ * a diferencia de `getStorageBudget()` de arriba, que es solo informativo.
+ * @param {number} workspaceId
+ * @param {'projectFilesMaxMbOverride'|'contentStorageMaxMbOverride'|'chatAttachmentMaxMbOverride'} overrideField
+ * @param {string} settingKey
+ * @returns {Promise<number>} MB (0 = ilimitado)
+ */
+async function getEffectiveCategoryLimitMb(workspaceId, overrideField, settingKey) {
+  const [ws, settings] = await Promise.all([
+    prisma.workspace.findUnique({ where: { id: workspaceId }, select: { [overrideField]: true } }),
+    getSettings([settingKey]),
+  ])
+  const override = ws?.[overrideField]
+  return override === null || override === undefined ? settings[settingKey] : override
+}
+
+module.exports = { getStorageBudget, getEffectiveCategoryLimitMb }

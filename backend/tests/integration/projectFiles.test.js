@@ -23,14 +23,14 @@ jest.mock('../../src/services/objectStorage.service', () => ({
 }))
 
 jest.mock('../../src/lib/platformSettings', () => ({
-  getSetting: jest.fn(),
+  getSettings: jest.fn(),
 }))
 
 const request = require('supertest')
 const jwt     = require('jsonwebtoken')
 const prisma  = require('../../src/lib/prisma')
 const objectStorage = require('../../src/services/objectStorage.service')
-const { getSetting } = require('../../src/lib/platformSettings')
+const { getSettings } = require('../../src/lib/platformSettings')
 const app     = require('../../src/app')
 
 const SECRET         = process.env.JWT_SECRET
@@ -65,7 +65,7 @@ function mockBase({ workspaceRole = 'admin', filesEnabled } = {}) {
 }
 
 function mockNoQuotaLimit() {
-  getSetting.mockResolvedValue(0)
+  getSettings.mockResolvedValue({ projectFilesMaxMbPerWorkspace: 0 })
 }
 
 const dbItem = (over = {}) => ({
@@ -190,7 +190,7 @@ describe('POST /files/presign', () => {
 
   it('413 STORAGE_QUOTA_EXCEEDED con la cuota del workspace llena', async () => {
     mockBase()
-    getSetting.mockResolvedValue(1) // 1 MB
+    getSettings.mockResolvedValue({ projectFilesMaxMbPerWorkspace: 1 }) // 1 MB
     prisma.projectFile.count.mockResolvedValue(0)
     prisma.projectFile.aggregate.mockResolvedValue({ _sum: { sizeBytes: 1024 * 1024 - 100 } })
 
@@ -198,6 +198,26 @@ describe('POST /files/presign', () => {
 
     expect(res.status).toBe(413)
     expect(res.body.code).toBe('STORAGE_QUOTA_EXCEEDED')
+  })
+
+  it('el override puntual del workspace (SuperAdmin) manda por sobre el default global de la plataforma', async () => {
+    mockBase()
+    // Default global de la plataforma: 1 MB (bloquearía esta subida).
+    getSettings.mockResolvedValue({ projectFilesMaxMbPerWorkspace: 1 })
+    // Pero ESTE workspace tiene un override de 100 MB (SuperAdmin → Workspaces → Cuotas).
+    prisma.workspace.findUnique.mockResolvedValue({
+      id: WORKSPACE_ID, slug: WORKSPACE_SLUG, status: 'active', name: 'Bliss',
+      disabledFeatureKeys: '[]',
+      members: [{ workspaceId: WORKSPACE_ID, userId: 1, role: 'admin', active: true }],
+      projectFilesMaxMbOverride: 100,
+    })
+    prisma.projectFile.count.mockResolvedValue(0)
+    prisma.projectFile.aggregate.mockResolvedValue({ _sum: { sizeBytes: 1024 * 1024 - 100 } }) // casi al MB, pero lejos de los 100MB del override
+    prisma.projectFile.create.mockResolvedValue(dbItem({ status: 'pending' }))
+
+    const res = await req('post', `${BASE}/presign`).send({ name: 'x.pdf', mimeType: 'application/pdf', sizeBytes: 1000 })
+
+    expect(res.status).toBe(201)
   })
 })
 
