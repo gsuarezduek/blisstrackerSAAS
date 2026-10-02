@@ -28,12 +28,14 @@ import { useFeatureFlag } from '../hooks/useFeatureFlag'
 import { useAuth } from '../context/AuthContext'
 import { useWorkspace } from '../context/WorkspaceContext'
 import api from '../api/client'
+import { Construction, Lock, X } from 'lucide-react'
+import { Icon } from '../components/ui/Icon'
 
 function ComingSoon({ label }) {
   return (
     <div className="flex flex-col items-center justify-center py-20 text-center">
-      <div className="w-16 h-16 bg-gray-100 dark:bg-gray-800 rounded-2xl flex items-center justify-center text-3xl mb-4">
-        🚧
+      <div className="w-16 h-16 bg-gray-100 dark:bg-gray-800 rounded-2xl flex items-center justify-center mb-4 text-gray-400">
+        <Icon as={Construction} size={28} />
       </div>
       <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-2">{label} — Próximamente</h3>
       <p className="text-sm text-gray-400 dark:text-gray-500 max-w-xs">
@@ -205,8 +207,9 @@ export default function Marketing() {
                   onClick={() => handleProjectChange('')}
                   title="Ver todos los proyectos"
                   className="flex-shrink-0 p-2 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                  aria-label="Ver todos los proyectos"
                 >
-                  ✕
+                  <Icon as={X} size={16} />
                 </button>
               )}
             </div>
@@ -223,7 +226,7 @@ export default function Marketing() {
 
         {!moduleAllowed ? (
           <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-10 text-center">
-            <div className="text-4xl mb-4">🔒</div>
+            <div className="mb-4"><Icon as={Lock} size={32} className="inline-block text-gray-300 dark:text-gray-600" /></div>
             <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-2">Sección no disponible</h3>
             <p className="text-sm text-gray-400 dark:text-gray-500 max-w-sm mx-auto">
               {enabled

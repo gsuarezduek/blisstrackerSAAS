@@ -8,6 +8,8 @@ import { LineChart, MonthNav, KpiCard, AudienceCard, BrandSpinner } from './netw
 import ConnectScreen, { OAuthMethod, ExpiredNotice } from './networks/ConnectScreen'
 import AccountHeader, { AccountBio } from './networks/AccountHeader'
 import CrossProjectNetworkPanel from './networks/CrossProjectNetworkPanel'
+import { Eye, Heart } from 'lucide-react'
+import { Icon } from '../ui/Icon'
 
 const BRAND = BRANDS.tiktok
 const TEAL = BRAND.color
@@ -20,7 +22,7 @@ function ConnectPrompt({ projectId, onConnected }) {
     <ConnectScreen brand={BRAND} title="Conectá la cuenta de TikTok"
       subtitle="Seguidores, videos del mes, vistas y engagement."
       methods={[{
-        key: 'official', icon: '🔗', title: 'Conexión oficial',
+        key: 'official', title: 'Conexión oficial',
         description: 'Iniciá sesión con TikTok. Necesitás una cuenta Business o Creator.',
         body: <OAuthMethod brand={BRAND} getAuthUrl={authUrl(projectId)} onConnected={onConnected} cta="Conectar con TikTok" />,
       }]}
@@ -30,10 +32,9 @@ function ConnectPrompt({ projectId, onConnected }) {
 
 // ── TOP del mes ───────────────────────────────────────────────────────────────
 
-function TopVideoCard({ video, medal, category, categoryIcon }) {
+function TopVideoCard({ video, rank, category }) {
   if (!video) return (
     <div className="bg-white dark:bg-gray-800 border border-dashed border-gray-200 dark:border-gray-700 rounded-xl p-4 flex flex-col items-center justify-center gap-2 min-h-[160px]">
-      <span className="text-2xl opacity-30">{categoryIcon}</span>
       <p className="text-xs text-gray-400 text-center">Sin videos este mes</p>
     </div>
   )
@@ -45,13 +46,13 @@ function TopVideoCard({ video, medal, category, categoryIcon }) {
           ? <img src={video.coverUrl} alt="" className="w-full h-full object-cover" loading="lazy" />
           : <div className="w-full h-full bg-gradient-to-br from-gray-800 to-gray-900" />
         }
-        <div className="absolute top-2 left-2 text-xl leading-none">{medal}</div>
+        <div className="absolute top-2 left-2 w-6 h-6 rounded-full bg-black/60 text-white text-xs font-bold flex items-center justify-center">{rank}</div>
       </div>
       <div className="p-3 space-y-1.5">
-        <p className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: TEAL }}>{categoryIcon} {category}</p>
+        <p className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: TEAL }}>{category}</p>
         <div className="flex items-center gap-3 text-xs text-gray-600 dark:text-gray-400">
           {video.viewCount   != null && <span>▶ {fmtK(video.viewCount)}</span>}
-          {video.likeCount   != null && <span>❤️ {fmtK(video.likeCount)}</span>}
+          {video.likeCount   != null && <span><Icon as={Heart} size={12} className="inline align-[-2px] mr-1" />{fmtK(video.likeCount)}</span>}
           {video.shareCount  != null && <span>↗ {fmtK(video.shareCount)}</span>}
         </div>
         {video.title && <p className="text-[11px] text-gray-500 dark:text-gray-400 line-clamp-2 leading-tight">{video.title}</p>}
@@ -73,7 +74,7 @@ function TopOfMonth({ topOfMonth }) {
     <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-5">
       <div className="flex items-center justify-between mb-4">
         <div>
-          <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">🏆 TOP del mes — {currentMonth}</p>
+          <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">TOP del mes — {currentMonth}</p>
           <p className="text-xs text-gray-400 mt-0.5">
             {postsThisMonth > 0 ? `${postsThisMonth} video${postsThisMonth !== 1 ? 's' : ''} este mes` : 'Sin videos en lo que va del mes'}
           </p>
@@ -82,9 +83,9 @@ function TopOfMonth({ topOfMonth }) {
       {postsThisMonth === 0
         ? <p className="text-sm text-gray-400 text-center py-6">Aún no hay videos este mes.</p>
         : <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <TopVideoCard video={v1} medal="🥇" category="Más visto"      categoryIcon="▶" />
-            <TopVideoCard video={v2} medal="🥈" category="Más likeado"    categoryIcon="❤️" />
-            <TopVideoCard video={v3} medal="🥉" category="Más compartido" categoryIcon="↗" />
+            <TopVideoCard video={v1} rank={1} category="Más visto" />
+            <TopVideoCard video={v2} rank={2} category="Más likeado" />
+            <TopVideoCard video={v3} rank={3} category="Más compartido" />
           </div>
       }
     </div>
@@ -196,7 +197,7 @@ export default function TikTokTab({ projectId, onSelectProject, projects = [] })
       renderSecondary={p => (
         <>
           <span className="text-gray-400">{fmtK(p.followersCount)} seguidores</span>
-          {p.avgViews != null && <span className="text-gray-400">👁 {fmtK(Math.round(p.avgViews))} vistas/video</span>}
+          {p.avgViews != null && <span className="text-gray-400"><Icon as={Eye} size={12} className="inline align-[-2px] mr-1" />{fmtK(Math.round(p.avgViews))} vistas/video</span>}
           {p.engagementRate != null && <span className={engColor(p.engagementRate)}>{p.engagementRate.toFixed(2)}% eng.</span>}
           {p.postsThisMonth != null && <span className="text-gray-400">{p.postsThisMonth} videos</span>}
         </>
@@ -246,20 +247,20 @@ export default function TikTokTab({ projectId, onSelectProject, projects = [] })
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
           <AudienceCard count={displayData.followersCount} monthlyGain={monthlyGain}
             sub={displayData.videoCount != null ? `${fmtNum(displayData.videoCount)} videos` : null} />
-          <KpiCard icon="⚡" label="Engagement"
+          <KpiCard label="Engagement"
             value={displayData.engagementRate != null ? `${displayData.engagementRate}%` : '—'}
             valueClass={engColor(displayData.engagementRate)}
             sub={engLabel(displayData.engagementRate)}
           />
-          <KpiCard icon="▶" label="Avg. Views"
+          <KpiCard label="Avg. Views"
             value={displayData.avgViews != null ? fmtK(displayData.avgViews) : '—'}
             sub="promedio del mes"
           />
-          <KpiCard icon="❤️" label="Avg. Likes"
+          <KpiCard label="Avg. Likes"
             value={displayData.avgLikes != null ? fmtNum(displayData.avgLikes) : '—'}
             sub="promedio del mes"
           />
-          <KpiCard icon="📅" label="Videos del mes"
+          <KpiCard label="Videos del mes"
             value={(displayData.postsThisMonth ?? displayData.postsCount) != null
               ? fmtNum(displayData.postsThisMonth ?? displayData.postsCount)
               : '—'}
@@ -269,7 +270,7 @@ export default function TikTokTab({ projectId, onSelectProject, projects = [] })
       )}
 
       {/* Objetivos de TikTok del período (seguidores / interacción) con barra de progreso */}
-      <ObjectiveProgressBars objectives={objectives} title="🎯 Objetivos de TikTok" />
+      <ObjectiveProgressBars objectives={objectives} title="Objetivos de TikTok" />
 
       {/* Análisis con IA: diagnóstico vs. mes anterior, objetivos y brief orgánico */}
       <RrssAdvisorPanel
@@ -293,7 +294,7 @@ export default function TikTokTab({ projectId, onSelectProject, projects = [] })
           <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-5">
             <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
               <div>
-                <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">📈 Evolución de seguidores</p>
+                <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">Evolución de seguidores</p>
                 {snapshotFallback && (
                   <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">Datos mensuales · el gráfico diario se irá completando</p>
                 )}

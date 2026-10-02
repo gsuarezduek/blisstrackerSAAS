@@ -5,60 +5,60 @@
 export const NAV = [
   {
     id: 'hoy',
-    label: '🎯 Prioridades',
+    label: 'Prioridades',
     subs: [],
   },
   {
     id: 'geo-seo',
-    label: '🤖 GEO / SEO',
+    label: 'GEO / SEO',
     // 3 sub-pestañas por intención (¿cómo está el sitio? / ¿por qué rankeo? /
     // ¿qué escribo?). Las que agrupan varias herramientas las muestran como
     // `views` (selector segmentado dentro del contenido, `?view=`).
     subs: [
-      { id: 'diagnostico', label: '🩺 Diagnóstico', views: [
-        { id: 'geo',            label: '🤖 GEO' },
-        { id: 'seo',            label: '🔍 SEO' },
-        { id: 'onpage',         label: '🔬 On-Page' },
-        { id: 'canibalizacion', label: '⚠️ Canibalización' },
+      { id: 'diagnostico', label: 'Diagnóstico', views: [
+        { id: 'geo',            label: 'GEO' },
+        { id: 'seo',            label: 'SEO' },
+        { id: 'onpage',         label: 'On-Page' },
+        { id: 'canibalizacion', label: 'Canibalización' },
       ] },
-      { id: 'keywords',  label: '🔑 Keywords y oportunidades' },
-      { id: 'contenido', label: '✍️ Contenido SEO', views: [
-        { id: 'brief', label: '✍️ Content Brief' },
+      { id: 'keywords',  label: 'Keywords y oportunidades' },
+      { id: 'contenido', label: 'Contenido SEO', views: [
+        { id: 'brief', label: 'Content Brief' },
         { id: 'gap',   label: '🆚 Content Gap' },
       ] },
     ],
   },
   {
     id: 'web',
-    label: '🌐 Web',
+    label: 'Web',
     subs: [
-      { id: 'analytics',   label: '📊 Analytics' },
-      { id: 'performance', label: '⚡ Performance' },
+      { id: 'analytics',   label: 'Analytics' },
+      { id: 'performance', label: 'Performance' },
     ],
   },
   {
     id: 'rrss',
-    label: '📱 RRSS',
+    label: 'RRSS',
     subs: [
       { id: 'instagram',    label: 'Instagram', network: 'instagram' },
       { id: 'tiktok',       label: 'TikTok',    network: 'tiktok' },
       { id: 'linkedin',     label: 'LinkedIn',  network: 'linkedin' },
       { id: 'facebook',     label: 'Facebook',  network: 'facebook' },
       { id: 'youtube',      label: 'YouTube',   network: 'youtube' },
-      { id: 'competidores', label: '🏁 Competidores' },
+      { id: 'competidores', label: 'Competidores' },
     ],
   },
   {
     id: 'anuncios',
-    label: '📣 Anuncios',
+    label: 'Anuncios',
     subs: [
-      { id: 'meta-ads',     label: '📘 Meta Ads' },
-      { id: 'google-ads',   label: '🔍 Google Ads' },
+      { id: 'meta-ads',     label: 'Meta Ads' },
+      { id: 'google-ads',   label: 'Google Ads' },
     ],
   },
   {
     id: 'informes',
-    label: '📊 Informes',
+    label: 'Informes',
     subs: [],
   },
 ]

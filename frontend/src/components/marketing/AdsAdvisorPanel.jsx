@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import api from '../../api/client'
 import CreateTaskModal from './CreateTaskModal'
+import { CirclePause, Dot, Lightbulb, TrendingUp, TriangleAlert, Wrench } from 'lucide-react'
+import { Icon } from '../ui/Icon'
 
 // Compartido entre MetaAdsTab y GoogleAdsTab — solo cambia el path del endpoint y el
 // prefijo de las tareas creadas ("Meta Ads - " / "Google Ads - ").
@@ -16,7 +18,7 @@ const PRIORITY_STYLES = {
 }
 
 const TYPE_ICON = {
-  pausar: '⏸️', escalar: '📈', ajustar: '🔧', alerta: '⚠️', oportunidad: '💡',
+  pausar: CirclePause, escalar: TrendingUp, ajustar: Wrench, alerta: TriangleAlert, oportunidad: Lightbulb,
 }
 
 const AMBITO_LABEL = { campania: 'Campaña', anuncio: 'Anuncio', cuenta: 'Cuenta' }
@@ -25,7 +27,7 @@ function DiagnosticoCard({ item, onCreateTask }) {
   return (
     <div className="border border-gray-200 dark:border-gray-700 rounded-xl p-4 flex flex-col gap-2">
       <div className="flex items-center gap-2 flex-wrap">
-        <span className="text-base leading-none">{TYPE_ICON[item.tipo] ?? '•'}</span>
+        <Icon as={TYPE_ICON[item.tipo] ?? Dot} size={16} className="text-gray-500 dark:text-gray-400" />
         <span className="text-sm font-semibold text-gray-900 dark:text-white flex-1 min-w-0">{item.titulo}</span>
         {item.prioridad && (
           <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full uppercase ${PRIORITY_STYLES[item.prioridad] ?? PRIORITY_STYLES.baja}`}>
@@ -96,7 +98,7 @@ export default function AdsAdvisorPanel({ projectId, projectName, platform, date
     <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4">
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
-          <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">🤖 Análisis con IA</p>
+          <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">Análisis con IA</p>
           <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
             Diagnóstico de campañas/anuncios e ideas de anuncios nuevos, con el brief y los objetivos del proyecto.
           </p>
@@ -106,7 +108,7 @@ export default function AdsAdvisorPanel({ projectId, projectName, platform, date
           disabled={loading}
           className="flex-shrink-0 px-3 py-1.5 text-xs font-medium bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition-colors disabled:opacity-50"
         >
-          {loading ? 'Analizando…' : result ? '🔄 Actualizar análisis' : 'Analizar'}
+          {loading ? 'Analizando…' : result ? 'Actualizar análisis' : 'Analizar'}
         </button>
       </div>
 

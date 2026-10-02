@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react'
+import { Pencil, Trash2 } from 'lucide-react'
+import { Icon } from '../ui/Icon'
 import api from '../../api/client'
 import EmptyState from '../EmptyState'
 import HowToButton from '../HowToButton'
@@ -94,7 +96,7 @@ function ObjectiveForm({ projectId, initial, keywords, competitors, igConnection
                 draft.category === c.key
                   ? 'bg-primary-600 text-white border-primary-600'
                   : 'border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'}`}>
-              {c.icon} {c.label}
+              {c.label}
             </button>
           ))}
         </div>
@@ -111,7 +113,7 @@ function ObjectiveForm({ projectId, initial, keywords, competitors, igConnection
           {metricDef && <p className="text-[11px] text-gray-400 mt-1">{metricDef.help}</p>}
           {igInsightsUnavailable && (
             <p className="text-[11px] text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-700/50 rounded-lg px-2.5 py-1.5 mt-1.5">
-              ⚠️ {igConnection === 'scrape'
+              {igConnection === 'scrape'
                 ? 'La cuenta de Instagram está conectada por scraping. El alcance y las visualizaciones no están disponibles por este método: solo se obtienen con la conexión oficial (API o token). Este objetivo no tendrá datos.'
                 : 'No hay una cuenta de Instagram conectada por API o token. El alcance y las visualizaciones solo se obtienen con la conexión oficial (la conexión por scraping no los ve), así que este objetivo no tendrá datos.'}
             </p>
@@ -256,7 +258,7 @@ export default function ObjectivesManager({ projectId, onClose }) {
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-lg p-6 max-h-[90vh] flex flex-col">
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-1.5">
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">🎯 Objetivos del proyecto</h2>
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Objetivos del proyecto</h2>
             <HowToButton topic="marketing.objetivos" />
           </div>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-xl leading-none">×</button>
@@ -271,7 +273,7 @@ export default function ObjectivesManager({ projectId, onClose }) {
           ) : (
             <>
               {objectives.length === 0 && !showForm && (
-                <EmptyState icon="🎯" message="Todavía no hay objetivos. Agregá el primero." />
+                <EmptyState message="Todavía no hay objetivos. Agregá el primero." />
               )}
 
               {objectives.map(o => {
@@ -291,7 +293,7 @@ export default function ObjectivesManager({ projectId, onClose }) {
                       {o.platform && <span className="text-gray-400"> · {PLATFORM_LABEL[o.platform] || o.platform}</span>}
                       {isOrphaned && (
                         <span className="ml-1.5 text-[10px] font-medium text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/30 rounded-full px-1.5 py-0.5" title="La keyword o el competidor de este objetivo fue eliminado — editalo para elegir uno nuevo, o eliminalo.">
-                          ⚠️ Huérfano
+                          Huérfano
                         </span>
                       )}
                     </p>
@@ -300,8 +302,8 @@ export default function ObjectivesManager({ projectId, onClose }) {
                       {METRICS[o.metric]?.hasTarget && <> · objetivo {fmtObjectiveValue(o.target, METRICS[o.metric]?.unit)}</>}
                     </p>
                   </div>
-                  <button onClick={() => startEdit(o)} className="text-xs text-gray-400 hover:text-primary-600" title="Editar">✏️</button>
-                  <button onClick={() => handleDelete(o.id)} className="text-xs text-gray-400 hover:text-red-500" title="Eliminar">🗑️</button>
+                  <button onClick={() => startEdit(o)} className="text-xs text-gray-400 hover:text-primary-600" title="Editar" aria-label="Editar"><Icon as={Pencil} size={14} /></button>
+                  <button onClick={() => handleDelete(o.id)} className="text-xs text-gray-400 hover:text-red-500" title="Eliminar" aria-label="Eliminar"><Icon as={Trash2} size={14} /></button>
                 </div>
                 )
               })}

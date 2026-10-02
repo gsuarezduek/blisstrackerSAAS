@@ -3,6 +3,8 @@ import { fmtNum, fmtK, engColor, engLabel, ENG_THRESHOLDS } from './networks/for
 import { AudienceCard } from './networks/ui'
 import NetworkAccountHeader, { AccountBio } from './networks/AccountHeader'
 import CrossProjectNetworkPanel from './networks/CrossProjectNetworkPanel'
+import { Bookmark, Clock, Eye, Heart, Inbox, Layers, MessageCircle, Radio } from 'lucide-react'
+import { Icon } from '../ui/Icon'
 
 // Piezas propias de la pestaña de Instagram. Lo genérico (formatos, gráfico,
 // navegación por mes, encabezado de cuenta, vista de todos los clientes) vive en
@@ -31,9 +33,9 @@ export function AccountHeader({ metrics, integration, onDisconnect, disconnectin
       avatarUrl={metrics?.profilePicUrl}
       name={metrics?.username ? `@${metrics.username}` : metrics?.name}
       subtitle={metrics?.username && metrics?.name ? metrics.name : null}
-      link={site && { href: site.startsWith('http') ? site : `https://${site}`, label: `🌐 ${site}` }}
+      link={site && { href: site.startsWith('http') ? site : `https://${site}`, label: site }}
       dataAt={isScrape ? metrics?.lastScrapedAt : null}
-      actions={isScrape && onRefresh ? [{ key: 'refresh', label: '↻ Actualizar', onClick: onRefresh, busy: refreshing }] : []}
+      actions={isScrape && onRefresh ? [{ key: 'refresh', label: 'Actualizar', onClick: onRefresh, busy: refreshing }] : []}
       onDisconnect={onDisconnect} disconnecting={disconnecting}>
       <AccountBio>{metrics?.biography}</AccountBio>
     </NetworkAccountHeader>
@@ -47,7 +49,7 @@ export function CrossProjectInstagramPanel({ onSelectProject }) {
         <>
           <span className="text-gray-400">{fmtK(p.followersCount)} seguidores</span>
           {p.engagementRate != null && <span className={engagementColor(p.engagementRate)}>{p.engagementRate.toFixed(2)}% eng.</span>}
-          {p.avgLikes != null && <span className="text-gray-400">❤️ {fmtK(Math.round(p.avgLikes))}</span>}
+          {p.avgLikes != null && <span className="text-gray-400"><Icon as={Heart} size={12} className="inline align-[-2px] mr-1" />{fmtK(Math.round(p.avgLikes))}</span>}
           {p.postsCount != null && <span className="text-gray-400">{p.postsCount} posts</span>}
         </>
       )}
@@ -63,15 +65,15 @@ export function hourRange(h) {
 // ── TOP del mes ───────────────────────────────────────────────────────────────
 
 const RANK_META = [
-  { medal: '🥇', label: 'Mejor publicación',  highlight: true  },
-  { medal: '🥈', label: '2ª mejor del mes',   highlight: false },
-  { medal: '🥉', label: '3ª mejor del mes',   highlight: false },
+  { label: 'Mejor publicación',  highlight: true  },
+  { label: '2ª mejor del mes',   highlight: false },
+  { label: '3ª mejor del mes',   highlight: false },
 ]
 
-function TopPostCard({ post, medal, label, highlight }) {
+function TopPostCard({ post, rank, label, highlight }) {
   if (!post) return (
     <div className="bg-white dark:bg-gray-800 border border-dashed border-gray-200 dark:border-gray-700 rounded-xl p-4 flex flex-col items-center justify-center gap-2 min-h-[160px]">
-      <span className="text-2xl opacity-30">📭</span>
+      <span><Icon as={Inbox} size={24} className="inline-block text-gray-300 dark:text-gray-600" /></span>
       <p className="text-xs text-gray-400 text-center">Sin más publicaciones este mes</p>
     </div>
   )
@@ -96,9 +98,9 @@ function TopPostCard({ post, medal, label, highlight }) {
         ) : (
           <div className="w-full h-full bg-gradient-to-br from-purple-400 to-pink-400" />
         )}
-        <div className="absolute top-2 left-2 text-xl leading-none">{medal}</div>
+        <div className="absolute top-2 left-2 w-6 h-6 rounded-full bg-black/60 text-white text-xs font-bold flex items-center justify-center">{rank}</div>
         {post.mediaType === 'VIDEO'          && <div className="absolute top-2 right-2 bg-black/60 rounded px-1 text-white text-[10px]">▶</div>}
-        {post.mediaType === 'CAROUSEL_ALBUM' && <div className="absolute top-2 right-2 bg-black/60 rounded px-1 text-white text-[10px]">❏</div>}
+        {post.mediaType === 'CAROUSEL_ALBUM' && <div className="absolute top-2 right-2 bg-black/60 rounded px-1 text-white text-[10px]"><Icon as={Layers} size={12} /></div>}
       </div>
 
       {/* Info */}
@@ -109,8 +111,8 @@ function TopPostCard({ post, medal, label, highlight }) {
           {label}
         </p>
         <div className="flex items-center gap-3 text-xs text-gray-600 dark:text-gray-400">
-          {post.likeCount     != null && <span>❤️ {fmtK(post.likeCount)}</span>}
-          {post.commentsCount != null && <span>💬 {fmtK(post.commentsCount)}</span>}
+          {post.likeCount     != null && <span><Icon as={Heart} size={12} className="inline align-[-2px] mr-1" />{fmtK(post.likeCount)}</span>}
+          {post.commentsCount != null && <span><Icon as={MessageCircle} size={12} className="inline align-[-2px] mr-1" />{fmtK(post.commentsCount)}</span>}
           {score > 0 && (
             <span className="ml-auto text-[10px] text-gray-400">
               {fmtK(score)} interacciones
@@ -119,8 +121,8 @@ function TopPostCard({ post, medal, label, highlight }) {
         </div>
         {(post.reach != null || post.saved != null || post.shares != null) && (
           <div className="flex items-center gap-3 text-[11px] text-gray-500 dark:text-gray-400">
-            {post.reach  != null && <span>📡 {fmtK(post.reach)}</span>}
-            {post.saved  != null && <span>🔖 {fmtK(post.saved)}</span>}
+            {post.reach  != null && <span><Icon as={Radio} size={12} className="inline align-[-2px] mr-1" />{fmtK(post.reach)}</span>}
+            {post.saved  != null && <span><Icon as={Bookmark} size={12} className="inline align-[-2px] mr-1" />{fmtK(post.saved)}</span>}
             {post.shares != null && <span>↗️ {fmtK(post.shares)}</span>}
           </div>
         )}
@@ -139,7 +141,7 @@ export function ReachHighlight({ post }) {
   if (!post || post.reach == null) return null
   return (
     <div className="bg-white dark:bg-gray-800 border border-purple-200 dark:border-purple-800/50 rounded-xl p-5">
-      <p className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">📡 Publicación de mayor alcance</p>
+      <p className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Publicación de mayor alcance</p>
       <a href={post.permalink ?? '#'} target="_blank" rel="noopener noreferrer" className="flex gap-4 group">
         <div className="w-20 h-20 rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-700 shrink-0">
           {post.imgSrc
@@ -149,9 +151,9 @@ export function ReachHighlight({ post }) {
         <div className="min-w-0 flex-1">
           <p className="text-lg font-bold text-purple-600 dark:text-purple-400 leading-tight">{fmtNum(post.reach)} <span className="text-sm font-medium text-gray-500 dark:text-gray-400">cuentas alcanzadas</span></p>
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-600 dark:text-gray-400 mt-1">
-            {post.likeCount != null && <span>❤️ {fmtK(post.likeCount)}</span>}
-            {post.commentsCount != null && <span>💬 {fmtK(post.commentsCount)}</span>}
-            {post.saved  != null && <span>🔖 {fmtK(post.saved)}</span>}
+            {post.likeCount != null && <span><Icon as={Heart} size={12} className="inline align-[-2px] mr-1" />{fmtK(post.likeCount)}</span>}
+            {post.commentsCount != null && <span><Icon as={MessageCircle} size={12} className="inline align-[-2px] mr-1" />{fmtK(post.commentsCount)}</span>}
+            {post.saved  != null && <span><Icon as={Bookmark} size={12} className="inline align-[-2px] mr-1" />{fmtK(post.saved)}</span>}
             {post.shares != null && <span>↗️ {fmtK(post.shares)}</span>}
           </div>
           {post.caption && <p className="text-xs text-gray-500 dark:text-gray-400 line-clamp-2 mt-1.5 leading-tight">{post.caption}</p>}
@@ -171,7 +173,7 @@ export function TopOfMonth({ topPosts, postsThisMonth, label, isPast = false }) 
       <div className="flex items-center justify-between mb-4">
         <div>
           <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">
-            🏆 Mejores publicaciones — {heading}
+            Mejores publicaciones — {heading}
           </p>
           <p className="text-xs text-gray-400 mt-0.5">
             {postsThisMonth > 0
@@ -191,7 +193,7 @@ export function TopOfMonth({ topPosts, postsThisMonth, label, isPast = false }) 
             <TopPostCard
               key={list[i]?.id ?? `slot-${i}`}
               post={list[i] ?? null}
-              medal={RANK_META[i].medal}
+              rank={i + 1}
               label={RANK_META[i].label}
               highlight={RANK_META[i].highlight}
             />
@@ -225,7 +227,7 @@ export function ContentInsights({ byType, bestHour }) {
                   <div className="h-2 rounded-full bg-purple-500" style={{ width: `${(t.avgLikes / maxAvg) * 100}%` }} />
                 </div>
                 <span className="text-xs font-semibold text-gray-700 dark:text-gray-200 w-16 text-right shrink-0">
-                  {fmtNum(t.avgLikes)} ❤️
+                  <Icon as={Heart} size={12} className="inline align-[-2px] mr-1" />{fmtNum(t.avgLikes)}
                 </span>
                 <span className="text-xs text-gray-400 w-12 shrink-0">{t.count} posts</span>
               </div>
@@ -240,7 +242,7 @@ export function ContentInsights({ byType, bestHour }) {
         </p>
         {bestHour ? (
           <div className="flex items-start gap-3">
-            <span className="text-3xl mt-0.5">🕐</span>
+            <span className="mt-0.5"><Icon as={Clock} size={28} className="inline-block text-gray-300 dark:text-gray-600" /></span>
             <div>
               <p className="text-lg font-bold text-gray-900 dark:text-white leading-tight">
                 {hourRange(bestHour.hour)}
@@ -268,14 +270,14 @@ export function StoriesSection({ stories, isCurrentMonth, onCapture, capturing }
   return (
     <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
       <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between gap-3">
-        <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">📸 Stories del mes</p>
+        <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">Stories del mes</p>
         {isCurrentMonth && (
           <button
             onClick={onCapture}
             disabled={capturing}
             className="text-xs font-medium px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-50"
           >
-            {capturing ? 'Capturando…' : '🔄 Capturar ahora'}
+            {capturing ? 'Capturando…' : 'Capturar ahora'}
           </button>
         )}
       </div>
@@ -309,8 +311,8 @@ export function StoriesSection({ stories, isCurrentMonth, onCapture, capturing }
                       : <div className="w-full h-full bg-gradient-to-br from-fuchsia-400 to-purple-400" />}
                     {(st.reach != null || st.replies != null) && (
                       <div className="absolute bottom-0 inset-x-0 bg-black/50 text-white text-[10px] flex items-center justify-center gap-2 py-0.5">
-                        {st.reach   != null && <span>👁️ {fmtK(st.reach)}</span>}
-                        {st.replies != null && st.replies > 0 && <span>💬 {fmtK(st.replies)}</span>}
+                        {st.reach   != null && <span><Icon as={Eye} size={12} className="inline align-[-2px] mr-1" />{fmtK(st.reach)}</span>}
+                        {st.replies != null && st.replies > 0 && <span><Icon as={MessageCircle} size={12} className="inline align-[-2px] mr-1" />{fmtK(st.replies)}</span>}
                       </div>
                     )}
                   </div>

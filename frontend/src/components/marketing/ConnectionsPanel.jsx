@@ -2,21 +2,23 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import api from '../../api/client'
 import SocialIcon from './SocialIcon'
+import { Globe, ChartColumn, Search, Megaphone } from 'lucide-react'
+import { Icon } from '../ui/Icon'
 
 // Fuentes de datos de Marketing de un proyecto, en el orden en que se recorren las
 // secciones. `section` = id del NAV (para ocultar las fuentes de secciones apagadas
 // en Preferencias); `link` = pestaña donde vive el flujo de conexión de esa fuente.
 export const CONNECTION_SOURCES = [
-  { type: 'website',               label: 'Sitio web',       icon: '🌐', section: null },
-  { type: 'google_analytics',      label: 'Google Analytics', icon: '📊', section: 'web',      link: { tab: 'web', sub: 'analytics' } },
-  { type: 'google_search_console', label: 'Search Console',  icon: '🔍', section: 'geo-seo',  link: { tab: 'geo-seo', sub: 'diagnostico', view: 'seo' } },
+  { type: 'website',               label: 'Sitio web',       icon: Globe, section: null },
+  { type: 'google_analytics',      label: 'Google Analytics', icon: ChartColumn, section: 'web',      link: { tab: 'web', sub: 'analytics' } },
+  { type: 'google_search_console', label: 'Search Console',  icon: Search, section: 'geo-seo',  link: { tab: 'geo-seo', sub: 'diagnostico', view: 'seo' } },
   { type: 'instagram',             label: 'Instagram',       network: 'instagram', section: 'rrss', link: { tab: 'rrss', sub: 'instagram' } },
   { type: 'tiktok',                label: 'TikTok',          network: 'tiktok',    section: 'rrss', link: { tab: 'rrss', sub: 'tiktok' } },
   { type: 'linkedin',              label: 'LinkedIn',        network: 'linkedin',  section: 'rrss', link: { tab: 'rrss', sub: 'linkedin' } },
   { type: 'facebook',              label: 'Facebook',        network: 'facebook',  section: 'rrss', link: { tab: 'rrss', sub: 'facebook' } },
   { type: 'google_youtube',        label: 'YouTube',         network: 'youtube',   section: 'rrss', link: { tab: 'rrss', sub: 'youtube' } },
-  { type: 'meta_ads',              label: 'Meta Ads',        icon: '📘', section: 'anuncios', link: { tab: 'anuncios', sub: 'meta-ads' } },
-  { type: 'google_ads',            label: 'Google Ads',      icon: '📣', section: 'anuncios', link: { tab: 'anuncios', sub: 'google-ads' } },
+  { type: 'meta_ads',              label: 'Meta Ads',        icon: Megaphone, section: 'anuncios', link: { tab: 'anuncios', sub: 'meta-ads' } },
+  { type: 'google_ads',            label: 'Google Ads',      icon: Megaphone, section: 'anuncios', link: { tab: 'anuncios', sub: 'google-ads' } },
 ]
 
 const STATE = {
@@ -107,7 +109,7 @@ function ConnectionChip({ c, projectId, onNavigate }) {
     <>
       {c.network
         ? <SocialIcon network={c.network} className="w-3.5 h-3.5" />
-        : <span aria-hidden="true" className="text-[13px] leading-none">{c.icon}</span>}
+        : <Icon as={c.icon} size={14} />}
       <span>{c.label}</span>
       <span className={`w-1.5 h-1.5 rounded-full ${st.dot}`} aria-hidden="true" />
       {c.state !== 'active' && <span className="font-semibold">{st.text}</span>}

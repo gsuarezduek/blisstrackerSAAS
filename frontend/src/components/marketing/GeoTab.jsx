@@ -2,7 +2,8 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import api from '../../api/client'
 import { useAuth } from '../../context/AuthContext'
 import SetupHintCard from '../SetupHintCard'
-import { Globe } from 'lucide-react'
+import { Bot, CircleCheck, Globe, Trash2 } from 'lucide-react'
+import { Icon } from '../ui/Icon'
 
 // Techo del polling de auditorías async: si el job no terminó en este tiempo, se
 // asume colgado y se deja de pollear en vez de reintentar indefinidamente.
@@ -11,13 +12,13 @@ const MAX_POLL_MS = 5 * 60 * 1000
 // ─── AI Traffic ───────────────────────────────────────────────────────────────
 
 const AI_META = {
-  chatgpt:    { label: 'ChatGPT',    icon: '🤖', color: 'bg-green-500' },
-  gemini:     { label: 'Gemini',     icon: '✨', color: 'bg-blue-500' },
-  claude:     { label: 'Claude',     icon: '🟠', color: 'bg-orange-500' },
-  grok:       { label: 'Grok',       icon: '𝕏',  color: 'bg-gray-800 dark:bg-gray-300' },
-  metaAi:     { label: 'Meta AI',    icon: '🔵', color: 'bg-blue-600' },
-  perplexity: { label: 'Perplexity', icon: '🔍', color: 'bg-teal-500' },
-  copilot:    { label: 'Copilot',    icon: '💠', color: 'bg-indigo-500' },
+  chatgpt:    { label: 'ChatGPT', color: 'bg-green-500' },
+  gemini:     { label: 'Gemini', color: 'bg-blue-500' },
+  claude:     { label: 'Claude', color: 'bg-orange-500' },
+  grok:       { label: 'Grok', color: 'bg-gray-800 dark:bg-gray-300' },
+  metaAi:     { label: 'Meta AI', color: 'bg-blue-600' },
+  perplexity: { label: 'Perplexity', color: 'bg-teal-500' },
+  copilot:    { label: 'Copilot', color: 'bg-indigo-500' },
 }
 
 // Mini gráfico de barras SVG para el histórico
@@ -109,7 +110,7 @@ function AiTrafficSection({ projectId }) {
     <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-5 space-y-4">
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">
-          🤖 Tráfico desde IAs
+          Tráfico desde IAs
         </h3>
         <span className="text-xs text-gray-400 dark:text-gray-500">Últimos 30 días</span>
       </div>
@@ -118,7 +119,7 @@ function AiTrafficSection({ projectId }) {
       {activeSources.length > 0 ? (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
           {activeSources.map(([key, sessions]) => {
-            const meta = AI_META[key] ?? { label: key, icon: '🤖', color: 'bg-gray-400' }
+            const meta = AI_META[key] ?? { label: key, color: 'bg-gray-400' }
             const pct  = totalLive > 0 ? Math.round((sessions / totalLive) * 100) : 0
             return (
               <div key={key} className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-3 flex flex-col gap-1">
@@ -164,12 +165,12 @@ function AiTrafficSection({ projectId }) {
 }
 
 const COMPONENTS_META = [
-  { key: 'citability',     icon: '🧠', label: 'Citabilidad IA',     desc: 'Qué tan probable es que la IA cite tu sitio' },
-  { key: 'brandAuthority', icon: '🏷',  label: 'Autoridad de Marca', desc: 'Reconocimiento y consistencia de la marca' },
-  { key: 'eeat',           icon: '🎓', label: 'E-E-A-T',            desc: 'Experiencia, autoridad y confiabilidad' },
-  { key: 'technical',      icon: '⚙️', label: 'Técnico',            desc: 'Rendimiento, accesibilidad y rastreo' },
-  { key: 'schema',         icon: '📋', label: 'Schema Markup',      desc: 'Datos estructurados y metadatos' },
-  { key: 'platforms',      icon: '🤖', label: 'Plataformas IA',     desc: 'Acceso para crawlers de IA (GPTBot, etc.)' },
+  { key: 'citability', label: 'Citabilidad IA',     desc: 'Qué tan probable es que la IA cite tu sitio' },
+  { key: 'brandAuthority',  label: 'Autoridad de Marca', desc: 'Reconocimiento y consistencia de la marca' },
+  { key: 'eeat', label: 'E-E-A-T',            desc: 'Experiencia, autoridad y confiabilidad' },
+  { key: 'technical', label: 'Técnico',            desc: 'Rendimiento, accesibilidad y rastreo' },
+  { key: 'schema', label: 'Schema Markup',      desc: 'Datos estructurados y metadatos' },
+  { key: 'platforms', label: 'Plataformas IA',     desc: 'Acceso para crawlers de IA (GPTBot, etc.)' },
 ]
 
 const SEVERITY_ORDER = { high: 0, medium: 1, low: 2 }
@@ -223,7 +224,6 @@ function ComponentCard({ meta, score }) {
     <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4 flex flex-col gap-2">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <span className="text-xl">{meta.icon}</span>
           <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{meta.label}</span>
         </div>
         {score != null && (
@@ -283,7 +283,7 @@ function CreateTaskModal({ title, projectId, projectName, onClose }) {
 
         {done ? (
           <div className="flex flex-col items-center py-6 gap-2">
-            <span className="text-3xl">✅</span>
+            <span><Icon as={CircleCheck} size={28} className="inline-block text-green-500" /></span>
             <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Tarea creada</p>
           </div>
         ) : (
@@ -420,7 +420,7 @@ function printGeoAudit(audit, findings, negativeSignals, projectName) {
     </div>`).join('')
 
   const negHtml = negativeSignals.length ? `
-    <div class="section-title neg-title">⚠️ Señales negativas (${negativeSignals.length})</div>
+    <div class="section-title neg-title">Señales negativas (${negativeSignals.length})</div>
     ${negativeSignals.map(s => `
       <div class="neg-item">
         <p class="neg-name">${s.title ?? ''}</p>
@@ -474,7 +474,7 @@ function printGeoAudit(audit, findings, negativeSignals, projectName) {
     .no-print { display: none !important; }
   }
 </style></head><body>
-  <button class="print-btn no-print" onclick="window.print()">🖨️ Imprimir / Guardar como PDF</button>
+  <button class="print-btn no-print" onclick="window.print()">Imprimir / Guardar como PDF</button>
   <div class="header">
     <div class="header-left">
       <h1>${projectName}</h1>
@@ -519,7 +519,7 @@ function CrossProjectPanel({ onSelectProject }) {
   )
   if (!data?.length) return (
     <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-10 text-center">
-      <div className="text-4xl mb-3">🤖</div>
+      <div className="mb-3"><Icon as={Bot} size={32} className="inline-block text-gray-300 dark:text-gray-600" /></div>
       <p className="text-sm text-gray-500 dark:text-gray-400">Todavía no hay auditorías GEO completadas. Seleccioná un proyecto para empezar.</p>
     </div>
   )
@@ -761,7 +761,7 @@ export default function GeoTab({ projectId, projects, onSelectProject }) {
                 </>
               ) : (
                 <>
-                  🤖 {activeAudit?.status === 'completed' ? 'Re-analizar' : 'Analizar'}
+                  {activeAudit?.status === 'completed' ? 'Re-analizar' : 'Analizar'}
                 </>
               )}
             </button>
@@ -846,13 +846,13 @@ export default function GeoTab({ projectId, projects, onSelectProject }) {
             {hasLlmsFinding && (
               <button onClick={handleGenerateLlmsTxt}
                 className="px-3 py-1.5 text-xs font-medium bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-700 rounded-xl hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors">
-                📄 Generar llms.txt
+                Generar llms.txt
               </button>
             )}
             {schemaScoreLow && (
               <button onClick={handleGenerateSchema}
                 className="px-3 py-1.5 text-xs font-medium bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400 border border-purple-200 dark:border-purple-700 rounded-xl hover:bg-purple-100 dark:hover:bg-purple-900/30 transition-colors">
-                🏷️ Generar JSON-LD
+                Generar JSON-LD
               </button>
             )}
             <button
@@ -884,7 +884,7 @@ export default function GeoTab({ projectId, projects, onSelectProject }) {
           {negativeSignals.length > 0 && (
             <div className="bg-red-50 dark:bg-red-900/10 rounded-2xl border border-red-200 dark:border-red-800/50 p-5">
               <h3 className="text-sm font-semibold text-red-700 dark:text-red-400 mb-3 flex items-center gap-2">
-                ⚠️ Señales negativas ({negativeSignals.length})
+                Señales negativas ({negativeSignals.length})
                 <span className="text-xs font-normal text-red-500 dark:text-red-500">— reducen la citabilidad en IA</span>
               </h3>
               <div className="space-y-3">
@@ -1015,7 +1015,7 @@ export default function GeoTab({ projectId, projects, onSelectProject }) {
           <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-sm p-6">
             <div className="flex items-start gap-4 mb-5">
               <div className="w-10 h-10 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center flex-shrink-0">
-                <span className="text-red-600 dark:text-red-400 text-lg">🗑</span>
+                <span className="text-red-600 dark:text-red-400"><Icon as={Trash2} size={18} className="inline-block" /></span>
               </div>
               <div>
                 <h3 className="text-base font-semibold text-gray-900 dark:text-white">Eliminar análisis</h3>

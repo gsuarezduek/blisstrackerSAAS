@@ -1,6 +1,8 @@
 import DOMPurify from 'dompurify'
 import RichTextEditor from '../RichTextEditor'
 import SocialIcon from './SocialIcon'
+import { Monitor, Smartphone, Trash2 } from 'lucide-react'
+import { Icon } from '../ui/Icon'
 import {
   fmt, fmtDuration, monthLabel, monthShort, ScoreRing, BarChart, LineChart, SectionCard, GroupHeader,
   KpiGrid, BestInstagramPost, StoriesBlock, BestAd, BestTikTokVideo, BestYouTubeVideo,
@@ -57,8 +59,8 @@ function ContextNote({ sectionKey, analysisKey, contextValue, canEdit, contextEd
           )}
           {canEdit && (
             <div className="no-print flex items-center gap-2 shrink-0">
-              <button onClick={() => { setContextDraft(contextValue); setEditingContext(sectionKey) }} className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors">✏️ Editar</button>
-              <button onClick={() => onSave(analysisKey, '')} className="text-xs text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors">🗑</button>
+              <button onClick={() => { setContextDraft(contextValue); setEditingContext(sectionKey) }} className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors">Editar</button>
+              <button onClick={() => onSave(analysisKey, '')} className="text-xs text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors" title="Eliminar" aria-label="Eliminar"><Icon as={Trash2} size={14} /></button>
             </div>
           )}
         </div>
@@ -72,7 +74,7 @@ function ContextNote({ sectionKey, analysisKey, contextValue, canEdit, contextEd
       onClick={() => { setContextDraft(''); setEditingContext(sectionKey) }}
       className="no-print w-full text-left text-xs text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 border border-dashed border-gray-200 dark:border-gray-700 rounded-xl px-4 py-2.5 transition-colors"
     >
-      ➕ Agregar información a esta sección
+      Agregar información a esta sección
     </button>
   )
 }
@@ -100,14 +102,14 @@ export function RRSSSection({ s, contextRRSS, canEdit, contextEditing }) {
             ]} />
             {s.instagram.bestPost && <BestInstagramPost post={s.instagram.bestPost} />}
             {s.instagram.bestByReach && s.instagram.bestByReach.id !== s.instagram.bestPost?.id && (
-              <BestInstagramPost post={s.instagram.bestByReach} label="Mayor alcance del mes" medal="📡" />
+              <BestInstagramPost post={s.instagram.bestByReach} label="Mayor alcance del mes" />
             )}
             <StoriesBlock stories={s.instagram.stories} />
             {s.instagram._fallbackMonth && (
               <p className="text-xs text-amber-600 dark:text-amber-400 mt-3 text-center">
                 {s.instagram._fallbackMonth === 'live'
-                  ? '⚡ Datos en tiempo real (aún no hay snapshot del mes anterior)'
-                  : `📅 Datos más recientes disponibles: ${monthLabel(s.instagram._fallbackMonth)}`
+                  ? 'Datos en tiempo real (aún no hay snapshot del mes anterior)'
+                  : `Datos más recientes disponibles: ${monthLabel(s.instagram._fallbackMonth)}`
                 }
               </p>
             )}
@@ -126,8 +128,8 @@ export function RRSSSection({ s, contextRRSS, canEdit, contextEditing }) {
             {s.tiktok._fallbackMonth && (
               <p className="text-xs text-amber-600 dark:text-amber-400 mt-3 text-center">
                 {s.tiktok._fallbackMonth === 'live'
-                  ? '⚡ Datos en tiempo real (aún no hay snapshot del mes anterior)'
-                  : `📅 Datos más recientes disponibles: ${monthLabel(s.tiktok._fallbackMonth)}`
+                  ? 'Datos en tiempo real (aún no hay snapshot del mes anterior)'
+                  : `Datos más recientes disponibles: ${monthLabel(s.tiktok._fallbackMonth)}`
                 }
               </p>
             )}
@@ -149,8 +151,8 @@ export function RRSSSection({ s, contextRRSS, canEdit, contextEditing }) {
             {s.youtube._fallbackMonth && (
               <p className="text-xs text-amber-600 dark:text-amber-400 mt-3 text-center">
                 {s.youtube._fallbackMonth === 'live'
-                  ? '⚡ Datos en tiempo real (aún no hay snapshot del mes anterior)'
-                  : `📅 Datos más recientes disponibles: ${monthLabel(s.youtube._fallbackMonth)}`
+                  ? 'Datos en tiempo real (aún no hay snapshot del mes anterior)'
+                  : `Datos más recientes disponibles: ${monthLabel(s.youtube._fallbackMonth)}`
                 }
               </p>
             )}
@@ -172,8 +174,8 @@ export function RRSSSection({ s, contextRRSS, canEdit, contextEditing }) {
             {s.linkedin._fallbackMonth && (
               <p className="text-xs text-amber-600 dark:text-amber-400 mt-3 text-center">
                 {s.linkedin._fallbackMonth === 'live'
-                  ? '⚡ Datos en tiempo real (aún no hay snapshot del mes anterior)'
-                  : `📅 Datos más recientes disponibles: ${monthLabel(s.linkedin._fallbackMonth)}`
+                  ? 'Datos en tiempo real (aún no hay snapshot del mes anterior)'
+                  : `Datos más recientes disponibles: ${monthLabel(s.linkedin._fallbackMonth)}`
                 }
               </p>
             )}
@@ -193,8 +195,8 @@ export function RRSSSection({ s, contextRRSS, canEdit, contextEditing }) {
             {s.facebook._fallbackMonth && (
               <p className="text-xs text-amber-600 dark:text-amber-400 mt-3 text-center">
                 {s.facebook._fallbackMonth === 'live'
-                  ? '⚡ Datos en tiempo real (aún no hay snapshot del mes anterior)'
-                  : `📅 Datos más recientes disponibles: ${monthLabel(s.facebook._fallbackMonth)}`
+                  ? 'Datos en tiempo real (aún no hay snapshot del mes anterior)'
+                  : `Datos más recientes disponibles: ${monthLabel(s.facebook._fallbackMonth)}`
                 }
               </p>
             )}
@@ -217,7 +219,7 @@ export function PublicidadSection({ s, contextPublicidad, canEdit, contextEditin
       <ContextNote sectionKey="publicidad" analysisKey="contextPublicidad" contextValue={contextPublicidad} canEdit={canEdit} contextEditing={contextEditing} />
       <div className={`grid gap-5 ${s.metaAds && s.googleAds ? 'sm:grid-cols-2' : 'grid-cols-1'}`}>
         {s.metaAds && (
-          <SectionCard title="Meta Ads" icon="📣" sectionKey="metaAds">
+          <SectionCard title="Meta Ads" sectionKey="metaAds">
             <KpiGrid items={[
               { label: 'Inversión',    value: s.metaAds.spend != null ? `$${fmt(s.metaAds.spend)}` : '—' },
               ...(s.metaAds.reach != null && s.metaAds.reach > 0 ? [{ label: 'Alcance', value: fmt(s.metaAds.reach) }] : []),
@@ -262,7 +264,7 @@ export function SeoGeoSection({ s, contextSEO, canEdit, contextEditing }) {
 
       {/* Keywords */}
       {s.keywords && (
-        <SectionCard title="Posicionamiento SEO — Keywords objetivo" icon="🔑" sectionKey="keywords">
+        <SectionCard title="Posicionamiento SEO — Keywords objetivo" sectionKey="keywords">
           <p className="text-xs text-gray-500 dark:text-gray-400 -mt-2 mb-4">
             Cómo posicionan las keywords que elegimos seguir, y su variación mes a mes.
           </p>
@@ -319,7 +321,7 @@ export function SeoGeoSection({ s, contextSEO, canEdit, contextEditing }) {
 
       {/* SEO — Search Console */}
       {s.seo && (
-        <SectionCard title="Rendimiento del sitio — Search Console" icon="🔍" sectionKey="seo">
+        <SectionCard title="Rendimiento del sitio — Search Console" sectionKey="seo">
           <p className="text-xs text-gray-500 dark:text-gray-400 -mt-2 mb-4">
             Tráfico orgánico total del sitio y las consultas y páginas que más visitas traen.
           </p>
@@ -387,7 +389,7 @@ export function SeoGeoSection({ s, contextSEO, canEdit, contextEditing }) {
 
       {/* GEO */}
       {s.geo && (
-        <SectionCard title="Presencia en IAs (GEO)" icon="🌐" sectionKey="geo">
+        <SectionCard title="Presencia en IAs (GEO)" sectionKey="geo">
           <div className="flex flex-col sm:flex-row gap-6 items-start">
             <div className="shrink-0 flex flex-col items-center gap-1">
               <ScoreRing score={s.geo.score} band={s.geo.band} />
@@ -441,7 +443,7 @@ export function SeoGeoSection({ s, contextSEO, canEdit, contextEditing }) {
 
       {/* Tráfico desde IAs */}
       {aiTrafficEntries && (
-        <SectionCard title="Sesiones referidas desde IAs" icon="🤖">
+        <SectionCard title="Sesiones referidas desde IAs">
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
             {aiTrafficEntries.map(([key, sessions]) => (
               <div key={key} className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-3 text-center">
@@ -497,7 +499,7 @@ export function SitioWebSection({ s, contextSitio, brandPrimary, brandSecondary,
 
       {/* Analytics GA4 */}
       {s.analytics && (
-        <SectionCard title="Analytics web" icon="📊" sectionKey="analytics">
+        <SectionCard title="Analytics web" sectionKey="analytics">
           <KpiGrid items={[
             { label: 'Sesiones',        value: fmt(s.analytics.sessions),    delta: s.analytics.delta?.sessions },
             { label: 'Usuarios nuevos', value: fmt(s.analytics.newUsers),    delta: s.analytics.delta?.newUsers },
@@ -582,7 +584,7 @@ export function SitioWebSection({ s, contextSitio, brandPrimary, brandSecondary,
 
       {/* Evolución multi-mes (hasta 6 meses, sesiones + usuarios nuevos) */}
       {evolutionPoints && (
-        <SectionCard title="Evolución web" icon="📈">
+        <SectionCard title="Evolución web">
           {/* Leyenda */}
           {evolutionNewUsers && (
             <div className="flex items-center gap-4 mb-3">
@@ -634,7 +636,7 @@ export function SitioWebSection({ s, contextSitio, brandPrimary, brandSecondary,
 
       {/* Performance */}
       {s.performance && (
-        <SectionCard title="Performance web" icon="⚡" sectionKey="performance">
+        <SectionCard title="Performance web" sectionKey="performance">
           {/* Scores móvil / desktop */}
           <div className="grid grid-cols-2 gap-4 mb-5">
             {s.performance.mobile && (
@@ -643,7 +645,7 @@ export function SitioWebSection({ s, contextSitio, brandPrimary, brandSecondary,
                   s.performance.mobile.score >= 90 ? 'text-green-600' :
                   s.performance.mobile.score >= 50 ? 'text-yellow-600' : 'text-red-600'
                 }`}>{s.performance.mobile.score}</p>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">📱 Móvil</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Móvil</p>
                 <p className="text-xs font-medium mt-0.5 text-gray-400 dark:text-gray-500">
                   {s.performance.mobile.score >= 90 ? 'Excelente' : s.performance.mobile.score >= 50 ? 'Necesita mejoras' : 'Deficiente'}
                 </p>
@@ -655,7 +657,7 @@ export function SitioWebSection({ s, contextSitio, brandPrimary, brandSecondary,
                   s.performance.desktop.score >= 90 ? 'text-green-600' :
                   s.performance.desktop.score >= 50 ? 'text-yellow-600' : 'text-red-600'
                 }`}>{s.performance.desktop.score}</p>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">🖥️ Desktop</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Desktop</p>
                 <p className="text-xs font-medium mt-0.5 text-gray-400 dark:text-gray-500">
                   {s.performance.desktop.score >= 90 ? 'Excelente' : s.performance.desktop.score >= 50 ? 'Necesita mejoras' : 'Deficiente'}
                 </p>
@@ -694,7 +696,7 @@ export function SitioWebSection({ s, contextSitio, brandPrimary, brandSecondary,
                         <p className="text-xs text-gray-400 dark:text-gray-500 truncate">{v.desc}</p>
                         {v.mobile && v.desktop && v.mobile !== v.desktop && (
                           <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
-                            📱 {v.mobile} · 🖥️ {v.desktop}
+                            <Icon as={Smartphone} size={12} className="inline align-[-2px] mr-1" />{v.mobile} · <Icon as={Monitor} size={12} className="inline align-[-2px] mr-1" />{v.desktop}
                           </p>
                         )}
                       </div>

@@ -9,6 +9,8 @@ import { fmtK, fmtUSD, fmtPct } from './networks/format'
 import { KpiCard, BrandSpinner } from './networks/ui'
 import ConnectScreen, { OAuthMethod, TokenMethod, ExpiredNotice } from './networks/ConnectScreen'
 import AccountHeader from './networks/AccountHeader'
+import { DollarSign, Eye, Image, Megaphone, MousePointerClick } from 'lucide-react'
+import { Icon } from '../ui/Icon'
 
 const BRAND = BRANDS.meta_ads
 
@@ -32,12 +34,12 @@ function ConnectPrompt({ projectId, onConnected }) {
       subtitle="Inversión, alcance, clicks, CTR y resultados de las campañas de Facebook e Instagram."
       methods={[
         {
-          key: 'official', icon: '🔗', title: 'Conexión oficial',
+          key: 'official', title: 'Conexión oficial',
           description: 'Iniciá sesión con Facebook. Necesitás acceso a una cuenta publicitaria activa.',
           body: <OAuthMethod brand={BRAND} getAuthUrl={authUrl(projectId)} onConnected={onConnected} cta="Conectar con Facebook" closedMessage={CLOSED_MSG} />,
         },
         {
-          key: 'token', icon: '🔑', title: 'Token de Business Manager',
+          key: 'token', title: 'Token de Business Manager',
           description: 'System User Token con permiso ads_read. Útil si administrás las cuentas desde Business Manager.',
           body: tokenMethod(projectId, onConnected),
         },
@@ -82,7 +84,7 @@ function CampaignsTable({ campaigns }) {
     <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
       <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-700">
         <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">
-          📋 Campañas ({campaigns.length})
+          Campañas ({campaigns.length})
         </p>
       </div>
       <div className="overflow-x-auto">
@@ -154,7 +156,7 @@ function MetaTopAds({ ads }) {
     <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
       <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-700">
         <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">
-          🏆 Mejores anuncios ({ads.length})
+          Mejores anuncios ({ads.length})
         </p>
       </div>
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 p-4">
@@ -167,7 +169,7 @@ function MetaTopAds({ ads }) {
               <div className="aspect-square bg-gray-100 dark:bg-gray-700 flex items-center justify-center overflow-hidden">
                 {ad.thumbnailUrl
                   ? <img src={ad.thumbnailUrl} alt={ad.name} className="w-full h-full object-cover" loading="lazy" />
-                  : <span className="text-3xl opacity-30">🖼️</span>}
+                  : <span><Icon as={Image} size={28} className="inline-block text-gray-300 dark:text-gray-600" /></span>}
               </div>
               <div className="p-2.5 flex flex-col gap-1.5">
                 {badges.length > 0 && (
@@ -179,10 +181,10 @@ function MetaTopAds({ ads }) {
                 )}
                 <p className="text-xs font-medium text-gray-800 dark:text-gray-200 truncate" title={ad.name}>{ad.name || 'Anuncio'}</p>
                 <div className="grid grid-cols-2 gap-x-2 gap-y-0.5 text-[11px] text-gray-500 dark:text-gray-400">
-                  <span>👁️ {fmtK(ad.reach)}</span>
-                  <span>📊 {fmtPct(ad.ctr)}</span>
-                  <span>📢 {fmtK(ad.impressions)}</span>
-                  <span>💰 {fmtUSD(ad.spend)}</span>
+                  <span><Icon as={Eye} size={12} className="inline align-[-2px] mr-1" />{fmtK(ad.reach)}</span>
+                  <span><Icon as={MousePointerClick} size={12} className="inline align-[-2px] mr-1" />{fmtPct(ad.ctr)}</span>
+                  <span><Icon as={Megaphone} size={12} className="inline align-[-2px] mr-1" />{fmtK(ad.impressions)}</span>
+                  <span><Icon as={DollarSign} size={12} className="inline align-[-2px] mr-1" />{fmtUSD(ad.spend)}</span>
                 </div>
               </div>
             </div>
@@ -289,8 +291,6 @@ export default function MetaAdsTab({ projectId, onSelectProject, projects = [] }
       <CrossProjectAdsPanel
         type="meta_ads"
         label="Meta Ads"
-        icon="📘"
-        emptyIcon="📘"
         activeBtnClass="bg-blue-500 text-white"
         spinnerBorderClass="border-blue-500"
         onSelectProject={onSelectProject}
@@ -348,7 +348,7 @@ export default function MetaAdsTab({ projectId, onSelectProject, projects = [] }
             disabled={savingSnap || snapSaved}
             className="ml-auto flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-400 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-50"
           >
-            {snapSaved ? '✓ Snapshot guardado' : savingSnap ? 'Guardando…' : '💾 Guardar snapshot'}
+            {snapSaved ? 'Snapshot guardado' : savingSnap ? 'Guardando…' : 'Guardar snapshot'}
           </button>
         )}
       </div>
@@ -357,27 +357,27 @@ export default function MetaAdsTab({ projectId, onSelectProject, projects = [] }
       {data && (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
           <KpiCard
-            icon="💰" label="Gasto total"
+ label="Gasto total"
             value={fmtUSD(data.spend)}
             sub={presetLabel}
           />
           <KpiCard
-            icon="👁️" label="Alcance"
+ label="Alcance"
             value={fmtK(data.reach)}
             sub="personas únicas"
           />
           <KpiCard
-            icon="📢" label="Impresiones"
+ label="Impresiones"
             value={fmtK(data.impressions)}
             sub="veces mostrado"
           />
           <KpiCard
-            icon="🖱️" label="Clicks"
+ label="Clicks"
             value={fmtK(data.clicks)}
             sub="total"
           />
           <KpiCard
-            icon="📊" label="CTR"
+ label="CTR"
             value={fmtPct(data.ctr)}
             sub="click-through rate"
             valueClass={
@@ -387,7 +387,7 @@ export default function MetaAdsTab({ projectId, onSelectProject, projects = [] }
             }
           />
           <KpiCard
-            icon="💸" label="CPM"
+ label="CPM"
             value={fmtUSD(data.cpm)}
             sub="costo por 1000 imp."
           />
@@ -395,7 +395,7 @@ export default function MetaAdsTab({ projectId, onSelectProject, projects = [] }
       )}
 
       {/* Objetivos de Meta Ads del proyecto */}
-      <ObjectiveProgressBars objectives={objectives} title="🎯 Objetivos de Meta Ads" />
+      <ObjectiveProgressBars objectives={objectives} title="Objetivos de Meta Ads" />
 
       {/* Análisis con IA: diagnóstico + ideas de anuncios nuevos */}
       <AdsAdvisorPanel

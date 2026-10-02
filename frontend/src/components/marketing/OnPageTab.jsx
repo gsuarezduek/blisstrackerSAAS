@@ -3,7 +3,8 @@ import api from '../../api/client'
 import { useAuth } from '../../context/AuthContext'
 import SetupHintCard from '../SetupHintCard'
 import LoadingSpinner from '../LoadingSpinner'
-import { Globe } from 'lucide-react'
+import { CircleCheck, Globe, Microscope, Trash2 } from 'lucide-react'
+import { Icon } from '../ui/Icon'
 
 const SEV = {
   high:   { label: 'Alta',  cls: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300' },
@@ -50,7 +51,7 @@ function CreateTaskModal({ title, projectId, projectName, onClose }) {
         <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-1">Crear tarea</h2>
         <p className="text-xs text-gray-400 dark:text-gray-500 mb-4">Proyecto: <span className="font-medium text-gray-600 dark:text-gray-300">{projectName}</span></p>
         {done ? (
-          <div className="flex flex-col items-center py-6 gap-2"><span className="text-3xl">✅</span><p className="text-sm font-medium text-gray-700 dark:text-gray-300">Tarea creada</p></div>
+          <div className="flex flex-col items-center py-6 gap-2"><span><Icon as={CircleCheck} size={28} className="inline-block text-green-500" /></span><p className="text-sm font-medium text-gray-700 dark:text-gray-300">Tarea creada</p></div>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-4">
             <textarea autoFocus rows={3} value={description} onChange={e => setDescription(e.target.value)}
@@ -109,7 +110,7 @@ function PageRow({ p, onTask }) {
               <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${SEV[iss.sev]?.cls}`}>{SEV[iss.sev]?.label}</span>
               <span className="text-xs text-gray-600 dark:text-gray-300">{iss.msg}</span>
             </div>
-          )) : <p className="text-xs text-green-600 dark:text-green-400">Sin problemas detectados 🎉</p>}
+          )) : <p className="text-xs text-green-600 dark:text-green-400">Sin problemas detectados</p>}
           <a href={p.url} target="_blank" rel="noreferrer" className="text-xs text-primary-600 dark:text-primary-400 hover:underline inline-block mt-1">Abrir página ↗</a>
         </div>
       )}
@@ -191,7 +192,7 @@ export default function OnPageTab({ projectId, projects }) {
   if (!projectId) {
     return (
       <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-10 text-center">
-        <div className="text-4xl mb-3">🔬</div>
+        <div className="mb-3"><Icon as={Microscope} size={32} className="inline-block text-gray-300 dark:text-gray-600" /></div>
         <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-1">Auditoría On-Page</h3>
         <p className="text-sm text-gray-400 dark:text-gray-500 max-w-sm mx-auto">
           Elegí un proyecto para rastrear el sitio y revisar title, meta, encabezados, alt, contenido, enlaces rotos y oportunidades de enlazado interno.
@@ -219,7 +220,7 @@ export default function OnPageTab({ projectId, projects }) {
         </div>
         <button onClick={runAudit} disabled={isRunning}
           className="flex items-center gap-2 px-4 py-2 bg-primary-600 hover:bg-primary-700 disabled:opacity-60 disabled:cursor-not-allowed text-white text-sm font-medium rounded-xl transition-colors">
-          {isRunning ? 'Analizando…' : audits.length ? '↻ Volver a analizar' : '🔬 Analizar sitio'}
+          {isRunning ? 'Analizando…' : audits.length ? 'Volver a analizar' : 'Analizar sitio'}
         </button>
       </div>
 
@@ -278,7 +279,7 @@ export default function OnPageTab({ projectId, projects }) {
           {/* Enlazado interno */}
           {active.linkSuggestions?.length > 0 && (
             <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden">
-              <div className="px-5 py-3 border-b border-gray-100 dark:border-gray-700"><h3 className="text-sm font-bold text-gray-900 dark:text-white">🔗 Oportunidades de enlazado interno</h3></div>
+              <div className="px-5 py-3 border-b border-gray-100 dark:border-gray-700"><h3 className="text-sm font-bold text-gray-900 dark:text-white">Oportunidades de enlazado interno</h3></div>
               <div className="divide-y divide-gray-100 dark:divide-gray-700">
                 {active.linkSuggestions.map((s, i) => (
                   <div key={i} className="px-5 py-3 flex items-start gap-3">
@@ -320,7 +321,7 @@ export default function OnPageTab({ projectId, projects }) {
                   <span className="text-gray-500 dark:text-gray-400">{new Date(a.createdAt).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
                   {a.status !== 'completed' && <span className="text-xs text-gray-400">({a.status})</span>}
                 </button>
-                <button onClick={() => remove(a.id)} className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 text-xs">🗑</button>
+                <button onClick={() => remove(a.id)} className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 text-xs" title="Eliminar" aria-label="Eliminar"><Icon as={Trash2} size={14} /></button>
               </div>
             ))}
           </div>

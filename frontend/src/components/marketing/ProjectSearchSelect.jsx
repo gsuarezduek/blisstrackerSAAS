@@ -118,7 +118,7 @@ export default function ProjectSearchSelect({
                         : 'text-gray-700 dark:text-gray-300'
                     }`}
                   >
-                    {group.label === 'Destacados' && '⭐ '}
+                    
                     {p.name}
                     {showUrl && (
                       <span className="ml-2 text-xs text-gray-400 dark:text-gray-500">

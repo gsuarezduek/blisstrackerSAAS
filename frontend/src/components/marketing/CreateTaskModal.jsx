@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import api from '../../api/client'
 import { useAuth } from '../../context/AuthContext'
+import { CircleCheck } from 'lucide-react'
+import { Icon } from '../ui/Icon'
 
 /**
  * Modal genérico "+ tarea" — mismo patrón usado (antes duplicado) en GeoTab.jsx y
@@ -51,7 +53,7 @@ export default function CreateTaskModal({ defaultDescription, projectId, project
 
         {done ? (
           <div className="flex flex-col items-center py-6 gap-2">
-            <span className="text-3xl">✅</span>
+            <span><Icon as={CircleCheck} size={28} className="inline-block text-green-500" /></span>
             <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Tarea creada</p>
           </div>
         ) : (

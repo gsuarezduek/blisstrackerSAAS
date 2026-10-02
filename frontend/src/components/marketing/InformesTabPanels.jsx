@@ -1,4 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
+import { ChartColumn, Target } from 'lucide-react'
+import { Icon } from '../ui/Icon'
 import api from '../../api/client'
 import { ObjectiveCard } from './ReportViewerParts'
 import { SectionsConfigModal } from './InformesTabModals'
@@ -13,19 +15,16 @@ function ReportsStatsCards({ stats }) {
   return (
     <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
       <StatCard
-        icon="📊"
         label="Informes este mes"
         value={reportsThisMonth}
         sub={<span className="capitalize">{statsMonthLabel}</span>}
       />
       <StatCard
-        icon="⭐"
         label="Calificaciones este mes"
         value={feedbackThisMonth}
         sub={avgRating != null ? `${avgRating} de promedio` : 'Sin calificaciones aún'}
       />
       <StatCard
-        icon="📈"
         label="% con calificación"
         value={`${ratePct}%`}
         accent="text-primary-600 dark:text-primary-400"
@@ -33,7 +32,6 @@ function ReportsStatsCards({ stats }) {
       />
       <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 px-4 py-3.5">
         <div className="flex items-center gap-1.5 text-xs font-medium text-gray-500 dark:text-gray-400">
-          <span>👤</span>
           <span>Generado por</span>
         </div>
         {generators.length === 0 ? (
@@ -250,9 +248,9 @@ export function LiveObjectivesPanel({ onSelectProject, projects = [] }) {
         </div>
       ) : !data?.projects?.length ? (
         <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-10 text-center">
-          <p className="text-4xl mb-3">🎯</p>
+          <p className="mb-3"><Icon as={Target} size={32} className="inline-block text-gray-300 dark:text-gray-600" /></p>
           <p className="text-gray-500 dark:text-gray-400 text-sm">
-            Ningún proyecto tiene objetivos configurados todavía. Entrá a un proyecto → pestaña Informes → 🎯 Objetivos para cargarlos.
+            Ningún proyecto tiene objetivos configurados todavía. Entrá a un proyecto → pestaña Informes → Objetivos para cargarlos.
           </p>
         </div>
       ) : (
@@ -369,7 +367,7 @@ export function ReportsHistoryPanel({ onSelectProject, projects }) {
         </div>
       ) : !reports.length ? (
         <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-10 text-center">
-          <p className="text-4xl mb-3">📊</p>
+          <p className="mb-3"><Icon as={ChartColumn} size={32} className="inline-block text-gray-300 dark:text-gray-600" /></p>
           <p className="text-gray-500 dark:text-gray-400 text-sm">
             {debouncedSearch || generatedById
               ? <>No se encontraron informes de {heading} con esos filtros.</>
@@ -398,8 +396,8 @@ export function AllReportsPanel({ onSelectProject, projects }) {
     <div className="space-y-4">
       <div className="flex gap-1 bg-gray-100 dark:bg-gray-900 rounded-lg p-0.5 w-fit">
         {[
-          { k: 'live',    label: '🔴 En vivo' },
-          { k: 'history', label: '📄 Informes' },
+          { k: 'live',    label: 'En vivo' },
+          { k: 'history', label: 'Informes' },
         ].map(t => (
           <button
             key={t.k}
@@ -431,7 +429,7 @@ export function ClientFeedbackPanel({ feedback }) {
     <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-3">
       <button onClick={() => setOpen(o => !o)} className="w-full flex items-center justify-between gap-3">
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-sm font-semibold text-gray-700 dark:text-gray-200">💬 Feedback del cliente</span>
+          <span className="text-sm font-semibold text-gray-700 dark:text-gray-200">Feedback del cliente</span>
           <StarRow value={feedback.avg} />
           <span className="text-sm font-bold text-gray-900 dark:text-white">{feedback.avg}</span>
           <span className="text-xs text-gray-400">({feedback.count} {feedback.count === 1 ? 'respuesta' : 'respuestas'})</span>
@@ -481,7 +479,7 @@ export function GenerationLogPanel({ projectId, month }) {
   return (
     <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-3">
       <button onClick={() => setOpen(o => !o)} className="w-full flex items-center justify-between gap-3">
-        <span className="text-sm font-semibold text-gray-700 dark:text-gray-200">🕘 Intentos de generación anteriores</span>
+        <span className="text-sm font-semibold text-gray-700 dark:text-gray-200">Intentos de generación anteriores</span>
         <span className="text-gray-400 text-xs shrink-0">{open ? '▲' : '▼'}</span>
       </button>
       {open && (
@@ -502,8 +500,8 @@ export function GenerationLogPanel({ projectId, month }) {
                         {new Date(a.createdAt).toLocaleString('es-AR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
                       </span>
                       {clean
-                        ? <span className="text-green-600 dark:text-green-400">✓ sin problemas</span>
-                        : <span className="text-amber-600 dark:text-amber-400">⚠ con problemas</span>}
+                        ? <span className="text-green-600 dark:text-green-400">sin problemas</span>
+                        : <span className="text-amber-600 dark:text-amber-400">con problemas</span>}
                     </div>
                     {a.analysisError && (
                       <p className="text-amber-700 dark:text-amber-400 mt-0.5">Análisis IA: {a.analysisError}</p>

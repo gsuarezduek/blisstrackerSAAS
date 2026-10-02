@@ -63,7 +63,7 @@ function ObjectiveBadge({ objective }) {
       className="mt-1.5 flex items-center gap-2"
       title={`Objetivo de inversión (${objective.periodLabel}): ${fmtUSD(objective.actual)} de ${fmtUSD(objective.target)}`}
     >
-      <span className="text-[10px] text-gray-400 flex-shrink-0">🎯 objetivo</span>
+      <span className="text-[10px] text-gray-400 flex-shrink-0">objetivo</span>
       <div className="flex-1 bg-gray-100 dark:bg-gray-700 rounded-full h-1">
         <div className={`h-1 rounded-full ${objectiveBarCls(objective.pct)}`} style={{ width: `${barPct}%` }} />
       </div>
@@ -141,7 +141,7 @@ function ProjectRow({ p, onSelectProject, maxSpend, down }) {
           <div className="flex items-center gap-3 flex-shrink-0 ml-2">
             {down ? (
               <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300" title={p.status === 'error' ? p.error : 'La integración se desconectó o venció. Reconectala desde el proyecto.'}>
-                ⚠ {p.status === 'error' ? 'Error' : 'Desconectado'}
+                {p.status === 'error' ? 'Error' : 'Desconectado'}
               </span>
             ) : (
               <>
@@ -187,7 +187,7 @@ function ProjectGroup({ title, rows, onSelectProject, maxSpend, isLive }) {
   )
 }
 
-export default function CrossProjectAdsPanel({ type, label, icon, emptyIcon, activeBtnClass, spinnerBorderClass, onSelectProject }) {
+export default function CrossProjectAdsPanel({ type, label, activeBtnClass, spinnerBorderClass, onSelectProject }) {
   const [period,  setPeriod]  = useState('this_month')
   const [sortKey, setSortKey] = useState('spend')
   const [sortDir, setSortDir] = useState('desc')
@@ -223,7 +223,7 @@ export default function CrossProjectAdsPanel({ type, label, icon, emptyIcon, act
     <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-5">
       <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
         <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">
-          {icon} {label} por proyecto {data && `(${rows.length})`} <span className="font-normal text-gray-400">· {periodDesc}</span>
+          {label} por proyecto {data && `(${rows.length})`} <span className="font-normal text-gray-400">· {periodDesc}</span>
         </h3>
         <div className="flex text-xs rounded-lg border border-gray-200 dark:border-gray-600 overflow-hidden flex-shrink-0">
           {CROSS_PERIODS.map(o => (
@@ -273,7 +273,6 @@ export default function CrossProjectAdsPanel({ type, label, icon, emptyIcon, act
         <div className="flex justify-center py-12"><div className={`w-6 h-6 border-2 ${spinnerBorderClass} border-t-transparent rounded-full animate-spin`} /></div>
       ) : !rows.length ? (
         <div className="text-center py-10">
-          <div className="text-4xl mb-3">{emptyIcon}</div>
           <p className="text-sm text-gray-500 dark:text-gray-400">
             {isLive
               ? `Todavía no hay proyectos con ${label} conectado.`
@@ -282,7 +281,7 @@ export default function CrossProjectAdsPanel({ type, label, icon, emptyIcon, act
         </div>
       ) : (
         <div className="space-y-6">
-          <ProjectGroup title={starredRows.length ? '★ Destacados' : null} rows={starredRows} onSelectProject={onSelectProject} maxSpend={maxSpend} isLive={isLive} />
+          <ProjectGroup title={starredRows.length ? 'Destacados' : null} rows={starredRows} onSelectProject={onSelectProject} maxSpend={maxSpend} isLive={isLive} />
           <ProjectGroup title={starredRows.length ? 'Resto de los proyectos' : null} rows={restRows} onSelectProject={onSelectProject} maxSpend={maxSpend} isLive={isLive} />
         </div>
       )}

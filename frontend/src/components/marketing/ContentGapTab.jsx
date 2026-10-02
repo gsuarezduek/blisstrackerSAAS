@@ -2,6 +2,8 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import api from '../../api/client'
 import { useAuth } from '../../context/AuthContext'
 import LoadingSpinner from '../LoadingSpinner'
+import { CircleCheck, Trash2 } from 'lucide-react'
+import { Icon } from '../ui/Icon'
 
 const PRIO = {
   alta:  { label: 'Alta',  cls: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300' },
@@ -39,7 +41,7 @@ function CreateTaskModal({ title, projectId, projectName, onClose }) {
         <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-1">Crear tarea</h2>
         <p className="text-xs text-gray-400 dark:text-gray-500 mb-4">Proyecto: <span className="font-medium text-gray-600 dark:text-gray-300">{projectName}</span></p>
         {done ? (
-          <div className="flex flex-col items-center py-6 gap-2"><span className="text-3xl">✅</span><p className="text-sm font-medium text-gray-700 dark:text-gray-300">Tarea creada</p></div>
+          <div className="flex flex-col items-center py-6 gap-2"><span><Icon as={CircleCheck} size={28} className="inline-block text-green-500" /></span><p className="text-sm font-medium text-gray-700 dark:text-gray-300">Tarea creada</p></div>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-4">
             <textarea autoFocus rows={3} value={description} onChange={e => setDescription(e.target.value)}
@@ -252,7 +254,7 @@ export default function ContentGapTab({ projectId, projects }) {
               className={`w-full text-left px-3 py-2 rounded-lg border text-sm flex items-center justify-between gap-2 group transition-colors ${
                 active?.id === g.id ? 'border-primary-400 bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-300' : 'border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/50'}`}>
               <span className="truncate">{g.keyword}{g.status !== 'completed' ? ` · ${g.status}` : ''}</span>
-              <span onClick={e => remove(g.id, e)} className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 text-xs flex-shrink-0">🗑</span>
+              <span onClick={e => remove(g.id, e)} className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 text-xs flex-shrink-0" title="Eliminar"><Icon as={Trash2} size={14} /></span>
             </button>
           ))}
         </div>

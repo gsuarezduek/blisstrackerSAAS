@@ -17,7 +17,7 @@ const BADGES = {
  * @param {object}   brand      entrada de BRANDS
  * @param {string}   title
  * @param {string}   [subtitle]
- * @param {object[]} methods    [{ key, icon, title, description, badge?: 'recommended'|'soon', body }]
+ * @param {object[]} methods    [{ key, title, description, badge?: 'recommended'|'soon', body }]
  */
 export default function ConnectScreen({ brand, title, subtitle, methods }) {
   const usable = methods.filter(m => m.badge !== 'soon')
@@ -40,7 +40,6 @@ export default function ConnectScreen({ brand, title, subtitle, methods }) {
           const badge = BADGES[m.badge]
           const head = (
             <>
-              <span className="text-xl shrink-0" aria-hidden="true">{m.icon}</span>
               <span className="flex-1 min-w-0 text-left">
                 <span className="flex items-center gap-2 flex-wrap">
                   <span className="text-sm font-semibold text-gray-800 dark:text-gray-200">{m.title}</span>

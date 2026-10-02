@@ -4,6 +4,8 @@ import ConfirmModal from '../ConfirmModal'
 import ObjectiveProgressBars from './ObjectiveProgressBars'
 import useObjectiveProgress from './useObjectiveProgress'
 import OportunidadesTab from './OportunidadesTab'
+import { FolderOpen, KeyRound, Search } from 'lucide-react'
+import { Icon } from '../ui/Icon'
 
 // ─── Países disponibles (ISO 3166-1 alpha-3 lowercase) ────────────────────────
 
@@ -231,7 +233,7 @@ function SerpPanel({ projectId, kwId, onAddKeyword }) {
             disabled={refreshing || !!waitMins}
             className="text-xs px-3 py-1 rounded-lg border border-gray-200 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 transition-colors"
           >
-            {refreshing ? 'Actualizando…' : '↻ Actualizar'}
+            {refreshing ? 'Actualizando…' : 'Actualizar'}
           </button>
         </div>
       </div>
@@ -348,7 +350,7 @@ function ClustersView({ keywords, projectId, expanded, onToggle, onRemove }) {
   if (withAnalysis.length < 2) {
     return (
       <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-8 text-center">
-        <div className="text-3xl mb-3">🗂️</div>
+        <div className="mb-3"><Icon as={FolderOpen} size={28} className="inline-block text-gray-300 dark:text-gray-600" /></div>
         <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Clusters no disponibles</p>
         <p className="text-xs text-gray-400">Analizá al menos 2 keywords con IA para ver los topic clusters.</p>
       </div>
@@ -638,7 +640,7 @@ function KeywordRow({ kw, serpSnap, isExpanded, onToggle, onRemove, onAddKeyword
         </td>
         <td className="px-4 py-3 text-sm text-right tabular-nums text-gray-700 dark:text-gray-300">
           {kw.currentPosition != null && kw.currentPosition > 0 && kw.currentPosition < 1.0
-            ? <span className="text-xs font-semibold bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 px-2 py-0.5 rounded-full">⭐ Featured</span>
+            ? <span className="text-xs font-semibold bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 px-2 py-0.5 rounded-full">Featured</span>
             : fmtPos(kw.currentPosition)
           }
         </td>
@@ -1235,7 +1237,7 @@ export default function KeywordsTab({ projectId, projects }) {
   if (!projectId) {
     return (
       <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-10 text-center">
-        <div className="text-4xl mb-3">🔑</div>
+        <div className="mb-3"><Icon as={KeyRound} size={32} className="inline-block text-gray-300 dark:text-gray-600" /></div>
         <p className="text-sm text-gray-500 dark:text-gray-400">Seleccioná un proyecto arriba para rastrear keywords</p>
       </div>
     )
@@ -1327,7 +1329,7 @@ export default function KeywordsTab({ projectId, projects }) {
       {/* Objetivos de posicionamiento del proyecto */}
       {objectives.length > 0 && (
         <div className="mb-4">
-          <ObjectiveProgressBars objectives={objectives} title="🎯 Objetivos de posicionamiento" />
+          <ObjectiveProgressBars objectives={objectives} title="Objetivos de posicionamiento" />
         </div>
       )}
 
@@ -1346,7 +1348,7 @@ export default function KeywordsTab({ projectId, projects }) {
       {/* Lista vacía */}
       {keywords.length === 0 && (
         <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-10 text-center">
-          <div className="text-3xl mb-3">🔍</div>
+          <div className="mb-3"><Icon as={Search} size={28} className="inline-block text-gray-300 dark:text-gray-600" /></div>
           <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
             Todavía no rastreás ninguna keyword
           </p>
@@ -1433,7 +1435,7 @@ export default function KeywordsTab({ projectId, projects }) {
 
       {/* Oportunidades SEO (striking distance, CTR bajo, content decay) */}
       <div className="mt-8 pt-6 border-t border-gray-200 dark:border-gray-700">
-        <h2 className="text-sm font-semibold text-gray-800 dark:text-white mb-3">🎯 Oportunidades</h2>
+        <h2 className="text-sm font-semibold text-gray-800 dark:text-white mb-3">Oportunidades</h2>
         <OportunidadesTab projectId={projectId} projects={projects} />
       </div>
 

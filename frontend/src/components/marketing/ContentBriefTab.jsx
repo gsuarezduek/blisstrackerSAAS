@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback } from 'react'
 import api from '../../api/client'
 import { useAuth } from '../../context/AuthContext'
 import LoadingSpinner from '../LoadingSpinner'
+import { CircleCheck, FileText, PenLine, Trash2 } from 'lucide-react'
+import { Icon } from '../ui/Icon'
 
 // ─── Crear tarea (prefijo "Contenido -") ───────────────────────────────────────
 function CreateTaskModal({ title, projectId, projectName, onClose }) {
@@ -38,7 +40,7 @@ function CreateTaskModal({ title, projectId, projectName, onClose }) {
         <p className="text-xs text-gray-400 dark:text-gray-500 mb-4">Proyecto: <span className="font-medium text-gray-600 dark:text-gray-300">{projectName}</span></p>
         {done ? (
           <div className="flex flex-col items-center py-6 gap-2">
-            <span className="text-3xl">✅</span>
+            <span><Icon as={CircleCheck} size={28} className="inline-block text-green-500" /></span>
             <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Tarea creada</p>
           </div>
         ) : (
@@ -103,7 +105,7 @@ function BriefView({ keyword, content, onTask }) {
             <h3 className="text-lg font-bold text-gray-900 dark:text-white">{keyword}</h3>
           </div>
           <div className="flex gap-2">
-            <button onClick={copy} className="text-xs font-medium text-gray-600 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">📋 Copiar</button>
+            <button onClick={copy} className="text-xs font-medium text-gray-600 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">Copiar</button>
             <button onClick={() => onTask(`Escribir "${c.titulo || keyword}"`)} className="text-xs font-medium text-white bg-primary-600 hover:bg-primary-700 rounded-lg px-3 py-1.5 transition-colors">+ tarea</button>
           </div>
         </div>
@@ -120,7 +122,7 @@ function BriefView({ keyword, content, onTask }) {
       {/* Estructura */}
       {c.estructura?.length > 0 && (
         <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-5">
-          <h4 className="text-sm font-bold text-gray-900 dark:text-white mb-3">🧱 Estructura de encabezados</h4>
+          <h4 className="text-sm font-bold text-gray-900 dark:text-white mb-3">Estructura de encabezados</h4>
           <div className="space-y-1.5">
             {c.estructura.map((s, i) => (
               <div key={i} className={s.h === 3 ? 'pl-6' : ''}>
@@ -139,7 +141,7 @@ function BriefView({ keyword, content, onTask }) {
       <div className="grid md:grid-cols-2 gap-4">
         {c.preguntas?.length > 0 && (
           <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-5">
-            <h4 className="text-sm font-bold text-gray-900 dark:text-white mb-3">❓ Preguntas a responder</h4>
+            <h4 className="text-sm font-bold text-gray-900 dark:text-white mb-3">Preguntas a responder</h4>
             <ul className="space-y-1.5">
               {c.preguntas.map((q, i) => <li key={i} className="text-sm text-gray-700 dark:text-gray-300 flex gap-2"><span className="text-primary-500">·</span>{q}</li>)}
             </ul>
@@ -147,7 +149,7 @@ function BriefView({ keyword, content, onTask }) {
         )}
         {c.entidades?.length > 0 && (
           <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-5">
-            <h4 className="text-sm font-bold text-gray-900 dark:text-white mb-3">🔗 Entidades / keywords semánticas</h4>
+            <h4 className="text-sm font-bold text-gray-900 dark:text-white mb-3">Entidades / keywords semánticas</h4>
             <Chips items={c.entidades} />
           </div>
         )}
@@ -253,7 +255,7 @@ export default function ContentBriefTab({ projectId, projects }) {
   if (!projectId) {
     return (
       <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-10 text-center">
-        <div className="text-4xl mb-3">✍️</div>
+        <div className="mb-3"><Icon as={PenLine} size={32} className="inline-block text-gray-300 dark:text-gray-600" /></div>
         <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-1">Content Brief</h3>
         <p className="text-sm text-gray-400 dark:text-gray-500 max-w-sm mx-auto">
           Elegí un proyecto para generar briefs de contenido SEO: estructura, preguntas a cubrir, entidades y ángulo diferencial, con el tono y los objetivos del brief del cliente.
@@ -281,7 +283,7 @@ export default function ContentBriefTab({ projectId, projects }) {
           </datalist>
           <button onClick={generate} disabled={generating || !keyword.trim()}
             className="bg-primary-600 hover:bg-primary-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg px-4 py-2 transition-colors">
-            {generating ? 'Generando…' : '✨ Generar brief'}
+            {generating ? 'Generando…' : 'Generar brief'}
           </button>
         </div>
         <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">
@@ -305,7 +307,7 @@ export default function ContentBriefTab({ projectId, projects }) {
                   ? 'border-primary-400 bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-300'
                   : 'border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/50'}`}>
               <span className="truncate">{b.keyword}</span>
-              <span onClick={e => remove(b.id, e)} className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 text-xs flex-shrink-0">🗑</span>
+              <span onClick={e => remove(b.id, e)} className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 text-xs flex-shrink-0" title="Eliminar"><Icon as={Trash2} size={14} /></span>
             </button>
           ))}
         </div>
@@ -316,7 +318,7 @@ export default function ContentBriefTab({ projectId, projects }) {
             ? <BriefView keyword={active.keyword} content={active.content} onTask={(title) => setTaskModal({ title })} />
             : !generating && (
               <div className="bg-white dark:bg-gray-800 rounded-2xl border border-dashed border-gray-300 dark:border-gray-600 p-10 text-center">
-                <div className="text-3xl mb-2">📝</div>
+                <div className="mb-2"><Icon as={FileText} size={28} className="inline-block text-gray-300 dark:text-gray-600" /></div>
                 <p className="text-sm text-gray-500 dark:text-gray-400">Generá un brief o elegí uno del historial para verlo acá.</p>
               </div>
             )}

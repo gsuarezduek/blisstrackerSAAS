@@ -7,6 +7,8 @@ import { LineChart, MonthNav, KpiCard, AudienceCard, BrandSpinner } from './netw
 import ConnectScreen, { OAuthMethod, ExpiredNotice } from './networks/ConnectScreen'
 import AccountHeader, { AccountBio } from './networks/AccountHeader'
 import CrossProjectNetworkPanel from './networks/CrossProjectNetworkPanel'
+import { Eye, Heart, MessageCircle } from 'lucide-react'
+import { Icon } from '../ui/Icon'
 
 const BRAND = BRANDS.youtube
 const RED = BRAND.color
@@ -20,7 +22,7 @@ function ConnectPrompt({ projectId, onConnected }) {
     <ConnectScreen brand={BRAND} title="Conectá el canal de YouTube"
       subtitle="Suscriptores, vistas del mes, videos y shorts publicados y engagement."
       methods={[{
-        key: 'official', icon: '🔗', title: 'Conexión oficial (Google)',
+        key: 'official', title: 'Conexión oficial (Google)',
         description: 'Autorizá con la cuenta de Google dueña del canal. Solo lectura.',
         body: <OAuthMethod brand={BRAND} getAuthUrl={authUrl(projectId)} onConnected={onConnected} cta="Conectar con Google" />,
       }]}
@@ -30,10 +32,9 @@ function ConnectPrompt({ projectId, onConnected }) {
 
 // ── TOP del mes ───────────────────────────────────────────────────────────────
 
-function TopVideoCard({ video, medal, category, categoryIcon }) {
+function TopVideoCard({ video, rank, category }) {
   if (!video) return (
     <div className="bg-white dark:bg-gray-800 border border-dashed border-gray-200 dark:border-gray-700 rounded-xl p-4 flex flex-col items-center justify-center gap-2 min-h-[160px]">
-      <span className="text-2xl opacity-30">{categoryIcon}</span>
       <p className="text-xs text-gray-400 text-center">Sin videos este mes</p>
     </div>
   )
@@ -45,15 +46,15 @@ function TopVideoCard({ video, medal, category, categoryIcon }) {
           ? <img src={video.coverUrl} alt="" className="w-full h-full object-cover" loading="lazy" />
           : <div className="w-full h-full bg-gradient-to-br from-gray-800 to-gray-900" />
         }
-        <div className="absolute top-2 left-2 text-xl leading-none">{medal}</div>
+        <div className="absolute top-2 left-2 w-6 h-6 rounded-full bg-black/60 text-white text-xs font-bold flex items-center justify-center">{rank}</div>
         {video.isShort && <span className="absolute bottom-2 right-2 text-[9px] bg-black/70 text-white px-1.5 py-0.5 rounded-full font-semibold">SHORT</span>}
       </div>
       <div className="p-3 space-y-1.5">
-        <p className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: RED }}>{categoryIcon} {category}</p>
+        <p className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: RED }}>{category}</p>
         <div className="flex items-center gap-3 text-xs text-gray-600 dark:text-gray-400">
           {video.viewCount    != null && <span>▶ {fmtK(video.viewCount)}</span>}
-          {video.likeCount    != null && <span>❤️ {fmtK(video.likeCount)}</span>}
-          {video.commentCount != null && <span>💬 {fmtK(video.commentCount)}</span>}
+          {video.likeCount    != null && <span><Icon as={Heart} size={12} className="inline align-[-2px] mr-1" />{fmtK(video.likeCount)}</span>}
+          {video.commentCount != null && <span><Icon as={MessageCircle} size={12} className="inline align-[-2px] mr-1" />{fmtK(video.commentCount)}</span>}
         </div>
         {video.title && <p className="text-[11px] text-gray-500 dark:text-gray-400 line-clamp-2 leading-tight">{video.title}</p>}
       </div>
@@ -73,7 +74,7 @@ function TopOfMonth({ topOfMonth }) {
     <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-5">
       <div className="flex items-center justify-between mb-4">
         <div>
-          <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">🏆 TOP del mes — {currentMonth}</p>
+          <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">TOP del mes — {currentMonth}</p>
           <p className="text-xs text-gray-400 mt-0.5">
             {videosThisMonth > 0
               ? `${videosThisMonth} video${videosThisMonth !== 1 ? 's' : ''} este mes · ${longsThisMonth ?? 0} largo${longsThisMonth !== 1 ? 's' : ''} · ${shortsThisMonth ?? 0} short${shortsThisMonth !== 1 ? 's' : ''}`
@@ -84,8 +85,8 @@ function TopOfMonth({ topOfMonth }) {
       {videosThisMonth === 0
         ? <p className="text-sm text-gray-400 text-center py-6">Aún no hay videos este mes.</p>
         : <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <TopVideoCard video={v1} medal="🥇" category="Más visto"   categoryIcon="▶" />
-            <TopVideoCard video={v2} medal="🥈" category="Más likeado" categoryIcon="❤️" />
+            <TopVideoCard video={v1} rank={1} category="Más visto" />
+            <TopVideoCard video={v2} rank={2} category="Más likeado" />
           </div>
       }
     </div>
@@ -191,7 +192,7 @@ export default function YouTubeTab({ projectId, onSelectProject, projects = [] }
       renderSecondary={p => (
         <>
           <span className="text-gray-400">{fmtK(p.followersCount)} suscriptores</span>
-          {p.monthViews != null && <span className="text-gray-400">👁 {fmtK(p.monthViews)} vistas/mes</span>}
+          {p.monthViews != null && <span className="text-gray-400"><Icon as={Eye} size={12} className="inline align-[-2px] mr-1" />{fmtK(p.monthViews)} vistas/mes</span>}
           {p.engagementRate != null && <span className={engColor(p.engagementRate)}>{p.engagementRate.toFixed(2)}% eng.</span>}
           {p.videosThisMonth != null && <span className="text-gray-400">{p.videosThisMonth} videos</span>}
         </>
@@ -240,21 +241,21 @@ export default function YouTubeTab({ projectId, onSelectProject, projects = [] }
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
           <AudienceCard label="Suscriptores" count={displayData.subscriberCount} monthlyGain={monthlyGain}
             sub={displayData.videoCount != null ? `${fmtNum(displayData.videoCount)} videos en total` : null} />
-          <KpiCard icon="👁" label="Vistas del mes"
+          <KpiCard label="Vistas del mes"
             value={displayData.monthViews != null ? fmtK(displayData.monthViews) : '—'}
             sub="videos publicados este mes"
           />
-          <KpiCard icon="📅" label="Videos del mes"
+          <KpiCard label="Videos del mes"
             value={displayData.videosThisMonth != null ? fmtNum(displayData.videosThisMonth) : '—'}
             sub={(displayData.longsThisMonth != null || displayData.shortsThisMonth != null)
               ? `${displayData.longsThisMonth ?? 0} largos · ${displayData.shortsThisMonth ?? 0} shorts`
               : (isCurrentMonth ? 'este mes' : 'ese mes')}
           />
-          <KpiCard icon="▶" label="Avg. Views"
+          <KpiCard label="Avg. Views"
             value={displayData.avgViews != null ? fmtK(displayData.avgViews) : '—'}
             sub="promedio por video"
           />
-          <KpiCard icon="⚡" label="Engagement"
+          <KpiCard label="Engagement"
             value={displayData.engagementRate != null ? `${displayData.engagementRate}%` : '—'}
             valueClass={engColor(displayData.engagementRate)}
             sub={engLabel(displayData.engagementRate)}
@@ -283,7 +284,7 @@ export default function YouTubeTab({ projectId, onSelectProject, projects = [] }
           <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-5">
             <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
               <div>
-                <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">📈 Evolución de suscriptores</p>
+                <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">Evolución de suscriptores</p>
                 {snapshotFallback && (
                   <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">Datos mensuales · el gráfico diario se irá completando</p>
                 )}

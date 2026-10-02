@@ -6,15 +6,13 @@ import CreateTaskModal from './CreateTaskModal'
 import BulkCreateTaskModal from './BulkCreateTaskModal'
 import ConnectionsPanel from './ConnectionsPanel'
 import { useWorkspace } from '../../context/WorkspaceContext'
+import { CircleCheck, PartyPopper, TriangleAlert } from 'lucide-react'
+import { Icon } from '../ui/Icon'
 
 const PRIORITY = {
   high:   { label: 'Alta',  cls: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300' },
   medium: { label: 'Media', cls: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300' },
   low:    { label: 'Baja',  cls: 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300' },
-}
-const CATEGORY_ICON = {
-  GEO: '🤖', 'Canibalización': '⚠️', Performance: '⚡', Keywords: '🔑',
-  Objetivos: '🎯', Contenido: '🗓️', 'Meta Ads': '📣', 'Google Ads': '📣', Informes: '📊',
 }
 // `source` (clave interna, ej. 'geo'/'ads_advisor') → label legible, para la lista de
 // ignorados (que solo guarda `source`, no la `category` de display del item original).
@@ -49,7 +47,7 @@ function WorkspacePending({ onSelectProject }) {
 
   if (err) return (
     <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-8 text-center">
-      <div className="text-3xl mb-3">⚠️</div>
+      <div className="mb-3"><Icon as={TriangleAlert} size={28} className="inline-block text-amber-500" /></div>
       <p className="text-sm text-gray-600 dark:text-gray-300">{err}</p>
     </div>
   )
@@ -57,7 +55,7 @@ function WorkspacePending({ onSelectProject }) {
 
   if (projects.length === 0) return (
     <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-10 text-center">
-      <div className="text-4xl mb-3">🎉</div>
+      <div className="mb-3"><Icon as={PartyPopper} size={32} className="inline-block text-green-500" /></div>
       <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-1">Todo al día</h3>
       <p className="text-sm text-gray-400 dark:text-gray-500 max-w-sm mx-auto">
         No hay pendientes de SEO, GEO, objetivos, RRSS, Ads, informes ni contenido en ningún proyecto activo.
@@ -132,7 +130,7 @@ function PendingItemRow({ it, selected, onToggle, onDismiss, onNavigate }) {
       <div className="min-w-0 flex-1 cursor-pointer" onClick={onToggle}>
         <div className="flex items-center gap-2 flex-wrap">
           <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${PRIORITY[it.priority].cls}`}>{PRIORITY[it.priority].label}</span>
-          <span className="text-[11px] text-gray-400 dark:text-gray-500">{CATEGORY_ICON[it.category] ?? ''} {it.category}</span>
+          <span className="text-[11px] text-gray-400 dark:text-gray-500">{it.category}</span>
         </div>
         <p className="text-sm text-gray-800 dark:text-gray-200 mt-1">{it.title}</p>
         {it.detail && <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{it.detail}</p>}
@@ -145,7 +143,7 @@ function PendingItemRow({ it, selected, onToggle, onDismiss, onNavigate }) {
         ) : null}
         <button onClick={onDismiss} title="Ignorar esta recomendación"
           className="text-xs font-medium text-gray-400 dark:text-gray-500 hover:text-red-600 dark:hover:text-red-400">
-          ✕ Ignorar
+          Ignorar
         </button>
       </div>
     </div>
@@ -251,7 +249,7 @@ function ProjectPending({ projectId, projects, onNavigate }) {
     <div className="space-y-5">
       {connections}
       <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-8 text-center">
-        <div className="text-3xl mb-3">⚠️</div>
+        <div className="mb-3"><Icon as={TriangleAlert} size={28} className="inline-block text-amber-500" /></div>
         <p className="text-sm text-gray-600 dark:text-gray-300">{err}</p>
       </div>
     </div>
@@ -269,7 +267,7 @@ function ProjectPending({ projectId, projects, onNavigate }) {
       {connections}
       {items.length === 0 ? (
         <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-8 text-center">
-          <div className="text-3xl mb-2">✅</div>
+          <div className="mb-2"><Icon as={CircleCheck} size={28} className="inline-block text-green-500" /></div>
           <p className="text-sm text-gray-600 dark:text-gray-300">No hay pendientes en este proyecto ahora mismo.</p>
           <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">SEO/GEO, objetivos, RRSS, Ads, informes y contenido se revisan automáticamente acá.</p>
         </div>
@@ -302,7 +300,7 @@ function ProjectPending({ projectId, projects, onNavigate }) {
                   {g.total > 0 && <span className="text-xs text-gray-400 dark:text-gray-500">{g.total} pendiente{g.total === 1 ? '' : 's'}</span>}
                 </div>
                 {groupItems.length === 0 ? (
-                  <p className="px-5 py-3.5 text-sm text-gray-400 dark:text-gray-500">✅ Sin pendientes en esta sección.</p>
+                  <p className="px-5 py-3.5 text-sm text-gray-400 dark:text-gray-500">Sin pendientes en esta sección.</p>
                 ) : (
                   <div className="divide-y divide-gray-100 dark:divide-gray-700">
                     {groupItems.map(it => (
@@ -338,7 +336,7 @@ function ProjectPending({ projectId, projects, onNavigate }) {
       {dismissedCount > 0 && (
         <div>
           <button onClick={toggleDismissedPanel} className="text-xs font-medium text-gray-500 dark:text-gray-400 hover:underline">
-            👁 {showDismissed ? 'Ocultar' : 'Ver'} ignorados ({dismissedCount})
+            {showDismissed ? 'Ocultar' : 'Ver'} ignorados ({dismissedCount})
           </button>
           {showDismissed && (
             <div className="mt-2 bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 divide-y divide-gray-100 dark:divide-gray-700 overflow-hidden">
@@ -356,7 +354,7 @@ function ProjectPending({ projectId, projects, onNavigate }) {
                     </p>
                   </div>
                   <button onClick={() => undismiss(d.id)} className="flex-shrink-0 text-xs font-medium text-primary-600 dark:text-primary-400 hover:underline">
-                    ↩️ Restaurar
+                    Restaurar
                   </button>
                 </div>
               ))}

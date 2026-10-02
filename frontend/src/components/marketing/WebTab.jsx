@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react'
 import api from '../../api/client'
+import { CalendarDays, ChartColumn, CircleCheck, Hash, Monitor, Smartphone, Tablet, Target, TriangleAlert, Zap } from 'lucide-react'
+import { Icon } from '../ui/Icon'
 import { useAuth } from '../../context/AuthContext'
 import ObjectiveProgressBars from './ObjectiveProgressBars'
 import useObjectiveProgress from './useObjectiveProgress'
@@ -40,7 +42,7 @@ function CreateTaskModal({ title, projectId, projectName, onClose }) {
         </p>
         {done ? (
           <div className="flex flex-col items-center py-6 gap-2">
-            <span className="text-3xl">✅</span>
+            <span><Icon as={CircleCheck} size={28} className="inline-block text-green-500" /></span>
             <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Tarea creada</p>
           </div>
         ) : (
@@ -138,7 +140,7 @@ function formatDateLabel(range, customStart, customEnd) {
   return `${fmt(startDate)} → ${fmt(endDate)}`
 }
 
-const DEVICE_ICONS = { desktop: '🖥️', mobile: '📱', tablet: '📲' }
+const DEVICE_ICONS = { desktop: Monitor, mobile: Smartphone, tablet: Tablet }
 const CHANNEL_COLORS = [
   'bg-primary-500', 'bg-blue-500', 'bg-green-500',
   'bg-purple-500',  'bg-yellow-500', 'bg-pink-500',
@@ -160,7 +162,7 @@ function pct(value, total) {
   return Math.round((value / total) * 100)
 }
 
-function MetricCard({ label, value, icon, sub, highlight, delta, deltaPositivo }) {
+function MetricCard({ label, value, sub, highlight, delta, deltaPositivo }) {
   const hasDelta = delta != null && delta !== 0
   return (
     <div className={`rounded-xl p-4 ${highlight
@@ -169,7 +171,6 @@ function MetricCard({ label, value, icon, sub, highlight, delta, deltaPositivo }
     }>
       <div className="flex items-start justify-between mb-2">
         <p className="text-xs text-gray-500 dark:text-gray-400">{label}</p>
-        {icon && <span className="text-base">{icon}</span>}
       </div>
       <p className={`text-2xl font-bold ${highlight
         ? 'text-primary-700 dark:text-primary-300'
@@ -266,7 +267,7 @@ function AllEventsBlock({ allEvents }) {
             Suma de todos los tipos de eventos registrados
           </p>
         </div>
-        <span className="text-3xl">⚡</span>
+        <span><Icon as={Zap} size={28} className="inline-block text-gray-300 dark:text-gray-600" /></span>
       </div>
 
       <div className="space-y-2">
@@ -325,7 +326,7 @@ function ConversionsBlock({ conversions, sessions }) {
               </p>
             )}
           </div>
-          <span className="text-3xl">🎯</span>
+          <span><Icon as={Target} size={28} className="inline-block text-gray-300 dark:text-gray-600" /></span>
         </div>
 
         <div className="space-y-2">
@@ -359,7 +360,7 @@ function ConversionsBlock({ conversions, sessions }) {
     <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-5">
       <div className="flex items-start justify-between mb-1">
         <SectionTitle>Eventos clave (conversiones)</SectionTitle>
-        <span className="text-2xl">🎯</span>
+        <span><Icon as={Target} size={24} className="inline-block text-gray-300 dark:text-gray-600" /></span>
       </div>
       <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
         No hay conversiones configuradas en este período. Las conversiones te permiten medir acciones
@@ -458,7 +459,7 @@ function PageSpeedSection({ websiteUrl, strategy, onStrategyChange, result, hist
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 flex items-center gap-2">
-            🚀 Performance
+            Performance
           </h3>
           {websiteUrl && (
             <p className="text-xs text-gray-400 mt-0.5 font-mono truncate max-w-[240px]">
@@ -473,13 +474,13 @@ function PageSpeedSection({ websiteUrl, strategy, onStrategyChange, result, hist
               <button
                 key={s}
                 onClick={() => onStrategyChange(s)}
-                className={`px-3 py-1.5 capitalize transition-colors ${
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 capitalize transition-colors ${
                   strategy === s
                     ? 'bg-primary-600 text-white'
                     : 'text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'
                 }`}
               >
-                {s === 'mobile' ? '📱' : '🖥️'} {s}
+                <Icon as={s === 'mobile' ? Smartphone : Monitor} size={14} />{s}
               </button>
             ))}
           </div>
@@ -733,7 +734,7 @@ function CrossProjectAnalyticsPanel({ onSelectProject }) {
   )
   if (!data?.length) return (
     <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-10 text-center">
-      <div className="text-4xl mb-3">📊</div>
+      <div className="mb-3"><Icon as={ChartColumn} size={32} className="inline-block text-gray-300 dark:text-gray-600" /></div>
       <p className="text-sm text-gray-500 dark:text-gray-400">Todavía no hay snapshots de Analytics. Seleccioná un proyecto para empezar.</p>
     </div>
   )
@@ -753,7 +754,7 @@ function CrossProjectAnalyticsPanel({ onSelectProject }) {
         >
           {refreshing
             ? <><span className="w-3 h-3 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" /> Actualizando…</>
-            : <>🔄 Actualizar todo</>}
+            : <>Actualizar todo</>}
         </button>
       </div>
 
@@ -789,7 +790,7 @@ function CrossProjectAnalyticsPanel({ onSelectProject }) {
                 <div className="flex items-center gap-3 flex-shrink-0 ml-2">
                   {down && (
                     <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300" title="La integración de Google Analytics se desconectó o venció. Reconectala desde el proyecto para poder actualizar.">
-                      ⚠ {p.integrationStatus === 'missing' ? 'Sin integración' : 'Desconectado'}
+                      {p.integrationStatus === 'missing' ? 'Sin integración' : 'Desconectado'}
                     </span>
                   )}
                   {!p.hasData
@@ -845,13 +846,13 @@ function CrossProjectPerformancePanel({ onSelectProject }) {
         <button
           key={s}
           onClick={() => setStrategy(s)}
-          className={`px-2.5 py-1 rounded-md text-xs font-medium capitalize transition-colors ${
+          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium capitalize transition-colors ${
             strategy === s
               ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
               : 'text-gray-500 dark:text-gray-400'
           }`}
         >
-          {s === 'mobile' ? '📱' : '🖥️'} {s}
+          <Icon as={s === 'mobile' ? Smartphone : Monitor} size={14} />{s}
         </button>
       ))}
     </div>
@@ -873,7 +874,7 @@ function CrossProjectPerformancePanel({ onSelectProject }) {
         {strategyToggle}
       </div>
       <div className="text-center py-6">
-        <div className="text-4xl mb-3">⚡</div>
+        <div className="mb-3"><Icon as={Zap} size={32} className="inline-block text-gray-300 dark:text-gray-600" /></div>
         <p className="text-sm text-gray-500 dark:text-gray-400">Todavía no hay análisis de Performance ({strategy}). Seleccioná un proyecto para empezar.</p>
       </div>
     </div>
@@ -1290,7 +1291,7 @@ export default function WebTab({ subtab = 'analytics', projectId, projects, onSe
       {/* Estados de error — solo Analytics */}
       {subtab === 'analytics' && errorStatus === 'no_integration' && (
         <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-2xl p-8 text-center">
-          <div className="text-3xl mb-3">📊</div>
+          <div className="mb-3"><Icon as={ChartColumn} size={28} className="inline-block text-gray-300 dark:text-gray-600" /></div>
           <p className="text-sm font-semibold text-amber-800 dark:text-amber-300 mb-1">
             Google Analytics no está conectado para este proyecto
           </p>
@@ -1304,13 +1305,13 @@ export default function WebTab({ subtab = 'analytics', projectId, projects, onSe
           >
             {reconnecting ? (
               <><span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Esperando autorización…</>
-            ) : '🔗 Conectar con Google'}
+            ) : 'Conectar con Google'}
           </button>
         </div>
       )}
       {subtab === 'analytics' && errorStatus === 'no_property' && (
         <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-2xl p-8 text-center">
-          <div className="text-3xl mb-3">🔢</div>
+          <div className="mb-3"><Icon as={Hash} size={28} className="inline-block text-gray-300 dark:text-gray-600" /></div>
           <p className="text-sm font-semibold text-amber-800 dark:text-amber-300 mb-1">
             Falta el GA4 Property ID
           </p>
@@ -1321,7 +1322,7 @@ export default function WebTab({ subtab = 'analytics', projectId, projects, onSe
       )}
       {subtab === 'analytics' && errorStatus === 'revoked' && (
         <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 rounded-2xl p-8 text-center">
-          <div className="text-3xl mb-3">⚠️</div>
+          <div className="mb-3"><Icon as={TriangleAlert} size={28} className="inline-block text-amber-500" /></div>
           <p className="text-sm font-semibold text-red-700 dark:text-red-300 mb-1">
             La conexión con Google expiró
           </p>
@@ -1336,7 +1337,7 @@ export default function WebTab({ subtab = 'analytics', projectId, projects, onSe
             >
               {reconnecting ? (
                 <><span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Esperando autorización…</>
-              ) : '🔄 Reconectar con Google'}
+              ) : 'Reconectar con Google'}
             </button>
             <button
               onClick={handleDisconnectGoogle}
@@ -1350,7 +1351,7 @@ export default function WebTab({ subtab = 'analytics', projectId, projects, onSe
       )}
       {subtab === 'analytics' && errorStatus === 'fetch_error' && (
         <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 rounded-2xl p-8 text-center">
-          <div className="text-3xl mb-3">⚠️</div>
+          <div className="mb-3"><Icon as={TriangleAlert} size={28} className="inline-block text-amber-500" /></div>
           <p className="text-sm font-semibold text-red-700 dark:text-red-300 mb-1">
             No se pudo cargar Analytics
           </p>
@@ -1371,7 +1372,7 @@ export default function WebTab({ subtab = 'analytics', projectId, projects, onSe
             >
               {reconnecting ? (
                 <><span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Esperando autorización…</>
-              ) : '🔄 Reconectar con Google'}
+              ) : 'Reconectar con Google'}
             </button>
             <button
               onClick={handleDisconnectGoogle}
@@ -1403,7 +1404,7 @@ export default function WebTab({ subtab = 'analytics', projectId, projects, onSe
           {/* Aviso primer día del mes */}
           {suppressComparison && (
             <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-xl px-4 py-3 flex items-center gap-3">
-              <span className="text-xl flex-shrink-0">📅</span>
+              <span className="flex-shrink-0"><Icon as={CalendarDays} size={20} className="inline-block text-gray-300 dark:text-gray-600" /></span>
               <p className="text-sm text-blue-700 dark:text-blue-300">
                 El mes acaba de comenzar. Los datos de hoy son parciales, así que las comparaciones con el mes anterior estarán disponibles a partir de mañana.
               </p>
@@ -1413,7 +1414,7 @@ export default function WebTab({ subtab = 'analytics', projectId, projects, onSe
           {/* Banner de caída de tráfico */}
           {!suppressComparison && gaComp?.sessionsDelta != null && gaComp.sessionsDelta < -20 && (
             <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-700 rounded-xl px-4 py-3 flex items-center gap-3">
-              <span className="text-xl flex-shrink-0">⚠️</span>
+              <span className="flex-shrink-0"><Icon as={TriangleAlert} size={20} className="inline-block text-amber-500" /></span>
               <p className="text-sm text-orange-700 dark:text-orange-300">
                 Las sesiones cayeron <strong>{Math.abs(gaComp.sessionsDelta)}%</strong> respecto al período anterior.
               </p>
@@ -1432,7 +1433,6 @@ export default function WebTab({ subtab = 'analytics', projectId, projects, onSe
               <MetricCard
                 label="Sesiones"
                 value={fmt(ov.sessions)}
-                icon="📈"
                 highlight
                 delta={deltas.sessions}
                 deltaPositivo={deltas.sessions >= 0}
@@ -1440,14 +1440,12 @@ export default function WebTab({ subtab = 'analytics', projectId, projects, onSe
               <MetricCard
                 label="Usuarios activos"
                 value={fmt(ov.activeUsers)}
-                icon="👥"
                 delta={deltas.activeUsers}
                 deltaPositivo={deltas.activeUsers >= 0}
               />
               <MetricCard
                 label="Nuevos usuarios"
                 value={fmt(ov.newUsers)}
-                icon="✨"
                 sub={ov.sessions ? `${pct(ov.newUsers, ov.sessions)}% del total` : undefined}
                 delta={deltas.newUsers}
                 deltaPositivo={deltas.newUsers >= 0}
@@ -1455,7 +1453,6 @@ export default function WebTab({ subtab = 'analytics', projectId, projects, onSe
               <MetricCard
                 label="Páginas vistas"
                 value={fmt(ov.screenPageViews)}
-                icon="📄"
                 sub={ov.sessions ? `${fmt(ov.screenPageViews / ov.sessions, 1)} por sesión` : undefined}
                 delta={deltas.pageviews}
                 deltaPositivo={deltas.pageviews >= 0}
@@ -1463,14 +1460,12 @@ export default function WebTab({ subtab = 'analytics', projectId, projects, onSe
               <MetricCard
                 label="Tasa de rebote"
                 value={ov.bounceRate != null ? `${fmt(ov.bounceRate * 100, 1)}%` : '—'}
-                icon="↩️"
                 delta={deltas.bounceRate}
                 deltaPositivo={deltas.bounceRate <= 0}
               />
               <MetricCard
                 label="Duración media"
                 value={fmtDuration(ov.averageSessionDuration)}
-                icon="⏱️"
                 delta={deltas.avgDuration}
                 deltaPositivo={deltas.avgDuration >= 0}
               />
@@ -1478,7 +1473,7 @@ export default function WebTab({ subtab = 'analytics', projectId, projects, onSe
           </div>
 
           {/* Objetivos del proyecto (visitas / leads) */}
-          <ObjectiveProgressBars objectives={webObjectives} title="🎯 Objetivos web" />
+          <ObjectiveProgressBars objectives={webObjectives} title="Objetivos web" />
 
           {/* Análisis IA — primero para períodos mensuales */}
           {isMonthly && (
@@ -1498,14 +1493,14 @@ export default function WebTab({ subtab = 'analytics', projectId, projects, onSe
                     disabled={savingSnap}
                     className="px-3 py-1.5 text-xs border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 rounded-lg transition-colors"
                   >
-                    {savingSnap ? 'Guardando…' : snapSaved ? '✓ Guardado' : '💾 Guardar snapshot'}
+                    {savingSnap ? 'Guardando…' : snapSaved ? 'Guardado' : 'Guardar snapshot'}
                   </button>
                   <button
                     onClick={handleGenerateInsight}
                     disabled={insightLoading}
                     className="px-3 py-1.5 text-xs bg-primary-600 hover:bg-primary-700 disabled:opacity-50 text-white font-medium rounded-lg transition-colors"
                   >
-                    {insightLoading ? 'Analizando…' : insight ? '🔄 Regenerar' : '✨ Analizar con IA'}
+                    {insightLoading ? 'Analizando…' : insight ? 'Regenerar' : 'Analizar con IA'}
                   </button>
                 </div>
               </div>
@@ -1639,12 +1634,12 @@ export default function WebTab({ subtab = 'analytics', projectId, projects, onSe
                   {analytics.devices.map((d, i) => {
                     const totalDev = analytics.devices.reduce((s, x) => s + x.sessions, 0)
                     const p = pct(d.sessions, totalDev)
-                    const icon = DEVICE_ICONS[d.channel?.toLowerCase()] ?? '💻'
+                    const icon = DEVICE_ICONS[d.channel?.toLowerCase()] ?? Monitor
                     return (
                       <div key={i}>
                         <div className="flex items-center justify-between mb-1.5">
                           <span className="text-xs text-gray-700 dark:text-gray-300 capitalize flex items-center gap-1.5">
-                            <span>{icon}</span>
+                            <Icon as={icon} size={14} className="text-gray-400" />
                             {d.channel}
                           </span>
                           <span className="text-xs font-semibold text-gray-900 dark:text-white tabular-nums">
@@ -1761,7 +1756,7 @@ export default function WebTab({ subtab = 'analytics', projectId, projects, onSe
       {/* ── PageSpeed Insights — solo Performance ── */}
       {subtab === 'performance' && (
         <>
-          <ObjectiveProgressBars objectives={webObjectives} title="🎯 Objetivos de performance" />
+          <ObjectiveProgressBars objectives={webObjectives} title="Objetivos de performance" />
           <PageSpeedSection
             websiteUrl={websiteUrlForPS}
             strategy={psStrategy}

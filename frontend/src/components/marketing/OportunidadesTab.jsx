@@ -4,7 +4,8 @@ import api from '../../api/client'
 import { useAuth } from '../../context/AuthContext'
 import SetupHintCard from '../SetupHintCard'
 import LoadingSpinner from '../LoadingSpinner'
-import { Globe } from 'lucide-react'
+import { CircleCheck, Globe, Plug, Sparkles, Target } from 'lucide-react'
+import { Icon } from '../ui/Icon'
 
 // ─── Crear tarea (copiado del patrón de GeoTab, prefijo "SEO -") ───────────────
 function CreateTaskModal({ title, projectId, projectName, onClose }) {
@@ -41,7 +42,7 @@ function CreateTaskModal({ title, projectId, projectName, onClose }) {
         <p className="text-xs text-gray-400 dark:text-gray-500 mb-4">Proyecto: <span className="font-medium text-gray-600 dark:text-gray-300">{projectName}</span></p>
         {done ? (
           <div className="flex flex-col items-center py-6 gap-2">
-            <span className="text-3xl">✅</span>
+            <span><Icon as={CircleCheck} size={28} className="inline-block text-green-500" /></span>
             <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Tarea creada</p>
           </div>
         ) : (
@@ -124,13 +125,12 @@ function StrikingRow({ r, onTask }) {
   )
 }
 
-function Section({ icon, title, subtitle, count, children }) {
+function Section({ title, subtitle, count, children }) {
   if (!count) return null
   return (
     <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden">
       <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-700">
         <div className="flex items-center gap-2">
-          <span className="text-lg">{icon}</span>
           <h3 className="text-sm font-bold text-gray-900 dark:text-white">{title}</h3>
           <span className="text-xs bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 rounded-full px-2 py-0.5">{count}</span>
         </div>
@@ -175,7 +175,7 @@ export default function OportunidadesTab({ projectId, projects, onSelectProject 
   if (!projectId) {
     return (
       <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-10 text-center">
-        <div className="text-4xl mb-3">🎯</div>
+        <div className="mb-3"><Icon as={Target} size={32} className="inline-block text-gray-300 dark:text-gray-600" /></div>
         <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-1">Oportunidades SEO</h3>
         <p className="text-sm text-gray-400 dark:text-gray-500 max-w-sm mx-auto">
           Elegí un proyecto para ver keywords a un empujón del top 3, páginas con CTR bajo y contenido que está perdiendo tráfico.
@@ -194,10 +194,10 @@ export default function OportunidadesTab({ projectId, projects, onSelectProject 
     }
     return (
       <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-8 text-center">
-        <div className="text-3xl mb-3">🔌</div>
+        <div className="mb-3"><Icon as={Plug} size={28} className="inline-block text-gray-300 dark:text-gray-600" /></div>
         <p className="text-sm text-gray-600 dark:text-gray-300 max-w-sm mx-auto">{err.message}</p>
         <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">
-          Las oportunidades se calculan con datos de Google Search Console. Conectá o reconectá la integración desde la pestaña <span className="font-medium">🔍 SEO</span>.
+          Las oportunidades se calculan con datos de Google Search Console. Conectá o reconectá la integración desde la pestaña <span className="font-medium">SEO</span>.
         </p>
       </div>
     )
@@ -224,14 +224,14 @@ export default function OportunidadesTab({ projectId, projects, onSelectProject 
 
       {nothing && (
         <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-8 text-center">
-          <div className="text-3xl mb-2">✨</div>
+          <div className="mb-2"><Icon as={Sparkles} size={28} className="inline-block text-gray-300 dark:text-gray-600" /></div>
           <p className="text-sm text-gray-600 dark:text-gray-300">No detectamos oportunidades claras en los últimos 28 días.</p>
           <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">Esto suele mejorar a medida que el sitio acumula más impresiones en Search Console.</p>
         </div>
       )}
 
       {/* Striking distance */}
-      <Section icon="🎯" title="A un empujón del top 3" count={data.strikingDistance.length}
+      <Section title="A un empujón del top 3" count={data.strikingDistance.length}
         subtitle="Keywords en posición 4-20, agrupadas por intención (las variantes casi idénticas se cuentan como una: son la misma búsqueda y las trabaja una sola página). Un refuerzo de contenido y enlaces internos puede subir todo el grupo a la primera plana.">
         {data.strikingDistance.map((r, i) => (
           <StrikingRow key={i} r={r} onTask={(title) => setTaskModal({ title })} />
@@ -239,7 +239,7 @@ export default function OportunidadesTab({ projectId, projects, onSelectProject 
       </Section>
 
       {/* CTR bajo */}
-      <Section icon="👆" title="Páginas con CTR bajo" count={data.lowCtr.length}
+      <Section title="Páginas con CTR bajo" count={data.lowCtr.length}
         subtitle="Muchas impresiones pero pocos clicks. Mejorar el title y la meta description puede recuperar tráfico sin subir de posición.">
         {data.lowCtr.map((r, i) => (
           <div key={i} className="px-5 py-3 flex items-center gap-3 hover:bg-gray-50 dark:hover:bg-gray-700/40">
@@ -254,7 +254,7 @@ export default function OportunidadesTab({ projectId, projects, onSelectProject 
       </Section>
 
       {/* Content decay — queries */}
-      <Section icon="📉" title="Contenido que está perdiendo tráfico" count={data.decay.queries.length}
+      <Section title="Contenido que está perdiendo tráfico" count={data.decay.queries.length}
         subtitle="Queries que cayeron en clicks o posición vs. el período anterior. Candidatas a un refresh de contenido.">
         {data.decay.queries.map((r, i) => (
           <div key={i} className="px-5 py-3 flex items-center gap-3 hover:bg-gray-50 dark:hover:bg-gray-700/40">
@@ -274,7 +274,7 @@ export default function OportunidadesTab({ projectId, projects, onSelectProject 
       </Section>
 
       {/* Content decay — páginas */}
-      <Section icon="📄" title="Páginas que están perdiendo tráfico" count={data.decay.pages.length}
+      <Section title="Páginas que están perdiendo tráfico" count={data.decay.pages.length}
         subtitle="URLs que cayeron en clicks o posición vs. el período anterior.">
         {data.decay.pages.map((r, i) => (
           <div key={i} className="px-5 py-3 flex items-center gap-3 hover:bg-gray-50 dark:hover:bg-gray-700/40">

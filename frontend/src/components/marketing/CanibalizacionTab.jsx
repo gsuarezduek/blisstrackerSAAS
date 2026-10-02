@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import api from '../../api/client'
+import { Search, Trash2 } from 'lucide-react'
+import { Icon } from '../ui/Icon'
 
 const SEVERITY_COLORS = {
   Alta:  'bg-red-100   dark:bg-red-900/30   text-red-700   dark:text-red-400   border-red-200   dark:border-red-700',
@@ -278,7 +280,7 @@ export default function CanibalizacionTab({ projectId }) {
               Analizando…
             </>
           ) : (
-            <>🔍 Nuevo análisis</>
+            <>Nuevo análisis</>
           )}
         </button>
 
@@ -323,7 +325,7 @@ export default function CanibalizacionTab({ projectId }) {
       {/* Sin datos todavía */}
       {!running && !activeReport && !loadingReport && reports.length === 0 && (
         <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-10 text-center space-y-3">
-          <div className="text-5xl">🔍</div>
+          <div><Icon as={Search} size={40} className="inline-block text-gray-300 dark:text-gray-600" /></div>
           <p className="text-gray-600 dark:text-gray-300 font-medium">No hay análisis todavía</p>
           <p className="text-sm text-gray-400 dark:text-gray-500">
             Ejecutá el primer análisis para detectar keywords donde tus páginas compiten entre sí.
@@ -381,7 +383,7 @@ export default function CanibalizacionTab({ projectId }) {
                 onClick={() => setDeleteModal({ id: activeReport.id })}
                 className="text-xs text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors flex items-center gap-1"
               >
-                🗑 Eliminar
+                Eliminar
               </button>
             </div>
 
@@ -396,7 +398,7 @@ export default function CanibalizacionTab({ projectId }) {
             {/* Sin conflictos */}
             {activeReport.totalConflicts === 0 && activeReport.status === 'completed' && (
               <div className="mt-4 p-4 rounded-lg bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-700 text-center">
-                <p className="text-green-700 dark:text-green-400 font-semibold">✅ No se detectaron conflictos de canibalización</p>
+                <p className="text-green-700 dark:text-green-400 font-semibold">No se detectaron conflictos de canibalización</p>
                 <p className="text-xs text-green-600 dark:text-green-500 mt-1">Cada keyword relevante apunta a una única URL dominante. Excelente trabajo.</p>
               </div>
             )}
@@ -404,7 +406,7 @@ export default function CanibalizacionTab({ projectId }) {
             {/* Error */}
             {activeReport.status === 'failed' && (
               <div className="mt-4 p-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700">
-                <p className="text-sm text-red-700 dark:text-red-400">❌ {activeReport.errorMsg ?? 'El análisis falló. Intentá de nuevo.'}</p>
+                <p className="text-sm text-red-700 dark:text-red-400">{activeReport.errorMsg ?? 'El análisis falló. Intentá de nuevo.'}</p>
               </div>
             )}
           </div>
@@ -479,7 +481,7 @@ export default function CanibalizacionTab({ projectId }) {
             className="bg-white dark:bg-gray-900 rounded-2xl p-6 max-w-sm w-full shadow-2xl"
             onClick={e => e.stopPropagation()}
           >
-            <div className="text-4xl mb-3 text-center">🗑️</div>
+            <div className="mb-3 text-center"><Icon as={Trash2} size={32} className="inline-block text-red-400" /></div>
             <h3 className="text-lg font-bold text-gray-900 dark:text-white text-center mb-2">
               Eliminar análisis
             </h3>

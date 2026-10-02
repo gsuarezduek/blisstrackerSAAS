@@ -3,10 +3,10 @@
 // para construir el formulario condicional del gestor de objetivos.
 
 export const CATEGORIES = [
-  { key: 'web',  label: 'Web',        icon: '🌐' },
-  { key: 'seo',  label: 'SEO / GEO',  icon: '🔍' },
-  { key: 'rrss', label: 'RRSS',       icon: '📱' },
-  { key: 'ads',  label: 'Anuncios',   icon: '📣' },
+  { key: 'web',  label: 'Web' },
+  { key: 'seo',  label: 'SEO / GEO' },
+  { key: 'rrss', label: 'RRSS' },
+  { key: 'ads',  label: 'Anuncios' },
 ]
 
 // param: null | 'trackedKeywordId' | 'competitorId' | 'platform'

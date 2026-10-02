@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import api from '../../api/client'
 import { useAuth } from '../../context/AuthContext'
+import { CircleCheck } from 'lucide-react'
+import { Icon } from '../ui/Icon'
 
 /**
  * Modal de confirmación para crear varias tareas a la vez a partir de una selección
@@ -52,7 +54,7 @@ export default function BulkCreateTaskModal({ items, projectId, projectName, onC
 
         {done ? (
           <div className="flex flex-col items-center py-6 gap-2">
-            <span className="text-3xl">✅</span>
+            <span><Icon as={CircleCheck} size={28} className="inline-block text-green-500" /></span>
             <p className="text-sm font-medium text-gray-700 dark:text-gray-300">{done.created} tarea(s) creada(s)</p>
           </div>
         ) : (

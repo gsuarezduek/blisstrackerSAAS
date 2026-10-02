@@ -64,7 +64,7 @@ function Bar({ o }) {
  * Lista de objetivos con barra de progreso. `objectives` son los resultados
  * calculados por el motor (GET /objectives/progress), ya filtrados por área.
  */
-export default function ObjectiveProgressBars({ objectives, title = '🎯 Objetivos del período' }) {
+export default function ObjectiveProgressBars({ objectives, title = 'Objetivos del período' }) {
   if (!objectives?.length) return null
   return (
     <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-5 space-y-4">

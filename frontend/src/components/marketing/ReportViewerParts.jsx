@@ -2,6 +2,8 @@
 // Todas piezas sin estado (props → JSX); se comparten entre el viewer y entre sí.
 import { createContext, useContext } from 'react'
 import { avatarUrl } from '../../utils/avatarUrl'
+import { Bookmark, DollarSign, Eye, Heart, Megaphone, MessageCircle, MousePointerClick, Radio, Share2, ThumbsUp, TrendingUp, Trophy } from 'lucide-react'
+import { Icon } from '../ui/Icon'
 
 export const PRINT_STYLES = `
 @media print {
@@ -290,11 +292,11 @@ export function LineChart({ points, color = '#f97316', height = 60, showLabels =
 
 // ─── Secciones ────────────────────────────────────────────────────────────────
 
-export function SectionCard({ title, icon, children, className = '', action, sectionKey = null, sectionLabel = null }) {
+export function SectionCard({ title, children, className = '', action, sectionKey = null, sectionLabel = null }) {
   return (
     <div className={`bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6 print-break-avoid ${className}`}>
       <h3 className="text-base font-semibold text-gray-900 dark:text-white mb-4 flex items-center justify-between gap-2">
-        <span className="flex items-center gap-2"><span>{icon}</span> {title}</span>
+        <span>{title}</span>
         <span className="flex items-center gap-2">
           {action}
           {sectionKey && <DeleteSectionBtn keys={[sectionKey]} label={sectionLabel || title} />}
@@ -333,7 +335,7 @@ export function KpiGrid({ items }) {
 }
 
 // Mejor publicación del mes (Instagram)
-export function BestInstagramPost({ post, label = 'Mejor publicación del mes', medal = '🏆' }) {
+export function BestInstagramPost({ post, label = 'Mejor publicación del mes' }) {
   if (!post) return null
   const score = (post.likeCount ?? 0) + (post.commentsCount ?? 0)
   const inner = (
@@ -344,21 +346,20 @@ export function BestInstagramPost({ post, label = 'Mejor publicación del mes', 
         ) : (
           <div className="w-full h-full bg-gradient-to-br from-purple-400 to-pink-400" />
         )}
-        <div className="absolute top-1 left-1 text-base leading-none">{medal}</div>
       </div>
       <div className="flex-1 min-w-0">
         <p className="text-[10px] font-semibold text-purple-700 dark:text-purple-300 uppercase tracking-wide">
           {label}
         </p>
         <div className="flex items-center gap-3 text-xs text-gray-600 dark:text-gray-400 mt-1">
-          {post.likeCount     != null && <span>❤️ {fmt(post.likeCount)}</span>}
-          {post.commentsCount != null && <span>💬 {fmt(post.commentsCount)}</span>}
+          {post.likeCount     != null && <span><Icon as={Heart} size={12} className="inline align-[-2px] mr-1" />{fmt(post.likeCount)}</span>}
+          {post.commentsCount != null && <span><Icon as={MessageCircle} size={12} className="inline align-[-2px] mr-1" />{fmt(post.commentsCount)}</span>}
           {score > 0 && <span className="text-gray-400">· {fmt(score)} interacciones</span>}
         </div>
         {(post.reach != null || post.saved != null || post.shares != null) && (
           <div className="flex items-center gap-3 text-[11px] text-gray-500 dark:text-gray-400 mt-1">
-            {post.reach  != null && <span>📡 {fmt(post.reach)}</span>}
-            {post.saved  != null && <span>🔖 {fmt(post.saved)}</span>}
+            {post.reach  != null && <span><Icon as={Radio} size={12} className="inline align-[-2px] mr-1" />{fmt(post.reach)}</span>}
+            {post.saved  != null && <span><Icon as={Bookmark} size={12} className="inline align-[-2px] mr-1" />{fmt(post.saved)}</span>}
             {post.shares != null && <span>↗️ {fmt(post.shares)}</span>}
           </div>
         )}
@@ -390,14 +391,14 @@ export function StoriesBlock({ stories }) {
   return (
     <div className="mt-4 rounded-xl border border-fuchsia-200 dark:border-fuchsia-800 bg-fuchsia-50/50 dark:bg-fuchsia-900/10 p-3">
       <p className="text-[10px] font-semibold text-fuchsia-700 dark:text-fuchsia-300 uppercase tracking-wide mb-2">
-        📸 Stories del mes
+        Stories del mes
       </p>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-600 dark:text-gray-400">
         <span><strong className="text-gray-800 dark:text-gray-200">{fmt(stories.count)}</strong> publicadas</span>
-        {stories.avgReach     != null && <span>👁️ {fmt(stories.avgReach)} alcance prom.</span>}
+        {stories.avgReach     != null && <span><Icon as={Eye} size={12} className="inline align-[-2px] mr-1" />{fmt(stories.avgReach)} alcance prom.</span>}
         {stories.avgViews     != null && <span>▶️ {fmt(stories.avgViews)} vistas prom.</span>}
-        {stories.totalReplies != null && <span>💬 {fmt(stories.totalReplies)} respuestas</span>}
-        {stories.retentionRate != null && <span>📈 {stories.retentionRate}% retención</span>}
+        {stories.totalReplies != null && <span><Icon as={MessageCircle} size={12} className="inline align-[-2px] mr-1" />{fmt(stories.totalReplies)} respuestas</span>}
+        {stories.retentionRate != null && <span><Icon as={TrendingUp} size={12} className="inline align-[-2px] mr-1" />{stories.retentionRate}% retención</span>}
       </div>
       {thumbs.length > 0 && (
         <div className="flex gap-2 mt-3 overflow-x-auto">
@@ -408,7 +409,7 @@ export function StoriesBlock({ stories }) {
                 : <div className="w-full h-full bg-gradient-to-br from-fuchsia-400 to-purple-400" />}
               {st.reach != null && (
                 <div className="absolute bottom-0 inset-x-0 bg-black/50 text-white text-[9px] text-center py-0.5">
-                  👁️ {fmt(st.reach)}
+                  <Icon as={Eye} size={12} className="inline align-[-2px] mr-1" />{fmt(st.reach)}
                 </div>
               )}
             </div>
@@ -435,7 +436,7 @@ export function BestAd({ ad, accent = 'blue' }) {
   return (
     <div className={`mt-4 rounded-xl border p-3 ${ACCENT.box}`}>
       <p className={`text-[10px] font-semibold uppercase tracking-wide mb-2 ${ACCENT.text}`}>
-        🏆 Anuncio destacado
+        Anuncio destacado
       </p>
       <div className="flex items-stretch gap-3">
         {ad.thumbnailUrl && (
@@ -453,10 +454,10 @@ export function BestAd({ ad, accent = 'blue' }) {
             <p className="text-sm font-medium text-gray-800 dark:text-gray-200 truncate" title={ad.name}>{ad.name || 'Anuncio'}</p>
           )}
           <div className="flex flex-wrap items-center gap-3 text-xs text-gray-600 dark:text-gray-400 mt-1.5">
-            {ad.reach       != null && ad.reach > 0 && <span>👁️ {fmt(ad.reach)} alcance</span>}
-            {ad.impressions != null && <span>📢 {fmt(ad.impressions)} imp.</span>}
-            {ad.ctr         != null && <span>📊 {Number(ad.ctr).toFixed(2)}% CTR</span>}
-            {spend          != null && spend > 0 && <span>💰 ${fmt(spend, 2)}</span>}
+            {ad.reach       != null && ad.reach > 0 && <span><Icon as={Eye} size={12} className="inline align-[-2px] mr-1" />{fmt(ad.reach)} alcance</span>}
+            {ad.impressions != null && <span><Icon as={Megaphone} size={12} className="inline align-[-2px] mr-1" />{fmt(ad.impressions)} imp.</span>}
+            {ad.ctr         != null && <span><Icon as={MousePointerClick} size={12} className="inline align-[-2px] mr-1" />{Number(ad.ctr).toFixed(2)}% CTR</span>}
+            {spend          != null && spend > 0 && <span><Icon as={DollarSign} size={12} className="inline align-[-2px] mr-1" />{fmt(spend, 2)}</span>}
           </div>
         </div>
       </div>
@@ -475,7 +476,6 @@ export function BestTikTokVideo({ video }) {
         ) : (
           <div className="w-full h-full bg-gradient-to-br from-cyan-400 to-pink-500" />
         )}
-        <div className="absolute top-1 left-1 text-base leading-none">🏆</div>
       </div>
       <div className="flex-1 min-w-0">
         <p className="text-[10px] font-semibold text-cyan-700 dark:text-cyan-300 uppercase tracking-wide">
@@ -483,9 +483,9 @@ export function BestTikTokVideo({ video }) {
         </p>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-gray-600 dark:text-gray-400 mt-1">
           {video.viewCount    != null && <span>▶️ {fmt(video.viewCount)}</span>}
-          {video.likeCount    != null && <span>❤️ {fmt(video.likeCount)}</span>}
-          {video.commentCount != null && <span>💬 {fmt(video.commentCount)}</span>}
-          {video.shareCount   != null && <span>🔁 {fmt(video.shareCount)}</span>}
+          {video.likeCount    != null && <span><Icon as={Heart} size={12} className="inline align-[-2px] mr-1" />{fmt(video.likeCount)}</span>}
+          {video.commentCount != null && <span><Icon as={MessageCircle} size={12} className="inline align-[-2px] mr-1" />{fmt(video.commentCount)}</span>}
+          {video.shareCount   != null && <span><Icon as={Share2} size={12} className="inline align-[-2px] mr-1" />{fmt(video.shareCount)}</span>}
         </div>
         {video.title && (
           <p className="text-[11px] text-gray-500 dark:text-gray-400 line-clamp-2 leading-tight mt-1">
@@ -518,7 +518,6 @@ export function BestYouTubeVideo({ video }) {
         ) : (
           <div className="w-full h-full bg-gradient-to-br from-red-500 to-red-700" />
         )}
-        <div className="absolute top-1 left-1 text-base leading-none">🏆</div>
         {video.isShort && <span className="absolute bottom-1 right-1 text-[8px] bg-black/70 text-white px-1 py-0.5 rounded-full font-semibold">SHORT</span>}
       </div>
       <div className="flex-1 min-w-0">
@@ -527,8 +526,8 @@ export function BestYouTubeVideo({ video }) {
         </p>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-gray-600 dark:text-gray-400 mt-1">
           {video.viewCount    != null && <span>▶️ {fmt(video.viewCount)}</span>}
-          {video.likeCount    != null && <span>❤️ {fmt(video.likeCount)}</span>}
-          {video.commentCount != null && <span>💬 {fmt(video.commentCount)}</span>}
+          {video.likeCount    != null && <span><Icon as={Heart} size={12} className="inline align-[-2px] mr-1" />{fmt(video.likeCount)}</span>}
+          {video.commentCount != null && <span><Icon as={MessageCircle} size={12} className="inline align-[-2px] mr-1" />{fmt(video.commentCount)}</span>}
         </div>
         {video.title && (
           <p className="text-[11px] text-gray-500 dark:text-gray-400 line-clamp-2 leading-tight mt-1">
@@ -561,16 +560,15 @@ export function BestLinkedinPost({ post }) {
         ) : (
           <div className="w-full h-full bg-gradient-to-br from-blue-500 to-sky-400" />
         )}
-        <div className="absolute top-1 left-1 text-base leading-none">🏆</div>
       </div>
       <div className="flex-1 min-w-0">
         <p className="text-[10px] font-semibold text-blue-700 dark:text-blue-300 uppercase tracking-wide">
           Mejor post del mes
         </p>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-gray-600 dark:text-gray-400 mt-1">
-          {post.impressions != null && <span>👁 {fmt(post.impressions)}</span>}
-          {post.likes       != null && <span>❤️ {fmt(post.likes)}</span>}
-          {post.comments    != null && <span>💬 {fmt(post.comments)}</span>}
+          {post.impressions != null && <span><Icon as={Eye} size={12} className="inline align-[-2px] mr-1" />{fmt(post.impressions)}</span>}
+          {post.likes       != null && <span><Icon as={Heart} size={12} className="inline align-[-2px] mr-1" />{fmt(post.likes)}</span>}
+          {post.comments    != null && <span><Icon as={MessageCircle} size={12} className="inline align-[-2px] mr-1" />{fmt(post.comments)}</span>}
           {post.shares      != null && <span>↗ {fmt(post.shares)}</span>}
         </div>
         {post.text && (
@@ -603,16 +601,15 @@ export function BestFacebookPost({ post }) {
         ) : (
           <div className="w-full h-full bg-gradient-to-br from-blue-600 to-sky-500" />
         )}
-        <div className="absolute top-1 left-1 text-base leading-none">🏆</div>
       </div>
       <div className="flex-1 min-w-0">
         <p className="text-[10px] font-semibold text-blue-700 dark:text-blue-300 uppercase tracking-wide">
           Mejor post del mes
         </p>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-gray-600 dark:text-gray-400 mt-1">
-          {post.reach    != null && <span>👁 {fmt(post.reach)}</span>}
-          {post.likes    != null && <span>👍 {fmt(post.likes)}</span>}
-          {post.comments != null && <span>💬 {fmt(post.comments)}</span>}
+          {post.reach    != null && <span><Icon as={Eye} size={12} className="inline align-[-2px] mr-1" />{fmt(post.reach)}</span>}
+          {post.likes    != null && <span><Icon as={ThumbsUp} size={12} className="inline align-[-2px] mr-1" />{fmt(post.likes)}</span>}
+          {post.comments != null && <span><Icon as={MessageCircle} size={12} className="inline align-[-2px] mr-1" />{fmt(post.comments)}</span>}
           {post.shares   != null && <span>↗ {fmt(post.shares)}</span>}
         </div>
         {post.text && (
@@ -639,10 +636,10 @@ export function BestFacebookPost({ post }) {
 export function LinkedinAudience({ demographics }) {
   if (!demographics) return null
   const cats = [
-    { key: 'region',    icon: '🌎', title: 'Región' },
-    { key: 'seniority', icon: '📊', title: 'Seniority' },
-    { key: 'industry',  icon: '🏢', title: 'Industria' },
-    { key: 'function',  icon: '💼', title: 'Función' },
+    { key: 'region', title: 'Región' },
+    { key: 'seniority', title: 'Seniority' },
+    { key: 'industry', title: 'Industria' },
+    { key: 'function', title: 'Función' },
   ].filter(c => Array.isArray(demographics[c.key]) && demographics[c.key].length)
   if (!cats.length) return null
   const labelOf = (item) => item.label || (item.urn ? String(item.urn).split(':').pop().replace(/_/g, ' ') : '—')
@@ -653,7 +650,7 @@ export function LinkedinAudience({ demographics }) {
         const total = items.reduce((sm, x) => sm + (x.count ?? 0), 0) || 1
         return (
           <div key={c.key} className="rounded-lg bg-gray-50 dark:bg-gray-700/40 p-2.5">
-            <p className="text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1.5">{c.icon} {c.title}</p>
+            <p className="text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1.5">{c.title}</p>
             <div className="space-y-1">
               {items.slice(0, 3).map((item, i) => (
                 <div key={i} className="flex items-center justify-between gap-2 text-[11px]">
@@ -708,7 +705,7 @@ export function CompetitorHeadToHead({ h2h }) {
             <tr key={i} className="border-t border-gray-50 dark:border-gray-700/50">
               <td className="py-1.5 px-2 text-gray-600 dark:text-gray-300">{m.label}</td>
               <td className={`py-1.5 px-2 text-right font-semibold ${m.won === true ? 'text-green-600 dark:text-green-400' : 'text-gray-700 dark:text-gray-300'}`}>
-                {m.own != null ? `${m.own}${m.unit}` : '—'}{m.won === true && ' 🏆'}
+                {m.own != null ? `${m.own}${m.unit}` : '—'}{m.won === true && <Icon as={Trophy} size={12} className="inline align-[-2px] ml-1 text-amber-500" label="Lidera" />}
               </td>
               <td className={`py-1.5 px-2 text-right ${m.won === false ? 'text-green-600 dark:text-green-400 font-semibold' : 'text-gray-500 dark:text-gray-400'}`}>
                 {m.competitor != null ? `${m.competitor}${m.unit}` : '—'}
@@ -798,7 +795,7 @@ export function ObjectiveCard({ obj }) {
 export function ObjectivesResults({ objectives }) {
   if (!objectives || objectives.length === 0) return null
   return (
-    <SectionCard title="Objetivos" icon="🎯" sectionKey="objectives">
+    <SectionCard title="Objetivos" sectionKey="objectives">
       <div className="grid sm:grid-cols-2 gap-3">
         {objectives.map(o => <ObjectiveCard key={o.id} obj={o} />)}
       </div>
@@ -814,7 +811,7 @@ export function CompetitorComparison({ data }) {
     : `${Number(v).toFixed(w.decimals ?? 1)}${w.unit ?? ''}`
 
   return (
-    <SectionCard title="Comparación con competidores" icon="🏁" className="mt-5" sectionKey="competitors">
+    <SectionCard title="Comparación con competidores" className="mt-5" sectionKey="competitors">
       <p className="text-sm text-gray-600 dark:text-gray-300 mb-4">
         Frente a {data.competitorsCount} competidor{data.competitorsCount > 1 ? 'es' : ''} analizado{data.competitorsCount > 1 ? 's' : ''}, la cuenta lidera en:
       </p>

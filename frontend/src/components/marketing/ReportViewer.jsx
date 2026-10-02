@@ -316,7 +316,7 @@ export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, o
               disabled={downloadingPdf}
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-60 disabled:cursor-wait"
             >
-              {downloadingPdf ? <><span className="w-3 h-3 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" /> Generando…</> : publicPdfToken ? <>📄 Descargar PDF</> : <>🖨️ Imprimir</>}
+              {downloadingPdf ? <><span className="w-3 h-3 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" /> Generando…</> : publicPdfToken ? <>Descargar PDF</> : <>Imprimir</>}
             </button>
             {pdfError && <p className="text-xs text-red-500 max-w-[14rem] text-right">{pdfError}</p>}
           </div>
@@ -335,7 +335,7 @@ export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, o
                   disabled={downloadingPdf}
                   className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-white/15 hover:bg-white/25 text-white backdrop-blur-sm transition-colors disabled:opacity-60 disabled:cursor-wait"
                 >
-                  {downloadingPdf ? <><span className="w-3 h-3 border-2 border-white/70 border-t-transparent rounded-full animate-spin" /> Generando…</> : publicPdfToken ? <>📄 Descargar PDF</> : <>🖨️ Imprimir</>}
+                  {downloadingPdf ? <><span className="w-3 h-3 border-2 border-white/70 border-t-transparent rounded-full animate-spin" /> Generando…</> : publicPdfToken ? <>Descargar PDF</> : <>Imprimir</>}
                 </button>
                 {pdfError && <p className="text-xs text-white bg-red-600/80 rounded px-2 py-0.5 max-w-[14rem] text-right">{pdfError}</p>}
               </div>
@@ -392,7 +392,7 @@ export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, o
                 >
                   {downloadingPdf
                     ? <><span className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" /> Generando PDF…</>
-                    : <>📄 Descargar PDF</>}
+                    : <>Descargar PDF</>}
                 </button>
                 {pdfError && <p className="text-xs text-red-500 max-w-[16rem] text-right">{pdfError}</p>}
               </div>
@@ -425,13 +425,12 @@ export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, o
       {(analysis?.resumen || canEdit) && (
         <SectionCard
           title="Resumen del mes"
-          icon="📝"
           action={canEdit && !editingResumen && (
             <button
               onClick={() => { setResumenDraft(analysis?.resumen || ''); setEditingResumen(true) }}
               className="no-print text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 flex items-center gap-1 transition-colors"
             >
-              ✏️ Editar
+              Editar
             </button>
           )}
         >
@@ -496,9 +495,9 @@ export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, o
                       <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Logros del mes</p>
                       {canEdit && !editingHighlights && (
                         <div className="no-print flex items-center gap-2">
-                          <button onClick={openHighlightsEditor} className="text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors">✏️ Editar</button>
+                          <button onClick={openHighlightsEditor} className="text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors">Editar</button>
                           {hasHighlights && (
-                            <button onClick={handleDeleteHighlights} className="text-xs text-gray-500 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition-colors">🗑 Eliminar</button>
+                            <button onClick={handleDeleteHighlights} className="text-xs text-gray-500 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition-colors">Eliminar</button>
                           )}
                         </div>
                       )}
@@ -565,9 +564,9 @@ export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, o
                       <p className="text-xs font-semibold text-amber-700 dark:text-amber-400 uppercase tracking-wide">Oportunidades de mejora</p>
                       {canEdit && !editingAlertas && (
                         <div className="no-print flex items-center gap-2">
-                          <button onClick={openAlertasEditor} className="text-xs text-amber-700/80 dark:text-amber-400/80 hover:text-amber-800 dark:hover:text-amber-300 transition-colors">✏️ Editar</button>
+                          <button onClick={openAlertasEditor} className="text-xs text-amber-700/80 dark:text-amber-400/80 hover:text-amber-800 dark:hover:text-amber-300 transition-colors">Editar</button>
                           {hasAlertas && (
-                            <button onClick={handleDeleteAlertas} className="text-xs text-amber-700/80 dark:text-amber-400/80 hover:text-red-600 dark:hover:text-red-400 transition-colors">🗑 Eliminar</button>
+                            <button onClick={handleDeleteAlertas} className="text-xs text-amber-700/80 dark:text-amber-400/80 hover:text-red-600 dark:hover:text-red-400 transition-colors">Eliminar</button>
                           )}
                         </div>
                       )}
@@ -654,21 +653,20 @@ export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, o
         return (
           <SectionCard
             title="Próximos pasos"
-            icon="🚀"
             action={canEdit && !editingNextSteps && (
               <div className="no-print flex items-center gap-2">
                 <button
                   onClick={openNextStepsEditor}
                   className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 flex items-center gap-1 transition-colors"
                 >
-                  ✏️ Editar
+                  Editar
                 </button>
                 {hasNextSteps && (
                   <button
                     onClick={handleDeleteNextSteps}
                     className="text-xs text-gray-400 hover:text-red-600 dark:hover:text-red-400 flex items-center gap-1 transition-colors"
                   >
-                    🗑 Eliminar
+                    Eliminar
                   </button>
                 )}
               </div>
@@ -705,7 +703,7 @@ export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, o
                     <span className="text-gray-700 dark:text-gray-300 flex-1 min-w-0">{step}</span>
                     {canEdit && (
                       createdSteps[i] === 'done' ? (
-                        <span className="no-print text-[11px] text-green-600 dark:text-green-400 shrink-0 whitespace-nowrap">✓ Tarea creada</span>
+                        <span className="no-print text-[11px] text-green-600 dark:text-green-400 shrink-0 whitespace-nowrap">Tarea creada</span>
                       ) : (
                         <button
                           onClick={() => handleCreateTaskFromStep(step, i)}
@@ -713,7 +711,7 @@ export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, o
                           title="Crear una tarea del proyecto con este próximo paso"
                           className="no-print text-[11px] text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 shrink-0 whitespace-nowrap opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity disabled:opacity-50"
                         >
-                          {createdSteps[i] === 'creating' ? 'Creando…' : createdSteps[i] === 'error' ? '⚠ Reintentar' : '+ Crear tarea'}
+                          {createdSteps[i] === 'creating' ? 'Creando…' : createdSteps[i] === 'error' ? 'Reintentar' : '+ Crear tarea'}
                         </button>
                       )
                     )}
@@ -734,7 +732,7 @@ export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, o
 
       {/* ── Trabajo realizado en el mes ── */}
       {s.tasks && s.tasks.length > 0 && (
-        <SectionCard title="Trabajo realizado en el mes" icon="🔧" sectionKey="tasks">
+        <SectionCard title="Trabajo realizado en el mes" sectionKey="tasks">
           <ul className="space-y-2">
             {s.tasks.map((task) => {
               const mins = task.minutesOverride != null

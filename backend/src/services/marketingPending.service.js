@@ -44,9 +44,9 @@ const SECTION_BY_SOURCE = {
 }
 const SECTION_BY_OBJ_CATEGORY = { web: 'web', seo: 'geo-seo', rrss: 'rrss', ads: 'anuncios' }
 const SECTION_LABELS = {
-  'geo-seo': '🤖 GEO / SEO', web: '🌐 Web', rrss: '📱 RRSS', anuncios: '📣 Anuncios', informes: '📊 Informes',
+  'geo-seo': 'GEO / SEO', web: 'Web', rrss: 'RRSS', anuncios: 'Anuncios', informes: 'Informes',
 }
-const CONTENIDO_LABEL = '🗓️ Contenido'
+const CONTENIDO_LABEL = 'Contenido'
 
 function sectionOf(it) {
   if (it.source === 'content') return 'contenido'

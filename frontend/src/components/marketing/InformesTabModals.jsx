@@ -1,4 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
+import { CircleCheck, Send } from 'lucide-react'
+import { Icon } from '../ui/Icon'
 import api from '../../api/client'
 import ProjectSearchSelect from './ProjectSearchSelect'
 import {
@@ -112,7 +114,7 @@ export function GenerateModal({ projectId, month, availableSections: initialAvai
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md p-6 max-h-[90vh] flex flex-col">
         <div className="flex items-center justify-between mb-2">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-white">📄 Generar informe</h2>
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Generar informe</h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-xl leading-none">×</button>
         </div>
 
@@ -122,7 +124,7 @@ export function GenerateModal({ projectId, month, availableSections: initialAvai
 
         {/* ── Período de datos ── */}
         <div className="mb-4 rounded-xl border border-gray-200 dark:border-gray-700 p-3">
-          <p className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">📅 Período de datos</p>
+          <p className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">Período de datos</p>
           <div className="grid grid-cols-2 gap-1.5 mb-2">
             {[
               { k: 'prev',       label: `Mes anterior (${monthLabel(prevMonth)})` },
@@ -175,7 +177,7 @@ export function GenerateModal({ projectId, month, availableSections: initialAvai
           <>
             {expiredSelected.length > 0 && (
               <div className="mb-3 rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 px-3 py-2 text-xs text-red-700 dark:text-red-400">
-                ⚠️ Hay secciones desconectadas: <strong>{expiredSelected.map(s => s.label).join(', ')}</strong>. Reconectalas desde su pestaña en Marketing para incluir datos actualizados (sin reconectar, el informe usa los últimos datos guardados o queda incompleto).
+                Hay secciones desconectadas: <strong>{expiredSelected.map(s => s.label).join(', ')}</strong>. Reconectalas desde su pestaña en Marketing para incluir datos actualizados (sin reconectar, el informe usa los últimos datos guardados o queda incompleto).
               </div>
             )}
 
@@ -191,7 +193,7 @@ export function GenerateModal({ projectId, month, availableSections: initialAvai
                 disabled={refreshing}
                 className="text-xs font-medium text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 disabled:opacity-50"
               >
-                {refreshing ? 'Actualizando…' : '🔄 Actualizar estado'}
+                {refreshing ? 'Actualizando…' : 'Actualizar estado'}
               </button>
             </div>
 
@@ -209,7 +211,6 @@ export function GenerateModal({ projectId, month, availableSections: initialAvai
                       onChange={() => toggle(s.key)}
                       className="w-4 h-4 rounded text-primary-600 focus:ring-primary-500"
                     />
-                    <span className="text-base leading-none">{s.icon}</span>
                     <span className="text-sm text-gray-700 dark:text-gray-300 flex-1 min-w-0">{s.label}</span>
                     <IntegrationChip integration={integration} />
                   </label>
@@ -221,13 +222,13 @@ export function GenerateModal({ projectId, month, availableSections: initialAvai
 
         {failedChecks.length > 0 && (
           <div className="mt-3 rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
-            <p className="font-semibold text-amber-800 dark:text-amber-300 mb-1">⚠️ No se pudo confirmar {failedChecks.length === 1 ? 'esta sección' : 'estas secciones'} ahora mismo:</p>
+            <p className="font-semibold text-amber-800 dark:text-amber-300 mb-1">No se pudo confirmar {failedChecks.length === 1 ? 'esta sección' : 'estas secciones'} ahora mismo:</p>
             <ul className="space-y-0.5 mb-1.5">
               {failedChecks.map(r => <li key={r.section}>• <strong>{r.label}</strong>: {r.message}</li>)}
             </ul>
             <p>Podés generar igual (esas secciones quedarán con datos anteriores o vacías) o reintentar el chequeo.</p>
             <button onClick={runCheck} disabled={checking} className="mt-1.5 font-medium underline disabled:opacity-50">
-              {checking ? 'Verificando…' : '🔄 Reintentar chequeo'}
+              {checking ? 'Verificando…' : 'Reintentar chequeo'}
             </button>
           </div>
         )}
@@ -306,7 +307,7 @@ export function SectionsConfigModal({ projects, initialProjectId, onClose }) {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md p-6 max-h-[90vh] flex flex-col">
         <div className="flex items-center justify-between mb-2">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-white">⚙️ Secciones del informe</h2>
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Secciones del informe</h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-xl leading-none">×</button>
         </div>
 
@@ -361,7 +362,6 @@ export function SectionsConfigModal({ projects, initialProjectId, onClose }) {
                     onChange={() => toggle(s.key)}
                     className="w-4 h-4 rounded text-primary-600 focus:ring-primary-500"
                   />
-                  <span className="text-base leading-none">{s.icon}</span>
                   <span className="text-sm text-gray-700 dark:text-gray-300 flex-1 min-w-0">{s.label}</span>
                 </label>
               ))}
@@ -412,7 +412,7 @@ export function PublishNotifyModal({ projectId, month, contacts = [], onClose })
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-sm p-6 text-center">
         {state === 'sent' ? (
           <>
-            <p className="text-4xl mb-3">📨</p>
+            <p className="mb-3"><Icon as={Send} size={32} className="inline-block text-gray-300 dark:text-gray-600" /></p>
             <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">Aviso enviado</h2>
             <p className="text-sm text-gray-500 dark:text-gray-400 mb-5">Le avisamos por email a los contactos del portal de este proyecto.</p>
             <button onClick={onClose} className="w-full py-2 text-sm font-medium bg-primary-600 hover:bg-primary-700 text-white rounded-xl transition-colors">
@@ -421,7 +421,7 @@ export function PublishNotifyModal({ projectId, month, contacts = [], onClose })
           </>
         ) : (
           <>
-            <p className="text-4xl mb-3">✅</p>
+            <p className="mb-3"><Icon as={CircleCheck} size={32} className="inline-block text-green-500" /></p>
             <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">Informe publicado</h2>
             <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">¿Querés avisarle a tu cliente por email de que ya está disponible?</p>
 

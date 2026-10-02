@@ -3,12 +3,13 @@ import api from '../../api/client'
 import ObjectiveProgressBars from './ObjectiveProgressBars'
 import useObjectiveProgress from './useObjectiveProgress'
 import SocialIcon from './SocialIcon'
+import { Flag, Heart, MessageCircle, X } from 'lucide-react'
+import { Icon } from '../ui/Icon'
 
 // Configuración por plataforma — UI label + URL externa + accent color + handle prefix
 const PLATFORMS = {
   instagram: {
     label:        'Instagram',
-    icon:         '📸',
     placeholder:  '@competidor o https://instagram.com/competidor',
     profileUrl:   (u) => `https://www.instagram.com/${u}/`,
     handle:       (u) => `@${u}`,
@@ -21,7 +22,6 @@ const PLATFORMS = {
   },
   linkedin: {
     label:        'LinkedIn',
-    icon:         '💼',
     placeholder:  'bliss-marketing o https://www.linkedin.com/company/bliss-marketing/',
     profileUrl:   (u) => `https://www.linkedin.com/company/${u}/`,
     handle:       (u) => u,
@@ -34,7 +34,6 @@ const PLATFORMS = {
   },
   facebook: {
     label:        'Facebook',
-    icon:         '👍',
     placeholder:  'tu-pagina o https://facebook.com/tu-pagina',
     profileUrl:   (u) => `https://www.facebook.com/${u}/`,
     handle:       (u) => u,
@@ -198,8 +197,8 @@ function CompetitorCard({ projectId, c, onChanged }) {
               >
                 {refreshing ? 'Actualizando…' : '↻'}
               </button>
-              <button onClick={handleDelete} disabled={deleting} className="text-xs text-gray-400 hover:text-red-500 disabled:opacity-50 transition-colors">
-                {deleting ? '…' : '✕'}
+              <button onClick={handleDelete} disabled={deleting} className="text-xs text-gray-400 hover:text-red-500 disabled:opacity-50 transition-colors" title="Quitar competidor" aria-label="Quitar competidor">
+                {deleting ? '…' : <Icon as={X} size={14} />}
               </button>
             </div>
           </div>
@@ -221,8 +220,8 @@ function CompetitorCard({ projectId, c, onChanged }) {
 
           <div className="flex items-center justify-between mt-2">
             <div className="flex gap-3 text-xs text-gray-400">
-              {c.avgLikes != null && <span>❤️ {fmtK(Math.round(c.avgLikes))}</span>}
-              {c.avgComments != null && <span>💬 {fmtK(Math.round(c.avgComments))}</span>}
+              {c.avgLikes != null && <span><Icon as={Heart} size={12} className="inline align-[-2px] mr-1" />{fmtK(Math.round(c.avgLikes))}</span>}
+              {c.avgComments != null && <span><Icon as={MessageCircle} size={12} className="inline align-[-2px] mr-1" />{fmtK(Math.round(c.avgComments))}</span>}
             </div>
             <button onClick={toggleHistory} className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 underline underline-offset-2">
               {expanded ? 'Ocultar historial' : 'Ver historial'}
@@ -314,7 +313,7 @@ export default function CompetitorsTab({ projectId, onSelectProject }) {
   if (!projectId) {
     return (
       <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-10 text-center">
-        <div className="text-4xl mb-3">🏁</div>
+        <div className="mb-3"><Icon as={Flag} size={32} className="inline-block text-gray-300 dark:text-gray-600" /></div>
         <p className="text-sm text-gray-500 dark:text-gray-400">Seleccioná un proyecto para trackear competidores.</p>
       </div>
     )
@@ -325,7 +324,7 @@ export default function CompetitorsTab({ projectId, onSelectProject }) {
       {/* Alta de competidor */}
       <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4">
         <div className="flex items-center gap-2 mb-2">
-          <span className="text-xl">🏁</span>
+          <span><Icon as={Flag} size={20} className="inline-block text-gray-300 dark:text-gray-600" /></span>
           <div>
             <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">Competidores</p>
             <p className="text-xs text-gray-400 dark:text-gray-500">Seguí cuentas/páginas públicas de la competencia por scraping.</p>
@@ -338,7 +337,7 @@ export default function CompetitorsTab({ projectId, onSelectProject }) {
             className={`text-sm bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg px-2 py-2 text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-1 ${cfg.accentRing}`}
           >
             {PLATFORM_KEYS.map(k => (
-              <option key={k} value={k}>{PLATFORMS[k].icon} {PLATFORMS[k].label}</option>
+              <option key={k} value={k}>{PLATFORMS[k].label}</option>
             ))}
           </select>
           <input
@@ -361,7 +360,7 @@ export default function CompetitorsTab({ projectId, onSelectProject }) {
       </div>
 
       {/* Objetivos de competidores del proyecto */}
-      <ObjectiveProgressBars objectives={objectives} title="🎯 Objetivos vs competidores" />
+      <ObjectiveProgressBars objectives={objectives} title="Objetivos vs competidores" />
 
       {/* Filtro por plataforma — sólo si hay más de una plataforma cargada */}
       {Object.keys(counts).length > 1 && (

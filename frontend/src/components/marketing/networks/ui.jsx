@@ -1,5 +1,7 @@
 import SocialIcon from '../SocialIcon'
 import { fmtK, fmtNum, monthLabel } from './format'
+import { Trash2 } from 'lucide-react'
+import { Icon } from '../../ui/Icon'
 
 // Primitivas visuales compartidas por las pestañas de redes y anuncios.
 
@@ -7,14 +9,13 @@ import { fmtK, fmtNum, monthLabel } from './format'
 export function NetworkMark({ brand, size = 'md', className = '' }) {
   const box  = size === 'lg' ? 'w-16 h-16 rounded-2xl' : size === 'sm' ? 'w-10 h-10 rounded-xl' : 'w-14 h-14'
   const icon = size === 'lg' ? 'w-8 h-8' : size === 'sm' ? 'w-5 h-5' : 'w-7 h-7'
-  const glyph = size === 'lg' ? 'text-3xl' : size === 'sm' ? 'text-xl' : 'text-2xl'
   const shape = size === 'md' ? (brand.square ? 'rounded-xl' : 'rounded-full') : ''
   return (
     <div className={`${box} ${shape} shrink-0 flex items-center justify-center text-white ${brand.markBorder ? 'border border-gray-200 dark:border-gray-700 shadow-sm' : ''} ${className}`}
       style={{ background: brand.mark }}>
       {brand.network
         ? <SocialIcon network={brand.network} className={icon} />
-        : <span className={glyph} aria-hidden="true">{brand.glyph}</span>}
+        : <Icon as={brand.glyph} size={size === 'lg' ? 30 : size === 'sm' ? 20 : 26} className={brand.glyphClass ?? ''} />}
     </div>
   )
 }
@@ -88,7 +89,7 @@ export function MonthNav({ selectedMonth, availableMonths, onChange, canDelete, 
         {canDelete && (
           <button onClick={onDelete} disabled={deleting} title="Borrar el snapshot de este mes"
             className="text-gray-400 hover:text-red-500 dark:hover:text-red-400 disabled:opacity-40 transition-colors text-sm leading-none">
-            {deleting ? '…' : '🗑'}
+            {deleting ? '…' : <Icon as={Trash2} size={14} />}
           </button>
         )}
       </div>
@@ -97,10 +98,10 @@ export function MonthNav({ selectedMonth, availableMonths, onChange, canDelete, 
   )
 }
 
-export function KpiCard({ icon, label, value, sub, valueClass = '', className = '' }) {
+export function KpiCard({ label, value, sub, valueClass = '', className = '' }) {
   return (
     <div className={`bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 flex flex-col gap-1 ${className}`}>
-      <div className="flex items-center gap-1.5 text-gray-500 dark:text-gray-400 text-xs"><span>{icon}</span><span>{label}</span></div>
+      <div className="flex items-center gap-1.5 text-gray-500 dark:text-gray-400 text-xs"><span>{label}</span></div>
       <div className={`text-2xl font-bold text-gray-900 dark:text-white ${valueClass}`}>{value}</div>
       {sub && <div className="text-xs text-gray-400 dark:text-gray-500">{sub}</div>}
     </div>
@@ -112,7 +113,7 @@ export function AudienceCard({ label = 'Seguidores', count, monthlyGain, sub, cl
   const gainCls = monthlyGain > 0 ? 'text-green-600 dark:text-green-400' : monthlyGain < 0 ? 'text-red-500 dark:text-red-400' : 'text-gray-400 dark:text-gray-500'
   return (
     <div className={`bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 flex flex-col gap-1 ${className}`}>
-      <div className="flex items-center gap-1.5 text-gray-500 dark:text-gray-400 text-xs"><span>👥</span><span>{label}</span></div>
+      <div className="flex items-center gap-1.5 text-gray-500 dark:text-gray-400 text-xs"><span>{label}</span></div>
       <div className="text-2xl font-bold text-gray-900 dark:text-white">{fmtK(count)}</div>
       {monthlyGain != null && (
         <div className={`text-xs font-semibold ${gainCls}`}>{monthlyGain > 0 ? '+' : ''}{fmtNum(monthlyGain)} este mes</div>

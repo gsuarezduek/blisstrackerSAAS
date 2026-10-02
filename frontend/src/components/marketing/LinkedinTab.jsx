@@ -8,6 +8,8 @@ import { LineChart, MonthNav, KpiCard, AudienceCard, BrandSpinner } from './netw
 import ConnectScreen, { OAuthMethod, ExpiredNotice } from './networks/ConnectScreen'
 import AccountHeader from './networks/AccountHeader'
 import CrossProjectNetworkPanel from './networks/CrossProjectNetworkPanel'
+import { CircleHelp, Eye, Heart, MessageCircle } from 'lucide-react'
+import { Icon } from '../ui/Icon'
 
 const BRAND = BRANDS.linkedin
 const LI_BLUE = BRAND.color
@@ -22,7 +24,7 @@ function ConnectPrompt({ projectId, onConnected }) {
     <ConnectScreen brand={BRAND} title="Conectá la página de empresa de LinkedIn"
       subtitle="Seguidores, impresiones, clicks, CTR, engagement de posts y datos de la audiencia."
       methods={[{
-        key: 'official', icon: '🔗', title: 'Conexión oficial',
+        key: 'official', title: 'Conexión oficial',
         description: 'Iniciá sesión con LinkedIn. Tenés que ser administrador de la página.',
         body: <OAuthMethod brand={BRAND} getAuthUrl={authUrl(projectId)} onConnected={onConnected} cta="Conectar con LinkedIn" />,
       }]}
@@ -70,7 +72,7 @@ function OrgPicker({ projectId, onSelected, onCancel }) {
 
   if (!orgs?.length) return (
     <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-8 text-center">
-      <p className="text-3xl mb-3">🤷‍♂️</p>
+      <p className="mb-3"><Icon as={CircleHelp} size={28} className="inline-block text-gray-300 dark:text-gray-600" /></p>
       <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">No administrás ninguna página de empresa</p>
       <p className="text-xs text-gray-500 dark:text-gray-400 max-w-sm mx-auto">Necesitás tener rol de administrador en al menos una Company Page de LinkedIn.</p>
       <button onClick={onCancel} className="text-xs text-gray-500 dark:text-gray-400 hover:underline mt-4">Volver</button>
@@ -106,19 +108,19 @@ function TopPosts({ posts }) {
   if (!posts?.length) return null
   return (
     <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-5">
-      <p className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">🏆 TOP posts del mes</p>
+      <p className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">TOP posts del mes</p>
       <div className="space-y-2">
         {posts.slice(0, 5).map((p, i) => (
           <a key={p.id ?? i} href={p.url ?? '#'} target="_blank" rel="noopener noreferrer"
             className="block p-3 bg-gray-50 dark:bg-gray-700/40 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors">
             <div className="flex items-start gap-3">
-              <span className="text-lg shrink-0">{['🥇','🥈','🥉','4️⃣','5️⃣'][i] ?? '•'}</span>
+              <span className="w-6 h-6 shrink-0 rounded-full bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-200 text-xs font-bold flex items-center justify-center">{i + 1}</span>
               <div className="flex-1 min-w-0">
                 {p.text && <p className="text-xs text-gray-700 dark:text-gray-300 line-clamp-2 mb-1.5">{p.text}</p>}
                 <div className="flex gap-3 text-[11px] text-gray-500 dark:text-gray-400">
-                  {p.impressions != null && <span>👁 {fmtK(p.impressions)}</span>}
-                  {p.likes       != null && <span>❤️ {fmtK(p.likes)}</span>}
-                  {p.comments    != null && <span>💬 {fmtK(p.comments)}</span>}
+                  {p.impressions != null && <span><Icon as={Eye} size={12} className="inline align-[-2px] mr-1" />{fmtK(p.impressions)}</span>}
+                  {p.likes       != null && <span><Icon as={Heart} size={12} className="inline align-[-2px] mr-1" />{fmtK(p.likes)}</span>}
+                  {p.comments    != null && <span><Icon as={MessageCircle} size={12} className="inline align-[-2px] mr-1" />{fmtK(p.comments)}</span>}
                   {p.shares      != null && <span>↗ {fmtK(p.shares)}</span>}
                 </div>
               </div>
@@ -144,12 +146,12 @@ function urnLabel(urn) {
   return last?.replace(/_/g, ' ') ?? urn
 }
 
-function DemographicsCard({ title, items, icon }) {
+function DemographicsCard({ title, items }) {
   if (!items?.length) return null
   const total = items.reduce((s, x) => s + x.count, 0)
   return (
     <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4">
-      <p className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-3">{icon} {title}</p>
+      <p className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-3">{title}</p>
       <div className="space-y-2">
         {items.slice(0, 5).map((item, i) => {
           const pct = Math.round((item.count / total) * 100)
@@ -174,12 +176,12 @@ function Demographics({ demographics }) {
   if (empty) return null
   return (
     <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-5">
-      <p className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-4">👥 Audiencia</p>
+      <p className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-4">Audiencia</p>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <DemographicsCard title="Industria"  icon="🏢" items={demographics.industry}  />
-        <DemographicsCard title="Seniority"  icon="📊" items={demographics.seniority} />
-        <DemographicsCard title="Función"    icon="💼" items={demographics.function}  />
-        <DemographicsCard title="Región"     icon="🌎" items={demographics.region}    />
+        <DemographicsCard title="Industria" items={demographics.industry}  />
+        <DemographicsCard title="Seniority" items={demographics.seniority} />
+        <DemographicsCard title="Función" items={demographics.function}  />
+        <DemographicsCard title="Región" items={demographics.region}    />
       </div>
     </div>
   )
@@ -312,7 +314,7 @@ export default function LinkedinTab({ projectId, onSelectProject, projects = [] 
       renderSecondary={p => (
         <>
           <span className="text-gray-400">{fmtK(p.followersCount)} seguidores</span>
-          {p.impressions    != null && <span className="text-gray-400">👁 {fmtK(p.impressions)} impr.</span>}
+          {p.impressions    != null && <span className="text-gray-400"><Icon as={Eye} size={12} className="inline align-[-2px] mr-1" />{fmtK(p.impressions)} impr.</span>}
           {p.engagementRate != null && <span className={engColor(p.engagementRate)}>{p.engagementRate.toFixed(2)}% eng.</span>}
           {p.postsThisMonth != null && <span className="text-gray-400">{p.postsThisMonth} posts</span>}
         </>
@@ -352,7 +354,7 @@ export default function LinkedinTab({ projectId, onSelectProject, projects = [] 
         link={metrics?.org?.vanityName && { href: `https://www.linkedin.com/company/${metrics.org.vanityName}`, label: `linkedin.com/company/${metrics.org.vanityName}` }}
         dataAt={scraped ? metrics?.lastScrapedAt : null}
         actions={scraped
-          ? [{ key: 'refresh', label: '↻ Actualizar', onClick: handleRefreshScrape, busy: refreshing }]
+          ? [{ key: 'refresh', label: 'Actualizar', onClick: handleRefreshScrape, busy: refreshing }]
           : [{ key: 'org', label: 'Cambiar página', onClick: () => setShowOrgPicker(true) }]}
         onDisconnect={handleDisconnect} disconnecting={disconnecting} />
 
@@ -363,10 +365,10 @@ export default function LinkedinTab({ projectId, onSelectProject, projects = [] 
       {scraped && (
         <div className="bg-blue-50/60 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-800 rounded-xl px-4 py-3 text-xs text-blue-700 dark:text-blue-300">
           <div className="flex items-center justify-between gap-3 flex-wrap">
-            <span>📊 Datos públicos vía scraping: seguidores, posts y engagement. Impresiones, clicks y audiencia solo están disponibles con la conexión oficial.</span>
+            <span>Datos públicos vía scraping: seguidores, posts y engagement. Impresiones, clicks y audiencia solo están disponibles con la conexión oficial.</span>
             <button onClick={handleScrapeDebug} disabled={debugLoading}
               className="shrink-0 px-2.5 py-1 rounded-lg border border-blue-300 dark:border-blue-700 hover:bg-blue-100 dark:hover:bg-blue-900/30 disabled:opacity-50 transition-colors font-medium">
-              {debugLoading ? 'Diagnosticando…' : '🔍 Diagnóstico'}
+              {debugLoading ? 'Diagnosticando…' : 'Diagnóstico'}
             </button>
           </div>
 
@@ -393,7 +395,7 @@ export default function LinkedinTab({ projectId, onSelectProject, projects = [] 
 
       {scraped && isCurrentMonth && metrics?.monthCoverageComplete === false && (
         <div className="bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800 rounded-xl px-4 py-3 text-xs text-amber-700 dark:text-amber-300">
-          ⚠️ Esta página puede postear más de lo que se pudo traer este mes — el engagement/posts del mes podrían estar subestimados. Corré el diagnóstico o subí el tope de posts en SuperAdmin → Configuración.
+          Esta página puede postear más de lo que se pudo traer este mes — el engagement/posts del mes podrían estar subestimados. Corré el diagnóstico o subí el tope de posts en SuperAdmin → Configuración.
         </div>
       )}
 
@@ -405,24 +407,24 @@ export default function LinkedinTab({ projectId, onSelectProject, projects = [] 
       {displayData && (
         <div className={`grid grid-cols-2 sm:grid-cols-3 gap-3 ${scraped ? 'lg:grid-cols-3' : 'lg:grid-cols-5'}`}>
           <AudienceCard count={displayData.followersCount} monthlyGain={monthlyGain} />
-          <KpiCard icon="⚡" label="Engagement"
+          <KpiCard label="Engagement"
             value={displayData.engagementRate != null ? `${displayData.engagementRate}%` : '—'}
             valueClass={engColor(displayData.engagementRate)}
             sub={engLabel(displayData.engagementRate)}
           />
           {!scraped && (
-            <KpiCard icon="👁" label="Impresiones"
+            <KpiCard label="Impresiones"
               value={displayData.impressions != null ? fmtK(displayData.impressions) : '—'}
               sub={isCurrentMonth ? 'este mes' : 'ese mes'}
             />
           )}
           {!scraped && (
-            <KpiCard icon="🖱" label="Clicks"
+            <KpiCard label="Clicks"
               value={displayData.clicks != null ? fmtK(displayData.clicks) : '—'}
               sub={displayData.ctr != null ? `${displayData.ctr}% CTR` : null}
             />
           )}
-          <KpiCard icon="📅" label="Posts del mes"
+          <KpiCard label="Posts del mes"
             value={displayData.postsThisMonth != null ? fmtNum(displayData.postsThisMonth) : '—'}
             sub={isCurrentMonth ? 'posts este mes' : 'posts ese mes'}
           />
@@ -454,7 +456,7 @@ export default function LinkedinTab({ projectId, onSelectProject, projects = [] 
           <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-5">
             <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
               <div>
-                <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">📈 Evolución de seguidores</p>
+                <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">Evolución de seguidores</p>
                 {snapshotFallback && (
                   <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">Datos mensuales · el gráfico diario se irá completando</p>
                 )}

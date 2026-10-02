@@ -53,21 +53,21 @@ export function objPctBand(pct) {
 
 // Catálogo de secciones (las claves coinciden con sections del backend / ReportViewer)
 export const SECTION_CATALOG = [
-  { key: 'objectives',      label: 'Objetivos',             icon: '🎯' },
-  { key: 'analytics',       label: 'Analítica web (GA4)',  icon: '📊' },
-  { key: 'performance',     label: 'Performance web',       icon: '⚡' },
-  { key: 'geo',             label: 'Presencia en IA (GEO)', icon: '🤖' },
-  { key: 'seo',             label: 'Rendimiento del sitio (Search Console)', icon: '🔍' },
-  { key: 'keywords',        label: 'Posicionamiento SEO (keywords)',         icon: '🔑' },
-  { key: 'instagram',       label: 'Instagram',             icon: '📸' },
-  { key: 'tiktok',          label: 'TikTok',                icon: '🎵' },
-  { key: 'youtube',         label: 'YouTube',               icon: '▶️' },
-  { key: 'linkedin',        label: 'LinkedIn',              icon: '💼' },
-  { key: 'facebook',        label: 'Facebook',              icon: '👍' },
-  { key: 'metaAds',         label: 'Meta Ads',              icon: '📣' },
-  { key: 'googleAds',       label: 'Google Ads',            icon: '🔎' },
-  { key: 'competitors',     label: 'Competidores',          icon: '🏁' },
-  { key: 'tasks',           label: 'Trabajo realizado',     icon: '✅' },
+  { key: 'objectives',      label: 'Objetivos' },
+  { key: 'analytics',       label: 'Analítica web (GA4)' },
+  { key: 'performance',     label: 'Performance web' },
+  { key: 'geo',             label: 'Presencia en IA (GEO)' },
+  { key: 'seo',             label: 'Rendimiento del sitio (Search Console)' },
+  { key: 'keywords',        label: 'Posicionamiento SEO (keywords)' },
+  { key: 'instagram',       label: 'Instagram' },
+  { key: 'tiktok',          label: 'TikTok' },
+  { key: 'youtube',         label: 'YouTube' },
+  { key: 'linkedin',        label: 'LinkedIn' },
+  { key: 'facebook',        label: 'Facebook' },
+  { key: 'metaAds',         label: 'Meta Ads' },
+  { key: 'googleAds',       label: 'Google Ads' },
+  { key: 'competitors',     label: 'Competidores' },
+  { key: 'tasks',           label: 'Trabajo realizado' },
 ]
 
 // Chip de estado de conexión de la integración de una sección
@@ -83,11 +83,10 @@ export function IntegrationChip({ integration }) {
   return <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400">Datos guardados</span>
 }
 
-export function StatCard({ icon, label, value, sub, accent = 'text-gray-900 dark:text-white' }) {
+export function StatCard({ label, value, sub, accent = 'text-gray-900 dark:text-white' }) {
   return (
     <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 px-4 py-3.5">
       <div className="flex items-center gap-1.5 text-xs font-medium text-gray-500 dark:text-gray-400">
-        <span>{icon}</span>
         <span>{label}</span>
       </div>
       <p className={`mt-1.5 text-2xl font-bold ${accent}`}>{value}</p>

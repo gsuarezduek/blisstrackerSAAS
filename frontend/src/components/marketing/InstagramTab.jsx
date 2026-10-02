@@ -238,10 +238,10 @@ export default function InstagramTab({ projectId, onSelectProject, projects = []
       {integration?.scopes === 'scrape' && (
         <div className="bg-blue-50/60 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-800 rounded-xl px-4 py-3 text-xs text-blue-700 dark:text-blue-300">
           <div className="flex items-center justify-between gap-3 flex-wrap">
-            <span>📊 Datos públicos vía scraping: seguidores, posts y engagement.</span>
+            <span>Datos públicos vía scraping: seguidores, posts y engagement.</span>
             <button onClick={handleScrapeDebug} disabled={debugLoading}
               className="shrink-0 px-2.5 py-1 rounded-lg border border-blue-300 dark:border-blue-700 hover:bg-blue-100 dark:hover:bg-blue-900/30 disabled:opacity-50 transition-colors font-medium">
-              {debugLoading ? 'Diagnosticando…' : '🔍 Diagnóstico'}
+              {debugLoading ? 'Diagnosticando…' : 'Diagnóstico'}
             </button>
           </div>
 
@@ -271,7 +271,7 @@ export default function InstagramTab({ projectId, onSelectProject, projects = []
 
       {isCurrentMonth && metrics?.monthCoverageComplete === false && (
         <div className="bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800 rounded-xl px-4 py-3 text-xs text-amber-700 dark:text-amber-300">
-          ⚠️ Esta cuenta puede postear más de lo que se pudo traer este mes — el engagement/posts del mes podrían estar subestimados. Corré el diagnóstico o subí el tope de posts en SuperAdmin → Configuración.
+          Esta cuenta puede postear más de lo que se pudo traer este mes — el engagement/posts del mes podrían estar subestimados. Corré el diagnóstico o subí el tope de posts en SuperAdmin → Configuración.
         </div>
       )}
 
@@ -292,23 +292,23 @@ export default function InstagramTab({ projectId, onSelectProject, projects = []
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
           <FollowersCard followersCount={displayData.followersCount} mediaCount={displayData.mediaCount} monthlyGain={monthlyGain} />
           <KpiCard
-            icon="❤️" label="Engagement"
+ label="Engagement"
             value={displayData.engagementRate != null ? `${displayData.engagementRate}%` : '—'}
             valueClass={engagementColor(displayData.engagementRate)}
             sub={engagementLabel(displayData.engagementRate)}
           />
           <KpiCard
-            icon="👍" label="Avg. Likes"
+ label="Avg. Likes"
             value={displayData.avgLikes != null ? fmtNum(displayData.avgLikes) : '—'}
             sub="promedio del mes"
           />
           <KpiCard
-            icon="💬" label="Avg. Comentarios"
+ label="Avg. Comentarios"
             value={displayData.avgComments != null ? fmtNum(displayData.avgComments) : '—'}
             sub="promedio del mes"
           />
           <KpiCard
-            icon="📅" label="Posts del mes"
+ label="Posts del mes"
             value={(displayData.postsThisMonth ?? displayData.postsCount) != null
               ? fmtNum(displayData.postsThisMonth ?? displayData.postsCount)
               : '—'}
@@ -321,28 +321,28 @@ export default function InstagramTab({ projectId, onSelectProject, projects = []
       {hasInsights && (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
           <KpiCard
-            icon="📡" label="Alcance del mes"
+ label="Alcance del mes"
             value={reachVal != null ? fmtNum(reachVal) : '—'}
             valueClass="text-purple-600 dark:text-purple-400"
             sub="cuentas alcanzadas"
           />
           <KpiCard
-            icon="👁️" label="Vistas"
+ label="Vistas"
             value={viewsVal != null ? fmtNum(viewsVal) : '—'}
             sub="impresiones del mes"
           />
           <KpiCard
-            icon="🔖" label="Guardados"
+ label="Guardados"
             value={savedVal != null ? fmtNum(savedVal) : '—'}
             sub="posts del mes"
           />
           <KpiCard
-            icon="↗️" label="Compartidos"
+ label="Compartidos"
             value={sharesVal != null ? fmtNum(sharesVal) : '—'}
             sub="posts del mes"
           />
           <KpiCard
-            icon="📊" label="Alcance prom."
+ label="Alcance prom."
             value={avgReachVal != null ? fmtNum(avgReachVal) : '—'}
             sub="por publicación"
           />
@@ -350,7 +350,7 @@ export default function InstagramTab({ projectId, onSelectProject, projects = []
       )}
 
       {/* Objetivos de Instagram del período (seguidores / interacción) con barra de progreso */}
-      <ObjectiveProgressBars objectives={objectives} title="🎯 Objetivos de Instagram" />
+      <ObjectiveProgressBars objectives={objectives} title="Objetivos de Instagram" />
 
       {/* Análisis con IA: diagnóstico vs. mes anterior, competencia, objetivos y brief orgánico */}
       <RrssAdvisorPanel
@@ -401,7 +401,7 @@ export default function InstagramTab({ projectId, onSelectProject, projects = []
           <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-5">
             <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
               <div>
-                <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">📈 Evolución de seguidores</p>
+                <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">Evolución de seguidores</p>
                 {snapshotFallback && (
                   <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">Datos mensuales · el gráfico diario se irá completando</p>
                 )}

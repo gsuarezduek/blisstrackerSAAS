@@ -3,6 +3,8 @@ import { useParams, useNavigate } from 'react-router-dom'
 import axios from 'axios'
 import ReportViewer from '../components/marketing/ReportViewer'
 import ReportFeedbackWidget from '../components/marketing/ReportFeedbackWidget'
+import { FileText } from 'lucide-react'
+import { Icon } from '../components/ui/Icon'
 
 const API = import.meta.env.VITE_API_URL || ''
 
@@ -74,7 +76,7 @@ export default function ReportPublic() {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
         <div className="text-center max-w-sm">
-          <p className="text-4xl mb-4">📄</p>
+          <p className="mb-4"><Icon as={FileText} size={32} className="inline-block text-gray-300 dark:text-gray-600" /></p>
           <p className="text-lg font-semibold text-gray-800 mb-2">Informe no disponible</p>
           <p className="text-sm text-gray-500">{error}</p>
         </div>

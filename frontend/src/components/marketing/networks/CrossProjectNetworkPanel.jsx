@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback } from 'react'
 import api from '../../../api/client'
 import CrossProjectRRSSPanel from '../CrossProjectRRSSPanel'
 import { NetworkMark, BrandSpinner } from './ui'
+import { Trash2 } from 'lucide-react'
+import { Icon } from '../../ui/Icon'
 
 /**
  * Vista "todos los clientes" de una red (sin proyecto elegido), igual para
@@ -75,7 +77,7 @@ export default function CrossProjectNetworkPanel({ brand, network, refreshable =
           className="flex-shrink-0 inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 transition-colors">
           {refreshing
             ? <><span className="w-3 h-3 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" /> Actualizando…</>
-            : <>🔄 Actualizar todo</>}
+            : <>Actualizar todo</>}
         </button>
       )}
       banner={flash && (
@@ -97,7 +99,7 @@ export default function CrossProjectNetworkPanel({ brand, network, refreshable =
         <button type="button" onClick={() => handleDelete(p)} disabled={deleting === p.projectId}
           title="Borrar este snapshot" aria-label={`Borrar el snapshot de ${p.projectName}`}
           className="text-gray-300 dark:text-gray-600 hover:text-red-500 dark:hover:text-red-400 disabled:opacity-40 transition-colors text-sm leading-none">
-          {deleting === p.projectId ? '…' : '🗑'}
+          {deleting === p.projectId ? '…' : <Icon as={Trash2} size={14} />}
         </button>
       )}
       renderSecondary={renderSecondary}

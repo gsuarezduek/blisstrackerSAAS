@@ -3,7 +3,8 @@ import api from '../../api/client'
 import { useAuth } from '../../context/AuthContext'
 import { useGoogleIntegration } from '../../hooks/useGoogleIntegration'
 import SetupHintCard from '../SetupHintCard'
-import { Globe } from 'lucide-react'
+import { CircleCheck, Globe, Search, TriangleAlert } from 'lucide-react'
+import { Icon } from '../ui/Icon'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const fmtNum = n => (n ?? 0).toLocaleString('es-AR')
@@ -146,7 +147,7 @@ function CrossProjectSeoPanel({ onSelectProject }) {
   )
   if (!data?.length) return (
     <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-10 text-center">
-      <div className="text-4xl mb-3">🔍</div>
+      <div className="mb-3"><Icon as={Search} size={32} className="inline-block text-gray-300 dark:text-gray-600" /></div>
       <p className="text-sm text-gray-500 dark:text-gray-400">No hay sitios web cargados. Agregá la URL del sitio en la tab Info de un proyecto y seleccionalo para ver los datos de Search Console.</p>
     </div>
   )
@@ -295,7 +296,7 @@ function GscErrorPanel({ error, loading, saving, siteUrlInput, setSiteUrlInput, 
   return (
     <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-4 space-y-3">
       <div className="flex items-start gap-3">
-        <span className="text-lg flex-shrink-0 mt-0.5">⚠️</span>
+        <span className="flex-shrink-0 mt-0.5"><Icon as={TriangleAlert} size={18} className="inline-block text-amber-500" /></span>
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold text-amber-800 dark:text-amber-200">{title}</p>
           <p className="text-xs text-amber-700 dark:text-amber-300 mt-0.5">{error.msg}</p>
@@ -408,7 +409,7 @@ function CreateTaskModal({ title, projectId, projectName, onClose }) {
         </p>
         {done ? (
           <div className="flex flex-col items-center py-6 gap-2">
-            <span className="text-3xl">✅</span>
+            <span><Icon as={CircleCheck} size={28} className="inline-block text-green-500" /></span>
             <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Tarea creada</p>
           </div>
         ) : (

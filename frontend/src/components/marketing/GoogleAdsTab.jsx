@@ -9,6 +9,8 @@ import { fmtNum, fmtK, fmtUSD, fmtPct } from './networks/format'
 import { KpiCard, BrandSpinner } from './networks/ui'
 import ConnectScreen, { OAuthMethod, ExpiredNotice } from './networks/ConnectScreen'
 import AccountHeader from './networks/AccountHeader'
+import { DollarSign, Folder, KeyRound, Megaphone, MousePointerClick } from 'lucide-react'
+import { Icon } from '../ui/Icon'
 
 const BRAND = BRANDS.google_ads
 
@@ -22,7 +24,7 @@ function ConnectPrompt({ projectId, onConnected }) {
     <ConnectScreen brand={BRAND} title="Conectá la cuenta de Google Ads"
       subtitle="Inversión, clicks, CTR, conversiones y las campañas activas."
       methods={[{
-        key: 'official', icon: '🔗', title: 'Conexión oficial (Google)',
+        key: 'official', title: 'Conexión oficial (Google)',
         description: 'Autorizá con la cuenta de Google que administra Google Ads. Después elegís el Customer ID.',
         body: <OAuthMethod brand={BRAND} getAuthUrl={authUrl(projectId)} onConnected={onConnected} cta="Conectar con Google" />,
       }]}
@@ -64,7 +66,7 @@ function CampaignsTable({ campaigns }) {
     <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
       <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-700">
         <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">
-          📋 Campañas ({campaigns.length})
+          Campañas ({campaigns.length})
         </p>
       </div>
       <div className="overflow-x-auto">
@@ -147,7 +149,7 @@ function GoogleTopAds({ ads }) {
     <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
       <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-700">
         <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">
-          🏆 Mejores anuncios ({ads.length})
+          Mejores anuncios ({ads.length})
         </p>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 p-4">
@@ -179,11 +181,11 @@ function GoogleTopAds({ ads }) {
                 : (
                   <p className="text-sm text-gray-700 dark:text-gray-300 truncate" title={ad.name}>{ad.name || 'Anuncio'}</p>
                 )}
-              {ad.campaignName && <p className="text-[10px] text-gray-400 truncate">📁 {ad.campaignName}</p>}
+              {ad.campaignName && <p className="text-[10px] text-gray-400 truncate"><Icon as={Folder} size={12} className="inline align-[-2px] mr-1" />{ad.campaignName}</p>}
               <div className="grid grid-cols-3 gap-x-2 text-[11px] text-gray-500 dark:text-gray-400 border-t border-gray-100 dark:border-gray-700 pt-2 mt-auto">
-                <span>📢 {fmtK(ad.impressions)}</span>
-                <span>📊 {fmtPct(ad.ctr)}</span>
-                <span>💰 {fmtUSD(ad.cost)}</span>
+                <span><Icon as={Megaphone} size={12} className="inline align-[-2px] mr-1" />{fmtK(ad.impressions)}</span>
+                <span><Icon as={MousePointerClick} size={12} className="inline align-[-2px] mr-1" />{fmtPct(ad.ctr)}</span>
+                <span><Icon as={DollarSign} size={12} className="inline align-[-2px] mr-1" />{fmtUSD(ad.cost)}</span>
               </div>
             </div>
           )
@@ -233,8 +235,8 @@ function CustomerIdForm({ projectId, onSaved, initialCustomerId = '', initialMan
 
   return (
     <div className="flex flex-col items-center justify-center py-12 text-center max-w-sm mx-auto">
-      <div className="w-14 h-14 bg-blue-50 dark:bg-blue-900/20 rounded-2xl flex items-center justify-center text-3xl mb-4">
-        🔑
+      <div className="w-14 h-14 bg-blue-50 dark:bg-blue-900/20 rounded-2xl flex items-center justify-center mb-4 text-blue-500">
+        <Icon as={KeyRound} size={26} />
       </div>
       <h3 className="text-base font-semibold text-gray-700 dark:text-gray-300 mb-1">
         Configurar cuenta de Google Ads
@@ -403,8 +405,6 @@ export default function GoogleAdsTab({ projectId, onSelectProject, projects = []
       <CrossProjectAdsPanel
         type="google_ads"
         label="Google Ads"
-        icon="🔍"
-        emptyIcon="🔍"
         activeBtnClass="bg-yellow-500 text-white"
         spinnerBorderClass="border-yellow-500"
         onSelectProject={onSelectProject}
@@ -491,7 +491,7 @@ export default function GoogleAdsTab({ projectId, onSelectProject, projects = []
             disabled={savingSnap || snapSaved}
             className="ml-auto flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-400 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-50"
           >
-            {snapSaved ? '✓ Snapshot guardado' : savingSnap ? 'Guardando…' : '💾 Guardar snapshot'}
+            {snapSaved ? 'Snapshot guardado' : savingSnap ? 'Guardando…' : 'Guardar snapshot'}
           </button>
         )}
       </div>
@@ -500,22 +500,22 @@ export default function GoogleAdsTab({ projectId, onSelectProject, projects = []
       {data && (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
           <KpiCard
-            icon="💰" label="Gasto total"
+ label="Gasto total"
             value={fmtUSD(data.cost)}
             sub={presetLabel}
           />
           <KpiCard
-            icon="📢" label="Impresiones"
+ label="Impresiones"
             value={fmtK(data.impressions)}
             sub="veces mostrado"
           />
           <KpiCard
-            icon="🖱️" label="Clicks"
+ label="Clicks"
             value={fmtK(data.clicks)}
             sub="total"
           />
           <KpiCard
-            icon="📊" label="CTR"
+ label="CTR"
             value={fmtPct(data.ctr)}
             sub="click-through rate"
             valueClass={
@@ -525,12 +525,12 @@ export default function GoogleAdsTab({ projectId, onSelectProject, projects = []
             }
           />
           <KpiCard
-            icon="💸" label="CPC Promedio"
+ label="CPC Promedio"
             value={fmtUSD(data.avgCpc)}
             sub="costo por click"
           />
           <KpiCard
-            icon="🎯" label="Conversiones"
+ label="Conversiones"
             value={data.conversions > 0 ? fmtNum(data.conversions) : '—'}
             sub="total"
           />
@@ -538,7 +538,7 @@ export default function GoogleAdsTab({ projectId, onSelectProject, projects = []
       )}
 
       {/* Objetivos de Google Ads del proyecto */}
-      <ObjectiveProgressBars objectives={objectives} title="🎯 Objetivos de Google Ads" />
+      <ObjectiveProgressBars objectives={objectives} title="Objetivos de Google Ads" />
 
       {/* Análisis con IA: diagnóstico + ideas de anuncios nuevos */}
       <AdsAdvisorPanel

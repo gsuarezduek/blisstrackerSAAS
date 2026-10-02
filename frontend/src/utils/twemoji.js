@@ -1,6 +1,8 @@
 // Emoji → imágenes (Twemoji). El PDF lo renderiza un Chromium en Linux sin fuentes de
 // emoji: como texto saldrían cuadraditos. Con imágenes se ven igual en cualquier
 // servidor (y en cualquier Mac). Si una imagen no existe, se restaura el carácter.
+// La interfaz del informe ya no usa emojis (íconos de línea lucide, que son SVG); esto
+// queda solo para el contenido escrito por el equipo o la IA (notas, análisis).
 export const EMOJI_RE = /(?:\p{Emoji_Presentation}|\p{Extended_Pictographic}\uFE0F)(?:\uFE0F|\u200D(?:\p{Emoji_Presentation}|\p{Extended_Pictographic})\uFE0F?|\p{Emoji_Modifier})*/gu
 export const TWEMOJI_BASE = 'https://cdn.jsdelivr.net/gh/jdecked/twemoji@15.1.0/assets/svg/'
 

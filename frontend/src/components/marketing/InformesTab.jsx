@@ -7,6 +7,8 @@ import ObjectiveProgressBars from './ObjectiveProgressBars'
 import { currentMonthStr, prevMonthStr, nextMonthStr, monthLabel } from './InformesTabParts'
 import { GenerateModal, SectionsConfigModal, PublishNotifyModal } from './InformesTabModals'
 import { AllReportsPanel, ClientFeedbackPanel, GenerationLogPanel } from './InformesTabPanels'
+import { FileText, TriangleAlert } from 'lucide-react'
+import { Icon } from '../ui/Icon'
 
 export default function InformesTab({ projectId, onSelectProject, projects = [] }) {
   // Default: informe del mes actual (que contiene datos del mes anterior)
@@ -143,7 +145,7 @@ export default function InformesTab({ projectId, onSelectProject, projects = [] 
           del hub sin proyecto seleccionado, acá recortados a este proyecto. No depende
           de que el informe del mes ya esté generado. ── */}
       {liveObjectives.length > 0 && (
-        <ObjectiveProgressBars objectives={liveObjectives} title="🎯 Objetivos del mes en curso" />
+        <ObjectiveProgressBars objectives={liveObjectives} title="Objetivos del mes en curso" />
       )}
 
       {/* ── Barra de navegación de mes ── */}
@@ -184,14 +186,14 @@ export default function InformesTab({ projectId, onSelectProject, projects = [] 
               title="Elegí las secciones y regenerá el informe (relee los datos y el análisis IA)"
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-gray-200 dark:border-gray-600 text-gray-500 dark:text-gray-400 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-40"
             >
-              🔄 Regenerar
+              Regenerar
             </button>
           )}
           <button
             onClick={() => setShowObjModal(true)}
             className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
           >
-            🎯 Objetivos
+            Objetivos
           </button>
           <button
             onClick={() => setShowSectionsConfig(true)}
@@ -210,7 +212,7 @@ export default function InformesTab({ projectId, onSelectProject, projects = [] 
                   : 'border-green-600 bg-green-600 hover:bg-green-700 text-white'
               }`}
             >
-              {reportMeta?.status === 'published' ? '↩ Despublicar' : '✅ Publicar'}
+              {reportMeta?.status === 'published' ? 'Despublicar' : 'Publicar'}
             </button>
           )}
           {isGenerated && (
@@ -226,7 +228,7 @@ export default function InformesTab({ projectId, onSelectProject, projects = [] 
               }
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition-colors disabled:opacity-40"
             >
-              {copied ? '✓ Copiado' : '📋 Link del cliente'}
+              {copied ? 'Copiado' : 'Link del cliente'}
             </button>
           )}
         </div>
@@ -252,7 +254,7 @@ export default function InformesTab({ projectId, onSelectProject, projects = [] 
 
       {!loading && !error && reportData?.analysisError && (
         <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-4 flex items-start gap-3">
-          <span className="text-lg leading-none mt-0.5">⚠️</span>
+          <span className="leading-none mt-0.5"><Icon as={TriangleAlert} size={18} className="inline-block text-amber-500" /></span>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">
               No se pudo generar el texto del análisis con IA
@@ -266,14 +268,14 @@ export default function InformesTab({ projectId, onSelectProject, projects = [] 
             disabled={generating}
             className="flex-shrink-0 px-3 py-1.5 text-xs font-medium bg-amber-600 hover:bg-amber-700 text-white rounded-lg transition-colors disabled:opacity-50"
           >
-            🔄 Regenerar
+            Regenerar
           </button>
         </div>
       )}
 
       {!loading && !error && reportData?.dataWarnings?.length > 0 && (
         <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-4 flex items-start gap-3">
-          <span className="text-lg leading-none mt-0.5">⚠️</span>
+          <span className="leading-none mt-0.5"><Icon as={TriangleAlert} size={18} className="inline-block text-amber-500" /></span>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">
               Algunas secciones no se pudieron traer en vivo
@@ -292,7 +294,7 @@ export default function InformesTab({ projectId, onSelectProject, projects = [] 
             disabled={generating}
             className="flex-shrink-0 px-3 py-1.5 text-xs font-medium bg-amber-600 hover:bg-amber-700 text-white rounded-lg transition-colors disabled:opacity-50"
           >
-            🔄 Regenerar
+            Regenerar
           </button>
         </div>
       )}
@@ -311,7 +313,7 @@ export default function InformesTab({ projectId, onSelectProject, projects = [] 
       {/* ── Estado vacío: informe todavía no generado ── */}
       {!loading && !error && !reportData && (
         <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-10 text-center">
-          <p className="text-5xl mb-4">📄</p>
+          <p className="mb-4"><Icon as={FileText} size={40} className="inline-block text-gray-300 dark:text-gray-600" /></p>
           <h3 className="text-base font-semibold text-gray-900 dark:text-white mb-1">
             Todavía no generaste el informe de {monthLabel(month)}
           </h3>
@@ -325,7 +327,7 @@ export default function InformesTab({ projectId, onSelectProject, projects = [] 
           >
             {generating
               ? <><span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Generando…</>
-              : '📄 Generar informe'}
+              : 'Generar informe'}
           </button>
         </div>
       )}

@@ -21,7 +21,7 @@ export default function ConnectPrompt({ projectId, onConnected }) {
     <ConnectScreen brand={BRAND} title="Conectá la cuenta de Instagram" subtitle="Elegí cómo querés traer los datos de la cuenta."
       methods={[
         {
-          key: 'token', icon: '🔑', title: 'Token de Business Manager', badge: 'recommended',
+          key: 'token', title: 'Token de Business Manager', badge: 'recommended',
           description: 'Datos completos vía API (alcance, guardados, historias) con un System User Token.',
           body: (
             <TokenMethod brand={BRAND} accountParam="igAccountId" onConnected={onConnected} steps={TOKEN_STEPS}
@@ -29,12 +29,12 @@ export default function ConnectPrompt({ projectId, onConnected }) {
           ),
         },
         {
-          key: 'official', icon: '🔗', title: 'Conexión oficial',
+          key: 'official', title: 'Conexión oficial',
           description: 'Instagram Business Login: directo, sin tokens.',
           body: <OAuthMethod brand={BRAND} getAuthUrl={authUrl(projectId)} onConnected={onConnected} cta="Conectar con Instagram" />,
         },
         {
-          key: 'scrape', icon: '🔎', title: 'Scraping',
+          key: 'scrape', title: 'Scraping',
           description: 'Sin conexión: seguidores, publicaciones e interacciones de un perfil público.',
           body: (
             <ScrapeMethod brand={BRAND} onConnected={onConnected}

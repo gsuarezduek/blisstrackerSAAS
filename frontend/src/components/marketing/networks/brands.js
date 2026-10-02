@@ -1,3 +1,4 @@
+import { Megaphone } from 'lucide-react'
 // Identidad visual de cada fuente de Marketing: color de acento (líneas, barras,
 // spinners) y fondo del "sello" de la red (cuadrado/círculo con el logo).
 // `network` = clave de SocialIcon; las de anuncios usan un emoji como glyph.
@@ -30,12 +31,12 @@ export const BRANDS = {
     integrationType: 'google_youtube',
   },
   meta_ads: {
-    label: 'Meta Ads', glyph: '📘', color: '#1877F2',
+    label: 'Meta Ads', glyph: Megaphone, color: '#1877F2',
     mark: 'linear-gradient(135deg, #2563eb 0%, #60a5fa 100%)', square: true,
     integrationType: 'meta_ads',
   },
   google_ads: {
-    label: 'Google Ads', glyph: '🔍', color: '#4285F4',
+    label: 'Google Ads', glyph: Megaphone, glyphClass: 'text-[#4285F4]', color: '#4285F4',
     mark: '#ffffff', markBorder: true, square: true,
     integrationType: 'google_ads',
   },
