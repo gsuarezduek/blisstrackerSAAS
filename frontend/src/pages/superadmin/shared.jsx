@@ -32,6 +32,14 @@ export function timeAgo(dateStr) {
   return new Date(dateStr).toLocaleDateString('es-AR', { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
+// Convierte un override de cuota (Int? — null, 0 o un número) al string que
+// vive en el input controlado: null/undefined = '' (sin override, usa el
+// default global); 0 y cualquier otro número se preservan como string (0 =
+// ilimitado para ese workspace es un valor válido, no "vacío").
+function mbToDraft(v) {
+  return v === null || v === undefined ? '' : String(v)
+}
+
 export function fmtBytes(bytes) {
   const n = Number(bytes) || 0
   if (n < 1024) return `${n} B`
@@ -87,9 +95,9 @@ export function WorkspaceDetailModal({ workspace, onClose, onStatusChange }) {
         setTokenLimit(String(r.data.monthlyTokenLimit ?? 1000000))
         setStorageLimit(String(r.data.storageLimitMb ?? 20480))
         setQuotaDrafts({
-          projectFilesMaxMb:   r.data.projectFilesMaxMbOverride   ?? '',
-          contentStorageMaxMb: r.data.contentStorageMaxMbOverride ?? '',
-          chatAttachmentMaxMb: r.data.chatAttachmentMaxMbOverride ?? '',
+          projectFilesMaxMb:   mbToDraft(r.data.projectFilesMaxMbOverride),
+          contentStorageMaxMb: mbToDraft(r.data.contentStorageMaxMbOverride),
+          chatAttachmentMaxMb: mbToDraft(r.data.chatAttachmentMaxMbOverride),
         })
         setLoading(false)
       })
