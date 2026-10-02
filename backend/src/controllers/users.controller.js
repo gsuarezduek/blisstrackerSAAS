@@ -44,6 +44,8 @@ function flattenMember(m) {
     isAdmin: m.role === 'admin' || m.role === 'owner',
     active: m.active,
     vacationDays: m.vacationDays,
+    freeHoursBalance: m.freeHoursBalance ?? 0,
+    homeDaysBalance: m.homeDaysBalance ?? 0,
     workStartTime: m.workStartTime,
     workEndTime: m.workEndTime,
     legajoData: m.legajoData ?? {},

@@ -120,15 +120,15 @@ export default function useNavDestinations() {
 
   if (rrhhAllowed) {
     const tabs = [
-      { id: 'dashboard',  label: '🏠 Dashboard' },
-      { id: 'ingresos',   label: '🕐 Ingresos' },
-      { id: 'legajos',    label: '📋 Legajos' },
-      { id: 'licencias',  label: '📋 Licencias' },
-      { id: 'vacaciones', label: '🏖️ Vacaciones' },
-      { id: 'beneficios', label: '🎁 Beneficios' },
-      ...(productivityEnabled ? [{ id: 'productividad', label: '📊 Productividad' }] : []),
+      { to: '/admin/rrhh',                                label: '✅ Hoy · Para resolver' },
+      { to: '/admin/rrhh?tab=personas',                   label: '👤 Personas' },
+      { to: '/admin/rrhh?tab=ausencias&view=solicitudes', label: '🏖️ Ausencias · Solicitudes' },
+      { to: '/admin/rrhh?tab=ausencias&view=vacaciones',  label: '🏖️ Ausencias · Saldos de vacaciones' },
+      { to: '/admin/rrhh?tab=ausencias&view=beneficios',  label: '🎁 Ausencias · Horas libres y días home' },
+      { to: '/admin/rrhh?tab=asistencia',                 label: '🕐 Asistencia' },
+      ...(productivityEnabled ? [{ to: '/admin/rrhh?tab=productividad', label: '📊 Productividad' }] : []),
     ]
-    for (const t of tabs) destinations.push({ to: `/admin/rrhh?tab=${t.id}`, label: `👥 RRHH · ${t.label}` })
+    for (const t of tabs) destinations.push({ to: t.to, label: `👥 RRHH · ${t.label}` })
   }
 
   if (isAdmin && eosEnabled) {

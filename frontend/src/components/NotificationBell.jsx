@@ -276,12 +276,12 @@ export default function NotificationBell() {
                           : 'text-gray-800 dark:text-gray-200'
 
                 // Deep-link: leads van a Ventas (ruta según rol), invitaciones/respuestas de
-                // Calendario van a la semana del evento, solicitudes de licencia a
-                // RRHH → Licencias y solicitudes de beneficios a RRHH → Beneficios (quien las
+                // Calendario van a la semana del evento, solicitudes de licencia y
+                // de beneficios a RRHH → Hoy, donde está la cola "Para resolver" (quien las
                 // recibe tiene acceso al módulo RRHH — admin u otro rol configurado, ya no es
                 // admin-only fijo), las revisiones (de licencia o de beneficio) al perfil propio
                 // (el destinatario puede no tener acceso al módulo), cambios de legajo a
-                // RRHH → Legajos con la persona preseleccionada (n.actor es quien editó su
+                // RRHH → Personas con la persona preseleccionada (n.actor es quien editó su
                 // propio legajo), las menciones de Contenido al calendario con el modal de la
                 // pieza abierto. Los juegos y las menciones de chat no navegan a ningún lado —
                 // abren su flotante (🏆 / 💬, ya visibles en cualquier página) vía un evento,
@@ -292,11 +292,11 @@ export default function NotificationBell() {
                   : n.calendarEvent
                     ? `/calendario?view=semana&date=${n.calendarEvent.date}`
                     : n.type === 'VACATION_REQUEST'
-                    ? '/admin/rrhh?tab=licencias'
+                    ? '/admin/rrhh'
                     : n.type === 'BENEFIT_REQUEST'
-                      ? '/admin/rrhh?tab=beneficios'
+                      ? '/admin/rrhh'
                       : n.type === 'LEGAJO_UPDATED'
-                        ? `/admin/rrhh?tab=legajos${n.actor?.id ? `&userId=${n.actor.id}` : ''}`
+                        ? `/admin/rrhh?tab=personas${n.actor?.id ? `&userId=${n.actor.id}` : ''}`
                       : (n.type === 'VACATION_REVIEWED' || n.type === 'BENEFIT_REVIEWED')
                         ? '/profile'
                         : (isGameLaunched || isChatMention)

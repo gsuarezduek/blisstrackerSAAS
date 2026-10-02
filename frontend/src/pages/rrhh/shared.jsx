@@ -96,34 +96,3 @@ export function leaveRangeLabel(start, end) {
   if (start === end) return fmt(start, { day: 'numeric', month: 'short', year: 'numeric' })
   return `${fmt(start, { day: 'numeric', month: 'short' })} – ${fmt(end, { day: 'numeric', month: 'short', year: 'numeric' })}`
 }
-
-// ─── Mini Dashboard ───────────────────────────────────────────────────────────
-
-export function StatCard({ icon, label, value, sub, onClick }) {
-  const clickable = typeof onClick === 'function'
-  return (
-    <div
-      onClick={onClick}
-      className={`bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-4 flex items-center gap-4 ${
-        clickable ? 'cursor-pointer hover:border-primary-300 dark:hover:border-primary-600 transition-colors' : ''
-      }`}
-    >
-      <span className="text-2xl flex-shrink-0">{icon}</span>
-      <div className="min-w-0">
-        <p className="text-2xl font-bold text-gray-900 dark:text-white leading-none">{value}</p>
-        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 flex items-center gap-1">
-          {label}
-          {clickable && (
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3 text-gray-300 dark:text-gray-600">
-              <path d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16ZM9 9a1 1 0 0 0 0 2v3a1 1 0 0 0 1 1h1a1 1 0 1 0 0-2v-3a1 1 0 0 0-1-1H9Zm1-4a1 1 0 1 0 0 2 1 1 0 0 0 0-2Z" />
-            </svg>
-          )}
-        </p>
-        {sub && <p className="text-xs text-primary-600 dark:text-primary-400 mt-0.5">{sub}</p>}
-      </div>
-    </div>
-  )
-}
-
-// Banda de color por porcentaje (compartida por People Score y "correctas en el asiento"):
-// <40% rojo · 40–70% amarillo · >70% verde. null = sin evaluar (gris).

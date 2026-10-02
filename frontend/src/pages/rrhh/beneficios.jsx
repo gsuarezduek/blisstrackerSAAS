@@ -88,7 +88,7 @@ function ReviewModal({ request, onClose, onDone }) {
 }
 
 // Otorgar/ajustar el saldo de un banco para una persona — mismo patrón que
-// VacationEditModal (RRHH → Vacaciones), genérico por `bank`.
+// VacationEditModal (RRHH → Ausencias → Saldos de vacaciones), genérico por `bank`.
 function AdjustModal({ user, bank, onClose, onUpdated }) {
   const meta = BENEFIT_BANKS[bank]
   const [newBalance, setNewBalance] = useState(String(user.balance ?? 0))

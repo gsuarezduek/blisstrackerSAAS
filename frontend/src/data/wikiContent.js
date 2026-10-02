@@ -649,20 +649,24 @@ Pasado el plazo, el workspace y todos sus datos se eliminan de forma permanente.
         title: 'Panel de RRHH',
         audience: 'admin',
         module: null,
-        summary: 'MiniDashboard del equipo, legajos por persona e historial de ingresos.',
-        body: `El panel de RRHH (\`/admin/rrhh\`) tiene tres partes.
+        summary: 'Solicitudes para resolver, personas, ausencias, asistencia y productividad del equipo.',
+        body: `El panel de RRHH (\`/admin/rrhh\`) está organizado por tarea.
 
-## MiniDashboard
+## Hoy
 
-Vista general: usuarios activos, antigüedad promedio, legajos incompletos, cumpleaños y aniversarios próximos (30 días), distribución por rol, último login por persona y —si hay horarios cargados— puntualidad del equipo y tardanzas de hoy.
+Lo que necesita tu decisión: una sola cola **Para resolver** con las licencias y los pedidos de horas libres / días home pendientes, ordenados por cuándo empiezan. Cada pedido muestra el saldo que le queda a la persona y si coincide con la licencia de alguien más. **Aprobar** es un click; **Rechazar** pide un motivo, que le llega a la persona. Debajo: avisos del día (quién no ingresó, tardanzas, legajos incompletos), quién está fuera del equipo, cumpleaños y aniversarios, e indicadores (puntualidad, ingreso promedio, antigüedad…) con su evolución mensual.
 
-## Legajos
+## Personas
 
-Vista por persona: hora promedio de ingreso, puntualidad vs horario esperado, proyectos, días de vacaciones (ajustables con ±1) y la grilla de datos personales.
+Legajo por persona: hora promedio de ingreso, puntualidad vs horario esperado, proyectos, saldo de vacaciones, licencias tomadas y datos personales.
 
-## Ingresos
+## Ausencias
 
-Historial de logins con filtro por rango de fechas y por persona, agrupado por usuario, con badge de tardanza por persona y por día.`,
+Historial de solicitudes de licencia (pendientes, activas y anteriores), saldos de vacaciones con la regla de acumulación, y los bancos de horas libres y días home.
+
+## Asistencia
+
+Historial de ingresos con filtro por rango de fechas y por persona, con badge de tardanza por persona y por día.`,
         related: ['vacaciones', 'puntualidad-horarios', 'legajo-configurable'],
       },
       {
