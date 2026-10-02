@@ -163,7 +163,7 @@ export function TabHoy({ users, lastLoginsMap, dashStats, peopleScore, pending, 
       id: 'incomplete-legajos', severity: 'info',
       label: `${incompleteCount} ${incompleteCount === 1 ? 'legajo incompleto' : 'legajos incompletos'}`,
       detail: 'Cada persona lo completa desde Mi Perfil',
-      onClick: () => onNavigate('personas'),
+      onClick: () => onNavigate('personas', null, { filter: 'incomplete' }),
     }] : []),
     ...(attendanceEnabled && !hasSchedules ? [{
       id: 'no-schedules', severity: 'info',
@@ -188,7 +188,7 @@ export function TabHoy({ users, lastLoginsMap, dashStats, peopleScore, pending, 
     ] : []),
     ...(legajoReady ? [{
       key: 'legajos', label: 'Legajos completos', value: `${activeUsers.length - incompleteCount}/${activeUsers.length}`,
-      sub: incompleteCount === 0 ? 'todos al día' : `${incompleteCount} por completar`, onClick: () => onNavigate('personas') }] : []),
+      sub: incompleteCount === 0 ? 'todos al día' : `${incompleteCount} por completar`, onClick: () => onNavigate('personas', null, incompleteCount ? { filter: 'incomplete' } : {}) }] : []),
     ...(attendanceEnabled && hasSchedules ? [{
       key: 'hours', label: 'Horas disponibles por día', value: `${teamHours.totalHours} h`,
       sub: `${teamHours.count} de ${teamHours.total} con horario`, onClick: () => setListModal('teamHours') }] : []),

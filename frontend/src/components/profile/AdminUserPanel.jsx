@@ -88,7 +88,7 @@ export default function AdminUserPanel({ userId, userName }) {
 
 // ─── Productividad ────────────────────────────────────────────────────────────
 
-function ProductividadSection({ userId }) {
+export function ProductividadSection({ userId }) {
   const [mode, setMode] = useState('current')
   const [customRange, setCustomRange] = useState(null)
   const [data, setData] = useState(null)
