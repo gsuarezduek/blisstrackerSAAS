@@ -7,10 +7,8 @@ import { useWorkspace } from '../context/WorkspaceContext'
 import { computePeopleScore, peopleColumnKeys } from '../utils/peopleScore'
 import { TabHoy } from './rrhh/hoy'
 import { TabIngresos } from './rrhh/ingresos'
-import { TabLegajos } from './rrhh/legajos'
-import { TabLicencias } from './rrhh/licencias'
-import { TabVacaciones } from './rrhh/vacacionesBalance'
-import { TabBeneficios } from './rrhh/beneficios'
+import { TabPersonas } from './rrhh/personas'
+import { TabCalendario, TabSolicitudes, TabSaldos } from './rrhh/ausencias'
 import ProductivityTab from '../components/admin/ProductivityTab'
 import LoadingSpinner from '../components/LoadingSpinner'
 import { rrhhSections, resolveRrhhNav, DEFAULT_TAB } from './rrhh/rrhhNav'
@@ -18,8 +16,8 @@ import { todayStr } from './rrhh/shared'
 
 // ─── Shell del panel RRHH ─────────────────────────────────────────────────────
 // Secciones por tarea (ver rrhh/rrhhNav.js): Hoy (cola de aprobaciones + avisos +
-// indicadores) · Personas · Ausencias (solicitudes / saldos de vacaciones /
-// beneficios) · Asistencia · Productividad. Sección y vista viven en la URL
+// indicadores) · Personas · Ausencias (calendario / solicitudes / saldos) ·
+// Asistencia · Productividad. Sección y vista viven en la URL
 // (?tab=&view=); los ?tab= del panel anterior se reescriben vía LEGACY_TABS.
 
 const EMPTY_PENDING = { leaves: [], benefits: [], approvedLeaves: [], loading: true, error: false }
@@ -31,7 +29,7 @@ export default function RRHH() {
   const sections = rrhhSections({ productivityEnabled })
   const nav = resolveRrhhNav({ tab: searchParams.get('tab'), view: searchParams.get('view') }, { productivityEnabled })
   const { tab, view } = nav
-  const legajoUserId = searchParams.get('userId')
+  const personId = searchParams.get('userId')
 
   const [users, setUsers]       = useState([])
   const [usersLoaded, setUsersLoaded] = useState(false)
@@ -50,11 +48,21 @@ export default function RRHH() {
     setSearchParams(next, { replace: true })
   }, [nav.changed, tab, view]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  function goTo(nextTab, nextView = null) {
+  function goTo(nextTab, nextView = null, extra = {}) {
     const next = new URLSearchParams()
     if (nextTab !== DEFAULT_TAB) next.set('tab', nextTab)
     if (nextView) next.set('view', nextView)
+    for (const [k, v] of Object.entries(extra)) if (v != null) next.set(k, String(v))
     setSearchParams(next)
+  }
+
+  // La ficha de una persona vive en ?tab=personas&userId= (deep-link desde notificaciones de legajo).
+  function openPerson(id) {
+    const next = new URLSearchParams()
+    next.set('tab', 'personas')
+    if (id) next.set('userId', String(id))
+    setSearchParams(next)
+    window.scrollTo({ top: 0 })
   }
 
   const loadUsers = useCallback(() => api.get('/users').then(r => setUsers(r.data)).catch(() => {}).finally(() => setUsersLoaded(true)), [])
@@ -88,8 +96,10 @@ export default function RRHH() {
       .catch(() => {})
   }, [loadUsers, loadDashStats])
 
-  // La cola se recarga cada vez que se vuelve a "Hoy" (pudo resolverse algo desde Ausencias).
-  useEffect(() => { if (tab === 'hoy') loadPending() }, [tab, loadPending])
+  // La cola alimenta el badge de "Hoy": se carga al entrar y se recarga al volver
+  // a Hoy o al resolver algo desde Ausencias → Solicitudes.
+  const onHoy = tab === 'hoy'
+  useEffect(() => { loadPending() }, [onHoy, loadPending])
 
   // People Score (EOS) — solo si el módulo está habilitado y hay valores definidos.
   useEffect(() => {
@@ -175,13 +185,15 @@ export default function RRHH() {
           <TabHoy users={users} lastLoginsMap={lastLoginsMap} dashStats={dashStats} peopleScore={peopleScore}
             pending={pending} onDecided={handleDecided} onNavigate={goTo} />
         )}
-        {tab === 'personas' && <TabLegajos users={activeUsers} initialUserId={legajoUserId} />}
-        {tab === 'ausencias' && view === 'solicitudes' && <TabLicencias />}
-        {tab === 'ausencias' && view === 'vacaciones' && (
-          <TabVacaciones users={activeUsers}
-            onVacationUpdate={updated => setUsers(prev => prev.map(u => u.id === updated.id ? { ...u, vacationDays: updated.vacationDays } : u))} />
+        {tab === 'personas' && (
+          <TabPersonas users={activeUsers} lastLoginsMap={lastLoginsMap} leaves={dashStats.leaves ?? []}
+            selectedId={personId} onSelect={openPerson} initialFilter={searchParams.get('filter')} onUsersChanged={loadUsers} productivityEnabled={productivityEnabled} />
         )}
-        {tab === 'ausencias' && view === 'beneficios' && <TabBeneficios />}
+        {tab === 'ausencias' && view === 'calendario' && <TabCalendario users={activeUsers} onOpenPerson={openPerson} />}
+        {tab === 'ausencias' && view === 'solicitudes' && (
+          <TabSolicitudes users={activeUsers} onUsersChanged={() => { loadUsers(); loadDashStats() }} onRequestsChanged={loadPending} />
+        )}
+        {tab === 'ausencias' && view === 'saldos' && <TabSaldos users={activeUsers} onUsersChanged={loadUsers} />}
         {tab === 'asistencia' && <TabIngresos users={activeUsers} />}
         {tab === 'productividad' && productivityEnabled && <ProductivityTab />}
       </main>

@@ -1,14 +1,10 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import api from '../../api/client'
-import { avatarUrl } from '../../utils/avatarUrl'
-import LoadingSpinner from '../../components/LoadingSpinner'
 import ConfirmModal from '../../components/ConfirmModal'
-import useLegajoFields from '../../hooks/useLegajoFields'
-import useRoles from '../../hooks/useRoles'
-import RoleBadge from '../../components/RoleBadge'
-import { useWorkspace } from '../../context/WorkspaceContext'
-import { fieldValue, displayValue } from '../../components/legajo/legajoUtils'
-import { TZ, fmtDate, LEAVE_TYPE_LABELS, leaveDayCount, leaveRangeLabel } from './shared'
+import { fmtDate } from './shared'
+
+// Piezas del legajo reutilizadas por la ficha de Personas (rrhh/personas.jsx) y
+// por el panel de admin del perfil (components/profile/AdminUserPanel.jsx).
 
 export function Field({ label, value }) {
   if (value === null || value === undefined || value === '') return null
@@ -20,257 +16,6 @@ export function Field({ label, value }) {
   )
 }
 
-export function TabLegajos({ users, initialUserId }) {
-  const { labelFor } = useRoles()
-  const { workspace } = useWorkspace()
-  const { fields: legajoFields } = useLegajoFields()
-  const [selectedId, setSelectedId] = useState(initialUserId ? String(initialUserId) : '')
-  const [summary, setSummary]       = useState(null)   // { avgLoginTime, loginCount, projects }
-  const [summaryLoading, setSummaryLoading] = useState(false)
-  const [showLoginDays, setShowLoginDays] = useState(false)
-  const [leaveYear, setLeaveYear] = useState(new Date().getFullYear())
-
-  const selected = users.find(u => String(u.id) === selectedId) ?? null
-
-  useEffect(() => {
-    setShowLoginDays(false)
-    setLeaveYear(new Date().getFullYear())
-    if (!selectedId) { setSummary(null); return }
-    setSummaryLoading(true)
-    api.get(`/admin/rrhh/user-summary/${selectedId}`)
-      .then(r => setSummary(r.data))
-      .catch(() => setSummary(null))
-      .finally(() => setSummaryLoading(false))
-  }, [selectedId])
-
-  // Recarga el resumen sin tocar el estado de carga (para refrescar tras editar/eliminar un ingreso).
-  function reloadSummary() {
-    if (!selectedId) return Promise.resolve()
-    return api.get(`/admin/rrhh/user-summary/${selectedId}`)
-      .then(r => setSummary(r.data))
-      .catch(() => {})
-  }
-
-  // Campos visibles del legajo con su valor mostrable para la persona seleccionada.
-  const legajoRows = selected
-    ? legajoFields
-        .filter(f => f.enabled !== false)
-        .sort((a, b) => a.order - b.order)
-        .map(f => ({ key: f.key, label: f.label, value: displayValue(f, fieldValue(selected, f)) }))
-        .filter(r => r.value !== null && r.value !== undefined && r.value !== '')
-    : []
-  const hasPersonalData = legajoRows.length > 0
-
-  // Licencias tomadas (aprobadas) de la persona en el año seleccionado.
-  const allLeaves = summary?.leaves ?? []
-  const yearLeaves = allLeaves.filter(l => Number(l.startDate.slice(0, 4)) === leaveYear)
-  const yearLeaveDays = yearLeaves.reduce((s, l) => s + leaveDayCount(l.startDate, l.endDate), 0)
-
-  return (
-    <div>
-      {!selected && (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-          {users.map(u => (
-            <button
-              key={u.id}
-              onClick={() => setSelectedId(String(u.id))}
-              className="group relative aspect-square rounded-2xl overflow-hidden border border-gray-200 dark:border-gray-700 hover:ring-2 hover:ring-primary-400 dark:hover:ring-primary-500 transition-all focus:outline-none focus:ring-2 focus:ring-primary-500"
-            >
-              <img
-                src={avatarUrl(u.avatar)}
-                alt={u.name}
-                className="absolute inset-0 w-full h-full object-cover transition-transform duration-200 group-hover:scale-105"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/25 to-transparent" />
-              <div className="absolute bottom-0 left-0 right-0 p-3 text-left">
-                <p className="text-white font-semibold text-sm leading-tight truncate drop-shadow">{u.name}</p>
-                <div className="mt-1">
-                  <RoleBadge role={u.role} userId={u.id} />
-                </div>
-              </div>
-            </button>
-          ))}
-        </div>
-      )}
-
-      {selected && (
-        <div className="space-y-4">
-          {/* Header */}
-          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 px-6 py-5 flex items-center gap-4">
-            <button
-              onClick={() => setSelectedId('')}
-              title="Volver a todos los legajos"
-              className="text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 transition-colors flex-shrink-0"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
-            </button>
-            <img src={avatarUrl(selected.avatar)} alt={selected.name}
-              className="w-14 h-14 rounded-full object-cover border-2 border-gray-200 dark:border-gray-600 flex-shrink-0" />
-            <div>
-              <p className="text-lg font-bold text-gray-900 dark:text-white">{selected.name}</p>
-              <RoleBadge role={selected.role} userId={selected.id} className="inline-block mt-1" />
-              {selected.workspaceJoinedAt && (
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                  📅 En {workspace?.name ?? 'el equipo'} desde el {new Date(selected.workspaceJoinedAt).toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric', timeZone: TZ })}
-                </p>
-              )}
-              <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{selected.email}</p>
-            </div>
-          </div>
-
-          {/* Datos de acceso y actividad */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            {/* Horario promedio de ingreso + puntualidad — clickeable para ver el desglose por día */}
-            {(() => {
-              const hasDays = summary?.loginDays?.length > 0
-              return (
-                <div
-                  className={`bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-4 ${hasDays ? 'cursor-pointer hover:border-primary-300 dark:hover:border-primary-600 transition-colors' : ''}`}
-                  onClick={hasDays ? () => setShowLoginDays(true) : undefined}
-                  role={hasDays ? 'button' : undefined}
-                  title={hasDays ? 'Ver desglose día por día' : undefined}
-                >
-                  <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">
-                    🕐 Horario promedio de ingreso
-                  </p>
-                  {summaryLoading
-                    ? <LoadingSpinner size="sm" className="mt-1" />
-                    : summary?.avgLoginTime
-                      ? <>
-                          <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">{summary.avgLoginTime}</p>
-                          {summary.punctuality
-                            ? (() => {
-                                const p = summary.punctuality
-                                const late = p.avgLateMins > 0
-                                return (
-                                  <>
-                                    <p className={`text-xs font-medium mt-0.5 ${late ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
-                                      Esperado {p.expectedStart}{p.toleranceMins > 0 ? ` (+${p.toleranceMins} min tol.)` : ''} · {late ? `+${p.avgLateMins} min promedio` : 'a horario'}
-                                    </p>
-                                    <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
-                                      {p.onTimeDays}/{p.daysCount} día{p.daysCount !== 1 ? 's' : ''} puntual ({p.punctualityPct}%)
-                                    </p>
-                                  </>
-                                )
-                              })()
-                            : <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
-                                sobre {summary.loginCount} ingreso{summary.loginCount !== 1 ? 's' : ''}
-                                {summary.attendanceTrackingEnabled !== false && !summary.workStartTime && ' · configurá el horario en Equipo para ver tardanzas'}
-                              </p>
-                          }
-                          {hasDays && (
-                            <p className="text-xs text-primary-600 dark:text-primary-400 mt-1.5 font-medium">Ver desglose por día →</p>
-                          )}
-                        </>
-                      : <p className="text-sm text-gray-400 dark:text-gray-500 mt-1">Sin registros</p>
-                  }
-                </div>
-              )
-            })()}
-
-            {/* Proyectos */}
-            <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-4">
-              <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">
-                📁 Proyectos
-              </p>
-              {summaryLoading
-                ? <LoadingSpinner size="sm" className="mt-1" />
-                : !summary?.projects?.length
-                  ? <p className="text-sm text-gray-400 dark:text-gray-500">Sin proyectos asignados</p>
-                  : <div className="flex flex-col gap-1.5">
-                      {summary.projects.map(p => (
-                        <div key={p.id} className="flex items-center gap-1.5">
-                          <span className="w-1.5 h-1.5 rounded-full flex-shrink-0 bg-green-400" />
-                          <p className="text-sm truncate text-gray-800 dark:text-gray-200">{p.name}</p>
-                        </div>
-                      ))}
-                    </div>
-              }
-            </div>
-
-            {/* Vacaciones */}
-            <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-4">
-              <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">
-                🏖️ Días de vacaciones pendientes
-              </p>
-              <p className="text-3xl font-bold text-gray-900 dark:text-white mt-2">
-                {selected.vacationDays ?? 0}
-              </p>
-              <p className="text-xs text-gray-400 dark:text-gray-500">días disponibles</p>
-              <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-2">Se gestiona desde Ausencias → Saldos de vacaciones</p>
-            </div>
-          </div>
-
-          {/* Licencias tomadas — por año calendario, con navegación */}
-          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-5">
-            <div className="flex items-center justify-between gap-3 mb-3">
-              <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
-                🏖️ Licencias tomadas
-              </p>
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={() => setLeaveYear(y => y - 1)}
-                  className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-                  title="Año anterior"
-                >◀</button>
-                <span className="text-sm font-semibold text-gray-900 dark:text-white tabular-nums w-12 text-center">{leaveYear}</span>
-                <button
-                  onClick={() => setLeaveYear(y => y + 1)}
-                  disabled={leaveYear >= new Date().getFullYear()}
-                  className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors disabled:opacity-30 disabled:hover:bg-transparent"
-                  title="Año siguiente"
-                >▶</button>
-              </div>
-            </div>
-            {summaryLoading
-              ? <LoadingSpinner size="sm" className="py-4" />
-              : yearLeaves.length === 0
-                ? <p className="text-sm text-gray-400 dark:text-gray-500 py-2">Sin licencias registradas en {leaveYear}.</p>
-                : <>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
-                      <span className="font-semibold text-gray-800 dark:text-gray-200">{yearLeaveDays}</span> día{yearLeaveDays !== 1 ? 's' : ''} en {yearLeaves.length} licencia{yearLeaves.length !== 1 ? 's' : ''}
-                    </p>
-                    <div className="divide-y divide-gray-100 dark:divide-gray-700">
-                      {yearLeaves.map(l => (
-                        <div key={l.id} className="flex items-start justify-between gap-3 py-2">
-                          <div className="min-w-0">
-                            <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{LEAVE_TYPE_LABELS[l.type] ?? l.type}</p>
-                            <p className="text-xs text-gray-400 dark:text-gray-500">{leaveRangeLabel(l.startDate, l.endDate)}</p>
-                            {l.observation && <p className="text-xs text-gray-400 dark:text-gray-500 italic mt-0.5 truncate">{l.observation}</p>}
-                          </div>
-                          <span className="text-xs font-medium text-gray-600 dark:text-gray-300 flex-shrink-0 tabular-nums">
-                            {leaveDayCount(l.startDate, l.endDate)} día{leaveDayCount(l.startDate, l.endDate) !== 1 ? 's' : ''}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </>
-            }
-          </div>
-
-          {/* Datos personales */}
-          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden">
-            <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide px-6 pt-5 pb-3">
-              📋 Datos personales
-            </p>
-            {!hasPersonalData
-              ? <p className="text-sm text-gray-400 dark:text-gray-500 text-center py-8 pb-10">Esta persona aún no completó sus datos personales.</p>
-              : <div className="px-6 pb-5 grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-4">
-                  {legajoRows.map(r => (
-                    <Field key={r.key} label={r.label} value={r.value} />
-                  ))}
-                </div>
-            }
-          </div>
-        </div>
-      )}
-
-      {showLoginDays && selected && summary?.loginDays?.length > 0 && (
-        <LoginDaysModal user={selected} summary={summary} onChanged={reloadSummary} onClose={() => setShowLoginDays(false)} />
-      )}
-    </div>
-  )
-}
 
 // Desglose día por día del primer ingreso de una persona (modal).
 // Permite editar la hora o eliminar el ingreso que distorsiona el promedio.
@@ -280,29 +25,32 @@ export function LoginDaysModal({ user, summary, onChanged, onClose }) {
   const [editingId, setEditingId] = useState(null)
   const [editTime, setEditTime]   = useState('')
   const [busyId, setBusyId]       = useState(null)
+  const [actionError, setActionError] = useState('')
   const [loginToDelete, setLoginToDelete] = useState(null)   // día | null
 
   function startEdit(d) { setEditingId(d.id); setEditTime(d.time) }
   function cancelEdit()  { setEditingId(null); setEditTime('') }
 
   async function saveEdit(d) {
-    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(editTime)) { alert('Hora inválida (HH:MM)'); return }
+    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(editTime)) { setActionError('Escribí la hora como HH:MM (por ejemplo, 09:15).'); return }
+    setActionError('')
     setBusyId(d.id)
     try {
       await api.patch(`/admin/rrhh/logins/${d.id}`, { time: editTime })
       cancelEdit()
       await onChanged?.()
-    } catch { alert('No se pudo actualizar el ingreso') }
+    } catch { setActionError('No pudimos actualizar el ingreso. Probá de nuevo.') }
     finally { setBusyId(null) }
   }
 
   async function removeLogin() {
     if (!loginToDelete) return
+    setActionError('')
     setBusyId(loginToDelete.id)
     try {
       await api.delete(`/admin/rrhh/logins/${loginToDelete.id}`)
       await onChanged?.()
-    } catch { alert('No se pudo eliminar el ingreso') }
+    } catch { setActionError('No pudimos eliminar el ingreso. Probá de nuevo.') }
     finally { setBusyId(null); setLoginToDelete(null) }
   }
 
@@ -365,6 +113,12 @@ export function LoginDaysModal({ user, summary, onChanged, onClose }) {
           </div>
         </div>
 
+        {actionError && (
+          <p role="alert" className="mx-5 mb-3 flex items-start justify-between gap-3 rounded-lg bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 text-sm px-3 py-2">
+            <span>{actionError}</span>
+            <button type="button" onClick={() => setActionError('')} aria-label="Cerrar aviso" className="text-red-400 hover:text-red-600">×</button>
+          </p>
+        )}
         <div className="px-5 py-3 border-t border-gray-100 dark:border-gray-700 text-xs text-gray-400 dark:text-gray-500">
           {days.length} día{days.length !== 1 ? 's' : ''} con registro · se muestra solo el primer ingreso de cada día
         </div>

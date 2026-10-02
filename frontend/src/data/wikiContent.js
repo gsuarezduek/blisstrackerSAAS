@@ -662,11 +662,15 @@ Legajo por persona: hora promedio de ingreso, puntualidad vs horario esperado, p
 
 ## Ausencias
 
-Historial de solicitudes de licencia (pendientes, activas y anteriores), saldos de vacaciones con la regla de acumulación, y los bancos de horas libres y días home.
+Tres vistas:
+
+- **Calendario**: el mes entero, una fila por persona, con los días de licencia, días home y horas libres pintados (lo pendiente en un tono más claro). Sirve para ver de un vistazo quién falta cuándo antes de aprobar algo.
+- **Solicitudes**: licencias y beneficios en una sola lista, filtrable por tipo y por persona. Lo pendiente se aprueba o rechaza ahí mismo; abajo quedan las próximas y en curso, y el historial.
+- **Saldos**: vacaciones, horas libres y días home de cada persona, con **Ajustar** en cada saldo, el total del equipo y la regla de acumulación automática vigente.
 
 ## Asistencia
 
-Historial de ingresos con filtro por rango de fechas y por persona, con badge de tardanza por persona y por día.`,
+Historial de ingresos con filtro por rango de fechas y por persona, con badge de tardanza por persona y por día. Cada ingreso se puede corregir o eliminar en el lugar.`,
         related: ['vacaciones', 'puntualidad-horarios', 'legajo-configurable'],
       },
       {

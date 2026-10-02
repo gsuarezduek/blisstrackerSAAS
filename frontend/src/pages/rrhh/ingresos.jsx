@@ -48,6 +48,7 @@ export function TabIngresos({ users }) {
   const [editingId, setEditingId] = useState(null)   // id del ingreso en edición
   const [editTime, setEditTime]   = useState('')
   const [busyId, setBusyId]       = useState(null)   // id del ingreso con acción en curso
+  const [actionError, setActionError] = useState('')
   const [loginToDelete, setLoginToDelete] = useState(null)   // login | null
 
   const shortcuts = useMemo(() => dateShortcuts(), [])
@@ -72,23 +73,25 @@ export function TabIngresos({ users }) {
   function cancelEdit() { setEditingId(null); setEditTime('') }
 
   async function saveEdit(l) {
-    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(editTime)) { alert('Hora inválida (HH:MM)'); return }
+    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(editTime)) { setActionError('Escribí la hora como HH:MM (por ejemplo, 09:15).'); return }
+    setActionError('')
     setBusyId(l.id)
     try {
       await api.patch(`/admin/rrhh/logins/${l.id}`, { time: editTime })
       cancelEdit()
       await fetchLogins()
-    } catch { alert('No se pudo actualizar el ingreso') }
+    } catch { setActionError('No pudimos actualizar el ingreso. Probá de nuevo.') }
     finally { setBusyId(null) }
   }
 
   async function removeLogin() {
     if (!loginToDelete) return
+    setActionError('')
     setBusyId(loginToDelete.id)
     try {
       await api.delete(`/admin/rrhh/logins/${loginToDelete.id}`)
       await fetchLogins()
-    } catch { alert('No se pudo eliminar el ingreso') }
+    } catch { setActionError('No pudimos eliminar el ingreso. Probá de nuevo.') }
     finally { setBusyId(null); setLoginToDelete(null) }
   }
 
@@ -275,6 +278,12 @@ export function TabIngresos({ users }) {
         </div>
       )}
 
+      {actionError && (
+        <p role="alert" className="mb-4 flex items-start justify-between gap-3 rounded-lg bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 text-sm px-3 py-2">
+          <span>{actionError}</span>
+          <button type="button" onClick={() => setActionError('')} aria-label="Cerrar aviso" className="text-red-400 hover:text-red-600">×</button>
+        </p>
+      )}
       {loading && <LoadingSpinner className="py-12" />}
 
       {!loading && logins.length === 0 && (
