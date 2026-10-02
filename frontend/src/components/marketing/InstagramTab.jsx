@@ -3,6 +3,9 @@ import api from '../../api/client'
 import ObjectiveProgressBars from './ObjectiveProgressBars'
 import RrssAdvisorPanel from './RrssAdvisorPanel'
 import ConnectPrompt from './InstagramConnect'
+import { BRANDS } from './networks/brands'
+import { BrandSpinner } from './networks/ui'
+import { ExpiredNotice } from './networks/ConnectScreen'
 import {
   fmtNum, fmtK, engagementColor, engagementLabel, subtractDays, todayAR, monthLabel,
   LineChart, MonthNav, FOLLOWER_FILTERS, FollowersCard, KpiCard,
@@ -178,23 +181,14 @@ export default function InstagramTab({ projectId, onSelectProject, projects = []
     return <CrossProjectInstagramPanel onSelectProject={onSelectProject} />
   }
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <div className="w-6 h-6 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
-      </div>
-    )
-  }
+  if (loading) return <BrandSpinner brand={BRANDS.instagram} />
 
   if (!integration) return <ConnectPrompt projectId={projectId} onConnected={fetchData} />
+  // Vencida: aviso + los mismos métodos de conexión (se puede volver por cualquiera).
   if (integration.status === 'expired') {
     return (
-      <div className="space-y-4">
-        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 rounded-2xl p-6 text-center">
-          <div className="text-3xl mb-2">⚠️</div>
-          <p className="text-sm font-semibold text-red-700 dark:text-red-300 mb-1">La conexión con Instagram expiró</p>
-          <p className="text-xs text-red-500 dark:text-red-400">Reconectá la cuenta para seguir viendo las métricas.</p>
-        </div>
+      <div>
+        <ExpiredNotice brand={BRANDS.instagram} className="pt-10" />
         <ConnectPrompt projectId={projectId} onConnected={fetchData} />
       </div>
     )
