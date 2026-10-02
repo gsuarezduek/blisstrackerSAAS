@@ -5,8 +5,9 @@ import LoadingSpinner from '../components/LoadingSpinner'
 import api from '../api/client'
 import { useAuth } from '../context/AuthContext'
 import { AvatarStack } from './project-detail/ui'
-import { FolderOpen } from 'lucide-react'
+import { FolderOpen, Plus } from 'lucide-react'
 import { Icon } from '../components/ui/Icon'
+import NewProjectModal from '../components/NewProjectModal'
 
 // ─── Iconos de integraciones ─────────────────────────────────────────────────
 
@@ -176,6 +177,14 @@ export default function MyProjects() {
   const [sort,         setSort]         = useState('name')
   const [filterService, setFilterService] = useState('')
   const [filterPerson,  setFilterPerson]  = useState('')
+  const [creating,      setCreating]      = useState(false)
+  const canCreate = !!user?.isAdmin
+
+  // Al crear, se abre la ficha del proyecto nuevo (ahí se completan sitio web, redes, portal…).
+  function handleCreated(project) {
+    setCreating(false)
+    navigate(`/my-projects/${encodeURIComponent(project.name)}`)
+  }
 
   useEffect(() => {
     api.get('/projects')
@@ -320,11 +329,20 @@ export default function MyProjects() {
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <Navbar />
       <main className="max-w-6xl mx-auto px-4 py-8">
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Mis Proyectos</h1>
-          <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">
-            {projects.length} proyecto{projects.length !== 1 ? 's' : ''} en el workspace
-          </p>
+        <div className="mb-6 flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Mis Proyectos</h1>
+            <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">
+              {projects.length} proyecto{projects.length !== 1 ? 's' : ''} en el workspace
+            </p>
+          </div>
+          {canCreate && (
+            <button type="button" onClick={() => setCreating(true)}
+              className="shrink-0 inline-flex items-center gap-1.5 bg-primary-600 hover:bg-primary-700 text-white rounded-xl px-4 py-2 text-sm font-semibold transition-colors">
+              <Icon as={Plus} size={16} />
+              Nuevo proyecto
+            </button>
+          )}
         </div>
 
         {loading && <LoadingSpinner className="py-16" />}
@@ -333,7 +351,9 @@ export default function MyProjects() {
           <div className="text-center py-16 text-gray-400">
             <Icon as={FolderOpen} size={32} strokeWidth={1.5} className="mx-auto mb-3" />
             <p className="font-medium">No hay proyectos en este workspace todavía</p>
-            <p className="text-sm mt-1">Pedile a un administrador que cree el primero</p>
+            {canCreate
+              ? <button type="button" onClick={() => setCreating(true)} className="mt-4 bg-primary-600 hover:bg-primary-700 text-white rounded-xl px-4 py-2 text-sm font-semibold">Crear el primero</button>
+              : <p className="text-sm mt-1">Pedile a un administrador que cree el primero</p>}
           </div>
         )}
 
@@ -419,6 +439,7 @@ export default function MyProjects() {
             </div>
           </section>
         )}
+      <NewProjectModal open={creating} onClose={() => setCreating(false)} onCreated={handleCreated} currentUserId={user?.id} />
       </main>
     </div>
   )
