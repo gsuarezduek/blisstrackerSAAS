@@ -9,7 +9,7 @@ const jwt    = require('jsonwebtoken')
 const prisma = require('../../src/lib/prisma')
 const { renderUrlToPdf } = require('../../src/services/pdfRenderer.service')
 const { buildPublicReportPayload } = require('../../src/controllers/monthlyReport/reportPublic.controller')
-const { downloadReportPdf, getReportForPrint } = require('../../src/controllers/monthlyReport/reportPdf.controller')
+const { downloadReportPdf, downloadPublicReportPdf, getReportForPrint, _publicPdfCache } = require('../../src/controllers/monthlyReport/reportPdf.controller')
 
 function mockRes() {
   const res = { statusCode: 200, headers: {}, body: undefined }
@@ -145,5 +145,54 @@ describe('getReportForPrint', () => {
     const res = mockRes()
     await getReportForPrint({ params: { printToken: sign({ purpose: 'report-print', reportId: 7 }) } }, res, jest.fn())
     expect(res.statusCode).toBe(404)
+  })
+})
+
+
+describe('downloadPublicReportPdf', () => {
+  const PUBLISHED = { ...GENERATED, status: 'published', updatedAt: new Date('2026-10-01T10:00:00Z'), workspace: { slug: 'bliss' } }
+  const reqTok = () => ({ params: { token: 'tok-1' } })
+
+  beforeEach(() => {
+    _publicPdfCache.clear()
+    renderUrlToPdf.mockReset()
+    prisma.monthlyReport.findUnique.mockReset()
+  })
+
+  it('404 REPORT_DRAFT si el informe es borrador (no se renderiza nada)', async () => {
+    prisma.monthlyReport.findUnique.mockResolvedValue({ ...PUBLISHED, status: 'draft' })
+    const res = mockRes()
+    await downloadPublicReportPdf(reqTok(), res, jest.fn())
+    expect(res.statusCode).toBe(404)
+    expect(res.body.code).toBe('REPORT_DRAFT')
+    expect(renderUrlToPdf).not.toHaveBeenCalled()
+  })
+
+  it('404 si el token no existe o el informe no se generó', async () => {
+    prisma.monthlyReport.findUnique.mockResolvedValue(null)
+    const res = mockRes()
+    await downloadPublicReportPdf(reqTok(), res, jest.fn())
+    expect(res.statusCode).toBe(404)
+  })
+
+  it('renderiza una vez y sirve del cache mientras el informe no cambie', async () => {
+    prisma.monthlyReport.findUnique.mockResolvedValue(PUBLISHED)
+    renderUrlToPdf.mockResolvedValue(Buffer.from('%PDF-pub'))
+
+    const r1 = mockRes(); await downloadPublicReportPdf(reqTok(), r1, jest.fn())
+    const r2 = mockRes(); await downloadPublicReportPdf(reqTok(), r2, jest.fn())
+    expect(renderUrlToPdf).toHaveBeenCalledTimes(1)
+    expect(r2.headers['Content-Type']).toBe('application/pdf')
+    expect(r2.body.toString()).toBe('%PDF-pub')
+    expect(renderUrlToPdf.mock.calls[0][0]).toMatch(/\/report-print\//)
+  })
+
+  it('vuelve a renderizar si el informe se actualizó', async () => {
+    renderUrlToPdf.mockResolvedValue(Buffer.from('x'))
+    prisma.monthlyReport.findUnique.mockResolvedValueOnce(PUBLISHED)
+    await downloadPublicReportPdf(reqTok(), mockRes(), jest.fn())
+    prisma.monthlyReport.findUnique.mockResolvedValueOnce({ ...PUBLISHED, updatedAt: new Date('2026-10-02T10:00:00Z') })
+    await downloadPublicReportPdf(reqTok(), mockRes(), jest.fn())
+    expect(renderUrlToPdf).toHaveBeenCalledTimes(2)
   })
 })

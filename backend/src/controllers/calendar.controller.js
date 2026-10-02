@@ -24,9 +24,9 @@ function rangeTooWide(from, to) {
   return (new Date(to) - new Date(from)) / 86400000 > MAX_RANGE_DAYS
 }
 
-// ─── GET /api/calendar/events?from=&to= ────────────────────────────────────
-// Eventos donde el usuario actual es organizador o participante (no se listan
-// eventos ajenos — ver getAvailability para "disponibilidad" sin contenido).
+// ─── GET /api/calendar/events?from=&to=[&projectId=] ──────────────────────
+// Sin projectId: eventos donde el usuario actual es organizador o participante.
+// Con projectId: todas las reuniones de ese proyecto en el rango (ver abajo).
 async function listEvents(req, res, next) {
   try {
     const workspaceId = req.workspace.id
@@ -34,6 +34,13 @@ async function listEvents(req, res, next) {
     const { from, to } = req.query
     if (!DATE_RE.test(from || '') || !DATE_RE.test(to || '')) return res.status(400).json({ error: 'from/to inválidos (YYYY-MM-DD)' })
     if (rangeTooWide(from, to)) return res.status(400).json({ error: 'Rango de fechas demasiado amplio' })
+    // ?projectId= → reuniones de ESE proyecto (las vea quien las vea), para el Resumen de
+    // la ficha del proyecto. Mismo criterio que getAvailability: una reunión es visible
+    // con su título para cualquier miembro del workspace ("equipo = etiqueta, no barrera").
+    const projectId = req.query.projectId ? Number(req.query.projectId) : null
+    if (req.query.projectId && !(Number.isInteger(projectId) && projectId > 0)) {
+      return res.status(400).json({ error: 'projectId inválido' })
+    }
 
     await ensureOccurrences({ workspaceId, from, to, tz: req.workspace.timezone })
 
@@ -41,7 +48,9 @@ async function listEvents(req, res, next) {
       where: {
         workspaceId,
         date: { gte: from, lte: to },
-        OR: [{ organizerId: userId }, { participants: { some: { userId } } }],
+        ...(projectId
+          ? { projectId }
+          : { OR: [{ organizerId: userId }, { participants: { some: { userId } } }] }),
       },
       include: EVENT_INCLUDE,
       orderBy: [{ date: 'asc' }, { startTime: 'asc' }],

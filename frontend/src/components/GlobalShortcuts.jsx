@@ -39,6 +39,9 @@ function Kbd({ children }) {
 export default function GlobalShortcuts() {
   const { user } = useAuth()
   const [taskOpen, setTaskOpen] = useState(false)
+  // Descripción precargada cuando otra pantalla abre el modal con contexto
+  // (ej. "crear tarea desde este archivo" en la Nube del proyecto).
+  const [taskDefaults, setTaskDefaults] = useState(null)
   const [helpOpen, setHelpOpen] = useState(false)
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [toast, setToast] = useState('')
@@ -63,7 +66,10 @@ export default function GlobalShortcuts() {
   // para que el dock abra el modal de tarea sin necesitar su propio botón.
   useEffect(() => {
     if (!enabled) return
-    function onOpenAddTask() { setTaskOpen(true) }
+    function onOpenAddTask(e) {
+      setTaskDefaults(e?.detail?.description ? { description: e.detail.description } : null)
+      setTaskOpen(true)
+    }
     window.addEventListener('bliss:open-add-task', onOpenAddTask)
     return () => window.removeEventListener('bliss:open-add-task', onOpenAddTask)
   }, [enabled])
@@ -113,7 +119,7 @@ export default function GlobalShortcuts() {
 
       // Atajos de una sola tecla (sin Shift).
       if (taskOpen || helpOpen || paletteOpen) return
-      if (lower === 'n') { e.preventDefault(); setTaskOpen(true) }
+      if (lower === 'n') { e.preventDefault(); setTaskDefaults(null); setTaskOpen(true) }
     }
 
     window.addEventListener('keydown', onKey)
@@ -135,7 +141,7 @@ export default function GlobalShortcuts() {
           (frontend/src/components/FloatingDock.jsx) vía el evento `bliss:open-add-task`,
           o con la tecla N. Si estamos dentro de un proyecto, la tarea queda asociada a él. */}
       {taskOpen && (
-        <AddTaskModal defaultProject={projectContext} onAdd={handleAdd} onClose={() => setTaskOpen(false)} />
+        <AddTaskModal defaultProject={projectContext} defaultDescription={taskDefaults?.description} onAdd={handleAdd} onClose={() => setTaskOpen(false)} />
       )}
 
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />

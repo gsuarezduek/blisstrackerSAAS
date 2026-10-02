@@ -1,33 +1,36 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import api from '../../api/client'
 import ObjectiveProgressBars from './ObjectiveProgressBars'
 import useObjectiveProgress from './useObjectiveProgress'
 import AdsAdvisorPanel from './AdsAdvisorPanel'
 import CrossProjectAdsPanel from './CrossProjectAdsPanel'
+import { BRANDS } from './networks/brands'
+import { fmtNum, fmtK, fmtUSD, fmtPct } from './networks/format'
+import { KpiCard, BrandSpinner } from './networks/ui'
+import ConnectScreen, { OAuthMethod, ExpiredNotice } from './networks/ConnectScreen'
+import AccountHeader from './networks/AccountHeader'
+
+const BRAND = BRANDS.google_ads
+
+const authUrl = projectId => () =>
+  api.get('/marketing/integrations/google/auth-url', { params: { projectId, type: 'google_ads' } }).then(r => r.data.url)
+
+const fmtGoogleId = id => String(id).replace(/(\d{3})(\d{3})(\d+)/, '$1-$2-$3')
+
+function ConnectPrompt({ projectId, onConnected }) {
+  return (
+    <ConnectScreen brand={BRAND} title="Conectá la cuenta de Google Ads"
+      subtitle="Inversión, clicks, CTR, conversiones y las campañas activas."
+      methods={[{
+        key: 'official', icon: '🔗', title: 'Conexión oficial (Google)',
+        description: 'Autorizá con la cuenta de Google que administra Google Ads. Después elegís el Customer ID.',
+        body: <OAuthMethod brand={BRAND} getAuthUrl={authUrl(projectId)} onConnected={onConnected} cta="Conectar con Google" />,
+      }]}
+    />
+  )
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-function fmtNum(n) {
-  if (n == null) return '—'
-  return n.toLocaleString('es-AR')
-}
-
-function fmtK(n) {
-  if (n == null) return '—'
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
-  if (n >= 10_000)    return `${(n / 1_000).toFixed(1)}K`
-  return n.toLocaleString('es-AR')
-}
-
-function fmtUSD(n) {
-  if (n == null || n === 0) return '$0'
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 }).format(n)
-}
-
-function fmtPct(n) {
-  if (n == null) return '—'
-  return `${Number(n).toFixed(2)}%`
-}
 
 const CAMPAIGN_STATUS = {
   ENABLED: { label: 'Activa',   cls: 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' },
@@ -43,20 +46,6 @@ const DATE_PRESETS = [
   { key: 'last_month',  label: 'Mes anterior' },
   { key: 'last_90d',    label: '90 días' },
 ]
-
-// ── KPI Card ──────────────────────────────────────────────────────────────────
-
-function KpiCard({ icon, label, value, sub, valueClass = '' }) {
-  return (
-    <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 flex flex-col gap-1">
-      <div className="flex items-center gap-1.5 text-gray-500 dark:text-gray-400 text-xs">
-        <span>{icon}</span><span>{label}</span>
-      </div>
-      <div className={`text-2xl font-bold text-gray-900 dark:text-white ${valueClass}`}>{value}</div>
-      {sub && <div className="text-xs text-gray-400 dark:text-gray-500">{sub}</div>}
-    </div>
-  )
-}
 
 // ── Tabla de campañas ─────────────────────────────────────────────────────────
 
@@ -303,77 +292,6 @@ function CustomerIdForm({ projectId, onSaved, initialCustomerId = '', initialMan
   )
 }
 
-// ── Prompt de conexión OAuth ──────────────────────────────────────────────────
-
-function ConnectPrompt({ projectId, onConnected }) {
-  const [loading, setLoading] = useState(false)
-  const [error,   setError]   = useState(null)
-  const pollRef = useRef(null)
-
-  const handleConnect = async () => {
-    if (!projectId) { setError('Seleccioná un proyecto primero.'); return }
-    setLoading(true)
-    setError(null)
-    try {
-      const { data } = await api.get('/marketing/integrations/google/auth-url', {
-        params: { projectId, type: 'google_ads' },
-      })
-      localStorage.removeItem('__ga_oauth_result')
-      const popup = window.open(data.url, 'google_ads_oauth', 'width=520,height=660,left=200,top=100')
-
-      let elapsed = 0
-      pollRef.current = setInterval(() => {
-        elapsed += 600
-        try {
-          const raw = localStorage.getItem('__ga_oauth_result')
-          if (raw) {
-            const result = JSON.parse(raw)
-            localStorage.removeItem('__ga_oauth_result')
-            clearInterval(pollRef.current)
-            setLoading(false)
-            if (result.success && result.integrationType === 'google_ads') onConnected()
-            else setError(result.error || 'Error al conectar Google Ads.')
-            return
-          }
-        } catch { /* ignorar */ }
-        if (popup?.closed) { clearInterval(pollRef.current); setLoading(false) }
-        if (elapsed >= 5 * 60 * 1000) {
-          clearInterval(pollRef.current); setLoading(false)
-          setError('La conexión tardó demasiado. Intentá de nuevo.')
-        }
-      }, 600)
-    } catch (err) {
-      setLoading(false)
-      setError(err.response?.data?.error || 'No se pudo iniciar la conexión.')
-    }
-  }
-
-  return (
-    <div className="flex flex-col items-center justify-center py-20 text-center">
-      <div className="w-16 h-16 rounded-2xl flex items-center justify-center text-3xl mb-4 overflow-hidden bg-white border border-gray-200 dark:border-gray-700 shadow-sm">
-        🔍
-      </div>
-      <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-2">
-        Conectá tu cuenta de Google Ads
-      </h3>
-      <p className="text-sm text-gray-400 dark:text-gray-500 max-w-xs mb-6">
-        Necesitás una cuenta activa de Google Ads con campañas configuradas.
-      </p>
-      {error && <p className="text-sm text-red-600 dark:text-red-400 mb-4 max-w-sm">{error}</p>}
-      <button
-        onClick={handleConnect}
-        disabled={loading || !projectId}
-        className="px-5 py-2.5 bg-blue-500 hover:bg-blue-600 text-white text-sm font-semibold rounded-xl disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-      >
-        {loading ? 'Conectando…' : 'Conectar Google Ads'}
-      </button>
-      {!projectId && (
-        <p className="text-xs text-gray-400 mt-2">Seleccioná un proyecto para continuar.</p>
-      )}
-    </div>
-  )
-}
-
 // ── Componente principal ──────────────────────────────────────────────────────
 
 export default function GoogleAdsTab({ projectId, onSelectProject, projects = [] }) {
@@ -494,49 +412,25 @@ export default function GoogleAdsTab({ projectId, onSelectProject, projects = []
     )
   }
 
-  if (initLoading) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-      </div>
-    )
-  }
+  if (initLoading) return <BrandSpinner brand={BRAND} />
 
   // Sin integración → prompt de conexión
   if (!integration) return <ConnectPrompt projectId={projectId} onConnected={handleConnected} />
+  // Token vencido (refresh con invalid_grant): se reconecta con el mismo OAuth.
+  if (integration.status === 'expired' || errorCode === 'TOKEN_EXPIRED') return (
+    <ExpiredNotice brand={BRAND}>
+      <OAuthMethod brand={BRAND} getAuthUrl={authUrl(projectId)} onConnected={handleConnected} cta="Reconectar con Google" />
+    </ExpiredNotice>
+  )
 
   // Integración conectada pero sin Customer ID, o usuario quiere editarlo → formulario
   if (!integration.customerId || editingCustomerId) {
     return (
       <div className="space-y-4">
-        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-5">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-blue-50 dark:bg-blue-900/20 rounded-xl flex items-center justify-center text-xl">🔍</div>
-              <div>
-                <p className="font-semibold text-gray-900 dark:text-white">Google Ads conectado</p>
-                <p className="text-xs text-green-600 dark:text-green-400">OAuth autorizado ✓</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-3">
-              {editingCustomerId && (
-                <button
-                  onClick={() => setEditingCustomerId(false)}
-                  className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
-                >
-                  Cancelar
-                </button>
-              )}
-              <button
-                onClick={handleDisconnect}
-                disabled={disconnecting}
-                className="text-xs text-gray-400 hover:text-red-500 transition-colors"
-              >
-                {disconnecting ? 'Desconectando…' : 'Desconectar'}
-              </button>
-            </div>
-          </div>
-        </div>
+        <AccountHeader brand={BRAND} integration={integration} name="Google Ads"
+          subtitle="Cuenta de Google autorizada ✓ — falta elegir el Customer ID"
+          actions={editingCustomerId ? [{ key: 'cancel', label: 'Cancelar', onClick: () => setEditingCustomerId(false) }] : []}
+          onDisconnect={handleDisconnect} disconnecting={disconnecting} />
         <CustomerIdForm
           projectId={projectId}
           onSaved={handleCustomerIdSaved}
@@ -552,32 +446,10 @@ export default function GoogleAdsTab({ projectId, onSelectProject, projects = []
   return (
     <div className="space-y-4">
 
-      {/* Header */}
-      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-5">
-        <div className="flex items-center justify-between gap-4 flex-wrap">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-blue-50 dark:bg-blue-900/20 rounded-xl flex items-center justify-center text-xl">🔍</div>
-            <div>
-              <p className="font-semibold text-gray-900 dark:text-white">Google Ads</p>
-              <p className="text-xs text-gray-400 dark:text-gray-500">
-                Cliente: {data?.customerName ? `${data.customerName} · ` : ''}{String(integration.customerId).replace(/(\d{3})(\d{3})(\d+)/, '$1-$2-$3')}
-              </p>
-              {integration.propertyId && (
-                <p className="text-xs text-gray-400 dark:text-gray-500">
-                  Manager: {String(integration.propertyId).replace(/(\d{3})(\d{3})(\d+)/, '$1-$2-$3')}
-                </p>
-              )}
-            </div>
-          </div>
-          <button
-            onClick={handleDisconnect}
-            disabled={disconnecting}
-            className="text-xs text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors disabled:opacity-50"
-          >
-            {disconnecting ? 'Desconectando…' : 'Desconectar'}
-          </button>
-        </div>
-      </div>
+      <AccountHeader brand={BRAND} integration={integration} name={data?.customerName || 'Google Ads'}
+        subtitle={<>Cliente {fmtGoogleId(integration.customerId)}{integration.propertyId && <> · Manager {fmtGoogleId(integration.propertyId)}</>}</>}
+        actions={[{ key: 'cid', label: 'Cambiar cuenta', onClick: () => setEditingCustomerId(true) }]}
+        onDisconnect={handleDisconnect} disconnecting={disconnecting} />
 
       {/* Error */}
       {error && (
@@ -590,11 +462,6 @@ export default function GoogleAdsTab({ projectId, onSelectProject, projects = []
             >
               {errorCode === 'PERMISSION_DENIED' ? 'Configurar Manager ID' : 'Corregir Customer ID'}
             </button>
-          )}
-          {errorCode === 'TOKEN_EXPIRED' && (
-            <span className="shrink-0 text-xs text-red-500 dark:text-red-400">
-              Desconectá y volvé a conectar desde <strong>Info</strong> del proyecto
-            </span>
           )}
         </div>
       )}

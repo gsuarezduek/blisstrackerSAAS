@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import DOMPurify from 'dompurify'
 import RichTextEditor from '../RichTextEditor'
+import axios from 'axios'
 import api from '../../api/client'
 import { linkify } from '../../utils/linkify'
 import '../situation-editor.css'
@@ -65,13 +66,25 @@ export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, o
     }
   }
 
+  // Vista pública (link del informe / portal del cliente): el mismo PDF del servidor
+  // por el token del informe, sin JWT del equipo (axios crudo). Las métricas en vivo
+  // del portal no tienen informe detrás → siguen con la impresión del navegador.
+  const publicPdfToken = isPublic ? report?.token : null
+  async function handlePdfClick() {
+    if (isPublic && !publicPdfToken) { window.print(); return }
+    handleDownloadPdf()
+  }
+
   async function handleDownloadPdf() {
     const reportMonth = report?.month || month
-    if (!project?.id || !reportMonth || downloadingPdf) return
+    if (downloadingPdf) return
+    if (!publicPdfToken && (!project?.id || !reportMonth)) return
     setDownloadingPdf(true)
     setPdfError(null)
     try {
-      const res = await api.get(`/marketing/projects/${project.id}/reports/${reportMonth}/pdf`, { responseType: 'blob', timeout: 120000 })
+      const res = publicPdfToken
+        ? await axios.get(`${import.meta.env.VITE_API_URL}/api/public/report/${publicPdfToken}/pdf`, { responseType: 'blob', timeout: 120000 })
+        : await api.get(`/marketing/projects/${project.id}/reports/${reportMonth}/pdf`, { responseType: 'blob', timeout: 120000 })
       const url = URL.createObjectURL(res.data)
       const a = document.createElement('a')
       a.href = url
@@ -297,12 +310,16 @@ export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, o
             <p className="text-gray-800 dark:text-gray-100 text-lg font-bold capitalize">{periodTitle}</p>
             {periodRange && <p className="text-gray-400 dark:text-gray-500 text-xs mt-0.5">{periodRange}</p>}
           </div>
-          <button
-            onClick={() => window.print()}
-            className="no-print flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors shrink-0"
-          >
-            🖨️ PDF
-          </button>
+          <div className="no-print flex flex-col items-end gap-1 shrink-0">
+            <button
+              onClick={handlePdfClick}
+              disabled={downloadingPdf}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-60 disabled:cursor-wait"
+            >
+              {downloadingPdf ? <><span className="w-3 h-3 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" /> Generando…</> : publicPdfToken ? <>📄 Descargar PDF</> : <>🖨️ Imprimir</>}
+            </button>
+            {pdfError && <p className="text-xs text-red-500 max-w-[14rem] text-right">{pdfError}</p>}
+          </div>
         </div>
       ) : isPublic ? (
         /* Hero de gradiente de marca (el banner de portada ahora vive a nivel de portal, ver PortalHero) */
@@ -312,12 +329,16 @@ export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, o
           <div className="relative flex flex-col justify-end p-6 sm:p-8" style={{ minHeight: '12rem' }}>
             {/* fila superior: PDF */}
             <div className="absolute top-5 left-6 right-6 sm:left-8 sm:right-8 flex items-center justify-end gap-3">
-              <button
-                onClick={() => window.print()}
-                className="no-print flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-white/15 hover:bg-white/25 text-white backdrop-blur-sm transition-colors shrink-0"
-              >
-                🖨️ PDF
-              </button>
+              <div className="no-print flex flex-col items-end gap-1 shrink-0">
+                <button
+                  onClick={handlePdfClick}
+                  disabled={downloadingPdf}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-white/15 hover:bg-white/25 text-white backdrop-blur-sm transition-colors disabled:opacity-60 disabled:cursor-wait"
+                >
+                  {downloadingPdf ? <><span className="w-3 h-3 border-2 border-white/70 border-t-transparent rounded-full animate-spin" /> Generando…</> : publicPdfToken ? <>📄 Descargar PDF</> : <>🖨️ Imprimir</>}
+                </button>
+                {pdfError && <p className="text-xs text-white bg-red-600/80 rounded px-2 py-0.5 max-w-[14rem] text-right">{pdfError}</p>}
+              </div>
             </div>
 
             <div className="flex items-end justify-between gap-4">

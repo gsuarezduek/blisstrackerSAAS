@@ -4,16 +4,14 @@ import Navbar from '../components/Navbar'
 import LoadingSpinner from '../components/LoadingSpinner'
 import HowToButton from '../components/HowToButton'
 import PrioridadesTab from '../components/marketing/PrioridadesTab'
-import { NAV, LEGACY_MAP, VALID_TABS } from '../components/marketing/marketingNav'
+import { NAV, LEGACY_MAP, LEGACY_SUB_MAP, VALID_TABS } from '../components/marketing/marketingNav'
 import GeoTab      from '../components/marketing/GeoTab'
 import WebTab      from '../components/marketing/WebTab'
 import SeoTab      from '../components/marketing/SeoTab'
 import KeywordsTab from '../components/marketing/KeywordsTab'
-import ActionPlanTab     from '../components/marketing/ActionPlanTab'
 import ContentBriefTab   from '../components/marketing/ContentBriefTab'
 import OnPageTab         from '../components/marketing/OnPageTab'
 import ContentGapTab     from '../components/marketing/ContentGapTab'
-import SaludTab         from '../components/marketing/SaludTab'
 import CanibalizacionTab from '../components/marketing/CanibalizacionTab'
 import InformesTab  from '../components/marketing/InformesTab'
 import InstagramTab from '../components/marketing/InstagramTab'
@@ -62,37 +60,66 @@ export default function Marketing() {
   const visibleNav = NAV.filter(n => !disabledSections.includes(n.id))
 
   function resolveNav() {
-    const rawTab = searchParams.get('tab')
-    const rawSub = searchParams.get('sub')
+    const rawTab  = searchParams.get('tab')
+    const rawSub  = searchParams.get('sub')
+    const rawView = searchParams.get('view')
 
-    // Backward compat
+    // Compat con URLs viejas: tab suelto (?tab=geo) y sub-pestañas que se fusionaron.
     if (rawTab && !VALID_TABS.has(rawTab) && LEGACY_MAP[rawTab]) {
-      return LEGACY_MAP[rawTab]
+      const m = LEGACY_MAP[rawTab]
+      const legacySub = LEGACY_SUB_MAP[m.tab]?.[m.sub]
+      return normalize(legacySub?.tab ?? m.tab, legacySub ? legacySub.sub : m.sub, legacySub?.view)
     }
+    const legacySub = LEGACY_SUB_MAP[rawTab]?.[rawSub]
+    if (legacySub) return normalize(legacySub.tab ?? rawTab, legacySub.sub, legacySub.view)
+    return normalize(rawTab, rawSub, rawView)
+  }
 
+  function normalize(rawTab, rawSub, rawView) {
     let tab = VALID_TABS.has(rawTab) ? rawTab : 'hoy'
     if (disabledSections.includes(tab)) tab = visibleNav[0]?.id ?? tab
     const navItem = NAV.find(n => n.id === tab)
-    const validSubs = new Set(navItem?.subs.map(s => s.id) ?? [])
-    const sub = validSubs.has(rawSub) ? rawSub : (navItem?.subs[0]?.id ?? '')
-    return { tab, sub }
+    const subItem = navItem?.subs.find(s => s.id === rawSub) ?? navItem?.subs[0]
+    const view = subItem?.views
+      ? (subItem.views.some(v => v.id === rawView) ? rawView : subItem.views[0].id)
+      : ''
+    return { tab, sub: subItem?.id ?? '', view }
   }
 
-  const { tab, sub } = resolveNav()
+  const { tab, sub, view } = resolveNav()
+
+  // Si la URL vino con nombres viejos, la reescribimos a la forma nueva (así los
+  // links compartidos/marcadores quedan apuntando bien desde ahora).
+  useEffect(() => {
+    if (!moduleAllowed) return
+    const cur = { tab: searchParams.get('tab') ?? '', sub: searchParams.get('sub') ?? '', view: searchParams.get('view') ?? '' }
+    if (!cur.tab) return
+    if (cur.tab === tab && (cur.sub || '') === sub && (cur.view || '') === view) return
+    if (cur.tab === tab && !cur.sub && !cur.view) return
+    navigateTo({ tab, sub, view })
+  }, [tab, sub, view, moduleAllowed]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  function navigateTo({ tab: t, sub: s, view: v }) {
+    const params = { tab: t }
+    if (s) params.sub = s
+    if (v) params.view = v
+    if (projectId) params.projectId = projectId
+    setSearchParams(params, { replace: true })
+  }
 
   function setTab(id) {
     const navItem = NAV.find(n => n.id === id)
-    const firstSub = navItem?.subs[0]?.id ?? ''
-    const params = { tab: id }
-    if (firstSub) params.sub = firstSub
-    if (projectId) params.projectId = projectId
-    setSearchParams(params, { replace: true })
+    const first = navItem?.subs[0]
+    navigateTo({ tab: id, sub: first?.id, view: first?.views?.[0]?.id })
   }
 
   function setSub(id) {
-    const params = { tab, sub: id }
-    if (projectId) params.projectId = projectId
-    setSearchParams(params, { replace: true })
+    const subItem = activeNav.subs.find(s => s.id === id)
+    navigateTo({ tab, sub: id, view: subItem?.views?.[0]?.id })
+  }
+
+  function setView(id) {
+    navigateTo({ tab, sub, view: id })
   }
 
   function handleProjectChange(id) {
@@ -105,13 +132,14 @@ export default function Marketing() {
     }, { replace: true })
   }
 
-  // Navega a una sub-pestaña puntual (usado por el panel "Prioridades" para llevar a
-  // cada hallazgo a su pestaña de origen), conservando el proyecto seleccionado.
-  function handleNavigateTo({ tab: destTab, sub: destSub }) {
-    const params = { tab: destTab }
-    if (destSub) params.sub = destSub
-    if (projectId) params.projectId = projectId
-    setSearchParams(params, { replace: true })
+  // Navega a una sub-pestaña puntual (usado por "Prioridades" para llevar cada
+  // hallazgo/conexión a su pestaña de origen), conservando el proyecto. Pasa por
+  // normalize() para completar sub/view por defecto y aceptar ids viejos.
+  function handleNavigateTo({ tab: destTab, sub: destSub, view: destView }) {
+    const legacy = LEGACY_SUB_MAP[destTab]?.[destSub]
+    navigateTo(legacy
+      ? normalize(legacy.tab ?? destTab, legacy.sub, legacy.view)
+      : normalize(destTab, destSub, destView))
   }
 
   const activeNav = NAV.find(n => n.id === tab) ?? NAV[0]
@@ -121,17 +149,17 @@ export default function Marketing() {
     if (tab === 'hoy')      return <PrioridadesTab projectId={projectId} projects={projects} onSelectProject={handleProjectChange} onNavigate={handleNavigateTo} />
     if (tab === 'informes') return <InformesTab projectId={projectId} onSelectProject={handleProjectChange} projects={projects} />
 
-    if (activeNav.soon || activeNav.subs.length === 0) return <ComingSoon label={activeNav.label} />
-    if (activeSub?.soon)                               return <ComingSoon label={activeSub.label} />
-
-    if (tab === 'geo-seo' && sub === 'geo')            return <GeoTab            projectId={projectId} projects={projects} onSelectProject={handleProjectChange} />
-    if (tab === 'geo-seo' && sub === 'seo')            return <SeoTab            projectId={projectId} projects={projects} onSelectProject={handleProjectChange} />
-    if (tab === 'geo-seo' && sub === 'onpage')         return <OnPageTab         projectId={projectId} projects={projects} />
-    if (tab === 'geo-seo' && sub === 'keywords')       return <KeywordsTab       projectId={projectId} projects={projects} />
-    if (tab === 'geo-seo' && sub === 'contenido')      return <ContentBriefTab   projectId={projectId} projects={projects} />
-    if (tab === 'geo-seo' && sub === 'content-gap')    return <ContentGapTab     projectId={projectId} projects={projects} />
-    if (tab === 'geo-seo' && sub === 'plan')           return <ActionPlanTab     projectId={projectId} projects={projects} />
-    if (tab === 'geo-seo' && sub === 'canibalizacion') return <CanibalizacionTab projectId={projectId} />
+    if (tab === 'geo-seo' && sub === 'diagnostico') {
+      if (view === 'seo')            return <SeoTab            projectId={projectId} projects={projects} onSelectProject={handleProjectChange} />
+      if (view === 'onpage')         return <OnPageTab         projectId={projectId} projects={projects} />
+      if (view === 'canibalizacion') return <CanibalizacionTab projectId={projectId} />
+      return <GeoTab projectId={projectId} projects={projects} onSelectProject={handleProjectChange} />
+    }
+    if (tab === 'geo-seo' && sub === 'keywords')  return <KeywordsTab projectId={projectId} projects={projects} />
+    if (tab === 'geo-seo' && sub === 'contenido') {
+      if (view === 'gap') return <ContentGapTab projectId={projectId} projects={projects} />
+      return <ContentBriefTab projectId={projectId} projects={projects} />
+    }
     if (tab === 'web')                           return <WebTab subtab={sub} projectId={projectId} projects={projects} onSelectProject={handleProjectChange} />
     if (tab === 'rrss'     && sub === 'instagram') return <InstagramTab projectId={projectId} onSelectProject={handleProjectChange} projects={projects} />
     if (tab === 'rrss'     && sub === 'tiktok')    return <TikTokTab    projectId={projectId} onSelectProject={handleProjectChange} projects={projects} />
@@ -205,80 +233,70 @@ export default function Marketing() {
           </div>
         ) : (
           <>
-            {/* ── Tabs principales — desktop ── */}
-            <div className="hidden sm:flex gap-1 mb-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-1">
-              {visibleNav.map(n => (
-                <button
-                  key={n.id}
-                  onClick={() => setTab(n.id)}
-                  className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors relative ${
-                    tab === n.id
-                      ? 'bg-primary-600 text-white shadow-sm'
-                      : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'
-                  }`}
-                >
-                  {n.label}
-                  {n.soon && tab !== n.id && (
-                    <span className="absolute -top-1 -right-1 text-[9px] bg-gray-200 dark:bg-gray-600 text-gray-500 dark:text-gray-300 rounded-full px-1 leading-4">
-                      soon
-                    </span>
-                  )}
-                </button>
-              ))}
-            </div>
-
-            {/* ── Subtabs — desktop ── */}
-            {!activeNav.soon && activeNav.subs.length > 0 && (
-              <div className="hidden sm:flex items-center justify-between gap-2 mb-5 border-b border-gray-200 dark:border-gray-700">
-                <div className="flex gap-0">
-                  {activeNav.subs.map(s => (
-                    <button
-                      key={s.id}
-                      onClick={() => setSub(s.id)}
-                      className={`py-2 px-5 text-sm font-medium transition-colors relative ${
-                        sub === s.id
-                          ? 'text-primary-600 dark:text-primary-400 border-b-2 border-primary-600 dark:border-primary-400 -mb-px'
-                          : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
-                      }`}
-                    >
-                      {s.network
-                        ? <span className="inline-flex items-center gap-1.5"><SocialIcon network={s.network} className="w-4 h-4" />{s.label}</span>
-                        : s.label}
-                      {s.soon && sub !== s.id && (
-                        <span className="ml-1.5 text-[9px] bg-gray-200 dark:bg-gray-600 text-gray-500 dark:text-gray-300 rounded-full px-1 leading-4">
-                          soon
-                        </span>
-                      )}
+            {/* ── Secciones: subrayado, con scroll horizontal en mobile ── */}
+            <nav aria-label="Secciones de Marketing"
+              className="-mx-4 px-4 sm:mx-0 sm:px-0 mb-1 border-b border-gray-200 dark:border-gray-700 overflow-x-auto scrollbar-none">
+              <div className="flex gap-1 min-w-max">
+                {visibleNav.map(n => {
+                  const active = tab === n.id
+                  return (
+                    <button key={n.id} type="button" onClick={() => setTab(n.id)}
+                      aria-current={active ? 'page' : undefined}
+                      className={`shrink-0 whitespace-nowrap px-3 sm:px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
+                        active
+                          ? 'border-primary-600 text-primary-700 dark:border-primary-400 dark:text-primary-300'
+                          : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 hover:border-gray-300 dark:hover:border-gray-600'}`}>
+                      {n.label}
                     </button>
-                  ))}
+                  )
+                })}
+              </div>
+            </nav>
+
+            {/* ── Sub-pestañas: chips ── */}
+            {activeNav.subs.length > 0 ? (
+              <div className="flex items-center justify-between gap-2 mt-3 mb-4">
+                <div className="-mx-4 px-4 sm:mx-0 sm:px-0 overflow-x-auto scrollbar-none flex-1 min-w-0">
+                  <div className="flex gap-1.5 min-w-max">
+                    {activeNav.subs.map(s => {
+                      const active = sub === s.id
+                      return (
+                        <button key={s.id} type="button" onClick={() => setSub(s.id)}
+                          aria-current={active ? 'true' : undefined}
+                          className={`shrink-0 whitespace-nowrap inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium border transition-colors ${
+                            active
+                              ? 'bg-gray-900 dark:bg-white border-gray-900 dark:border-white text-white dark:text-gray-900'
+                              : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:border-gray-300 dark:hover:border-gray-500'}`}>
+                          {s.network && <SocialIcon network={s.network} className="w-4 h-4" />}
+                          {s.label}
+                        </button>
+                      )
+                    })}
+                  </div>
                 </div>
-                {tab === 'geo-seo' && <HowToButton topic="marketing.geoSeo" className="mb-2 mr-1" />}
+                {tab === 'geo-seo' && <HowToButton topic="marketing.geoSeo" className="flex-shrink-0" />}
+              </div>
+            ) : <div className="mb-5" />}
+
+            {/* ── Vistas dentro de una sub-pestaña (ej. Diagnóstico: GEO/SEO/On-Page/Canibalización) ── */}
+            {activeSub?.views && (
+              <div className="-mx-4 px-4 sm:mx-0 sm:px-0 overflow-x-auto scrollbar-none mb-5">
+                <div role="tablist" className="inline-flex min-w-max gap-0.5 p-0.5 rounded-lg bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
+                  {activeSub.views.map(v => {
+                    const active = view === v.id
+                    return (
+                      <button key={v.id} type="button" role="tab" aria-selected={active} onClick={() => setView(v.id)}
+                        className={`whitespace-nowrap px-3 py-1.5 rounded-md text-xs sm:text-sm font-medium transition-colors ${
+                          active
+                            ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
+                            : 'text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'}`}>
+                        {v.label}
+                      </button>
+                    )
+                  })}
+                </div>
               </div>
             )}
-
-            {/* ── Mobile: selectores ── */}
-            <div className="sm:hidden mb-5 space-y-2">
-              <select
-                value={tab}
-                onChange={e => setTab(e.target.value)}
-                className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-              >
-                {visibleNav.map(n => (
-                  <option key={n.id} value={n.id}>{n.label}{n.soon ? ' (próximamente)' : ''}</option>
-                ))}
-              </select>
-              {!activeNav.soon && activeNav.subs.length > 0 && (
-                <select
-                  value={sub}
-                  onChange={e => setSub(e.target.value)}
-                  className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-                >
-                  {activeNav.subs.map(s => (
-                    <option key={s.id} value={s.id}>{s.label}{s.soon ? ' (próximamente)' : ''}</option>
-                  ))}
-                </select>
-              )}
-            </div>
 
             {/* Contenido */}
             {renderContent()}

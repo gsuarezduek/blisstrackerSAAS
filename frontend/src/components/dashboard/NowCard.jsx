@@ -129,7 +129,8 @@ export default function NowCard({ activeTask, suggestion, onUpdate, onOpenCommen
                 {busy === 'pause' ? 'Pausando…' : 'Pausar'}
               </button>
               <button onClick={() => setBlocking(true)} disabled={!!busy}
-                className="sm:ml-auto px-3 py-2.5 rounded-xl text-sm font-medium text-gray-500 hover:text-red-600 dark:text-gray-400 dark:hover:text-red-400 disabled:opacity-50">
+                className="sm:ml-auto inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-semibold border border-red-200 dark:border-red-900 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50">
+                <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4"><path fillRule="evenodd" d="M10 1a4.5 4.5 0 0 0-4.5 4.5V9H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2h-.5V5.5A4.5 4.5 0 0 0 10 1Zm3 8V5.5a3 3 0 1 0-6 0V9h6Z" clipRule="evenodd" /></svg>
                 Estoy bloqueado
               </button>
             </div>

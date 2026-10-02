@@ -22,6 +22,14 @@ const SIMILARITY_THRESHOLD = 0.5
 
 const ADS_PLATFORM_LABEL = { meta_ads: 'Meta Ads', google_ads: 'Google Ads' }
 const ADS_PLATFORM_SUB   = { meta_ads: 'meta-ads', google_ads: 'google-ads' }
+// Pestaña de origen de cada hallazgo del plan SEO (antes todos llevaban al viejo
+// "Plan de acción", que se fusionó en Prioridades).
+const SEO_SOURCE_LINK = {
+  geo:       { tab: 'geo-seo', sub: 'diagnostico', view: 'geo' },
+  cannibal:  { tab: 'geo-seo', sub: 'diagnostico', view: 'canibalizacion' },
+  pagespeed: { tab: 'web',     sub: 'performance' },
+  keywords:  { tab: 'geo-seo', sub: 'keywords' },
+}
 const RRSS_PLATFORM_LABEL = { instagram: 'Instagram', tiktok: 'TikTok', linkedin: 'LinkedIn', facebook: 'Facebook', youtube: 'YouTube' }
 
 // Bucket de "Prioridades" (id de NAV de Marketing) al que pertenece cada item, para
@@ -207,7 +215,7 @@ async function computeProjectPendingItems({ projectId, workspaceId, tz = DEFAULT
     return false
   }
 
-  const seoItems = seo.items.map(it => ({ ...it, taskPrefix: 'SEO', link: { tab: 'geo-seo', sub: 'plan' } }))
+  const seoItems = seo.items.map(it => ({ ...it, taskPrefix: 'SEO', link: SEO_SOURCE_LINK[it.source] ?? { tab: 'geo-seo', sub: 'diagnostico' } }))
   const allItems = [...seoItems, ...objectives, ...content, ...ads, ...rrss, ...reports].map(it => ({ ...it, section: sectionOf(it) }))
 
   const items = allItems

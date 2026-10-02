@@ -351,6 +351,7 @@ async function listIntegrations(req, res, next) {
       select: {
         type: true, status: true, propertyId: true,
         customerId: true, country: true, scopes: true, connectedAt: true,
+        expiresAt: true, // null = token permanente (System User de Business Manager)
         // tokens NO se devuelven al frontend
       },
     })

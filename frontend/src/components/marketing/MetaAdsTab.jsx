@@ -1,33 +1,52 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import api from '../../api/client'
 import ObjectiveProgressBars from './ObjectiveProgressBars'
 import useObjectiveProgress from './useObjectiveProgress'
 import AdsAdvisorPanel from './AdsAdvisorPanel'
 import CrossProjectAdsPanel from './CrossProjectAdsPanel'
+import { BRANDS } from './networks/brands'
+import { fmtK, fmtUSD, fmtPct } from './networks/format'
+import { KpiCard, BrandSpinner } from './networks/ui'
+import ConnectScreen, { OAuthMethod, TokenMethod, ExpiredNotice } from './networks/ConnectScreen'
+import AccountHeader from './networks/AccountHeader'
+
+const BRAND = BRANDS.meta_ads
+
+const authUrl = projectId => () =>
+  api.get('/marketing/integrations/meta-ads/auth-url', { params: { projectId } }).then(r => r.data.url)
+
+const CLOSED_MSG = 'La ventana se cerró sin completar la autorización. Si Facebook mostró un error, verificá que la redirect URI esté registrada en Meta for Developers y que tu cuenta tenga acceso a una cuenta publicitaria activa.'
+
+function tokenMethod(projectId, onConnected) {
+  return (
+    <TokenMethod brand={BRAND} accountParam="adAccountId" onConnected={onConnected}
+      endpoint={`/marketing/projects/${projectId}/integrations/meta-ads/connect-token`}
+      renderAccountSub={a => `${a.id}${a.currency ? ` · ${a.currency}` : ''}`}
+      steps={<>En Business Manager → Configuración → Usuarios del sistema, generá un token con el permiso <span className="font-mono">ads_read</span> y la cuenta publicitaria asignada.</>} />
+  )
+}
+
+function ConnectPrompt({ projectId, onConnected }) {
+  return (
+    <ConnectScreen brand={BRAND} title="Conectá la cuenta de Meta Ads"
+      subtitle="Inversión, alcance, clicks, CTR y resultados de las campañas de Facebook e Instagram."
+      methods={[
+        {
+          key: 'official', icon: '🔗', title: 'Conexión oficial',
+          description: 'Iniciá sesión con Facebook. Necesitás acceso a una cuenta publicitaria activa.',
+          body: <OAuthMethod brand={BRAND} getAuthUrl={authUrl(projectId)} onConnected={onConnected} cta="Conectar con Facebook" closedMessage={CLOSED_MSG} />,
+        },
+        {
+          key: 'token', icon: '🔑', title: 'Token de Business Manager',
+          description: 'System User Token con permiso ads_read. Útil si administrás las cuentas desde Business Manager.',
+          body: tokenMethod(projectId, onConnected),
+        },
+      ]}
+    />
+  )
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-function fmtNum(n) {
-  if (n == null) return '—'
-  return n.toLocaleString('es-AR')
-}
-
-function fmtK(n) {
-  if (n == null) return '—'
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
-  if (n >= 10_000)    return `${(n / 1_000).toFixed(1)}K`
-  return n.toLocaleString('es-AR')
-}
-
-function fmtUSD(n) {
-  if (n == null || n === 0) return '$0'
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 }).format(n)
-}
-
-function fmtPct(n) {
-  if (n == null) return '—'
-  return `${Number(n).toFixed(2)}%`
-}
 
 const CAMPAIGN_STATUS_LABEL = {
   ACTIVE:   { label: 'Activa',   cls: 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' },
@@ -45,21 +64,6 @@ const DATE_PRESETS = [
   { key: 'last_month',  label: 'Mes anterior' },
   { key: 'last_90d',    label: '90 días' },
 ]
-
-// ── KPI Card ─────────────────────────────────────────────────────────────────
-
-function KpiCard({ icon, label, value, sub, valueClass = '' }) {
-  return (
-    <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 flex flex-col gap-1">
-      <div className="flex items-center gap-1.5 text-gray-500 dark:text-gray-400 text-xs">
-        <span>{icon}</span>
-        <span>{label}</span>
-      </div>
-      <div className={`text-2xl font-bold text-gray-900 dark:text-white ${valueClass}`}>{value}</div>
-      {sub && <div className="text-xs text-gray-400 dark:text-gray-500">{sub}</div>}
-    </div>
-  )
-}
 
 // ── Tabla de campañas ─────────────────────────────────────────────────────────
 
@@ -189,196 +193,6 @@ function MetaTopAds({ ads }) {
   )
 }
 
-// ── Prompt de conexión ────────────────────────────────────────────────────────
-
-function ConnectPrompt({ projectId, onConnected }) {
-  const [loading,     setLoading]     = useState(false)
-  const [error,       setError]       = useState(null)
-  const [showManual,  setShowManual]  = useState(false)
-  const [manualToken, setManualToken] = useState('')
-  const [accounts,    setAccounts]    = useState(null) // null | array
-  const pollRef = useRef(null)
-
-  const handleConnect = async () => {
-    if (!projectId) { setError('Seleccioná un proyecto primero.'); return }
-    setLoading(true)
-    setError(null)
-    try {
-      const { data } = await api.get('/marketing/integrations/meta-ads/auth-url', { params: { projectId } })
-      localStorage.removeItem('__ga_oauth_result')
-      const popup = window.open(data.url, 'meta_ads_oauth', 'width=520,height=660,left=200,top=100')
-
-      let elapsed = 0
-      pollRef.current = setInterval(async () => {
-        elapsed += 600
-        try {
-          const raw = localStorage.getItem('__ga_oauth_result')
-          if (raw) {
-            const result = JSON.parse(raw)
-            localStorage.removeItem('__ga_oauth_result')
-            clearInterval(pollRef.current)
-            setLoading(false)
-            if (result.success && result.integrationType === 'meta_ads') onConnected()
-            else setError(result.error || 'Error al conectar Meta Ads.')
-            return
-          }
-        } catch { /* ignorar */ }
-        if (popup?.closed) {
-          clearInterval(pollRef.current)
-          setLoading(false)
-          setError('La ventana se cerró sin completar la autorización. Si Facebook mostró un error, verificá que la redirect URI esté registrada en Meta for Developers y que tu cuenta tenga acceso a una Ad Account activa.')
-        }
-        if (elapsed >= 5 * 60 * 1000) {
-          clearInterval(pollRef.current); setLoading(false)
-          setError('La conexión tardó demasiado. Intentá de nuevo.')
-        }
-      }, 600)
-    } catch (err) {
-      setLoading(false)
-      setError(err.response?.data?.error || 'No se pudo iniciar la conexión.')
-    }
-  }
-
-  async function handleManualConnect(adAccountId = null) {
-    if (!manualToken.trim()) { setError('Ingresá el System User Token.'); return }
-    setLoading(true)
-    setError(null)
-    try {
-      const body = { accessToken: manualToken.trim() }
-      if (adAccountId) body.adAccountId = adAccountId
-      const { data } = await api.post(
-        `/marketing/projects/${projectId}/integrations/meta-ads/connect-token`,
-        body
-      )
-      if (data.accounts) {
-        // Múltiples cuentas — mostrar picker
-        setAccounts(data.accounts)
-        setLoading(false)
-      } else {
-        onConnected()
-      }
-    } catch (err) {
-      setError(err.response?.data?.error || 'Error al conectar con el token.')
-      setLoading(false)
-    }
-  }
-
-  // ── Vista: picker de cuentas ──────────────────────────────────────────────
-  if (accounts) {
-    return (
-      <div className="flex flex-col items-center justify-center py-16 text-center">
-        <p className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
-          Seleccioná la cuenta de Meta Ads
-        </p>
-        <p className="text-xs text-gray-400 dark:text-gray-500 mb-5">
-          Se encontraron {accounts.length} cuentas publicitarias.
-        </p>
-        {error && <p className="text-sm text-red-600 dark:text-red-400 mb-3 max-w-sm">{error}</p>}
-        <div className="w-full max-w-sm space-y-2 mb-5">
-          {accounts.map(acc => (
-            <button
-              key={acc.id}
-              onClick={() => handleManualConnect(acc.id)}
-              disabled={loading}
-              className="w-full flex items-center gap-3 px-4 py-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl hover:border-blue-400 dark:hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors text-left disabled:opacity-50"
-            >
-              <div className="w-9 h-9 rounded-full bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center text-blue-700 dark:text-blue-300 font-bold text-sm shrink-0">
-                {(acc.name?.[0] ?? '?').toUpperCase()}
-              </div>
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-gray-800 dark:text-gray-200 truncate">{acc.name}</p>
-                <p className="text-xs text-gray-400 dark:text-gray-500">{acc.id}{acc.currency ? ` · ${acc.currency}` : ''}</p>
-              </div>
-            </button>
-          ))}
-        </div>
-        <button
-          onClick={() => { setAccounts(null); setError(null) }}
-          className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-        >
-          ← Usar otro token
-        </button>
-      </div>
-    )
-  }
-
-  // ── Vista: formulario de token manual ─────────────────────────────────────
-  if (showManual) {
-    return (
-      <div className="flex flex-col items-center justify-center py-16 text-center">
-        <div className="w-16 h-16 bg-gradient-to-br from-blue-600 to-blue-400 rounded-2xl flex items-center justify-center text-3xl mb-4">
-          🔑
-        </div>
-        <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-1">
-          System User Token
-        </h3>
-        <p className="text-xs text-gray-400 dark:text-gray-500 max-w-xs mb-5">
-          Generalo desde Business Manager → Configuración → Usuarios del sistema → Generar token.
-          Seleccioná permiso <strong>ads_read</strong>.
-        </p>
-        {error && <p className="text-sm text-red-600 dark:text-red-400 mb-3 max-w-sm">{error}</p>}
-        <textarea
-          value={manualToken}
-          onChange={e => setManualToken(e.target.value)}
-          placeholder="Pegá el System User Token aquí…"
-          rows={3}
-          className="w-full max-w-sm px-3 py-2 text-xs font-mono border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none mb-4"
-        />
-        <button
-          onClick={() => handleManualConnect()}
-          disabled={loading || !manualToken.trim()}
-          className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-xl disabled:opacity-50 disabled:cursor-not-allowed transition-colors mb-3"
-        >
-          {loading ? 'Verificando…' : 'Conectar'}
-        </button>
-        <button
-          onClick={() => { setShowManual(false); setError(null); setManualToken('') }}
-          className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-        >
-          ← Volver
-        </button>
-      </div>
-    )
-  }
-
-  // ── Vista: pantalla principal de conexión ─────────────────────────────────
-  return (
-    <div className="flex flex-col items-center justify-center py-20 text-center">
-      <div className="w-16 h-16 bg-gradient-to-br from-blue-600 to-blue-400 rounded-2xl flex items-center justify-center text-3xl mb-4">
-        📘
-      </div>
-      <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-2">
-        Conectá tu cuenta de Meta Ads
-      </h3>
-      <p className="text-sm text-gray-400 dark:text-gray-500 max-w-xs mb-6">
-        Necesitás una cuenta publicitaria activa en Facebook Ads Manager.
-      </p>
-      {error && (
-        <p className="text-sm text-red-600 dark:text-red-400 mb-4 max-w-sm">{error}</p>
-      )}
-      <div className="flex flex-col gap-2 items-center">
-        <button
-          onClick={handleConnect}
-          disabled={loading || !projectId}
-          className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-xl disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-        >
-          {loading ? 'Conectando…' : 'Conectar con Facebook'}
-        </button>
-        <button
-          onClick={() => { setShowManual(true); setError(null) }}
-          disabled={!projectId}
-          className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors disabled:opacity-40"
-        >
-          Usar System User Token →
-        </button>
-      </div>
-      {!projectId && (
-        <p className="text-xs text-gray-400 mt-2">Seleccioná un proyecto para continuar.</p>
-      )}
-    </div>
-  )
-}
-
 // ── Componente principal ──────────────────────────────────────────────────────
 
 export default function MetaAdsTab({ projectId, onSelectProject, projects = [] }) {
@@ -484,46 +298,23 @@ export default function MetaAdsTab({ projectId, onSelectProject, projects = [] }
     )
   }
 
-  if (loading && !data) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-      </div>
-    )
-  }
+  if (loading && !data) return <BrandSpinner brand={BRAND} />
 
-  if (!integration) {
-    return <ConnectPrompt projectId={projectId} onConnected={() => fetchData()} />
-  }
+  if (!integration) return <ConnectPrompt projectId={projectId} onConnected={() => fetchData()} />
+  if (integration.status === 'expired') return (
+    <ExpiredNotice brand={BRAND}>
+      <OAuthMethod brand={BRAND} getAuthUrl={authUrl(projectId)} onConnected={() => fetchData()} cta="Reconectar con Facebook" closedMessage={CLOSED_MSG} />
+    </ExpiredNotice>
+  )
 
   const presetLabel = DATE_PRESETS.find(p => p.key === datePreset)?.label ?? datePreset
 
   return (
     <div className="space-y-4">
 
-      {/* Header */}
-      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-5">
-        <div className="flex items-center justify-between gap-4 flex-wrap">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center text-white text-xl shrink-0">
-              📘
-            </div>
-            <div>
-              <p className="font-semibold text-gray-900 dark:text-white">Meta Ads</p>
-              <p className="text-xs text-gray-400 dark:text-gray-500">
-                Cuenta: {integration.propertyId}
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={handleDisconnect}
-            disabled={disconnecting}
-            className="text-xs text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors disabled:opacity-50"
-          >
-            {disconnecting ? 'Desconectando…' : 'Desconectar'}
-          </button>
-        </div>
-      </div>
+      <AccountHeader brand={BRAND} integration={integration} name="Meta Ads"
+        subtitle={integration.propertyId ? `Cuenta publicitaria ${integration.propertyId}` : null}
+        onDisconnect={handleDisconnect} disconnecting={disconnecting} />
 
       {/* Error */}
       {error && (

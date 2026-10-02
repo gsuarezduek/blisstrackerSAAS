@@ -197,7 +197,7 @@ export function TabLegajos({ users, initialUserId }) {
                 {selected.vacationDays ?? 0}
               </p>
               <p className="text-xs text-gray-400 dark:text-gray-500">días disponibles</p>
-              <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-2">Se gestiona desde RRHH → Vacaciones</p>
+              <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-2">Se gestiona desde Ausencias → Saldos de vacaciones</p>
             </div>
           </div>
 

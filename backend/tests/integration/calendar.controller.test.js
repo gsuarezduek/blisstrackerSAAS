@@ -593,6 +593,31 @@ describe('GET /api/calendar/events', () => {
     expect(res.status).toBe(200)
     expect(prisma.calendarEvent.create).not.toHaveBeenCalled()
   })
+
+  it('con ?projectId= lista las reuniones del proyecto, no solo las propias', async () => {
+    prisma.calendarEventRecurrence.findMany.mockResolvedValueOnce([])
+    prisma.calendarEvent.findMany.mockResolvedValueOnce([])
+
+    const res = await request(app)
+      .get('/api/calendar/events')
+      .query({ from: '2026-09-21', to: '2026-10-21', projectId: '7' })
+      .set('Authorization', makeToken())
+      .set('X-Workspace', WORKSPACE_SLUG)
+
+    expect(res.status).toBe(200)
+    const where = prisma.calendarEvent.findMany.mock.calls.at(-1)[0].where
+    expect(where).toEqual(expect.objectContaining({ workspaceId: WORKSPACE_ID, projectId: 7 }))
+    expect(where.OR).toBeUndefined()
+  })
+
+  it('rechaza un projectId inválido', async () => {
+    const res = await request(app)
+      .get('/api/calendar/events')
+      .query({ from: '2026-09-21', to: '2026-09-22', projectId: 'abc' })
+      .set('Authorization', makeToken())
+      .set('X-Workspace', WORKSPACE_SLUG)
+    expect(res.status).toBe(400)
+  })
 })
 
 // ── DELETE /api/calendar/events/:id?scope=series ─────────────────────────────

@@ -75,6 +75,23 @@ async function rrssObjectivesByProject(workspaceId, network, month, projectIds) 
   return byProj
 }
 
+// Suma a cada fila "nuevos del mes" (desde los follower logs) y el progreso de los
+// objetivos rrss de esa red — mismos campos en las 5 redes, así la vista
+// "todos los clientes" del frontend ordena igual en todas.
+async function attachMonthMetrics(result, { followerLogModel, network, workspaceId, currentMonth }) {
+  const monthStart = `${currentMonth}-01`
+  const [newFollowersMap, objMap] = await Promise.all([
+    newFollowersByProject(followerLogModel, workspaceId, monthStart),
+    rrssObjectivesByProject(workspaceId, network, currentMonth, result.map(r => r.projectId)),
+  ])
+  for (const r of result) {
+    const nf = newFollowersMap.get(r.projectId)
+    if (nf) { r.newFollowers = nf.last - nf.first; r.lastDataDate = nf.lastDate }
+    const obj = objMap.get(r.projectId)
+    if (obj) r.objectives = obj
+  }
+}
+
 /**
  * GET /api/marketing/summary/instagram
  * Snapshot de Instagram más reciente por proyecto, ordenado por followersCount desc.
@@ -206,7 +223,6 @@ async function getYouTubeSummary(req, res, next) {
     const workspaceId = req.workspace.id
 
     const currentMonth = todayString().slice(0, 7)
-    const monthStart   = `${currentMonth}-01`
 
     const snapshots = await prisma.youTubeSnapshot.findMany({
       where:   { workspaceId, project: { active: true } },
@@ -228,16 +244,16 @@ async function getYouTubeSummary(req, res, next) {
         avgViews:        s.avgViews        ?? null,
         videosThisMonth: s.videosThisMonth ?? null,
         monthViews:      s.monthViews      ?? null,
+        interactions:    s.videosThisMonth != null && (s.avgLikes != null || s.avgComments != null)
+          ? Math.round(((s.avgLikes ?? 0) + (s.avgComments ?? 0)) * s.videosThisMonth)
+          : null,
         newFollowers:    null,
         lastDataDate:    `${s.month}-01`,
+        objectives:      { seguidores: null, interaccion: null },
       })
     }
 
-    const newFollowersMap = await newFollowersByProject(prisma.youTubeFollowerLog, workspaceId, monthStart)
-    for (const r of result) {
-      const nf = newFollowersMap.get(r.projectId)
-      if (nf) { r.newFollowers = nf.last - nf.first; r.lastDataDate = nf.lastDate }
-    }
+    await attachMonthMetrics(result, { followerLogModel: prisma.youTubeFollowerLog, network: 'youtube', workspaceId, currentMonth })
 
     result.sort((a, b) => b.followersCount - a.followersCount)
     res.json(result)
@@ -253,6 +269,7 @@ async function getYouTubeSummary(req, res, next) {
 async function getLinkedinSummary(req, res, next) {
   try {
     const workspaceId = req.workspace.id
+    const currentMonth = todayString().slice(0, 7)
 
     const snapshots = await prisma.linkedinSnapshot.findMany({
       where:   { workspaceId, project: { active: true } },
@@ -274,8 +291,17 @@ async function getLinkedinSummary(req, res, next) {
         impressions:    s.impressions    ?? null,
         clicks:         s.clicks         ?? null,
         postsThisMonth: s.postsThisMonth ?? null,
+        // Interacciones del mes: likes + comentarios + compartidos del snapshot.
+        interactions:   [s.totalLikes, s.totalComments, s.totalShares].some(v => v != null)
+          ? (s.totalLikes ?? 0) + (s.totalComments ?? 0) + (s.totalShares ?? 0)
+          : null,
+        newFollowers:   null,
+        lastDataDate:   `${s.month}-01`,
+        objectives:     { seguidores: null, interaccion: null },
       })
     }
+
+    await attachMonthMetrics(result, { followerLogModel: prisma.linkedinFollowerLog, network: 'linkedin', workspaceId, currentMonth })
 
     result.sort((a, b) => b.followersCount - a.followersCount)
     res.json(result)
@@ -291,6 +317,7 @@ async function getLinkedinSummary(req, res, next) {
 async function getFacebookSummary(req, res, next) {
   try {
     const workspaceId = req.workspace.id
+    const currentMonth = todayString().slice(0, 7)
 
     const snapshots = await prisma.facebookSnapshot.findMany({
       where:   { workspaceId, project: { active: true } },
@@ -312,8 +339,17 @@ async function getFacebookSummary(req, res, next) {
         reach:          s.reach          ?? null,
         impressions:    s.impressions    ?? null,
         postsThisMonth: s.postsThisMonth ?? null,
+        // Interacciones del mes: likes + comentarios + compartidos del snapshot.
+        interactions:   [s.totalLikes, s.totalComments, s.totalShares].some(v => v != null)
+          ? (s.totalLikes ?? 0) + (s.totalComments ?? 0) + (s.totalShares ?? 0)
+          : null,
+        newFollowers:   null,
+        lastDataDate:   `${s.month}-01`,
+        objectives:     { seguidores: null, interaccion: null },
       })
     }
+
+    await attachMonthMetrics(result, { followerLogModel: prisma.facebookFollowerLog, network: 'facebook', workspaceId, currentMonth })
 
     result.sort((a, b) => b.followersCount - a.followersCount)
     res.json(result)

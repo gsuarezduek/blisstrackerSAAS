@@ -1,13 +1,24 @@
 const express             = require('express')
+const rateLimit           = require('express-rate-limit')
 const router              = express.Router()
 const prisma              = require('../lib/prisma')
 const { getPublicReport, getPublicReportMeta } = require('../controllers/monthlyReport/reportPublic.controller')
-const { getReportForPrint } = require('../controllers/monthlyReport/reportPdf.controller')
+const { getReportForPrint, downloadPublicReportPdf } = require('../controllers/monthlyReport/reportPdf.controller')
 const { submitReportFeedback } = require('../controllers/monthlyReport/reportFeedback.controller')
+
+// El PDF lo renderiza Chromium en el servidor (caro): tope por IP además del cache del controller.
+const publicPdfLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 15,
+  message: { error: 'Demasiadas descargas del PDF. Probá de nuevo en un rato.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+})
 
 // Sin auth — endpoint público para informes mensuales de clientes
 router.get('/report/:token/meta', getPublicReportMeta)   // metadata liviana para Open Graph (Vercel)
 router.post('/report/:token/feedback', submitReportFeedback) // el cliente califica el informe (1–5 + comentario)
+router.get('/report/:token/pdf', publicPdfLimiter, downloadPublicReportPdf) // PDF con portada (solo publicados)
 router.get('/report/:token', getPublicReport)
 router.get('/report-print/:printToken', getReportForPrint) // solo la abre el render de PDF (token firmado, vence en minutos)
 

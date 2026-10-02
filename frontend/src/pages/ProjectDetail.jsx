@@ -13,6 +13,16 @@ import { useFeatureFlag } from '../hooks/useFeatureFlag'
 import useMembers from '../hooks/useMembers'
 import TareasTab from './project-detail/tareas'
 import InfoTab, { TeamModal } from './project-detail/info'
+import OverviewTab from './project-detail/overview'
+import AccesosTab from './project-detail/accesos'
+import { AvatarStack } from './project-detail/ui'
+
+// Nombres viejos de pestañas que siguen llegando por links guardados/notificaciones
+// (`?infoTab=info` desde Marketing para cargar el sitio web, `reportes`).
+const LEGACY_TABS = { info: 'ajustes', reportes: 'horas' }
+function tabFromParam(value) {
+  return LEGACY_TABS[value] || value || 'resumen'
+}
 
 // Lunes de esta semana → hoy, en ART — mismo default que usa Reports.jsx.
 function defaultArchiveFrom() {
@@ -28,10 +38,11 @@ function defaultArchiveTo() {
 export default function ProjectDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const { user: authUser } = useAuth()
   const { enabled: marketingEnabled } = useFeatureFlag('marketing')
   const { enabled: contenidoEnabled } = useFeatureFlag('contenido')
+  const { enabled: calendarioEnabled } = useFeatureFlag('calendario')
   const { members: workspaceMembers } = useMembers()
   const [data,    setData]    = useState(null)
   const [loading, setLoading] = useState(true)
@@ -39,7 +50,8 @@ export default function ProjectDetail() {
   const [linkForm, setLinkForm] = useState(null) // null = oculto, { label, url } = visible
   const [linkSaving, setLinkSaving] = useState(false)
   const [commentTask, setCommentTask] = useState(null)
-  const [infoTab, setInfoTab] = useState(searchParams.get('infoTab') || 'tareas')
+  const [infoTab, setInfoTab] = useState(() => tabFromParam(searchParams.get('infoTab')))
+  const [statusFilter, setStatusFilter] = useState('')
 
   const [projectList, setProjectList] = useState([])
 
@@ -66,12 +78,39 @@ export default function ProjectDetail() {
 
   const encodedId = encodeURIComponent(id)
 
-  useEffect(() => {
-    api.get(`/projects/${encodedId}/tasks`)
-      .then(r => setData(r.data))
+  const loadProject = useCallback(() => {
+    return api.get(`/projects/${encodedId}/tasks`)
+      .then(r => { setData(r.data); setError('') })
       .catch(err => setError(err.response?.data?.error || 'Error al cargar el proyecto'))
       .finally(() => setLoading(false))
   }, [encodedId])
+
+  useEffect(() => { loadProject() }, [loadProject])
+
+  // Una tarea creada desde el modal global (tecla N / botón flotante) puede ser de
+  // este proyecto: refrescamos el tablero para que aparezca sin recargar la página.
+  useEffect(() => {
+    function onTaskCreated() { loadProject() }
+    window.addEventListener('bliss:task-created', onTaskCreated)
+    return () => window.removeEventListener('bliss:task-created', onTaskCreated)
+  }, [loadProject])
+
+  // Navegar entre pestañas deja la pestaña en la URL (?infoTab=), así un link
+  // compartido o el botón "atrás" vuelven al mismo lugar. `opts.status` preselecciona
+  // el filtro de la pestaña Tareas (ej. "ver bloqueadas").
+  function goTab(key, opts = {}) {
+    setInfoTab(key)
+    if (key === 'tareas') setStatusFilter(opts.status || '')
+    const next = new URLSearchParams(searchParams)
+    if (key === 'resumen') next.delete('infoTab'); else next.set('infoTab', key)
+    next.delete('fileId')
+    setSearchParams(next, { replace: true })
+  }
+
+  // Si la URL cambia por fuera (buscador global → "?infoTab=archivos&fileId="
+  // estando ya en este proyecto), seguimos a la URL.
+  const tabParam = searchParams.get('infoTab')
+  useEffect(() => { setInfoTab(tabFromParam(tabParam)) }, [tabParam])
 
   useEffect(() => {
     api.get('/projects').then(r => setProjectList(r.data)).catch(() => {})
@@ -212,17 +251,43 @@ export default function ProjectDetail() {
     }
   }
 
+  const projectStar = projectList.find(p => p.id === data?.project?.id)
+  async function toggleStar() {
+    if (!projectStar) return
+    const next = !projectStar.starred
+    setProjectList(prev => prev.map(p => p.id === projectStar.id ? { ...p, starred: next } : p))
+    try { await api.patch(`/projects/${projectStar.id}/star`) }
+    catch { setProjectList(prev => prev.map(p => p.id === projectStar.id ? { ...p, starred: !next } : p)) }
+  }
+
+  const allTasks = data?.byUser.flatMap(u => u.tasks) ?? []
+  const blockedCount = allTasks.filter(t => t.status === 'BLOCKED').length
+  const inProgressCount = allTasks.filter(t => t.status === 'IN_PROGRESS').length
+  const canEditProject = authUser?.isAdmin || (data?.project.members ?? []).some(pm => pm.user.id === authUser?.id)
+
+  const tabs = data ? [
+    { key: 'resumen',   label: 'Resumen' },
+    { key: 'tareas',    label: 'Tareas', count: totalPending, alert: blockedCount > 0 },
+    { key: 'reuniones', label: 'Reuniones' },
+    ...(data.project.filesEnabled !== false ? [{ key: 'archivos', label: 'Nube' }] : []),
+    ...(data.project.briefsEnabled !== false ? [{ key: 'briefs', label: 'Briefs' }] : []),
+    ...(data.project.linksEnabled !== false ? [{ key: 'accesos', label: 'Links y accesos' }] : []),
+    { key: 'horas',     label: 'Horas' },
+    { key: 'ajustes',   label: 'Ajustes' },
+  ] : []
+  const activeTab = tabs.some(t => t.key === infoTab) ? infoTab : 'resumen'
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <Navbar />
-      <main className="max-w-6xl mx-auto px-4 py-8">
+      <main className="max-w-6xl mx-auto px-4 py-6 sm:py-8">
 
-        {/* Nav bar */}
+        {/* Navegación entre proyectos */}
         {(() => {
           const currentIdx = projectList.findIndex(p => String(p.id) === String(id) || p.name === id)
           const nextProject = currentIdx >= 0 && currentIdx < projectList.length - 1 ? projectList[currentIdx + 1] : null
           return (
-            <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center justify-between mb-5">
               <button
                 onClick={() => navigate('/my-projects')}
                 className="flex items-center gap-1.5 text-sm text-gray-500 dark:text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
@@ -236,6 +301,7 @@ export default function ProjectDetail() {
                 <button
                   onClick={() => navigate(`/my-projects/${encodeURIComponent(nextProject.name)}`)}
                   className="flex items-center gap-1.5 text-sm text-gray-500 dark:text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
+                  title="Siguiente proyecto"
                 >
                   <span className="truncate max-w-[160px]">{nextProject.name}</span>
                   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4 flex-shrink-0">
@@ -258,37 +324,69 @@ export default function ProjectDetail() {
 
         {data && (
           <>
-            {/* Header */}
-            <div className="flex items-start justify-between gap-4 mb-6">
-              <div>
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="w-2.5 h-2.5 rounded-full bg-green-500 flex-shrink-0" />
-                  <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{data.project.name}</h1>
+            {/* Header: nombre + pulso del proyecto + atajos a otros módulos */}
+            <header className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-5">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  {projectStar && (
+                    <button type="button" onClick={toggleStar}
+                      title={projectStar.starred ? 'Quitar de destacados' : 'Destacar proyecto'}
+                      aria-label={projectStar.starred ? 'Quitar de destacados' : 'Destacar proyecto'}
+                      className="-m-1 p-1 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors flex-shrink-0">
+                      {projectStar.starred ? (
+                        <svg viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5 text-yellow-400">
+                          <path fillRule="evenodd" d="M10.788 3.21c.448-1.077 1.976-1.077 2.424 0l2.082 5.007 5.404.433c1.164.093 1.636 1.545.749 2.305l-4.117 3.527 1.257 5.273c.271 1.136-.964 2.033-1.96 1.425L10 18.354 5.373 21.18c-.996.608-2.231-.29-1.96-1.425l1.257-5.273-4.117-3.527c-.887-.76-.415-2.212.749-2.305l5.404-.433 2.082-5.005z" clipRule="evenodd" />
+                        </svg>
+                      ) : (
+                        <svg fill="none" viewBox="0 0 24 24" strokeWidth={1.7} stroke="currentColor" className="w-5 h-5 text-gray-300 dark:text-gray-600 hover:text-yellow-400">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M11.48 3.499a.562.562 0 0 1 1.04 0l2.125 5.111a.563.563 0 0 0 .475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 0 0-.182.557l1.285 5.385a.562.562 0 0 1-.84.61l-4.725-2.885a.562.562 0 0 0-.586 0L6.982 20.54a.562.562 0 0 1-.84-.61l1.285-5.386a.562.562 0 0 0-.182-.557l-4.204-3.602a.562.562 0 0 1 .321-.988l5.518-.442a.563.563 0 0 0 .475-.345L11.48 3.5Z" />
+                        </svg>
+                      )}
+                    </button>
+                  )}
+                  <h1 className="text-2xl font-bold text-gray-900 dark:text-white break-words">{data.project.name}</h1>
                 </div>
-                <div className="flex items-center gap-3 flex-wrap">
-                  <p className="text-gray-500 dark:text-gray-400 text-sm">
-                    {totalPending === 0
-                      ? 'No hay tareas pendientes'
-                      : `${totalPending} tarea${totalPending !== 1 ? 's' : ''} pendiente${totalPending !== 1 ? 's' : ''}`}
-                  </p>
+
+                <div className="mt-2 flex items-center gap-x-4 gap-y-2 flex-wrap text-sm">
+                  {totalPending === 0 ? (
+                    <span className="text-gray-500 dark:text-gray-400">Sin tareas activas</span>
+                  ) : (
+                    <button type="button" onClick={() => goTab('tareas')} className="text-gray-600 dark:text-gray-300 hover:text-primary-600 dark:hover:text-primary-400">
+                      <span className="font-semibold text-gray-900 dark:text-white">{totalPending}</span> tarea{totalPending !== 1 ? 's' : ''} activa{totalPending !== 1 ? 's' : ''}
+                    </button>
+                  )}
+                  {inProgressCount > 0 && (
+                    <span className="inline-flex items-center gap-1.5 text-gray-600 dark:text-gray-300">
+                      <span className="w-2 h-2 rounded-full bg-primary-500" />{inProgressCount} en curso
+                    </span>
+                  )}
+                  {blockedCount > 0 && (
+                    <button type="button" onClick={() => goTab('tareas', { status: 'BLOCKED' })}
+                      className="inline-flex items-center gap-1.5 font-medium text-red-600 dark:text-red-400 hover:underline">
+                      <span className="w-2 h-2 rounded-full bg-red-500" />{blockedCount} bloqueada{blockedCount !== 1 ? 's' : ''}
+                    </button>
+                  )}
+                  {(data.project.members?.length ?? 0) > 0 && (
+                    <button type="button" onClick={() => goTab('resumen')} title="Equipo del proyecto" className="flex items-center gap-2">
+                      <AvatarStack users={data.project.members.map(pm => pm.user)} max={5} size="xs" />
+                    </button>
+                  )}
                   {data.project.createdAt && (
-                    <p className="text-xs text-gray-400 dark:text-gray-500">
-                      Activo desde: <span className="font-medium text-gray-500 dark:text-gray-400">
-                        {new Date(data.project.createdAt).toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric', timeZone: data.project.timezone || 'America/Argentina/Buenos_Aires' })}
-                      </span>
-                    </p>
+                    <span className="text-xs text-gray-400 dark:text-gray-500">
+                      Activo desde {new Date(data.project.createdAt).toLocaleDateString('es-AR', { day: 'numeric', month: 'short', year: 'numeric', timeZone: data.project.timezone || 'America/Argentina/Buenos_Aires' })}
+                    </span>
                   )}
                 </div>
               </div>
-              {/* Chat del proyecto y "Agregar tarea" se sacaron de acá — ya están cubiertos
-                  por el ícono flotante único (FloatingDock, abajo a la derecha). Marketing/
-                  Contenido muestran el nombre además del ícono (dejaron de ser solo-ícono). */}
-              <div className="flex items-center gap-2 flex-shrink-0">
+
+              {/* "+ Nueva tarea" abre el MISMO modal global que la tecla N y el botón flotante
+                  (GlobalShortcuts, vía `bliss:open-add-task`): ya sabe que estamos en este
+                  proyecto por `bliss:project-context`. Chat sigue solo en el botón flotante. */}
+              <div className="flex items-center gap-2 flex-shrink-0 flex-wrap">
                 {marketingEnabled && (
                   <button
-                    onClick={() => navigate(`/marketing?tab=geo-seo&sub=geo&projectId=${data.project.id}`)}
+                    onClick={() => navigate(`/marketing?tab=hoy&projectId=${data.project.id}`)}
                     className="flex items-center gap-1.5 px-3 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 text-sm font-medium text-gray-700 dark:text-gray-200 rounded-xl transition-colors"
-                    title="Marketing"
                   >
                     <span className="text-base leading-none">🎯</span>
                     Marketing
@@ -304,78 +402,67 @@ export default function ProjectDetail() {
                     Contenido
                   </button>
                 )}
-              </div>
-            </div>
-
-            {/* Info tabs: Tareas / Info / Briefs / Reuniones / Reportes */}
-            <div className="mb-6">
-              {/* Tab bar — mobile select */}
-              <div className="mb-3">
-                <select
-                  className="sm:hidden w-full px-3 py-2 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary-500"
-                  value={infoTab}
-                  onChange={e => setInfoTab(e.target.value)}
+                <button
+                  onClick={() => window.dispatchEvent(new CustomEvent('bliss:open-add-task'))}
+                  className="flex items-center gap-1.5 px-4 py-2 bg-primary-600 hover:bg-primary-700 text-sm font-semibold text-white rounded-xl shadow-sm transition-colors"
+                  title="Nueva tarea en este proyecto (tecla N)"
                 >
-                  <option value="tareas">Tareas</option>
-                  <option value="info">Info</option>
-                  {data.project.briefsEnabled !== false && <option value="briefs">Briefs</option>}
-                  <option value="reuniones">Reuniones</option>
-                  {data.project.filesEnabled !== false && <option value="archivos">Nube</option>}
-                  <option value="reportes">Reportes</option>
-                </select>
-                {/* Desktop */}
-                <div className="hidden sm:flex gap-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-1 w-fit">
-                  <button
-                    onClick={() => setInfoTab('tareas')}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${infoTab === 'tareas' ? 'bg-primary-600 text-white' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700'}`}
-                  >
-                    Tareas
-                  </button>
-                  <button
-                    onClick={() => setInfoTab('info')}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${infoTab === 'info' ? 'bg-primary-600 text-white' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700'}`}
-                  >
-                    Info
-                  </button>
-                  {data.project.briefsEnabled !== false && (
-                    <button
-                      onClick={() => setInfoTab('briefs')}
-                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${infoTab === 'briefs' ? 'bg-primary-600 text-white' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700'}`}
-                    >
-                      Briefs
-                    </button>
-                  )}
-                  <button
-                    onClick={() => setInfoTab('reuniones')}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${infoTab === 'reuniones' ? 'bg-primary-600 text-white' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700'}`}
-                  >
-                    Reuniones
-                  </button>
-                  {data.project.filesEnabled !== false && (
-                    <button
-                      onClick={() => setInfoTab('archivos')}
-                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${infoTab === 'archivos' ? 'bg-primary-600 text-white' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700'}`}
-                    >
-                      Nube
-                    </button>
-                  )}
-                  <button
-                    onClick={() => setInfoTab('reportes')}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${infoTab === 'reportes' ? 'bg-primary-600 text-white' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700'}`}
-                  >
-                    Reportes
-                  </button>
-                </div>
+                  <span className="text-base leading-none">+</span>
+                  Nueva tarea
+                </button>
               </div>
+            </header>
 
-              {/* Tab: Tareas — situación de la cuenta + tablero de tareas del proyecto */}
-              {infoTab === 'tareas' && (
-                <TareasTab
+            {/* Pestañas — subrayado, con scroll horizontal en mobile */}
+            <nav className="mb-5 border-b border-gray-200 dark:border-gray-700" aria-label="Secciones del proyecto">
+              <div className="flex gap-1 overflow-x-auto -mb-px" role="tablist">
+                {tabs.map(t => {
+                  const active = t.key === activeTab
+                  return (
+                    <button
+                      key={t.key}
+                      type="button"
+                      role="tab"
+                      aria-selected={active}
+                      onClick={() => goTab(t.key)}
+                      className={`shrink-0 inline-flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium border-b-2 whitespace-nowrap transition-colors ${
+                        active
+                          ? 'border-primary-500 text-gray-900 dark:text-white'
+                          : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'}`}
+                    >
+                      {t.label}
+                      {t.count > 0 && (
+                        <span className={`text-xs rounded-full px-1.5 py-0.5 tabular-nums ${active ? 'bg-primary-50 text-primary-700 dark:bg-primary-900/40 dark:text-primary-300' : 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'}`}>
+                          {t.count}
+                        </span>
+                      )}
+                      {t.alert && <span className="w-1.5 h-1.5 rounded-full bg-red-500" aria-label="Hay tareas bloqueadas" />}
+                    </button>
+                  )
+                })}
+              </div>
+            </nav>
+
+            <div>
+              {activeTab === 'resumen' && (
+                <OverviewTab
                   data={data}
                   encodedId={encodedId}
-                  totalPending={totalPending}
-                  navigate={navigate}
+                  authUser={authUser}
                   onOpenComments={setCommentTask}
+                  goTab={goTab}
+                  contentEnabled={contenidoEnabled && authUser?.moduleAccess?.contenido !== false}
+                  calendarEnabled={calendarioEnabled && authUser?.moduleAccess?.calendario !== false}
+                  onOpenTeamEdit={openTeamEdit}
+                />
+              )}
+
+              {activeTab === 'tareas' && (
+                <TareasTab
+                  data={data}
+                  onOpenComments={setCommentTask}
+                  statusFilter={statusFilter}
+                  setStatusFilter={setStatusFilter}
                   archive={archive}
                   archiveSkip={archiveSkip}
                   hasMore={hasMore}
@@ -392,18 +479,50 @@ export default function ProjectDetail() {
                 />
               )}
 
-              {/* Tab: Info — incluye Links/Accesos, Servicios, Equipo e Info del proyecto */}
-              {infoTab === 'info' && (
-                <InfoTab
+              {activeTab === 'reuniones' && (
+                <ProjectMeetings projectId={data.project.id} canEdit={canEditProject} />
+              )}
+
+              {activeTab === 'archivos' && (
+                <ProjectFiles
+                  projectId={data.project.id}
+                  deepLinkFileId={searchParams.get('fileId')}
+                  onCreateTaskFromFile={(file, link) => {
+                    // El modal de nueva tarea es el global (GlobalShortcuts): ya sabe que
+                    // estamos en este proyecto por `bliss:project-context`.
+                    window.dispatchEvent(new CustomEvent('bliss:open-add-task', {
+                      detail: { description: `Archivo: ${file.name}\n${link}` },
+                    }))
+                  }}
+                  contenidoEnabled={contenidoEnabled}
+                />
+              )}
+
+              {activeTab === 'briefs' && (
+                <ProjectBriefs projectId={data.project.id} canEdit={canEditProject} />
+              )}
+
+              {activeTab === 'accesos' && (
+                <AccesosTab
                   data={data}
-                  setData={setData}
                   encodedId={encodedId}
-                  authUser={authUser}
                   linkForm={linkForm}
                   setLinkForm={setLinkForm}
                   linkSaving={linkSaving}
                   onAddLink={handleAddLink}
                   onDeleteLink={handleDeleteLink}
+                />
+              )}
+
+              {activeTab === 'horas' && (
+                <ProjectReports projectId={data.project.id} />
+              )}
+
+              {activeTab === 'ajustes' && (
+                <InfoTab
+                  data={data}
+                  setData={setData}
+                  authUser={authUser}
                   editingServices={editingServices}
                   setEditingServices={setEditingServices}
                   servicesDraft={servicesDraft}
@@ -415,42 +534,7 @@ export default function ProjectDetail() {
                   onOpenTeamEdit={openTeamEdit}
                 />
               )}
-
-              {/* Tab: Briefs */}
-              {infoTab === 'briefs' && data.project.briefsEnabled !== false && (
-                <ProjectBriefs
-                  projectId={data.project.id}
-                  canEdit={authUser?.isAdmin || (data.project.members ?? []).some(pm => pm.user.id === authUser?.id)}
-                />
-              )}
-
-              {/* Tab: Reuniones */}
-              {infoTab === 'reuniones' && (
-                <ProjectMeetings
-                  projectId={data.project.id}
-                  canEdit={authUser?.isAdmin || (data.project.members ?? []).some(pm => pm.user.id === authUser?.id)}
-                />
-              )}
-
-              {/* Tab: Archivos — repositorio de archivos tipo Drive (sobre R2) */}
-              {infoTab === 'archivos' && data.project.filesEnabled !== false && (
-                <ProjectFiles
-                  projectId={data.project.id}
-                  deepLinkFileId={searchParams.get('fileId')}
-                  onCreateTaskFromFile={(file, link) => {
-                    setAddTaskDefaultDescription(`Archivo: ${file.name}\n${link}`)
-                    setShowAddTask(true)
-                  }}
-                  contenidoEnabled={contenidoEnabled}
-                />
-              )}
-
-              {/* Tab: Reportes — horas y tareas completadas por mes, histórico */}
-              {infoTab === 'reportes' && (
-                <ProjectReports projectId={data.project.id} />
-              )}
             </div>
-
           </>
         )}
       </main>

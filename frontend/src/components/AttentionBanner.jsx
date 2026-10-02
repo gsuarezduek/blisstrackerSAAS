@@ -39,7 +39,7 @@ export default function AttentionBanner({ items = [], emptyLabel = '✅ Nadie ne
             <span className="text-base flex-shrink-0">{SEVERITY_ICON[severity]}</span>
             <span className={`text-sm font-semibold leading-snug flex-1 min-w-0 ${SEVERITY_TEXT[severity]}`}>{item.label}</span>
             {item.detail && (
-              <span className={`text-xs flex-shrink-0 ${SEVERITY_TEXT[severity]} opacity-75`}>{item.detail}</span>
+              <span className={`hidden sm:inline text-xs flex-shrink-0 max-w-[45%] truncate ${SEVERITY_TEXT[severity]} opacity-75`}>{item.detail}</span>
             )}
             {item.onClick && (
               <span className={`flex-shrink-0 ${SEVERITY_TEXT[severity]} opacity-60`}>→</span>
