@@ -122,9 +122,9 @@ export default function useNavDestinations() {
     const tabs = [
       { to: '/admin/rrhh',                                label: '✅ Hoy · Para resolver' },
       { to: '/admin/rrhh?tab=personas',                   label: '👤 Personas' },
+      { to: '/admin/rrhh?tab=ausencias&view=calendario',  label: '🏖️ Ausencias · Calendario del equipo' },
       { to: '/admin/rrhh?tab=ausencias&view=solicitudes', label: '🏖️ Ausencias · Solicitudes' },
-      { to: '/admin/rrhh?tab=ausencias&view=vacaciones',  label: '🏖️ Ausencias · Saldos de vacaciones' },
-      { to: '/admin/rrhh?tab=ausencias&view=beneficios',  label: '🎁 Ausencias · Horas libres y días home' },
+      { to: '/admin/rrhh?tab=ausencias&view=saldos',      label: '🎁 Ausencias · Saldos (vacaciones, horas libres, días home)' },
       { to: '/admin/rrhh?tab=asistencia',                 label: '🕐 Asistencia' },
       ...(productivityEnabled ? [{ to: '/admin/rrhh?tab=productividad', label: '📊 Productividad' }] : []),
     ]

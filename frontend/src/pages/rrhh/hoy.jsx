@@ -250,7 +250,7 @@ export function TabHoy({ users, lastLoginsMap, dashStats, peopleScore, pending, 
         <div className="space-y-4">
           <Card>
             <CardHeader title="Fuera del equipo" count={leaves.length || null}
-              action={<TextButton onClick={() => onNavigate('ausencias', 'solicitudes')}>Ver todas</TextButton>} />
+              action={<TextButton onClick={() => onNavigate('ausencias', 'calendario')}>Ver calendario</TextButton>} />
             {leaves.length === 0
               ? <EmptyNote>Nadie de licencia en los próximos 30 días.</EmptyNote>
               : (

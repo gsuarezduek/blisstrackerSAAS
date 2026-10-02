@@ -1,7 +1,5 @@
 import { useState, useEffect } from 'react'
 import api from '../../api/client'
-import { avatarUrl } from '../../utils/avatarUrl'
-import RoleBadge from '../../components/RoleBadge'
 import { TZ } from './shared'
 
 // Ajustar (otorgar/sacar) el saldo de vacaciones de una persona — mismo modal que antes
@@ -135,72 +133,4 @@ export function VacationEditModal({ user, onClose, onUpdated }) {
   )
 }
 
-const INTERVAL_LABELS = { 1: 'mes', 3: 'trimestre', 6: 'semestre', 12: 'año' }
-
-// Pestaña "Vacaciones": listado de saldos (desc) + banner de la regla de acumulación
-// automática vigente (configurable en Preferencias → Módulos, solo lectura acá).
-export function TabVacaciones({ users, onVacationUpdate }) {
-  // null = todavía no cargó, o sin permiso (no-admin) — el banner simplemente se omite,
-  // no es un dato crítico para gestionar el saldo.
-  const [accrual, setAccrual] = useState(null)
-  const [editingUser, setEditingUser] = useState(null)
-
-  useEffect(() => {
-    api.get('/projects/settings')
-      .then(({ data }) => setAccrual({
-        enabled: !!data.vacationAccrualEnabled,
-        days: data.vacationAccrualDays,
-        intervalMonths: data.vacationAccrualIntervalMonths,
-      }))
-      .catch(() => setAccrual(null))
-  }, [])
-
-  const sorted = [...users].sort((a, b) => (b.vacationDays ?? 0) - (a.vacationDays ?? 0))
-
-  return (
-    <div>
-      {accrual && (
-        <div className={`mb-4 rounded-xl border px-4 py-3 text-sm ${
-          accrual.enabled
-            ? 'border-primary-200 dark:border-primary-800 bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-300'
-            : 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-500 dark:text-gray-400'
-        }`}>
-          {accrual.enabled
-            ? <>🔁 Se agregan automáticamente <strong>{accrual.days} día{accrual.days === 1 ? '' : 's'}</strong> cada <strong>{INTERVAL_LABELS[accrual.intervalMonths] ?? `${accrual.intervalMonths} meses`}</strong>, en el aniversario de ingreso de cada persona.</>
-            : <>Sin acumulación automática configurada. Se puede activar desde Preferencias → Módulos.</>
-          }
-        </div>
-      )}
-
-      <div className="space-y-2">
-        {sorted.map(u => (
-          <div key={u.id} className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 px-4 py-3 flex items-center gap-3">
-            <img src={avatarUrl(u.avatar)} alt={u.name}
-              className="w-9 h-9 rounded-full object-cover flex-shrink-0 border-2 border-gray-100 dark:border-gray-600" />
-            <div className="flex-1 min-w-0 flex items-center gap-2 flex-wrap">
-              <p className="font-semibold text-sm text-gray-900 dark:text-white">{u.name}</p>
-              <RoleBadge role={u.role} userId={u.id} />
-            </div>
-            <div className="text-right flex-shrink-0">
-              <p className="text-xl font-bold text-gray-900 dark:text-white">{u.vacationDays ?? 0}</p>
-              <p className="text-[11px] text-gray-400 dark:text-gray-500">días</p>
-            </div>
-            <button onClick={() => setEditingUser(u)}
-              className="flex-shrink-0 text-xs font-medium text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 transition-colors px-2">
-              Ajustar
-            </button>
-          </div>
-        ))}
-        {sorted.length === 0 && <p className="text-sm text-gray-400 text-center py-8">Sin personas activas.</p>}
-      </div>
-
-      {editingUser && (
-        <VacationEditModal
-          user={editingUser}
-          onClose={() => setEditingUser(null)}
-          onUpdated={data => { onVacationUpdate(data); setEditingUser(null) }}
-        />
-      )}
-    </div>
-  )
-}
+export const INTERVAL_LABELS = { 1: 'mes', 3: 'trimestre', 6: 'semestre', 12: 'año' }

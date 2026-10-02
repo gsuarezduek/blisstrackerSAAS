@@ -5,9 +5,9 @@ export const RRHH_SECTIONS = [
   { id: 'hoy',        label: 'Hoy' },
   { id: 'personas',   label: 'Personas' },
   { id: 'ausencias',  label: 'Ausencias', views: [
+    { id: 'calendario',  label: 'Calendario' },
     { id: 'solicitudes', label: 'Solicitudes' },
-    { id: 'vacaciones',  label: 'Saldos de vacaciones' },
-    { id: 'beneficios',  label: 'Horas libres y días home' },
+    { id: 'saldos',      label: 'Saldos' },
   ] },
   { id: 'asistencia', label: 'Asistencia' },
   { id: 'productividad', label: 'Productividad', requiresProductivity: true },
@@ -21,10 +21,13 @@ export const LEGACY_TABS = {
   dashboard:  { tab: 'hoy' },
   legajos:    { tab: 'personas' },
   licencias:  { tab: 'ausencias', view: 'solicitudes' },
-  vacaciones: { tab: 'ausencias', view: 'vacaciones' },
-  beneficios: { tab: 'ausencias', view: 'beneficios' },
+  vacaciones: { tab: 'ausencias', view: 'saldos' },
+  beneficios: { tab: 'ausencias', view: 'saldos' },
   ingresos:   { tab: 'asistencia' },
 }
+
+// Vistas que existieron en una versión anterior de Ausencias → vista actual.
+export const LEGACY_VIEWS = { vacaciones: 'saldos', beneficios: 'saldos' }
 
 export function rrhhSections({ productivityEnabled = true } = {}) {
   return RRHH_SECTIONS.filter(s => !s.requiresProductivity || productivityEnabled)
@@ -44,6 +47,7 @@ export function resolveRrhhNav({ tab, view } = {}, opts = {}) {
   const section = sections.find(s => s.id === t) ?? sections[0]
   t = section.id
   if (section.views) {
+    if (LEGACY_VIEWS[v]) v = LEGACY_VIEWS[v]
     if (!section.views.some(x => x.id === v)) v = section.views[0].id
   } else {
     v = null

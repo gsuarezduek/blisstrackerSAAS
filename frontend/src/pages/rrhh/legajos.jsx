@@ -25,29 +25,32 @@ export function LoginDaysModal({ user, summary, onChanged, onClose }) {
   const [editingId, setEditingId] = useState(null)
   const [editTime, setEditTime]   = useState('')
   const [busyId, setBusyId]       = useState(null)
+  const [actionError, setActionError] = useState('')
   const [loginToDelete, setLoginToDelete] = useState(null)   // día | null
 
   function startEdit(d) { setEditingId(d.id); setEditTime(d.time) }
   function cancelEdit()  { setEditingId(null); setEditTime('') }
 
   async function saveEdit(d) {
-    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(editTime)) { alert('Hora inválida (HH:MM)'); return }
+    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(editTime)) { setActionError('Escribí la hora como HH:MM (por ejemplo, 09:15).'); return }
+    setActionError('')
     setBusyId(d.id)
     try {
       await api.patch(`/admin/rrhh/logins/${d.id}`, { time: editTime })
       cancelEdit()
       await onChanged?.()
-    } catch { alert('No se pudo actualizar el ingreso') }
+    } catch { setActionError('No pudimos actualizar el ingreso. Probá de nuevo.') }
     finally { setBusyId(null) }
   }
 
   async function removeLogin() {
     if (!loginToDelete) return
+    setActionError('')
     setBusyId(loginToDelete.id)
     try {
       await api.delete(`/admin/rrhh/logins/${loginToDelete.id}`)
       await onChanged?.()
-    } catch { alert('No se pudo eliminar el ingreso') }
+    } catch { setActionError('No pudimos eliminar el ingreso. Probá de nuevo.') }
     finally { setBusyId(null); setLoginToDelete(null) }
   }
 
@@ -110,6 +113,12 @@ export function LoginDaysModal({ user, summary, onChanged, onClose }) {
           </div>
         </div>
 
+        {actionError && (
+          <p role="alert" className="mx-5 mb-3 flex items-start justify-between gap-3 rounded-lg bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 text-sm px-3 py-2">
+            <span>{actionError}</span>
+            <button type="button" onClick={() => setActionError('')} aria-label="Cerrar aviso" className="text-red-400 hover:text-red-600">×</button>
+          </p>
+        )}
         <div className="px-5 py-3 border-t border-gray-100 dark:border-gray-700 text-xs text-gray-400 dark:text-gray-500">
           {days.length} día{days.length !== 1 ? 's' : ''} con registro · se muestra solo el primer ingreso de cada día
         </div>

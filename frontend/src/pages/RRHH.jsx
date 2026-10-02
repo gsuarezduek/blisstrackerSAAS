@@ -8,9 +8,7 @@ import { computePeopleScore, peopleColumnKeys } from '../utils/peopleScore'
 import { TabHoy } from './rrhh/hoy'
 import { TabIngresos } from './rrhh/ingresos'
 import { TabPersonas } from './rrhh/personas'
-import { TabLicencias } from './rrhh/licencias'
-import { TabVacaciones } from './rrhh/vacacionesBalance'
-import { TabBeneficios } from './rrhh/beneficios'
+import { TabCalendario, TabSolicitudes, TabSaldos } from './rrhh/ausencias'
 import ProductivityTab from '../components/admin/ProductivityTab'
 import LoadingSpinner from '../components/LoadingSpinner'
 import { rrhhSections, resolveRrhhNav, DEFAULT_TAB } from './rrhh/rrhhNav'
@@ -18,8 +16,8 @@ import { todayStr } from './rrhh/shared'
 
 // ─── Shell del panel RRHH ─────────────────────────────────────────────────────
 // Secciones por tarea (ver rrhh/rrhhNav.js): Hoy (cola de aprobaciones + avisos +
-// indicadores) · Personas · Ausencias (solicitudes / saldos de vacaciones /
-// beneficios) · Asistencia · Productividad. Sección y vista viven en la URL
+// indicadores) · Personas · Ausencias (calendario / solicitudes / saldos) ·
+// Asistencia · Productividad. Sección y vista viven en la URL
 // (?tab=&view=); los ?tab= del panel anterior se reescriben vía LEGACY_TABS.
 
 const EMPTY_PENDING = { leaves: [], benefits: [], approvedLeaves: [], loading: true, error: false }
@@ -98,8 +96,10 @@ export default function RRHH() {
       .catch(() => {})
   }, [loadUsers, loadDashStats])
 
-  // La cola se recarga cada vez que se vuelve a "Hoy" (pudo resolverse algo desde Ausencias).
-  useEffect(() => { if (tab === 'hoy') loadPending() }, [tab, loadPending])
+  // La cola alimenta el badge de "Hoy": se carga al entrar y se recarga al volver
+  // a Hoy o al resolver algo desde Ausencias → Solicitudes.
+  const onHoy = tab === 'hoy'
+  useEffect(() => { loadPending() }, [onHoy, loadPending])
 
   // People Score (EOS) — solo si el módulo está habilitado y hay valores definidos.
   useEffect(() => {
@@ -189,12 +189,11 @@ export default function RRHH() {
           <TabPersonas users={activeUsers} lastLoginsMap={lastLoginsMap} leaves={dashStats.leaves ?? []}
             selectedId={personId} onSelect={openPerson} initialFilter={searchParams.get('filter')} onUsersChanged={loadUsers} productivityEnabled={productivityEnabled} />
         )}
-        {tab === 'ausencias' && view === 'solicitudes' && <TabLicencias />}
-        {tab === 'ausencias' && view === 'vacaciones' && (
-          <TabVacaciones users={activeUsers}
-            onVacationUpdate={updated => setUsers(prev => prev.map(u => u.id === updated.id ? { ...u, vacationDays: updated.vacationDays } : u))} />
+        {tab === 'ausencias' && view === 'calendario' && <TabCalendario users={activeUsers} onOpenPerson={openPerson} />}
+        {tab === 'ausencias' && view === 'solicitudes' && (
+          <TabSolicitudes users={activeUsers} onUsersChanged={() => { loadUsers(); loadDashStats() }} onRequestsChanged={loadPending} />
         )}
-        {tab === 'ausencias' && view === 'beneficios' && <TabBeneficios />}
+        {tab === 'ausencias' && view === 'saldos' && <TabSaldos users={activeUsers} onUsersChanged={loadUsers} />}
         {tab === 'asistencia' && <TabIngresos users={activeUsers} />}
         {tab === 'productividad' && productivityEnabled && <ProductivityTab />}
       </main>

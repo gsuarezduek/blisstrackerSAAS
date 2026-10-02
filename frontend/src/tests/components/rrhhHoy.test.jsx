@@ -13,15 +13,16 @@ describe('rrhhNav', () => {
 
   it('mapea las pestañas del panel anterior', () => {
     expect(resolveRrhhNav({ tab: 'licencias' })).toEqual({ tab: 'ausencias', view: 'solicitudes', changed: true })
-    expect(resolveRrhhNav({ tab: 'beneficios' })).toMatchObject({ tab: 'ausencias', view: 'beneficios' })
+    expect(resolveRrhhNav({ tab: 'beneficios' })).toMatchObject({ tab: 'ausencias', view: 'saldos' })
+    expect(resolveRrhhNav({ tab: 'ausencias', view: 'vacaciones' })).toMatchObject({ view: 'saldos', changed: true })
     expect(resolveRrhhNav({ tab: 'legajos' })).toMatchObject({ tab: 'personas', view: null })
     expect(resolveRrhhNav({ tab: 'ingresos' })).toMatchObject({ tab: 'asistencia' })
     expect(resolveRrhhNav({ tab: 'dashboard' })).toMatchObject({ tab: 'hoy', changed: true })
   })
 
   it('completa la vista por defecto y descarta vistas inválidas', () => {
-    expect(resolveRrhhNav({ tab: 'ausencias' })).toMatchObject({ view: 'solicitudes', changed: true })
-    expect(resolveRrhhNav({ tab: 'ausencias', view: 'vacaciones' })).toMatchObject({ view: 'vacaciones', changed: false })
+    expect(resolveRrhhNav({ tab: 'ausencias' })).toMatchObject({ view: 'calendario', changed: true })
+    expect(resolveRrhhNav({ tab: 'ausencias', view: 'saldos' })).toMatchObject({ view: 'saldos', changed: false })
     expect(resolveRrhhNav({ tab: 'personas', view: 'x' })).toMatchObject({ view: null, changed: true })
   })
 
