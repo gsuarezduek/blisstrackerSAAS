@@ -74,6 +74,7 @@ async function resolvePlans(rawPlans, { workspaceId, defaultCurrency }) {
       label: typeof p.label === 'string' && p.label.trim() ? p.label.trim() : `Plan ${i + 1}`,
       price: Number.isFinite(priceNum) ? priceNum : null,
       currency: typeof p.currency === 'string' && p.currency.trim() ? p.currency.trim() : (defaultCurrency || 'ARS'),
+      plusIva: p.plusIva === true, // precio + IVA (se muestra "+ IVA" junto al monto; no afecta el número)
       services,
     }
   })
@@ -125,7 +126,7 @@ async function createBrief(req, res, next) {
   }
 }
 
-// POST /api/ventas/leads/:id/proposals  { plans: [{ label?, price?, currency?, serviceIds?, serviceNames? }], objectives, title?, signatureId? }
+// POST /api/ventas/leads/:id/proposals  { plans: [{ label?, price?, currency?, plusIva?, serviceIds?, serviceNames? }], objectives, title?, signatureId? }
 // Genera la propuesta con IA y la guarda como nueva versión. Cada plan es una opción de precio
 // (ej. Básico/Completo) con su propio set de servicios y precio mensual definido a mano.
 async function createProposal(req, res, next) {

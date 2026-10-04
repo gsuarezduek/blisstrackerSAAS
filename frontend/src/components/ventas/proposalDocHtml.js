@@ -121,6 +121,8 @@ export const PROPOSAL_DOC_CSS = `
 .pd .pd-table tr.pd-total td { background: var(--tint); font-weight: 800; color: #111827; font-size: 15px; border-bottom: 0; }
 .pd .pd-price-box { background: var(--tint); border-radius: 12px; padding: 16px 20px; display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin: 0 0 12px; break-inside: avoid; page-break-inside: avoid; }
 .pd .pd-price-box .pd-price { font-size: 22px; font-weight: 800; color: #111827; }
+.pd .pd-iva { font-size: 0.72em; font-weight: 600; color: #6b7280; margin-left: 3px; }
+.pd .pd-table tr.pd-total .pd-iva { color: #6b7280; }
 
 .pd .pd-closing { background: var(--dark); color: #d1d5db; border-radius: 14px; padding: 24px 28px; margin-top: 26px; break-inside: avoid; page-break-inside: avoid; }
 .pd .pd-closing-label { font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; font-weight: 700; color: var(--accent); margin-bottom: 8px; }
@@ -146,7 +148,9 @@ const intro = t => (t ? `<p>${rich(t)}</p>` : '')
 
 function money(plan) {
   const n = Number(plan.price)
-  return plan.price == null || plan.price === '' || !Number.isFinite(n) ? 'A definir' : `${esc(plan.currency || 'ARS')} ${n.toLocaleString('es-AR')}`
+  if (plan.price == null || plan.price === '' || !Number.isFinite(n)) return 'A definir'
+  const amount = `${esc(plan.currency || 'ARS')} ${n.toLocaleString('es-AR')}`
+  return plan.plusIva ? `${amount}<span class="pd-iva">+ IVA</span>` : amount
 }
 
 // Servicios de los planes (unión, en orden de aparición) con el badge de qué planes los incluyen.

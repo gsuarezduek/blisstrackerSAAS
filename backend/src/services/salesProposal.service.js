@@ -64,7 +64,8 @@ function formatPrice(n) {
 
 function planBlock(plan, i) {
   const price = formatPrice(plan.price)
-  const priceLine = price ? ` (precio mensual ${plan.currency || 'ARS'} ${price} — NO lo escribas en los textos)` : ''
+  const ivaNote = plan.plusIva ? ', + IVA' : ''
+  const priceLine = price ? ` (precio mensual ${plan.currency || 'ARS'} ${price}${ivaNote} — NO lo escribas en los textos)` : ''
   const services = plan.services?.length
     ? plan.services.map(s => `  - ${s.name}${s.description ? `: ${s.description}` : ''}`).join('\n')
     : '  (sin servicios específicos; inferí un alcance razonable para este plan según los objetivos)'

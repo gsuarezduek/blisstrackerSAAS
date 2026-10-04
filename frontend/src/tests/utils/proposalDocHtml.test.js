@@ -44,6 +44,22 @@ describe('renderProposalDoc', () => {
     expect(html).toContain('A definir')
   })
 
+  it('un plan con plusIva muestra "+ IVA" junto al precio; sin precio no lo muestra', () => {
+    const htmlSingle = renderProposalDoc({ blocks: [{ type: 'pricing' }] }, { plans: [{ label: 'X', price: 1000, currency: 'ARS', plusIva: true, services: [] }] })
+    expect(htmlSingle).toContain('ARS 1.000<span class="pd-iva">+ IVA</span>')
+
+    const htmlMulti = renderProposalDoc({ blocks: [{ type: 'pricing' }] }, { plans: [
+      { label: 'A', price: 1000, currency: 'ARS', plusIva: true, services: [] },
+      { label: 'B', price: 2000, currency: 'ARS', plusIva: false, services: [] },
+    ] })
+    expect(htmlMulti).toContain('ARS 1.000<span class="pd-iva">+ IVA</span>')
+    expect(htmlMulti).toContain('>ARS 2.000</td>') // sin el tag
+
+    const htmlNoPrice = renderProposalDoc({ blocks: [{ type: 'pricing' }] }, { plans: [{ label: 'X', price: null, plusIva: true, services: [] }] })
+    expect(htmlNoPrice).toContain('A definir')
+    expect(htmlNoPrice).not.toContain('pd-iva')
+  })
+
   it('el valor de las barras se acota a 0-100 y el color de marca inválido cae al default', () => {
     const html = renderProposalDoc({ blocks: [{ type: 'bars', items: [{ label: 'a', value: 999 }] }] }, { plans: [], accent: 'no-es-color' })
     expect(html).toContain('width:100%')

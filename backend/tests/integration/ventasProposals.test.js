@@ -60,25 +60,41 @@ describe('POST /api/ventas/leads/:id/proposals', () => {
     prisma.proposal.create.mockResolvedValue({ id: 1, version: 1, status: 'draft', title: 'Propuesta v1' })
 
     const res = await req('post', '/api/ventas/leads/1/proposals').send({
-      plans: [{ label: 'Básico', price: 1000, currency: 'ARS', serviceIds: [1] }],
+      plans: [{ label: 'Básico', price: 1000, currency: 'ARS', plusIva: true, serviceIds: [1] }],
       objectives: 'Más leads',
     })
 
     expect(res.status).toBe(201)
-    // La IA recibe las notas (HTML → texto), la investigación y las notas del seguimiento.
+    // La IA recibe las notas (HTML → texto), la investigación y las notas del seguimiento,
+    // y los planes con el flag +IVA resuelto (false por default si no se manda).
     expect(generateProposalDoc).toHaveBeenCalledWith(expect.objectContaining({
       notesText: 'Quieren más leads',
       research: { description: 'Empresa X' },
       activityNotes: ['Llamado inicial'],
+      plans: [expect.objectContaining({ label: 'Básico', plusIva: true })],
     }), expect.anything())
     expect(prisma.proposal.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({
         workspaceId: WORKSPACE_ID, leadId: 1, version: 1, status: 'draft',
         title: 'Propuesta de Marketing',
+        plans: [expect.objectContaining({ plusIva: true })],
         doc: expect.objectContaining({ blocks: expect.any(Array) }),
         publicToken: expect.any(String),
       }),
     }))
+  })
+
+  it('plusIva default false si no se manda, sin romper el resto del plan', async () => {
+    mockWorkspace()
+    prisma.lead.findFirst.mockResolvedValue({ id: 1, currency: 'ARS', title: 'x', notes: null, company: { name: 'Acme' }, primaryContact: null })
+    prisma.leadResearch.findFirst.mockResolvedValue(null)
+    prisma.leadActivity.findMany.mockResolvedValue([])
+    prisma.proposal.findFirst.mockResolvedValue(null)
+    prisma.proposal.create.mockResolvedValue({ id: 1, version: 1 })
+
+    await req('post', '/api/ventas/leads/1/proposals').send({ plans: [{ label: 'Básico', price: 1000 }] })
+
+    expect(generateProposalDoc.mock.calls.at(-1)[0].plans).toEqual([expect.objectContaining({ plusIva: false })])
   })
 
   it('usa Sonnet por defecto y Opus si se pide quality:max (valores inválidos caen al default)', async () => {

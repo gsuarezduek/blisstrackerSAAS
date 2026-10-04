@@ -3503,7 +3503,7 @@ model Proposal {
   version     Int       @default(1)
   title       String?
   services    Json      @default("[]") // unión de nombres de servicios de todos los planes (referencia rápida)
-  plans       Json      @default("[]") // planes de precio propuestos: [{ label, price, currency, services: [{ name, description }] }]
+  plans       Json      @default("[]") // planes de precio propuestos: [{ label, price, currency, plusIva, services: [{ name, description }] }]
   objectives  String? // objetivos del cliente (input del usuario)
   content     String? // propuesta generada por IA (HTML editable) — LEGACY: las propuestas nuevas usan `doc`; queda para las creadas antes
   doc         Json? // propuesta como documento estructurado de bloques tipados (ver lib/proposalDoc.js) — un único renderer lo dibuja igual en preview, link público y PDF

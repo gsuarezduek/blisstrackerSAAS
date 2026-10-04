@@ -10,7 +10,7 @@ const input = 'w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-7
 const label = 'block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1'
 const CURRENCIES = ['ARS', 'USD', 'EUR']
 
-function newPlan(label, currency) { return { id: crypto.randomUUID(), label, price: '', currency, serviceIds: [] } }
+function newPlan(label, currency) { return { id: crypto.randomUUID(), label, price: '', currency, plusIva: true, serviceIds: [] } }
 
 // Modal de propuesta. Tres pasos: (1) form: armar planes de precio (servicios + precio mensual, ej.
 // Básico/Completo) + objetivos; (2) brief: la IA analiza el caso y muestra qué entendió, hace
@@ -71,6 +71,7 @@ export default function ProposalModal({ leadId, companyName, currency: defaultCu
     label: p.label.trim(),
     price: p.price === '' ? null : Number(p.price),
     currency: p.currency,
+    plusIva: !!p.plusIva,
     serviceIds: p.serviceIds,
   }))
 
@@ -163,6 +164,10 @@ export default function ProposalModal({ leadId, companyName, currency: defaultCu
                         {CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
                       </select>
                       <input type="number" min="0" placeholder="Precio/mes" className="w-28 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-2 py-2 text-sm shrink-0" value={plan.price} onChange={e => updatePlan(plan.id, 'price', e.target.value)} />
+                      <label className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400 shrink-0 select-none" title="Muestra “+ IVA” junto al precio en la propuesta">
+                        <input type="checkbox" className="accent-primary-600" checked={!!plan.plusIva} onChange={e => updatePlan(plan.id, 'plusIva', e.target.checked)} />
+                        + IVA
+                      </label>
                       {plans.length > 1 && <button type="button" onClick={() => removePlan(plan.id)} className="text-gray-400 hover:text-red-500 text-lg leading-none px-1" title="Eliminar plan">×</button>}
                     </div>
                     {services.length === 0 ? (
