@@ -333,6 +333,8 @@ async function fetchTopPosts(orgId, accessToken, targetMonth = null) {
     const postsRes = await restGetRaw('posts', postsQuery, accessToken)
 
     const posts = postsRes.data?.elements ?? []
+    // TEMP DEBUG — ver qué devuelve realmente la API antes de filtrar por mes.
+    console.log(`[Linkedin] fetchTopPosts debug: org=${orgId} targetMonth=${targetMonth} crudos=${posts.length} fechas=${JSON.stringify(posts.map(p => ({ id: p.id, createdAt: p.createdAt, publishedAt: p.publishedAt, lastModifiedAt: p.lastModifiedAt, author: p.author })))}`)
     if (posts.length === 0) return { topPosts: [], postsThisMonth: 0 }
 
     // Filtrar por mes. `publishedAt` es el campo real de la Posts API (no
@@ -344,6 +346,7 @@ async function fetchTopPosts(orgId, accessToken, targetMonth = null) {
         const t = p.createdAt ?? p.publishedAt ?? p.lastModifiedAt
         return t && t >= startMs && t <= endMs
       })
+      console.log(`[Linkedin] fetchTopPosts debug: targetMonth=${targetMonth} bounds=[${startMs},${endMs}] filtrados=${filtered.length}`)
     }
 
     const postsThisMonth = filtered.length
