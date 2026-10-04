@@ -289,7 +289,10 @@ export default function AddTaskModal({ onAdd, onClose, lockedProject, defaultPro
     // Sin lockedProject el selector queda editable: si hay defaultProject arranca
     // preseleccionado (ver estado inicial de projectId/projects), si no arranca vacío
     // y el usuario elige (favoritos → los suyos → el resto, o filtrando por texto).
-    api.get('/projects').then(r => setProjects(r.data))
+    // Los proyectos privados que no son el mío (locked, ver "Proyectos privados")
+    // quedan afuera: no tiene sentido ofrecer crear una tarea en un proyecto cuyo
+    // contenido no se puede ver (y el backend la rechazaría igual).
+    api.get('/projects').then(r => setProjects(r.data.filter(p => !p.locked)))
   }, [lockedProject])
 
   // Todos los integrantes activos del workspace: cualquiera puede ser asignado,

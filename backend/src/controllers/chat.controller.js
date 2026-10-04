@@ -4,6 +4,7 @@ const { resolveMentions } = require('../lib/mentions')
 const { slugify } = require('../lib/slugify')
 const { emitTo } = require('../lib/socket')
 const { channelLabel, uniqueSlug, materializeChannels } = require('../lib/chatChannels')
+const { canWrite } = require('../lib/projectAccess')
 const { MESSAGE_INCLUDE } = require('../lib/chatMessageInclude')
 const { sendPushToUser } = require('../services/pushNotification.service')
 const objectStorage = require('../services/objectStorage.service')
@@ -46,10 +47,22 @@ function isAdminMember(req) {
   return req.workspaceMember?.role === 'admin' || req.workspaceMember?.role === 'owner'
 }
 
-function assertChannelAccess(req, res, channel) {
+// Caso nuevo (ver concepto "Proyectos privados"): el canal de un proyecto privado
+// NO sigue el criterio de arriba ("privado" = solo admin) — lo ve el equipo del
+// proyecto (ProjectMember) + admin/owner, igual que el resto de su ficha. No hace
+// falta un campo nuevo en ChatChannel: alcanza con mirar `channel.projectId` contra
+// `Project.isPrivate` (reusa `canWrite`, que ya es "admin o ProjectMember").
+async function assertChannelAccess(req, res, channel) {
   if (channel.isPrivate && !isAdminMember(req)) {
     res.status(403).json({ error: 'Este canal es privado — solo lo ven los administradores', code: 'CHANNEL_PRIVATE' })
     return false
+  }
+  if (channel.kind === 'project' && channel.projectId && !isAdminMember(req)) {
+    const project = await prisma.project.findUnique({ where: { id: channel.projectId }, select: { isPrivate: true } })
+    if (project?.isPrivate && !(await canWrite(req, channel.projectId))) {
+      res.status(403).json({ error: 'El proyecto de este canal es privado — solo lo ve su equipo', code: 'PROJECT_PRIVATE' })
+      return false
+    }
   }
   return true
 }
@@ -60,8 +73,21 @@ async function listChannels(req, res, next) {
     const userId = req.user.userId
     await materializeChannels(workspaceId)
 
+    // Proyectos privados (ver concepto "Proyectos privados"): el canal de un proyecto
+    // privado no se lista para quien no es admin ni del equipo de ese proyecto — no
+    // alcanza con `isPrivate` (eso es el "solo admin" de los canales custom).
     const channels = await prisma.chatChannel.findMany({
-      where: { workspaceId, archived: false, ...(isAdminMember(req) ? {} : { isPrivate: false }) },
+      where: {
+        workspaceId, archived: false,
+        ...(isAdminMember(req) ? {} : {
+          isPrivate: false,
+          OR: [
+            { projectId: null },
+            { project: { isPrivate: false } },
+            { project: { isPrivate: true, members: { some: { userId } } } },
+          ],
+        }),
+      },
       include: {
         project: { select: { name: true } },
         messages: { orderBy: { id: 'desc' }, take: 1, select: { id: true, content: true, gifUrl: true, createdAt: true, authorId: true } },
@@ -202,7 +228,7 @@ async function listMessages(req, res, next) {
 
     const channel = await prisma.chatChannel.findFirst({ where: { id: channelId, workspaceId } })
     if (!channel) return res.status(404).json({ error: 'Canal no encontrado' })
-    if (!assertChannelAccess(req, res, channel)) return
+    if (!await assertChannelAccess(req, res, channel)) return
 
     // "around" — saltar a un mensaje puntual que puede haber quedado fuera de la
     // ventana normal de paginación (ej. un mensaje fijado hace meses, desde
@@ -261,7 +287,7 @@ async function listPinned(req, res, next) {
 
     const channel = await prisma.chatChannel.findFirst({ where: { id: channelId, workspaceId } })
     if (!channel) return res.status(404).json({ error: 'Canal no encontrado' })
-    if (!assertChannelAccess(req, res, channel)) return
+    if (!await assertChannelAccess(req, res, channel)) return
 
     const messages = await prisma.chatMessage.findMany({
       where: { channelId, pinnedAt: { not: null } },
@@ -287,7 +313,7 @@ async function searchMessages(req, res, next) {
 
     const channel = await prisma.chatChannel.findFirst({ where: { id: channelId, workspaceId } })
     if (!channel) return res.status(404).json({ error: 'Canal no encontrado' })
-    if (!assertChannelAccess(req, res, channel)) return
+    if (!await assertChannelAccess(req, res, channel)) return
 
     const messages = await prisma.chatMessage.findMany({
       where: { channelId, content: { contains: q, mode: 'insensitive' } },
@@ -326,13 +352,21 @@ async function finalizeSentMessage({ req, channel, channelId, workspaceId, userI
   // (channel.projectId), notifica únicamente al equipo principal de ESE proyecto (ProjectMember)
   // — un subconjunto más chico, útil en canales grandes donde "@everyone" sería demasiado ruido.
   // En un canal privado sólo pueden verlo (y por ende ser notificados) admin/owner — mencionar a
-  // alguien sin acceso sería un callejón sin salida (notificación a un canal que no puede abrir).
+  // alguien sin acceso sería un callejón sin salida. Mismo motivo para el canal de un proyecto
+  // privado (ver concepto "Proyectos privados"): ahí el pool es equipo del proyecto + admin/owner.
   let mentionedUserIds = new Set()
   let isEveryoneMention = false
   let isEquipoMention = false
   if (text.includes('@')) {
+    let memberWhere = { workspaceId, active: true }
+    if (channel.isPrivate) {
+      memberWhere = { ...memberWhere, role: { in: ['admin', 'owner'] } }
+    } else if (channel.project?.isPrivate) {
+      const teamRows = await prisma.projectMember.findMany({ where: { projectId: channel.projectId }, select: { userId: true } })
+      memberWhere = { ...memberWhere, OR: [{ role: { in: ['admin', 'owner'] } }, { userId: { in: teamRows.map(m => m.userId) } }] }
+    }
     const members = await prisma.workspaceMember.findMany({
-      where: { workspaceId, active: true, ...(channel.isPrivate ? { role: { in: ['admin', 'owner'] } } : {}) },
+      where: memberWhere,
       select: { user: { select: { id: true, name: true } } },
     })
     const allUsers = members.map(m => m.user)
@@ -410,10 +444,10 @@ async function sendMessage(req, res, next) {
 
     const channel = await prisma.chatChannel.findFirst({
       where: { id: channelId, workspaceId },
-      include: { project: { select: { name: true } } },
+      include: { project: { select: { name: true, isPrivate: true } } },
     })
     if (!channel) return res.status(404).json({ error: 'Canal no encontrado' })
-    if (!assertChannelAccess(req, res, channel)) return
+    if (!await assertChannelAccess(req, res, channel)) return
 
     const requestedReplyToId = req.body?.replyToId ? Number(req.body.replyToId) : null
     const replyTarget = await resolveReplyTarget(channelId, requestedReplyToId)
@@ -445,10 +479,10 @@ async function sendMessageWithMedia(req, res, next) {
 
     const channel = await prisma.chatChannel.findFirst({
       where: { id: channelId, workspaceId },
-      include: { project: { select: { name: true } } },
+      include: { project: { select: { name: true, isPrivate: true } } },
     })
     if (!channel) return res.status(404).json({ error: 'Canal no encontrado' })
-    if (!assertChannelAccess(req, res, channel)) return
+    if (!await assertChannelAccess(req, res, channel)) return
 
     if (req.file.buffer.length > ATTACHMENT_MAX_BYTES) {
       return res.status(413).json({ error: `El archivo supera el máximo permitido (${Math.round(ATTACHMENT_MAX_BYTES / 1024 / 1024)} MB).` })
@@ -554,7 +588,7 @@ async function markRead(req, res, next) {
 
     const channel = await prisma.chatChannel.findFirst({ where: { id: channelId, workspaceId } })
     if (!channel) return res.status(404).json({ error: 'Canal no encontrado' })
-    if (!assertChannelAccess(req, res, channel)) return
+    if (!await assertChannelAccess(req, res, channel)) return
 
     const last = await prisma.chatMessage.findFirst({ where: { channelId }, orderBy: { id: 'desc' }, select: { id: true } })
 
@@ -590,7 +624,7 @@ async function togglePin(req, res, next) {
     if (!existing) return res.status(404).json({ error: 'Mensaje no encontrado' })
 
     const channel = await prisma.chatChannel.findFirst({ where: { id: existing.channelId, workspaceId } })
-    if (!channel || !assertChannelAccess(req, res, channel)) return
+    if (!channel || !await assertChannelAccess(req, res, channel)) return
 
     const message = await prisma.chatMessage.update({
       where: { id: messageId },
@@ -619,7 +653,7 @@ async function toggleReaction(req, res, next) {
     if (!existing) return res.status(404).json({ error: 'Mensaje no encontrado' })
 
     const channel = await prisma.chatChannel.findFirst({ where: { id: existing.channelId, workspaceId } })
-    if (!channel || !assertChannelAccess(req, res, channel)) return
+    if (!channel || !await assertChannelAccess(req, res, channel)) return
 
     const existingReaction = await prisma.chatMessageReaction.findUnique({
       where: { messageId_userId_emoji: { messageId, userId, emoji } },

@@ -530,6 +530,7 @@ model Project {
   hoursEnabled        Boolean   @default(false)
   briefsEnabled       Boolean   @default(true)
   filesEnabled        Boolean   @default(true)
+  isPrivate           Boolean   @default(false) // ver concepto "Proyectos privados": solo ProjectMember + admin/owner ven la ficha completa
   monthlyHours        Int?
   emailFrom           String?
   aiWeeklyTokenLimit  Int       @default(500000)

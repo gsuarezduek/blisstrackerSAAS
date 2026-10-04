@@ -1,16 +1,24 @@
 const prisma = require('../lib/prisma')
 const { resolveMentions } = require('../lib/mentions')
 const { sendPushToUser } = require('../services/pushNotification.service')
+const { isAdmin, isProjectMember } = require('../lib/projectAccess')
 
 // Mismo criterio "equipo = etiqueta, no barrera" que el resto del modelo de acceso a
 // proyectos (ver ProjectAccess/Links/lecturas): cualquier miembro activo del workspace
 // puede ver y comentar cualquier tarea, sin necesidad de ser ProjectMember. Solo se scopea
 // por workspace (evita leer/comentar tareas de otro workspace vía ID).
-async function getTaskWithAccess(taskId, workspaceId) {
+//
+// Excepción — proyecto privado (ver concepto "Proyectos privados"): ahí sí hace falta
+// ser del equipo del proyecto o admin/owner, igual que el resto de su ficha.
+async function getTaskWithAccess(req, taskId) {
   const task = await prisma.task.findFirst({
-    where: { id: taskId, workDay: { workspaceId } },
+    where: { id: taskId, workDay: { workspaceId: req.workspace.id } },
     include: { project: true },
   })
+  if (!task) return null
+  if (task.project?.isPrivate && !isAdmin(req) && !(await isProjectMember(task.projectId, req.user.userId))) {
+    return null
+  }
   return task
 }
 
@@ -22,7 +30,7 @@ const COMMENT_INCLUDE = {
 async function listComments(req, res, next) {
   try {
     const taskId = Number(req.params.id)
-    const task = await getTaskWithAccess(taskId, req.workspace.id)
+    const task = await getTaskWithAccess(req, taskId)
     if (!task) return res.status(403).json({ error: 'No tenés acceso a esta tarea' })
 
     const comments = await prisma.taskComment.findMany({
@@ -43,7 +51,7 @@ async function addComment(req, res, next) {
 
     if (!text?.trim()) return res.status(400).json({ error: 'El comentario no puede estar vacío' })
 
-    const task = await getTaskWithAccess(taskId, workspaceId)
+    const task = await getTaskWithAccess(req, taskId)
     if (!task) return res.status(403).json({ error: 'No tenés acceso a esta tarea' })
 
     const comment = await prisma.taskComment.create({
@@ -56,11 +64,18 @@ async function addComment(req, res, next) {
     // Contra miembros activos del workspace, no solo del equipo del proyecto — cualquiera
     // puede ser mencionado y notificado en un comentario, mismo criterio que la mención
     // en la descripción de la tarea (ver resolveTaskMentions en tasks.controller.js).
+    // Excepción — proyecto privado: acotado al equipo + admin/owner, para no notificar
+    // (ni dejar un link muerto) a alguien que no puede abrir la tarea.
     let mentionedUserIds = new Set()
 
     if (text.includes('@')) {
+      let where = { workspaceId, active: true }
+      if (task.project?.isPrivate) {
+        const teamRows = await prisma.projectMember.findMany({ where: { projectId: task.projectId }, select: { userId: true } })
+        where = { workspaceId, active: true, OR: [{ role: { in: ['admin', 'owner'] } }, { userId: { in: teamRows.map(m => m.userId) } }] }
+      }
       const wsMembers = await prisma.workspaceMember.findMany({
-        where: { workspaceId, active: true },
+        where,
         include: { user: { select: { id: true, name: true } } },
       })
       mentionedUserIds = resolveMentions(text, wsMembers.map(m => m.user), userId)
@@ -140,7 +155,7 @@ async function toggleReaction(req, res, next) {
     const emoji = (req.body?.emoji || '').trim()
     if (!emoji || emoji.length > 32) return res.status(400).json({ error: 'Emoji inválido' })
 
-    const task = await getTaskWithAccess(taskId, workspaceId)
+    const task = await getTaskWithAccess(req, taskId)
     if (!task) return res.status(403).json({ error: 'No tenés acceso a esta tarea' })
 
     const comment = await prisma.taskComment.findFirst({ where: { id: commentId, taskId } })

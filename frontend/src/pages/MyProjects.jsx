@@ -5,7 +5,7 @@ import LoadingSpinner from '../components/LoadingSpinner'
 import api from '../api/client'
 import { useAuth } from '../context/AuthContext'
 import { AvatarStack } from './project-detail/ui'
-import { FolderOpen, Plus } from 'lucide-react'
+import { FolderOpen, Plus, Lock } from 'lucide-react'
 import { Icon } from '../components/ui/Icon'
 import NewProjectModal from '../components/NewProjectModal'
 
@@ -235,6 +235,25 @@ export default function MyProjects() {
   const hasBlocked = sort === 'blocked'
 
   const renderCard = p => {
+    // Proyecto privado del que no soy equipo ni admin (ver concepto "Proyectos
+    // privados"): el backend ya recorta la fila a lo mínimo — nombre visible,
+    // nada de contenido — así que la card tampoco intenta mostrar nada más.
+    if (p.locked) {
+      return (
+        <div
+          key={p.id}
+          onClick={() => navigate(`/my-projects/${encodeURIComponent(p.name)}`)}
+          className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-5 flex flex-col gap-3 cursor-pointer hover:border-gray-300 dark:hover:border-gray-600 transition-colors opacity-70"
+        >
+          <div className="flex items-center gap-2 min-w-0">
+            <Icon as={Lock} size={16} className="text-gray-400 dark:text-gray-500 flex-shrink-0" />
+            <h2 className="font-bold text-gray-700 dark:text-gray-300 text-lg leading-tight truncate">{p.name}</h2>
+          </div>
+          <p className="text-xs text-gray-400 dark:text-gray-500">Proyecto privado — no sos parte de su equipo.</p>
+        </div>
+      )
+    }
+
     const counts      = p.taskCounts ?? {}
     const activePills = COUNT_CONFIG.filter(c => counts[c.key] > 0)
     const isBlocked   = (counts.BLOCKED ?? 0) > 0

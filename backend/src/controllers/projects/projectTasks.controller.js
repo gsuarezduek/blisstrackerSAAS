@@ -16,7 +16,7 @@ async function projectTasks(req, res, next) {
       select: {
         id: true, name: true, createdAt: true, situation: true,
         timezone: true, linksEnabled: true, situationEnabled: true, briefsEnabled: true, filesEnabled: true,
-        websiteUrl: true, connections: true,
+        websiteUrl: true, connections: true, isPrivate: true,
         chatChannel: { select: { slug: true } },
         links:    { orderBy: { createdAt: 'asc' } },
         services: { include: { service: true }, orderBy: { service: { name: 'asc' } } },

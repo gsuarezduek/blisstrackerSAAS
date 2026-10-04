@@ -1,5 +1,6 @@
 import ProjectInfoTab from '../../components/ProjectInfoTab'
 import ClientPortalConfig from '../../components/ClientPortalConfig'
+import ProjectPrivacyToggle from '../../components/ProjectPrivacyToggle'
 import UserLink from '../../components/UserLink'
 import { avatarUrl } from '../../utils/avatarUrl'
 import RoleBadge from '../../components/RoleBadge'
@@ -12,8 +13,17 @@ export default function InfoTab({
   editingServices, setEditingServices, servicesDraft, setServicesDraft, allServices, servicesSaving,
   onOpenServicesEdit, onSaveServices, onOpenTeamEdit,
 }) {
+  const canEditProject = authUser?.isAdmin || (data.project.members ?? []).some(pm => pm.user.id === authUser?.id)
+
   return (
     <div className="space-y-4">
+
+      {/* Privacidad — ver concepto "Proyectos privados" */}
+      <ProjectPrivacyToggle
+        project={data.project}
+        canEdit={canEditProject}
+        onUpdated={updated => setData(prev => ({ ...prev, project: { ...prev.project, ...updated } }))}
+      />
 
       {/* Servicios */}
       {(data.project.services?.length > 0 || authUser?.isAdmin) && (

@@ -1,6 +1,7 @@
 const prisma = require('../lib/prisma')
 const { todayString } = require('../utils/dates')
 const { taskWorkedMinutes } = require('../lib/taskTime')
+const { isAdmin } = require('../lib/projectAccess')
 
 async function snapshot(req, res, next) {
   try {
@@ -75,9 +76,42 @@ async function snapshot(req, res, next) {
       }
     })
 
+    // Proyectos privados (ver concepto "Proyectos privados"): quien no es admin ni
+    // del equipo del proyecto ve que la persona está trabajando ahí ("Juan está
+    // trabajando en Proyecto X"), pero no la descripción de la tarea ni puede
+    // abrirla/seguirla — se enmascara antes de resolver follows/id.
+    const viewerIsAdmin = isAdmin(req)
+    if (!viewerIsAdmin) {
+      const privateProjectIds = [...new Set(
+        result.filter(e => e.currentTask?.project?.isPrivate).map(e => e.currentTask.project.id)
+      )]
+      if (privateProjectIds.length > 0) {
+        const myMemberships = await prisma.projectMember.findMany({
+          where: { projectId: { in: privateProjectIds }, userId },
+          select: { projectId: true },
+        })
+        const accessibleIds = new Set(myMemberships.map(m => m.projectId))
+        result = result.map(e => {
+          const t = e.currentTask
+          if (!t?.project?.isPrivate || accessibleIds.has(t.project.id)) return e
+          return {
+            ...e,
+            currentTask: {
+              masked: true,
+              status: t.status,
+              startedAt: t.startedAt,
+              sessions: t.sessions,
+              project: { id: t.project.id, name: t.project.name },
+            },
+          }
+        })
+      }
+    }
+
     // Marca en currentTask si el usuario actual ya la sigue, para poder
     // seguir/dejar de seguir directo desde la tarjeta sin abrir el modal.
-    const currentTaskIds = result.filter(e => e.currentTask).map(e => e.currentTask.id)
+    // (Una tarea enmascarada no tiene `id`: queda afuera, no se puede seguir algo que no se ve.)
+    const currentTaskIds = result.filter(e => e.currentTask && !e.currentTask.masked).map(e => e.currentTask.id)
     if (currentTaskIds.length > 0) {
       const follows = await prisma.taskFollow.findMany({
         where: { userId, taskId: { in: currentTaskIds } },

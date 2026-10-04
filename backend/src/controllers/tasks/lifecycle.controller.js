@@ -3,7 +3,7 @@ const { todayString } = require('../../utils/dates')
 const {
   buildRecurrenceParams, firstScheduledDate, spawnInstance,
 } = require('../../services/recurrence.service')
-const { isAdmin, canWrite } = require('../../lib/projectAccess')
+const { isAdmin, canWrite, isProjectMember } = require('../../lib/projectAccess')
 const { resolveMentions } = require('../../lib/mentions')
 const { emitTo } = require('../../lib/socket')
 const { nextOnTaskDone } = require('../../lib/contentCatalog')
@@ -18,10 +18,18 @@ const { sendPushToUser } = require('../../services/pushNotification.service')
 // puede ser mencionado en una tarea, sea o no su responsable — la etiqueta de proyecto/
 // equipo no es una barrera, ver "Project access model" en CLAUDE.md) y devuelve el Set
 // de userIds a notificar.
-async function resolveTaskMentions(text, workspaceId, authorId) {
+// `project` opcional: si es privado (ver concepto "Proyectos privados"), el pool de
+// mencionables se acota al equipo del proyecto + admin/owner — mencionar a alguien
+// de afuera notificaría/linkearía a una tarea que esa persona no puede abrir.
+async function resolveTaskMentions(text, workspaceId, authorId, project = null) {
   if (!text.includes('@')) return new Set()
+  let where = { workspaceId, active: true }
+  if (project?.isPrivate) {
+    const teamRows = await prisma.projectMember.findMany({ where: { projectId: project.id }, select: { userId: true } })
+    where = { workspaceId, active: true, OR: [{ role: { in: ['admin', 'owner'] } }, { userId: { in: teamRows.map(m => m.userId) } }] }
+  }
   const wsMembers = await prisma.workspaceMember.findMany({
-    where: { workspaceId, active: true },
+    where,
     include: { user: { select: { id: true, name: true } } },
   })
   return resolveMentions(text, wsMembers.map(m => m.user), authorId)
@@ -143,6 +151,20 @@ async function create(req, res, next) {
       }
     }
 
+    // Excepción — proyecto privado (ver concepto "Proyectos privados"): ahí SÍ es una
+    // barrera. Ni crear ni recibir una tarea sin ser del equipo o admin/owner (si no,
+    // el destinatario vería en su dashboard una tarea de un proyecto al que no puede
+    // entrar, o alguien de afuera podría crear tareas "a ciegas" en un proyecto cuyo
+    // contenido no puede ver).
+    if (project.isPrivate && !isAdmin(req)) {
+      if (!(await isProjectMember(project.id, requesterId))) {
+        return res.status(403).json({ error: 'Este proyecto es privado: no formás parte del equipo', code: 'PROJECT_PRIVATE' })
+      }
+      if (userId !== requesterId && !(await isProjectMember(project.id, userId))) {
+        return res.status(400).json({ error: 'Este proyecto es privado: la persona asignada debe ser del equipo del proyecto' })
+      }
+    }
+
     const wdKey = { userId_workspaceId_date: { userId, workspaceId, date: today } }
     let workDay = await prisma.workDay.findUnique({ where: wdKey })
     if (!workDay) {
@@ -238,7 +260,7 @@ async function create(req, res, next) {
       // @menciones en la descripción: notifican aunque la tarea sea para uno mismo
       // (ej. "Para mí, avisale a @Fulano"). Si la mencionada es además la responsable,
       // no se duplica el aviso — ya recibió el de arriba.
-      const mentioned = await resolveTaskMentions(description, workspaceId, requesterId)
+      const mentioned = await resolveTaskMentions(description, workspaceId, requesterId, project)
       mentioned.delete(userId)
       if (mentioned.size > 0) {
         const mentionMessage = `te mencionó en una tarea: "${desc}"`

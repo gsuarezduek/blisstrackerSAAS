@@ -10,6 +10,8 @@ import TaskCommentsModal from '../components/TaskCommentsModal'
 import { fmtMins, fmtDuration, activeSeconds } from '../utils/format'
 import { roleColor } from '../utils/roleColor'
 import { useAuth } from '../context/AuthContext'
+import { Lock } from 'lucide-react'
+import { Icon } from '../components/ui/Icon'
 
 const REFRESH_INTERVAL = 30 // seconds
 
@@ -122,8 +124,19 @@ function UserCard({ entry, now, onOpenUser, onOpenTask, ownUserId }) {
         </div>
       </div>
 
-      {/* Current task — click → comentarios de la tarea; + seguir si no es tu propia tarea */}
-      {hasTask && (
+      {/* Current task — click → comentarios de la tarea; + seguir si no es tu propia tarea.
+          Proyecto privado sin acceso (ver concepto "Proyectos privados"): el backend ya
+          enmascaró la tarea — se muestra solo el nombre del proyecto, sin descripción,
+          sin poder abrirla ni seguirla. */}
+      {hasTask && currentTask.masked && (
+        <div className="bg-gray-50 dark:bg-gray-700/40 rounded-xl px-4 py-3 flex items-center gap-2">
+          <Icon as={Lock} size={14} className="text-gray-400 dark:text-gray-500 flex-shrink-0" />
+          <p className="text-sm text-gray-600 dark:text-gray-400">
+            Está trabajando en <span className="font-medium text-gray-800 dark:text-gray-300">{currentTask.project.name}</span>
+          </p>
+        </div>
+      )}
+      {hasTask && !currentTask.masked && (
         <div className="bg-primary-50 dark:bg-primary-900/20 rounded-xl px-4 py-3 flex items-start gap-2">
           <button
             onClick={() => onOpenTask(currentTask)}

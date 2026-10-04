@@ -157,6 +157,9 @@ describe('Portal de cliente — endpoints admin', () => {
     jest.clearAllMocks()
     mockWorkspace()
     prisma.project.findFirst.mockResolvedValue({ id: PROJECT_ID })
+    // Gate de proyectos privados (router.param('id', ...) en projects.routes.js):
+    // se consulta antes del controller en toda ruta /api/projects/:id/*.
+    prisma.project.findUnique.mockResolvedValue({ isPrivate: false })
   })
 
   it('GET /api/projects/:id/client-portal devuelve null si no hay portal', async () => {
@@ -340,6 +343,9 @@ describe('Portal de cliente — contactos (ABM)', () => {
     jest.clearAllMocks()
     mockWorkspace()
     prisma.project.findFirst.mockResolvedValue({ id: PROJECT_ID })
+    // Gate de proyectos privados (router.param('id', ...) en projects.routes.js):
+    // se consulta antes del controller en toda ruta /api/projects/:id/*.
+    prisma.project.findUnique.mockResolvedValue({ isPrivate: false })
   })
 
   it('GET lista los contactos del portal', async () => {

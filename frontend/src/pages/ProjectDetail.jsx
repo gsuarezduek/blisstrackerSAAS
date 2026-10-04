@@ -16,7 +16,7 @@ import InfoTab, { TeamModal } from './project-detail/info'
 import OverviewTab from './project-detail/overview'
 import AccesosTab from './project-detail/accesos'
 import { AvatarStack } from './project-detail/ui'
-import { TriangleAlert } from 'lucide-react'
+import { TriangleAlert, Lock } from 'lucide-react'
 import { Icon } from '../components/ui/Icon'
 
 // Nombres viejos de pestañas que siguen llegando por links guardados/notificaciones
@@ -49,6 +49,7 @@ export default function ProjectDetail() {
   const [data,    setData]    = useState(null)
   const [loading, setLoading] = useState(true)
   const [error,   setError]   = useState('')
+  const [errorCode, setErrorCode] = useState('')
   const [linkForm, setLinkForm] = useState(null) // null = oculto, { label, url } = visible
   const [linkSaving, setLinkSaving] = useState(false)
   const [commentTask, setCommentTask] = useState(null)
@@ -82,8 +83,11 @@ export default function ProjectDetail() {
 
   const loadProject = useCallback(() => {
     return api.get(`/projects/${encodedId}/tasks`)
-      .then(r => { setData(r.data); setError('') })
-      .catch(err => setError(err.response?.data?.error || 'Error al cargar el proyecto'))
+      .then(r => { setData(r.data); setError(''); setErrorCode('') })
+      .catch(err => {
+        setError(err.response?.data?.error || 'Error al cargar el proyecto')
+        setErrorCode(err.response?.data?.code || '')
+      })
       .finally(() => setLoading(false))
   }, [encodedId])
 
@@ -319,8 +323,8 @@ export default function ProjectDetail() {
 
         {error && (
           <div className="text-center py-16 text-gray-400">
-            <Icon as={TriangleAlert} size={32} strokeWidth={1.5} className="mx-auto mb-3" />
-            <p>{error}</p>
+            <Icon as={errorCode === 'PROJECT_PRIVATE' ? Lock : TriangleAlert} size={32} strokeWidth={1.5} className="mx-auto mb-3" />
+            <p>{errorCode === 'PROJECT_PRIVATE' ? 'Este proyecto es privado — no formás parte de su equipo.' : error}</p>
           </div>
         )}
 

@@ -1,5 +1,6 @@
 const prisma = require('../lib/prisma')
 const { taskMins, tzOffsetStr } = require('../lib/timeMetrics')
+const { isAdmin } = require('../lib/projectAccess')
 
 // Filtro Prisma { gte, lte } para un intervalo de días [startStr, endStr] (YYYY-MM-DD), en la TZ dada.
 function utcRange(startStr, endStr, tz) {
@@ -102,10 +103,28 @@ async function getAdminUserDetail(req, res, next) {
  */
 // Include para tareas del perfil: proyecto, quién la creó/delegó, asignado y conteo de comentarios.
 const profileTaskInclude = {
-  project: { select: { id: true, name: true } },
+  project: { select: { id: true, name: true, isPrivate: true } },
   createdBy: { select: { id: true, name: true, avatar: true } },
   user: { select: { id: true, name: true, avatar: true } },
   _count: { select: { comments: true } },
+}
+
+// Filtra tareas de proyectos privados que el usuario que está mirando el perfil
+// (no necesariamente el dueño del perfil) no puede ver — ver concepto "Proyectos
+// privados". Sin esto, el perfil de una persona sería un atajo para leer el
+// contenido que Actividad ya enmascara.
+async function filterVisibleTasks(req, taskLists) {
+  if (isAdmin(req)) return taskLists
+  const all = taskLists.flat()
+  const privateIds = [...new Set(all.filter(t => t.project?.isPrivate).map(t => t.projectId))]
+  if (privateIds.length === 0) return taskLists
+  const memberships = await prisma.projectMember.findMany({
+    where: { projectId: { in: privateIds }, userId: req.user.userId },
+    select: { projectId: true },
+  })
+  const accessibleIds = new Set(memberships.map(m => m.projectId))
+  const canSee = t => !t.project?.isPrivate || accessibleIds.has(t.projectId)
+  return taskLists.map(list => list.filter(canSee))
 }
 
 /**
@@ -194,8 +213,14 @@ async function getUserProfile(req, res, next) {
       if (at >= dayFrom) { summary.day.count++; summary.day.minutes += mins }
     }
 
+    // Proyectos privados (ver concepto "Proyectos privados"): sin esto, el perfil
+    // de una persona sería un atajo para leer lo que Actividad enmascara.
+    const [activeVisible, futureVisible, byThemVisible, toThemVisible] = await filterVisibleTasks(req, [
+      activeTasks, futureTasks, delegatedByThem, delegatedToThem,
+    ])
+
     const byStatus = { IN_PROGRESS: [], PENDING: [], PAUSED: [], BLOCKED: [] }
-    for (const t of activeTasks) {
+    for (const t of activeVisible) {
       if (byStatus[t.status]) byStatus[t.status].push(t)
     }
 
@@ -213,9 +238,9 @@ async function getUserProfile(req, res, next) {
       onLeave: onLeaveReq || null,
       summary,
       active: byStatus,
-      future: futureTasks,
-      delegatedByThem,
-      delegatedToThem,
+      future: futureVisible,
+      delegatedByThem: byThemVisible,
+      delegatedToThem: toThemVisible,
     })
   } catch (err) { next(err) }
 }
@@ -247,7 +272,7 @@ async function getUserCompleted(req, res, next) {
       endStr = date
     }
 
-    const tasks = await prisma.task.findMany({
+    const tasksRaw = await prisma.task.findMany({
       where: {
         userId: targetId, status: 'COMPLETED', workDay: { workspaceId },
         completedAt: utcRange(startStr, endStr, TZ),
@@ -255,6 +280,8 @@ async function getUserCompleted(req, res, next) {
       include: profileTaskInclude,
       orderBy: { completedAt: 'desc' },
     })
+    // Proyectos privados (ver concepto "Proyectos privados"): mismo filtro que getUserProfile.
+    const [tasks] = await filterVisibleTasks(req, [tasksRaw])
 
     let totalMinutes = 0
     const items = tasks.map(t => {

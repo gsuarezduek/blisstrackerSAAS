@@ -2,7 +2,10 @@ const prisma = require('../../lib/prisma')
 const { DEFAULT_TZ } = require('../../utils/dates')
 const { monthStringInTz } = require('../../lib/timeMetrics')
 const { createProject } = require('../../services/projects.service')
+const { isAdmin, canWrite } = require('../../lib/projectAccess')
 const { resolveProjectId, includeDetails } = require('./_shared')
+
+const OPEN_TASK_STATUSES = ['PENDING', 'IN_PROGRESS', 'PAUSED', 'BLOCKED']
 
 function weekMondayStr(tz) {
   const safeZone = (tz && typeof tz === 'string' && tz.trim()) ? tz : DEFAULT_TZ
@@ -61,17 +64,31 @@ async function list(req, res, next) {
       countsMap[row.projectId].COMPLETED_WEEK = (countsMap[row.projectId].COMPLETED_WEEK ?? 0) + 1
     }
 
-    const result = projects.map(p => ({
-      ...p,
-      starred: starredSet.has(p.id),
-      taskCounts: {
-        IN_PROGRESS:    countsMap[p.id]?.IN_PROGRESS    ?? 0,
-        PENDING:        countsMap[p.id]?.PENDING        ?? 0,
-        PAUSED:         countsMap[p.id]?.PAUSED         ?? 0,
-        BLOCKED:        countsMap[p.id]?.BLOCKED        ?? 0,
-        COMPLETED_WEEK: countsMap[p.id]?.COMPLETED_WEEK ?? 0,
-      },
-    }))
+    // Proyectos privados (ver concepto "Proyectos privados"): el nombre NO es secreto
+    // (sigue apareciendo en Mis Proyectos/Actividad), pero el resto del detalle
+    // (equipo, servicios, links, canal de chat, conteos de tareas) solo lo ve el
+    // equipo del proyecto o admin/owner — el resto del workspace recibe una versión
+    // mínima con `locked: true`.
+    const viewerIsAdmin = isAdmin(req)
+    const result = projects.map(p => {
+      const isMember = p.members.some(m => m.userId === userId)
+      const hasAccess = viewerIsAdmin || isMember || !p.isPrivate
+      if (!hasAccess) {
+        return { id: p.id, name: p.name, active: p.active, isPrivate: true, locked: true, starred: false, taskCounts: null }
+      }
+      return {
+        ...p,
+        locked: false,
+        starred: starredSet.has(p.id),
+        taskCounts: {
+          IN_PROGRESS:    countsMap[p.id]?.IN_PROGRESS    ?? 0,
+          PENDING:        countsMap[p.id]?.PENDING        ?? 0,
+          PAUSED:         countsMap[p.id]?.PAUSED         ?? 0,
+          BLOCKED:        countsMap[p.id]?.BLOCKED        ?? 0,
+          COMPLETED_WEEK: countsMap[p.id]?.COMPLETED_WEEK ?? 0,
+        },
+      }
+    })
 
     res.json(result)
   } catch (err) { next(err) }
@@ -290,4 +307,54 @@ async function remove(req, res, next) {
   }
 }
 
-module.exports = { list, listAll, create, update, remove, getMembers, toggleStar }
+// PATCH /api/projects/:id/privacy — body { isPrivate }. Lo puede marcar/desmarcar
+// cualquier integrante del equipo del proyecto o admin/owner (el router.param de
+// projects.routes.js ya bloquea a cualquier otro para des-privatizar; acá se
+// vuelve a chequear porque marcar PRIVADO por primera vez pasa por un proyecto
+// que todavía es público, así que ese gate no alcanza a cubrir ese caso). Al
+// marcarlo privado valida que nadie ajeno al equipo tenga tareas ABIERTAS en el
+// proyecto — si hay, 409 con el detalle para resolverlo a mano antes de reintentar.
+async function setPrivacy(req, res, next) {
+  try {
+    const projectId = req.project?.id ?? await resolveProjectId(req.params.id, req.workspace.id)
+    if (!projectId) return res.status(404).json({ error: 'Proyecto no encontrado' })
+    if (!(await canWrite(req, projectId))) {
+      return res.status(403).json({ error: 'Necesitás ser del equipo del proyecto (o admin/owner) para cambiar esto' })
+    }
+
+    const isPrivate = !!req.body?.isPrivate
+
+    if (isPrivate) {
+      const [openTasks, members] = await Promise.all([
+        prisma.task.findMany({
+          where: { projectId, status: { in: OPEN_TASK_STATUSES } },
+          select: { userId: true, user: { select: { id: true, name: true } } },
+        }),
+        prisma.projectMember.findMany({ where: { projectId }, select: { userId: true } }),
+      ])
+      const memberIds = new Set(members.map(m => m.userId))
+      const offenders = new Map()
+      for (const t of openTasks) {
+        if (memberIds.has(t.userId)) continue
+        const cur = offenders.get(t.userId) ?? { id: t.user.id, name: t.user.name, taskCount: 0 }
+        cur.taskCount += 1
+        offenders.set(t.userId, cur)
+      }
+      if (offenders.size > 0) {
+        return res.status(409).json({
+          error: 'Hay personas con tareas abiertas en este proyecto que no son del equipo. Agregalas al equipo, reasigná sus tareas a otra persona o cerralas antes de marcarlo privado.',
+          code: 'PRIVATE_BLOCKED_BY_TASKS',
+          users: Array.from(offenders.values()),
+        })
+      }
+    }
+
+    const project = await prisma.project.update({ where: { id: projectId }, data: { isPrivate }, include: includeDetails })
+    res.json({ ...project, locked: false, starred: false })
+  } catch (err) {
+    if (err.code === 'P2025') return res.status(404).json({ error: 'Proyecto no encontrado' })
+    next(err)
+  }
+}
+
+module.exports = { list, listAll, create, update, remove, getMembers, toggleStar, setPrivacy }
