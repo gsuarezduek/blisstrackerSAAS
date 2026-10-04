@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import Navbar from '../components/Navbar'
 import LoadingSpinner from '../components/LoadingSpinner'
 import api from '../api/client'
@@ -39,6 +39,7 @@ export default function Calendario() {
   const { enabled, loading: flagLoading } = useFeatureFlag('calendario')
   const moduleAllowed = enabled && !!user?.moduleAccess?.calendario
   const { byId: memberById } = useMembers()
+  const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
 
   const rawView = searchParams.get('view')
@@ -369,7 +370,13 @@ export default function Calendario() {
         onClose={() => setDetailEvent(null)}
         onChanged={ev => { setDetailEvent(ev); load() }}
         onDeleted={() => { setDetailEvent(null); load() }}
-        onStarted={() => { setDetailEvent(null); load() }}
+        onStarted={({ event, meetingId }) => {
+          // Al iniciar, llevamos directo a las notas de esa reunión en la
+          // ficha del proyecto — mismo deep-link que usan NowCard/TaskCard
+          // para la tarea "reserva" (?infoTab=reuniones&meeting=).
+          setDetailEvent(null)
+          navigate(`/my-projects/${event.projectId}?infoTab=reuniones&meeting=${meetingId}`)
+        }}
       />
     </div>
   )
