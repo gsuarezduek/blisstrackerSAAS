@@ -45,10 +45,17 @@ function liErrDetail(err) {
   return `${status ?? '—'} · ${bodyStr}`
 }
 
+// Argentina no tiene horario de verano desde 2009 → UTC-3 fijo todo el año.
+// Los límites del mes deben calcularse en esta TZ (no UTC puro) para ser
+// consistentes con monthOfTimestamp/currentMonthStr, que sí usan DEFAULT_TZ —
+// si no, un post publicado cerca de medianoche ART puede contarse en el mes
+// equivocado.
+const ART_OFFSET_MS = 3 * 60 * 60 * 1000
+
 function monthBounds(month) {
   const [y, m] = month.split('-').map(Number)
-  const startMs = Date.UTC(y, m - 1, 1, 0, 0, 0, 0)
-  const endMs   = Date.UTC(y, m,     1, 0, 0, 0, 0) - 1
+  const startMs = Date.UTC(y, m - 1, 1, 0, 0, 0, 0) + ART_OFFSET_MS
+  const endMs   = Date.UTC(y, m,     1, 0, 0, 0, 0) + ART_OFFSET_MS - 1
   return { startMs, endMs }
 }
 
@@ -318,18 +325,23 @@ async function fetchFollowerDemographics(orgId, accessToken) {
  */
 async function fetchTopPosts(orgId, accessToken, targetMonth = null) {
   try {
-    const postsQuery = `q=author&author=${encUrn(orgId)}&count=20`
+    // sortBy=CREATED explícito: sin esto, LinkedIn puede devolver los 20 por
+    // última modificación (editar un post viejo lo "sube" en ese orden), lo que
+    // deja afuera de la ventana de 20 posts creados recientemente — justo el
+    // campo que usamos para filtrar por mes más abajo. Deben ser el mismo criterio.
+    const postsQuery = `q=author&author=${encUrn(orgId)}&count=20&sortBy=CREATED`
     const postsRes = await restGetRaw('posts', postsQuery, accessToken)
 
     const posts = postsRes.data?.elements ?? []
     if (posts.length === 0) return { topPosts: [], postsThisMonth: 0 }
 
-    // Filtrar por mes
+    // Filtrar por mes. `publishedAt` es el campo real de la Posts API (no
+    // "firstPublishedAt", que era de la API vieja de shares/UGC posts).
     let filtered = posts
     if (targetMonth) {
       const { startMs, endMs } = monthBounds(targetMonth)
       filtered = posts.filter(p => {
-        const t = p.createdAt ?? p.firstPublishedAt ?? p.lastModifiedAt
+        const t = p.createdAt ?? p.publishedAt ?? p.lastModifiedAt
         return t && t >= startMs && t <= endMs
       })
     }
@@ -377,7 +389,7 @@ async function fetchTopPosts(orgId, accessToken, targetMonth = null) {
         impressions:  stats.impressions  ?? null,
         clicks:       stats.clicks       ?? null,
         engagement,
-        publishedAt:  p.createdAt        ?? p.firstPublishedAt ?? null,
+        publishedAt:  p.createdAt        ?? p.publishedAt ?? null,
         url:          idPart ? `https://www.linkedin.com/feed/update/${encodeURIComponent(p.id)}/` : null,
       }
     })
