@@ -94,7 +94,8 @@ export default function EventDetailModal({ event, onClose, onChanged, onDeleted,
     setError('')
     setScopePrompt(null)
     setMode('edit')
-    if (projects.length === 0) api.get('/projects').then(r => setProjects(r.data)).catch(() => {})
+    // Proyectos privados ajenos (locked) afuera del selector al editar (ver "Proyectos privados").
+    if (projects.length === 0) api.get('/projects').then(r => setProjects(r.data.filter(p => !p.locked))).catch(() => {})
   }
 
   function requestSave() {

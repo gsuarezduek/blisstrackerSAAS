@@ -70,7 +70,9 @@ export default function ScheduleEventModal({ open, initial, onClose, onCreated }
     setWeekdays([])
     setEndMode('never')
     setEndDate('')
-    api.get('/projects').then(r => setProjects(r.data)).catch(() => {})
+    // Proyectos privados ajenos (locked, ver "Proyectos privados") afuera del
+    // selector: no se puede agendar una reunión en un proyecto cuyo contenido no se ve.
+    api.get('/projects').then(r => setProjects(r.data.filter(p => !p.locked))).catch(() => {})
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, initial])
 

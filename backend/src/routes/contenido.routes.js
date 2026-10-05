@@ -4,6 +4,7 @@ const { auth } = require('../middleware/auth')
 const { resolveWorkspace } = require('../middleware/workspace')
 const { requireFeatureFlag } = require('../lib/featureFlags')
 const { moduleAccessGuard } = require('../lib/moduleAccess')
+const { requireProjectAccess } = require('../middleware/projectPrivacy')
 
 // Fallback multipart (solo imagen, sin R2 configurado) — memoryStorage, nunca
 // disco, mismo patrón que avatares/logo/banner. El límite de tamaño real de
@@ -21,10 +22,15 @@ const uploadFallback = multer({ storage: multer.memoryStorage(), limits: { fileS
 // cualquier miembro con acceso al módulo (criterio "equipo = etiqueta, no
 // barrera" que ya usan proyectos, reuniones y chat), y solo las mutaciones
 // exigen además ser admin/owner o miembro del proyecto.
+//
+// Excepción — proyecto privado (ver concepto "Proyectos privados"): ahí SÍ es
+// una barrera, también para lectura. Mismo gate que projects.routes.js, reusado
+// vía router.param('id') porque acá también ':id' es siempre el projectId.
 router.use(auth)
 router.use(resolveWorkspace)
 router.use(requireFeatureFlag('contenido'))
 router.use(moduleAccessGuard('contenido'))
+router.param('id', requireProjectAccess)
 
 const content  = require('../controllers/content.controller')
 const assets   = require('../controllers/contentAssets.controller')

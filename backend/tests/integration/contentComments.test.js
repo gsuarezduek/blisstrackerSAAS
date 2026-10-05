@@ -2,7 +2,7 @@ jest.mock('../../src/lib/prisma', () => ({
   workspace:          { findUnique: jest.fn() },
   workspaceMember:    { findUnique: jest.fn(), findMany: jest.fn() },
   projectMember:      { findUnique: jest.fn(), findMany: jest.fn() },
-  project:            { findFirst: jest.fn() },
+  project:            { findFirst: jest.fn(), findUnique: jest.fn() },
   featureFlag:        { findUnique: jest.fn() },
   contentPiece:       { findFirst: jest.fn() },
   contentComment:     { findFirst: jest.fn(), findMany: jest.fn(), create: jest.fn(), delete: jest.fn() },
@@ -47,6 +47,7 @@ function mockBase({ workspaceRole = 'admin', flagOn = true } = {}) {
   prisma.workspaceMember.findUnique.mockResolvedValue({ workspaceId: WORKSPACE_ID, userId: 1, role: workspaceRole, active: true })
   prisma.featureFlag.findUnique.mockResolvedValue({ key: 'contenido', enabledGlobally: flagOn, enabledWorkspaceIds: '[]' })
   prisma.project.findFirst.mockResolvedValue({ id: PROJECT_ID, timezone: 'America/Argentina/Buenos_Aires' })
+  prisma.project.findUnique.mockResolvedValue({ isPrivate: false })
   prisma.contentPiece.findFirst.mockResolvedValue({ id: PIECE_ID, projectId: PROJECT_ID, workspaceId: WORKSPACE_ID, title: 'Reel de lanzamiento', assets: [] })
 }
 

@@ -1,6 +1,6 @@
 const prisma = require('../lib/prisma')
 const { emitTo } = require('../lib/socket')
-const { canWrite } = require('../lib/projectAccess')
+const { isAdmin, canWrite } = require('../lib/projectAccess')
 const { todayString } = require('../utils/dates')
 const { getBusyBlocks, findCommonFreeSlots, DEFAULT_TASK_BLOCK_MINS } = require('../services/availability.service')
 const { startMeetingParticipants } = require('../lib/projectMeetingLifecycle')
@@ -24,6 +24,21 @@ function rangeTooWide(from, to) {
   return (new Date(to) - new Date(from)) / 86400000 > MAX_RANGE_DAYS
 }
 
+// Proyecto privado (ver concepto "Proyectos privados"): los invitados a una
+// reunión de ese proyecto quedan acotados a su equipo (ProjectMember) + admin/owner
+// — no se cae toda la reunión por un invitado sin acceso, simplemente no se lo suma
+// (mismo criterio best-effort que filterActiveMembers). El organizador, en cambio,
+// SÍ es un requisito duro — se valida aparte en create/updateEvent.
+async function filterEligibleForPrivateProject(workspaceId, projectId, userIds) {
+  if (userIds.length === 0) return []
+  const [members, admins] = await Promise.all([
+    prisma.projectMember.findMany({ where: { projectId, userId: { in: userIds } }, select: { userId: true } }),
+    prisma.workspaceMember.findMany({ where: { workspaceId, userId: { in: userIds }, role: { in: ['admin', 'owner'] } }, select: { userId: true } }),
+  ])
+  const eligible = new Set([...members.map(m => m.userId), ...admins.map(a => a.userId)])
+  return userIds.filter(id => eligible.has(id))
+}
+
 // ─── GET /api/calendar/events?from=&to=[&projectId=] ──────────────────────
 // Sin projectId: eventos donde el usuario actual es organizador o participante.
 // Con projectId: todas las reuniones de ese proyecto en el rango (ver abajo).
@@ -40,6 +55,15 @@ async function listEvents(req, res, next) {
     const projectId = req.query.projectId ? Number(req.query.projectId) : null
     if (req.query.projectId && !(Number.isInteger(projectId) && projectId > 0)) {
       return res.status(400).json({ error: 'projectId inválido' })
+    }
+    // Proyecto privado: acá sí es una barrera (ver concepto "Proyectos privados"),
+    // a diferencia del resto de este endpoint que es abierto a todo el workspace.
+    if (projectId) {
+      const project = await prisma.project.findFirst({ where: { id: projectId, workspaceId }, select: { isPrivate: true } })
+      if (!project) return res.status(404).json({ error: 'Proyecto no encontrado' })
+      if (project.isPrivate && !(await canWrite(req, projectId))) {
+        return res.status(403).json({ error: 'Este proyecto es privado: no formás parte del equipo', code: 'PROJECT_PRIVATE' })
+      }
     }
 
     await ensureOccurrences({ workspaceId, from, to, tz: req.workspace.timezone })
@@ -84,6 +108,27 @@ async function getAvailability(req, res, next) {
 
     const busy = await getBusyBlocks({ workspaceId, userIds, fromDate: from, toDate: to })
 
+    // Proyecto privado (ver concepto "Proyectos privados"): un calendar_event de
+    // un proyecto privado ajeno se enmascara como si fuera una tarea — se ve el
+    // bloque (ocupado/tentativo) pero no su título/proyecto/link.
+    const eventProjectIds = [...new Set(
+      Object.values(busy).flatMap(s => s.blocks.filter(b => b.kind === 'calendar_event' && b.projectId).map(b => b.projectId))
+    )]
+    let privateIds = new Set()
+    if (eventProjectIds.length > 0) {
+      const rows = await prisma.project.findMany({ where: { id: { in: eventProjectIds }, isPrivate: true }, select: { id: true } })
+      privateIds = new Set(rows.map(r => r.id))
+    }
+    let accessibleIds = new Set()
+    const viewerIsAdmin = isAdmin(req)
+    if (privateIds.size > 0 && !viewerIsAdmin) {
+      const memberships = await prisma.projectMember.findMany({
+        where: { projectId: { in: [...privateIds] }, userId: requesterId }, select: { projectId: true },
+      })
+      accessibleIds = new Set(memberships.map(m => m.projectId))
+    }
+    const hasAccessToProject = pid => !pid || !privateIds.has(pid) || viewerIsAdmin || accessibleIds.has(pid)
+
     const sanitized = {}
     for (const [uid, state] of Object.entries(busy)) {
       const isSelf = Number(uid) === requesterId
@@ -92,7 +137,7 @@ async function getAvailability(req, res, next) {
         workEnd:    state.workEnd,
         fullDayOff: [...state.fullDayOff],
         blocks: state.blocks.map((b) => {
-          const revealed = isSelf || b.kind === 'calendar_event'
+          const revealed = isSelf || (b.kind === 'calendar_event' && hasAccessToProject(b.projectId))
           return revealed ? b : { date: b.date, start: b.start, end: b.end, kind: b.kind, tentative: b.tentative }
         }),
       }
@@ -154,12 +199,20 @@ async function createEvent(req, res, next) {
     // Proyecto obligatorio: sin él no hay dónde crear la Task "reserva" que aparece
     // en el dashboard de cada participante que acepte (ver lib/calendarEventTasks.js).
     if (req.body.projectId == null) return res.status(400).json({ error: 'Elegí un proyecto para la reunión' })
-    const project = await prisma.project.findFirst({ where: { id: Number(req.body.projectId), workspaceId }, select: { id: true } })
+    const project = await prisma.project.findFirst({ where: { id: Number(req.body.projectId), workspaceId }, select: { id: true, isPrivate: true } })
     if (!project) return res.status(404).json({ error: 'Proyecto no encontrado' })
     const projectId = project.id
 
+    // Proyecto privado (ver concepto "Proyectos privados"): el organizador tiene
+    // que ser del equipo o admin/owner — requisito duro, a diferencia de los
+    // invitados (que simplemente se filtran más abajo).
+    if (project.isPrivate && !(await canWrite(req, projectId))) {
+      return res.status(403).json({ error: 'Este proyecto es privado: no formás parte del equipo', code: 'PROJECT_PRIVATE' })
+    }
+
     const requestedIds = parseUserIds(participantIds).filter(id => id !== organizerId)
-    const inviteeIds = await filterActiveMembers(workspaceId, requestedIds)
+    let inviteeIds = await filterActiveMembers(workspaceId, requestedIds)
+    if (project.isPrivate) inviteeIds = await filterEligibleForPrivateProject(workspaceId, projectId, inviteeIds)
 
     // ── Serie recurrente ───────────────────────────────────────────────────
     if (req.body.recurrence) {
@@ -227,14 +280,19 @@ async function createEvent(req, res, next) {
 // ─── GET /api/calendar/events/:id ───────────────────────────────────────────
 // Cualquier miembro activo del workspace puede ver el detalle completo de
 // cualquier reunión (participantes, proyecto, link, notas), sea o no
-// organizador/invitado — mismo criterio que getAvailability arriba. Las
-// acciones (editar/responder/cancelar) siguen restringidas más abajo en cada
-// endpoint puntual; acá solo se lee.
+// organizador/invitado — mismo criterio que getAvailability arriba. Excepción:
+// si el proyecto de la reunión es privado, hace falta ser de su equipo o
+// admin/owner (ver concepto "Proyectos privados"). Las acciones (editar/
+// responder/cancelar) siguen restringidas más abajo en cada endpoint puntual;
+// acá solo se lee.
 async function getEvent(req, res, next) {
   try {
     const workspaceId = req.workspace.id
     const event = await loadEvent(req.params.id, workspaceId)
     if (!event) return res.status(404).json({ error: 'Evento no encontrado' })
+    if (event.project?.isPrivate && !(await canWrite(req, event.projectId))) {
+      return res.status(403).json({ error: 'Este proyecto es privado: no formás parte del equipo', code: 'PROJECT_PRIVATE' })
+    }
     res.json(formatEvent(event))
   } catch (err) { next(err) }
 }
@@ -292,12 +350,21 @@ async function updateEvent(req, res, next) {
       if (durationMins !== existing.durationMins) scheduleChanged = true
       data.durationMins = durationMins
     }
+    // Proyecto de referencia para la elegibilidad de abajo: el nuevo si se está
+    // cambiando, si no el que ya tenía (ver concepto "Proyectos privados").
+    let finalProjectId = existing.projectId
+    let finalIsPrivate = existing.project?.isPrivate || false
     if (req.body.projectId !== undefined) {
       // Proyecto obligatorio (ver createEvent) — no se puede desasociar por edición.
       if (req.body.projectId === null) return res.status(400).json({ error: 'La reunión necesita un proyecto' })
-      const p = await prisma.project.findFirst({ where: { id: Number(req.body.projectId), workspaceId }, select: { id: true } })
+      const p = await prisma.project.findFirst({ where: { id: Number(req.body.projectId), workspaceId }, select: { id: true, isPrivate: true } })
       if (!p) return res.status(404).json({ error: 'Proyecto no encontrado' })
+      if (p.isPrivate && !(await canWrite(req, p.id))) {
+        return res.status(403).json({ error: 'Este proyecto es privado: no formás parte del equipo', code: 'PROJECT_PRIVATE' })
+      }
       data.projectId = p.id
+      finalProjectId = p.id
+      finalIsPrivate = p.isPrivate
     }
     if (meetLink !== undefined) data.meetLink = typeof meetLink === 'string' && meetLink.trim() ? meetLink.trim().slice(0, MEET_LINK_MAX) : null
     if (notes !== undefined) data.notes = typeof notes === 'string' && notes.trim() ? notes.trim() : null
@@ -308,7 +375,10 @@ async function updateEvent(req, res, next) {
     if (Array.isArray(participantIds)) {
       const requestedIds = parseUserIds(participantIds).filter(id => id !== existing.organizerId)
       const currentIds = new Set(current.participants.filter(p => p.userId !== existing.organizerId).map(p => p.userId))
-      const activeRequested = await filterActiveMembers(workspaceId, requestedIds)
+      let activeRequested = await filterActiveMembers(workspaceId, requestedIds)
+      // Proyecto privado: igual que al crear, los invitados quedan acotados al
+      // equipo + admin/owner (ver concepto "Proyectos privados").
+      if (finalIsPrivate) activeRequested = await filterEligibleForPrivateProject(workspaceId, finalProjectId, activeRequested)
       const newIds = new Set(activeRequested)
 
       const toRemove = [...currentIds].filter(id => !newIds.has(id))
@@ -397,11 +467,23 @@ async function updateEventSeries(req, res, next, existing) {
       if (durationMins !== rec.durationMins) scheduleChanged = true
       data.durationMins = durationMins
     }
+    // Ver concepto "Proyectos privados": igual criterio que updateEvent para un
+    // evento suelto — organizador elegible como requisito duro, invitados filtrados.
+    let finalProjectId = rec.projectId
+    let finalIsPrivate = false
     if (req.body.projectId !== undefined) {
       if (req.body.projectId === null) return res.status(400).json({ error: 'La reunión necesita un proyecto' })
-      const p = await prisma.project.findFirst({ where: { id: Number(req.body.projectId), workspaceId }, select: { id: true } })
+      const p = await prisma.project.findFirst({ where: { id: Number(req.body.projectId), workspaceId }, select: { id: true, isPrivate: true } })
       if (!p) return res.status(404).json({ error: 'Proyecto no encontrado' })
+      if (p.isPrivate && !(await canWrite(req, p.id))) {
+        return res.status(403).json({ error: 'Este proyecto es privado: no formás parte del equipo', code: 'PROJECT_PRIVATE' })
+      }
       data.projectId = p.id
+      finalProjectId = p.id
+      finalIsPrivate = p.isPrivate
+    } else {
+      const cur = await prisma.project.findFirst({ where: { id: rec.projectId }, select: { isPrivate: true } })
+      finalIsPrivate = !!cur?.isPrivate
     }
     if (meetLink !== undefined) data.meetLink = typeof meetLink === 'string' && meetLink.trim() ? meetLink.trim().slice(0, MEET_LINK_MAX) : null
     if (notes !== undefined) data.notes = typeof notes === 'string' && notes.trim() ? notes.trim() : null
@@ -411,6 +493,7 @@ async function updateEventSeries(req, res, next, existing) {
     if (Array.isArray(participantIds)) {
       const requested = parseUserIds(participantIds).filter(id => id !== rec.organizerId)
       newInviteeIds = await filterActiveMembers(workspaceId, requested)
+      if (finalIsPrivate) newInviteeIds = await filterEligibleForPrivateProject(workspaceId, finalProjectId, newInviteeIds)
       data.participantIds = JSON.stringify(newInviteeIds)
       participantsChanged = true
     }

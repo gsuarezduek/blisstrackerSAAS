@@ -2,7 +2,7 @@ jest.mock('../../src/lib/prisma', () => ({
   workspace:          { findUnique: jest.fn() },
   workspaceMember:    { findUnique: jest.fn(), findMany: jest.fn() },
   projectMember:      { findUnique: jest.fn(), findMany: jest.fn() },
-  project:            { findFirst: jest.fn() },
+  project:            { findFirst: jest.fn(), findUnique: jest.fn() },
   featureFlag:        { findUnique: jest.fn() },
   contentPiece:       { findFirst: jest.fn(), findMany: jest.fn(), count: jest.fn(), create: jest.fn(), update: jest.fn(), delete: jest.fn(), groupBy: jest.fn() },
   contentAsset:       { groupBy: jest.fn() },
@@ -53,6 +53,9 @@ function mockBase({ workspaceRole = 'member', flagOn = true } = {}) {
     key: 'contenido', enabledGlobally: flagOn, enabledWorkspaceIds: '[]',
   })
   prisma.project.findFirst.mockResolvedValue({ id: PROJECT_ID, timezone: 'America/Argentina/Buenos_Aires' })
+  // Gate de proyectos privados (router.param('id', ...) en contenido.routes.js):
+  // se consulta antes del controller en toda ruta /projects/:id/*.
+  prisma.project.findUnique.mockResolvedValue({ isPrivate: false })
   prisma.workspaceMember.findMany.mockResolvedValue([])
   prisma.projectMember.findMany.mockResolvedValue([])
   // Sin portal de cliente por default — getClientContacts devuelve [] sin pegarle

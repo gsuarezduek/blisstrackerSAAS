@@ -1,6 +1,5 @@
 const router = require('express').Router()
 const multer = require('multer')
-const prisma = require('../lib/prisma')
 const projects = require('../controllers/projects/projects.controller')
 const projectTasks = require('../controllers/projects/projectTasks.controller')
 const projectSettings = require('../controllers/projects/projectSettings.controller')
@@ -11,38 +10,23 @@ const briefs = require('../controllers/briefs.controller')
 const meetings = require('../controllers/projectMeetings.controller')
 const projectReports = require('../controllers/projectReports.controller')
 const clientPortal = require('../controllers/clientPortal.controller')
-const { resolveProjectId } = require('../controllers/projects/_shared')
-const { canWrite } = require('../lib/projectAccess')
 const { auth } = require('../middleware/auth')
 const { resolveWorkspace, workspaceAdminOnly } = require('../middleware/workspace')
+const { requireProjectAccess } = require('../middleware/projectPrivacy')
 
 const uploadPortalBanner = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } })
 
 router.use(auth)
 router.use(resolveWorkspace)
 
-// Gate único para TODA ruta de este router que use `:id` (ver router.param más abajo):
-// si el proyecto es privado, solo el equipo (ProjectMember) o admin/owner pasan — el
-// resto del workspace recibe 403 antes de llegar al controller. Para un proyecto NO
-// privado no cambia nada (sigue "equipo = etiqueta, no barrera" como siempre). Esto
-// cubre de una sola vez /members, /tasks, /completed, /star, /links, /situation, /info,
-// /accesos*, /briefs*, /reports/hours-history, /client-portal*, /meetings*, /files* y
-// la propia /privacy — sin tocar cada controller individualmente.
+// Gate único para TODA ruta de este router que use `:id`: si el proyecto es privado,
+// solo el equipo (ProjectMember) o admin/owner pasan — el resto del workspace recibe
+// 403 antes de llegar al controller. Para un proyecto NO privado no cambia nada (sigue
+// "equipo = etiqueta, no barrera" como siempre). Esto cubre de una sola vez /members,
+// /tasks, /completed, /star, /links, /situation, /info, /accesos*, /briefs*,
+// /reports/hours-history, /client-portal*, /meetings*, /files* y la propia /privacy —
+// sin tocar cada controller individualmente. Mismo middleware que usa contenido.routes.js.
 // Ver concepto "Proyectos privados" en CLAUDE.md.
-async function requireProjectAccess(req, res, next, idParam) {
-  try {
-    const workspaceId = req.workspace.id
-    const projectId = await resolveProjectId(idParam, workspaceId)
-    if (!projectId) return res.status(404).json({ error: 'Proyecto no encontrado' })
-    const project = await prisma.project.findUnique({ where: { id: projectId }, select: { isPrivate: true } })
-    if (!project) return res.status(404).json({ error: 'Proyecto no encontrado' })
-    if (project.isPrivate && !(await canWrite(req, projectId))) {
-      return res.status(403).json({ error: 'Este proyecto es privado: no formás parte del equipo', code: 'PROJECT_PRIVATE' })
-    }
-    req.project = { id: projectId, isPrivate: project.isPrivate }
-    next()
-  } catch (err) { next(err) }
-}
 router.param('id', requireProjectAccess)
 
 router.get('/',                            projects.list)

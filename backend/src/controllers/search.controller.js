@@ -1,10 +1,24 @@
 const prisma = require('../lib/prisma')
 const { isFlagEnabledForWorkspace } = require('../lib/featureFlags')
 const { hasModuleAccess } = require('../lib/moduleAccess')
+const { isAdmin } = require('../lib/projectAccess')
 const { taskInclude } = require('./tasks/_shared')
 
 const MIN_QUERY_LENGTH = 2
 const LIMIT = 6
+
+// Proyectos privados (ver concepto "Proyectos privados"): ningún bloque del
+// buscador global debe devolver contenido de un proyecto privado ajeno. Admin/
+// owner no necesita filtro (ve todo); el resto solo ve resultados de proyectos
+// no privados o donde es del equipo (ProjectMember). `requireProject: true` es
+// para relaciones `project` obligatorias (Task/ContentPiece/ProjectFile);
+// CalendarEvent.projectId es nullable (eventos legacy), así que ahí además hay
+// que dejar pasar los que no tienen proyecto asociado.
+function projectVisibilityWhere(req, { requireProject = true } = {}) {
+  if (isAdmin(req)) return {}
+  const condition = { OR: [{ isPrivate: false }, { isPrivate: true, members: { some: { userId: req.user.userId } } }] }
+  return requireProject ? { project: condition } : { OR: [{ projectId: null }, { project: condition }] }
+}
 
 /**
  * ¿El módulo `key` está disponible para este request? Mismo criterio que
@@ -43,14 +57,14 @@ async function globalSearch(req, res, next) {
 
     const [tasks, pieces, events, files] = await Promise.all([
       prisma.task.findMany({
-        where: { workDay: { workspaceId }, description: contains },
+        where: { workDay: { workspaceId }, description: contains, ...projectVisibilityWhere(req) },
         include: { ...taskInclude, user: { select: { id: true, name: true, avatar: true } } },
         orderBy: { createdAt: 'desc' },
         take: LIMIT,
       }),
       contenidoOk
         ? prisma.contentPiece.findMany({
-            where: { workspaceId, deletedAt: null, title: contains },
+            where: { workspaceId, deletedAt: null, title: contains, ...projectVisibilityWhere(req) },
             select: { id: true, title: true, status: true, projectId: true, project: { select: { name: true } } },
             orderBy: { updatedAt: 'desc' },
             take: LIMIT,
@@ -58,7 +72,7 @@ async function globalSearch(req, res, next) {
         : [],
       calendarioOk
         ? prisma.calendarEvent.findMany({
-            where: { workspaceId, title: contains },
+            where: { workspaceId, title: contains, ...projectVisibilityWhere(req, { requireProject: false }) },
             select: { id: true, title: true, date: true, startTime: true, project: { select: { name: true } } },
             orderBy: { date: 'desc' },
             take: LIMIT,
@@ -67,7 +81,7 @@ async function globalSearch(req, res, next) {
       prisma.projectFile.findMany({
         where: {
           workspaceId, deletedAt: null, name: contains,
-          project: { filesEnabled: true },
+          project: { filesEnabled: true, ...projectVisibilityWhere(req).project },
           OR: [{ type: 'folder' }, { type: 'file', status: 'ready' }],
         },
         select: { id: true, name: true, type: true, projectId: true, project: { select: { name: true } } },

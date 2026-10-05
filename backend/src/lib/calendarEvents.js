@@ -81,7 +81,7 @@ function formatRecurrence(rec) {
 
 const EVENT_INCLUDE = {
   organizer:    { select: { id: true, name: true, avatar: true } },
-  project:      { select: { id: true, name: true } },
+  project:      { select: { id: true, name: true, isPrivate: true } },
   participants: { include: { user: { select: { id: true, name: true, avatar: true } } }, orderBy: { createdAt: 'asc' } },
 }
 

@@ -53,7 +53,9 @@ export default function Contenido() {
   const [trashOpen, setTrashOpen] = useState(false)
 
   useEffect(() => {
-    api.get('/projects').then(r => setProjects(r.data)).catch(() => {})
+    // Proyectos privados ajenos (locked) afuera del selector: el backend igual
+    // bloquearía todo lo demás, pero así no aparece como una opción muerta.
+    api.get('/projects').then(r => setProjects(r.data.filter(p => !p.locked))).catch(() => {})
   }, [])
 
   const rawView = searchParams.get('view')

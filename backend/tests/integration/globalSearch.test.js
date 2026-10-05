@@ -89,7 +89,35 @@ describe('GET /api/search', () => {
     await get('logo')
     const where = prisma.projectFile.findMany.mock.calls[0][0].where
     expect(where.workspaceId).toBe(WORKSPACE_ID)
-    expect(where.project).toEqual({ filesEnabled: true })
+    // Ver concepto "Proyectos privados": un miembro no-admin solo ve archivos de
+    // proyectos no privados o donde es del equipo.
+    expect(where.project).toEqual({
+      filesEnabled: true,
+      OR: [{ isPrivate: false }, { isPrivate: true, members: { some: { userId: 1 } } }],
+    })
     expect(where.deletedAt).toBeNull()
+  })
+
+  it('acota tareas/piezas/eventos a proyectos no privados o del equipo (member)', async () => {
+    mockWorkspace()
+    prisma.featureFlag.findUnique.mockResolvedValue({ key: 'x', enabledGlobally: true, enabledWorkspaceIds: '[]' })
+    await get('logo')
+    const privacyOr = { OR: [{ isPrivate: false }, { isPrivate: true, members: { some: { userId: 1 } } }] }
+    expect(prisma.task.findMany.mock.calls[0][0].where.project).toEqual(privacyOr)
+    expect(prisma.contentPiece.findMany.mock.calls[0][0].where.project).toEqual(privacyOr)
+    // CalendarEvent.projectId es nullable: además de la condición de arriba, deja
+    // pasar los eventos legacy sin proyecto asociado.
+    expect(prisma.calendarEvent.findMany.mock.calls[0][0].where.OR).toEqual([
+      { projectId: null },
+      { project: privacyOr },
+    ])
+  })
+
+  it('admin/owner no lleva filtro de privacidad', async () => {
+    mockWorkspace({ role: 'admin' })
+    prisma.featureFlag.findUnique.mockResolvedValue({ key: 'x', enabledGlobally: true, enabledWorkspaceIds: '[]' })
+    await get('logo', 'admin')
+    expect(prisma.task.findMany.mock.calls[0][0].where.project).toBeUndefined()
+    expect(prisma.projectFile.findMany.mock.calls[0][0].where.project).toEqual({ filesEnabled: true })
   })
 })
