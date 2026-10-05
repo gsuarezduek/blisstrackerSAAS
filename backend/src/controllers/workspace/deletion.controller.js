@@ -127,7 +127,7 @@ async function cancelDeletion(req, res, next) {
  * Ejecuta la eliminación de un workspace y todos sus datos. Llamado desde el cron
  * job (solicitud de owner vencida a las 48hs) y desde SuperAdmin → Workspaces
  * (borrado inmediato por staff, sin owner ni espera — ver `deleteWorkspace` en
- * superadmin.controller.js). El resto de las ~120 tablas workspace-scoped tienen
+ * superadmin/workspaces.controller.js). El resto de las ~120 tablas workspace-scoped tienen
  * `onDelete: Cascade` a nivel de DB (ver migración `add_workspace_cascade_deletes`
  * y los modelos creados después con esa cláusula ya puesta) y se resuelven solas
  * con `prisma.workspace.delete()`; acá solo se manejan a mano las que son
