@@ -351,31 +351,46 @@ async function fetchTopPosts(orgId, accessToken, targetMonth = null) {
     const postsThisMonth = filtered.length
     if (filtered.length === 0) return { topPosts: [], postsThisMonth }
 
-    // Stats por share (batch — máximo 20 URNs). `shares=List(urn1,urn2)` en
-    // sintaxis Rest.li 2.0: el List(...) va crudo, cada URN percent-encodeada.
-    const shareUrns = filtered.map(p => p.id).filter(Boolean).slice(0, 20)
+    // Stats por post (batch — máximo 20 URNs). `organizationalEntityShareStatistics`
+    // tiene DOS parámetros de array distintos según el tipo de URN del post —
+    // `shares=List(...)` solo acepta `urn:li:share:*` y `ugcPosts=List(...)`
+    // solo acepta `urn:li:ugcPost:*` (son typerefs distintos de Rest.li, pese a
+    // ser conceptualmente "lo mismo"). Antes se mandaban todos los ids mezclados
+    // bajo `shares`, y un solo ugcPost en el lote hacía fallar el batch ENTERO
+    // con 400 "Deserializing output ... failed" — perdiendo los likes/comments
+    // de todos los posts del lote, no solo del que no matcheaba el tipo.
+    const postUrns   = filtered.map(p => p.id).filter(Boolean).slice(0, 20)
+    const shareUrns  = postUrns.filter(u => u.startsWith('urn:li:share:'))
+    const ugcUrns    = postUrns.filter(u => u.startsWith('urn:li:ugcPost:'))
     let statsByUrn = {}
-    if (shareUrns.length > 0) {
+
+    async function fetchStatsBatch(paramName, urns, resultKey) {
+      if (urns.length === 0) return
       try {
-        const sharesParam = `List(${shareUrns.map(u => encodeURIComponent(u)).join(',')})`
-        const statsQuery = `q=organizationalEntity&organizationalEntity=${encUrn(orgId)}&shares=${sharesParam}`
+        const listParam = `List(${urns.map(u => encodeURIComponent(u)).join(',')})`
+        const statsQuery = `q=organizationalEntity&organizationalEntity=${encUrn(orgId)}&${paramName}=${listParam}`
         const statsRes = await restGetRaw('organizationalEntityShareStatistics', statsQuery, accessToken)
         for (const el of (statsRes.data?.elements ?? [])) {
-          if (el.share) {
-            const ts = el.totalShareStatistics ?? {}
-            statsByUrn[el.share] = {
-              likes:       ts.likeCount       ?? 0,
-              comments:    ts.commentCount    ?? 0,
-              shares:      ts.shareCount      ?? 0,
-              impressions: ts.impressionCount ?? 0,
-              clicks:      ts.clickCount      ?? 0,
-            }
+          const urn = el[resultKey]
+          if (!urn) continue
+          const ts = el.totalShareStatistics ?? {}
+          statsByUrn[urn] = {
+            likes:       ts.likeCount       ?? 0,
+            comments:    ts.commentCount    ?? 0,
+            shares:      ts.shareCount      ?? 0,
+            impressions: ts.impressionCount ?? 0,
+            clicks:      ts.clickCount      ?? 0,
           }
         }
       } catch (err) {
-        console.warn(`[Linkedin] fetchTopPosts stats batch:`, liErrDetail(err))
+        console.warn(`[Linkedin] fetchTopPosts stats batch (${paramName}):`, liErrDetail(err))
       }
     }
+
+    await Promise.all([
+      fetchStatsBatch('shares', shareUrns, 'share'),
+      fetchStatsBatch('ugcPosts', ugcUrns, 'ugcPost'),
+    ])
 
     const enriched = filtered.map(p => {
       const stats   = statsByUrn[p.id] ?? {}
