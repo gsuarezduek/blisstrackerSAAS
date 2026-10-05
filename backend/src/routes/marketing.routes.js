@@ -4,6 +4,7 @@ const { auth }             = require('../middleware/auth')
 const { resolveWorkspace } = require('../middleware/workspace')
 const { requireFeatureFlag } = require('../lib/featureFlags')
 const { moduleAccessGuard } = require('../lib/moduleAccess')
+const { requireProjectAccessPrefix } = require('../middleware/projectPrivacy')
 
 const geo               = require('../controllers/geo.controller')
 const integrations      = require('../controllers/integrations.controller')
@@ -59,6 +60,12 @@ router.get('/integrations/facebook/callback',  metaIntegrations.handleFacebookCa
 router.use(auth, resolveWorkspace)
 router.use(requireFeatureFlag('marketing'))
 router.use(moduleAccessGuard('marketing'))
+// Gate de proyectos privados — por prefijo de path (no router.param): acá ':id'
+// se reusa para otra cosa en rutas que no son de proyecto (ej. '/geo/audits/:id'
+// es el id del GeoAudit). Ver middleware/projectPrivacy.js y concepto "Proyectos
+// privados" en CLAUDE.md. '/summary/*' y los *-auth-url/callback de arriba no
+// matchean este prefijo, siguen abiertos como siempre (son cross-proyecto o sin auth).
+router.use('/projects/:id', requireProjectAccessPrefix)
 
 // GEO
 router.post('/geo/audit',                    geo.runAudit)
