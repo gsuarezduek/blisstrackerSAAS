@@ -13,7 +13,7 @@ const { buildPublicReportPayload } = require('./monthlyReport/reportPublic.contr
 const { canWrite } = require('../lib/projectAccess')
 const { isFlagEnabledForWorkspace } = require('../lib/featureFlags')
 const { emitTo } = require('../lib/socket')
-const { formatAsset } = require('./content.controller')
+const { formatAsset } = require('./content/_shared')
 const { getProjectNotifyRecipients } = require('../lib/projectRecipients')
 
 const ALLOWED_BANNER_TYPES = ['image/png', 'image/jpeg', 'image/webp']
@@ -770,7 +770,7 @@ async function verifyLoginCode(req, res, next) {
 /**
  * POST /api/public/client-portal/:slug/live/magic-login
  * Body: { token }. Intercambia el magic-token de acceso directo que va en el
- * email de "Pedir aprobación" de Contenido (content.controller.js#requestApproval,
+ * email de "Pedir aprobación" de Contenido (content/approval.controller.js#requestApproval,
  * válido 72h desde ese envío, atado a un contactId puntual) por el JWT normal
  * de sesión de 30 días — mismo resultado final que el login OTP, sólo cambia
  * el paso previo. El portal SIGUE siempre disponible por el camino de siempre

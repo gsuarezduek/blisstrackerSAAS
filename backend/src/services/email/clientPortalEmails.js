@@ -70,7 +70,7 @@ async function sendReportFeedbackEmail(emails, payload, workspaceId) {
 
 /**
  * Aviso al cliente: hay piezas de Contenido esperando su aprobación. Se dispara
- * desde el botón "Pedir aprobación" (content.controller.js requestApproval),
+ * desde el botón "Pedir aprobación" (content/approval.controller.js requestApproval),
  * UNA VEZ POR CONTACTO (no en batch): `portalUrl` es personal, lleva el
  * magic-token de acceso directo de 72h atado a ese contactId — mandar un solo
  * email a varios destinatarios forzaría a compartir el mismo link entre todos.

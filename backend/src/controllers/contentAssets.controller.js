@@ -5,12 +5,12 @@ const { emitTo } = require('../lib/socket')
 const { validateImageUpload } = require('../lib/imageType')
 const { validateMediaHeader } = require('../lib/mediaType')
 const { safeContentDisposition } = require('../lib/contentDisposition')
-const { resolveCtx, loadPiece, formatPiece, formatAsset } = require('./content.controller')
+const { resolveCtx, loadPiece, formatPiece, formatAsset } = require('./content/_shared')
 const { mirrorAssetToArchivos } = require('../services/contentFileMirror.service')
 
 // El asset cambió, pero lo que muestran las vistas (Kanban/Tabla/Calendario) es
 // la PIEZA con su array de assets embebido — se recarga y emite completa, mismo
-// evento que usan las mutaciones de content.controller.js.
+// evento que usan las mutaciones de content/pieces.controller.js y content/kanban.controller.js.
 async function emitPieceUpdated(workspaceId, projectId, pieceId) {
   const fresh = await loadPiece(pieceId, projectId, workspaceId)
   if (fresh) emitTo(`workspace:${workspaceId}`, 'content:piece:updated', { projectId, piece: formatPiece(fresh) })
@@ -331,7 +331,7 @@ async function createLinkAsset(req, res, next) {
 /**
  * PATCH /api/contenido/projects/:id/pieces/:pid/assets/:aid — { order }
  * Reindexa todos los assets 'ready' de la pieza en una transacción, mismo
- * patrón que movePiece (content.controller.js) para el Kanban.
+ * patrón que movePiece (content/kanban.controller.js) para el Kanban.
  */
 async function reorderAsset(req, res, next) {
   try {
