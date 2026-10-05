@@ -194,6 +194,7 @@ export default function TaskCommentsModal({ task, onClose, onCommentAdded, onTas
   // taskFileUpload.js) y quedan linkeados a la tarea.
   const [attachments, setAttachments] = useState([])
   const [attError, setAttError]       = useState('')
+  const [lightbox, setLightbox]       = useState(null)
   const fileInputRef = useRef(null)
 
   useEffect(() => {
@@ -658,7 +659,22 @@ export default function TaskCommentsModal({ task, onClose, onCommentAdded, onTas
               <div className="mt-1.5 space-y-1">
                 {attachments.map(f => (
                   <div key={f.id} className="group flex items-center gap-2 text-sm px-2 py-1 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700">
-                    <Icon as={iconFor(f.mimeType)} size={15} className="text-gray-400" />
+                    {f.mimeType?.startsWith('image/') && f.url ? (
+                      <button
+                        type="button"
+                        onClick={() => setLightbox(f.url)}
+                        title="Ver imagen"
+                        className="flex-shrink-0"
+                      >
+                        <img
+                          src={f.url}
+                          alt={f.name}
+                          className="w-8 h-8 rounded object-cover border border-gray-200 dark:border-gray-600"
+                        />
+                      </button>
+                    ) : (
+                      <Icon as={iconFor(f.mimeType)} size={15} className="text-gray-400 flex-shrink-0" />
+                    )}
                     <button
                       type="button"
                       onClick={() => handleDownloadAttachment(f)}
@@ -811,6 +827,22 @@ export default function TaskCommentsModal({ task, onClose, onCommentAdded, onTas
         </div>
 
       </div>
+
+      {/* Lightbox de imagen adjunta */}
+      {lightbox && (
+        <div
+          className="fixed inset-0 z-[60] bg-black/80 flex items-center justify-center p-4"
+          onClick={() => setLightbox(null)}
+        >
+          <img src={lightbox} alt="" className="max-w-full max-h-full rounded-lg" />
+          <button
+            onClick={() => setLightbox(null)}
+            className="absolute top-4 right-4 text-white text-3xl leading-none"
+          >
+            ×
+          </button>
+        </div>
+      )}
     </div>
   )
 }
