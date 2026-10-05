@@ -18,7 +18,7 @@ async function createTaskForParticipant(event, participant, { tz }) {
   const workDay = await ensureWorkDay(participant.userId, event.workspaceId, today)
   const task = await prisma.task.create({
     data: {
-      description:  event.title,
+      description:  `${event.startTime} ${event.title}`,
       projectId:    event.projectId,
       userId:       participant.userId,
       workDayId:    workDay.id,
@@ -43,7 +43,7 @@ async function syncTaskFields(participant, event, { tz }) {
   await prisma.task.update({
     where: { id: task.id },
     data: {
-      description:   event.title,
+      description:   `${event.startTime} ${event.title}`,
       projectId:     event.projectId,
       scheduledFor:  event.date > today ? event.date : null,
       scheduledTime: event.startTime,
