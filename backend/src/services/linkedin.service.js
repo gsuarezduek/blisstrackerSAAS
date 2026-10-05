@@ -333,20 +333,19 @@ async function fetchTopPosts(orgId, accessToken, targetMonth = null) {
     const postsRes = await restGetRaw('posts', postsQuery, accessToken)
 
     const posts = postsRes.data?.elements ?? []
-    // TEMP DEBUG — ver qué devuelve realmente la API antes de filtrar por mes.
-    console.log(`[Linkedin] fetchTopPosts debug: org=${orgId} targetMonth=${targetMonth} crudos=${posts.length} fechas=${JSON.stringify(posts.map(p => ({ id: p.id, createdAt: p.createdAt, publishedAt: p.publishedAt, lastModifiedAt: p.lastModifiedAt, author: p.author })))}`)
     if (posts.length === 0) return { topPosts: [], postsThisMonth: 0 }
 
-    // Filtrar por mes. `publishedAt` es el campo real de la Posts API (no
-    // "firstPublishedAt", que era de la API vieja de shares/UGC posts).
+    // Filtrar por mes usando `publishedAt` (cuándo salió a la vista pública),
+    // NO `createdAt` (cuándo se creó el borrador) — LinkedIn permite programar
+    // un post: se crea un día y se publica otro, y es la fecha de publicación
+    // la que define a qué mes pertenece.
     let filtered = posts
     if (targetMonth) {
       const { startMs, endMs } = monthBounds(targetMonth)
       filtered = posts.filter(p => {
-        const t = p.createdAt ?? p.publishedAt ?? p.lastModifiedAt
+        const t = p.publishedAt ?? p.createdAt ?? p.lastModifiedAt
         return t && t >= startMs && t <= endMs
       })
-      console.log(`[Linkedin] fetchTopPosts debug: targetMonth=${targetMonth} bounds=[${startMs},${endMs}] filtrados=${filtered.length}`)
     }
 
     const postsThisMonth = filtered.length
@@ -392,7 +391,7 @@ async function fetchTopPosts(orgId, accessToken, targetMonth = null) {
         impressions:  stats.impressions  ?? null,
         clicks:       stats.clicks       ?? null,
         engagement,
-        publishedAt:  p.createdAt        ?? p.publishedAt ?? null,
+        publishedAt:  p.publishedAt      ?? p.createdAt   ?? null,
         url:          idPart ? `https://www.linkedin.com/feed/update/${encodeURIComponent(p.id)}/` : null,
       }
     })
