@@ -292,6 +292,7 @@ backend/
       backlog.test.js
       projectLinks.test.js
       vacation.controller.test.js         # usa fechas dinámicas (futureDate) para respetar validación ≥48h
+      chat.controller.test.js             # @everyone/@equipo/menciones individuales, responder=mención (+dedup), canal privado y proyecto privado, permisos de editar/eliminar/fijar
 
 frontend/
   src/tests/
