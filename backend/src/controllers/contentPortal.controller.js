@@ -9,7 +9,7 @@ const {
   CLIENT_CHANGES_TO,
   statusMeta,
 } = require('../lib/contentCatalog')
-const { formatAsset, formatPiece, loadPiece } = require('./content.controller')
+const { formatAsset, formatPiece, loadPiece } = require('./content/_shared')
 const { SYSTEM_TYPES, postProjectSystemMessage } = require('../lib/chatSystemMessage')
 
 const MAX_COMMENT = 2000
@@ -45,7 +45,7 @@ const PUBLIC_PIECE_SELECT = {
   updatedAt:          true,
 }
 
-// Formatter PÚBLICO. Deliberadamente separado de formatPiece (content.controller.js):
+// Formatter PÚBLICO. Deliberadamente separado de formatPiece (content/_shared.js):
 // nunca debe tocar internalNotes/ownerId/taskId/order ni comentarios internal.
 function formatPiecePublic(p) {
   return {

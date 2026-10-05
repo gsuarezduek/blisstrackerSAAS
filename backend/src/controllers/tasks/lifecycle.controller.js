@@ -10,7 +10,7 @@ const { nextOnTaskDone } = require('../../lib/contentCatalog')
 const { maybeAutoFinishMeeting } = require('../../lib/projectMeetingLifecycle')
 const { loadEvent } = require('../../lib/calendarEvents')
 const { startMeetingCore } = require('../calendar.controller')
-const { statusSideEffects, logEvent, loadPiece, formatPiece, emitPieceUpdated } = require('../content.controller')
+const { statusSideEffects, logEvent, loadPiece, formatPiece, emitPieceUpdated } = require('../content/_shared')
 const { taskInclude, assertNoActiveTask, handleActiveTaskConflict } = require('./_shared')
 const { sendPushToUser } = require('../../services/pushNotification.service')
 

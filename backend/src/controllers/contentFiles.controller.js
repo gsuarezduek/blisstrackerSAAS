@@ -1,6 +1,6 @@
 // ─── Vínculos entre piezas de Contenido y archivos del proyecto (Archivos) ────
 // Asociación pura (ContentPieceFile), sin duplicar storage — ver el modelo en
-// schema.prisma y content.controller.js#PIECE_INCLUDE (los archivos vinculados
+// schema.prisma y content/_shared.js#PIECE_INCLUDE (los archivos vinculados
 // ya viajan embebidos en cada pieza como `piece.files`, formateados por
 // formatLinkedFile). Este controller solo resuelve las dos direcciones de la UI:
 // - Desde el archivo (menú ⋯ → "Contenido"): listPiecesForFile.
@@ -8,7 +8,7 @@
 //   usados también por la primera vez que se hace click en una pieza del picker.
 const prisma = require('../lib/prisma')
 const { statusMeta } = require('../lib/contentCatalog')
-const { resolveCtx, loadPiece, formatPiece, emitPieceUpdated } = require('./content.controller')
+const { resolveCtx, loadPiece, formatPiece, emitPieceUpdated } = require('./content/_shared')
 
 /**
  * GET /api/contenido/projects/:id/files/:fileId/pieces

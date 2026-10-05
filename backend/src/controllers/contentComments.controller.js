@@ -2,7 +2,7 @@ const prisma = require('../lib/prisma')
 const { resolveMentions } = require('../lib/mentions')
 const { isAdmin } = require('../lib/projectAccess')
 const { emitTo } = require('../lib/socket')
-const { resolveCtx, loadPiece } = require('./content.controller')
+const { resolveCtx, loadPiece } = require('./content/_shared')
 
 const MAX_BODY = 4000
 const AUTHOR_INCLUDE = { authorUser: { select: { id: true, name: true, avatar: true } } }

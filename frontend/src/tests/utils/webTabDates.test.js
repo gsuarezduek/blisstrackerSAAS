@@ -1,55 +1,8 @@
 /**
- * Tests para los helpers de fecha de WebTab.jsx
- *
- * Las funciones están definidas en el componente, así que las reproducimos
- * aquí con la misma implementación para testearlas aisladamente.
+ * Tests para los helpers de fecha de la pestaña Web de Marketing.
  */
 import { describe, test, expect, beforeAll, afterAll, vi } from 'vitest'
-
-// ─── Implementaciones (copiadas exactas de WebTab.jsx) ────────────────────────
-
-function todayStr() {
-  return new Date().toISOString().slice(0, 10)
-}
-
-function getDateParams(range, customStart, customEnd) {
-  const now   = new Date()
-  const year  = now.getFullYear()
-  const month = now.getMonth() // 0-indexed
-
-  if (range === 'thisMonth') {
-    const start = `${year}-${String(month + 1).padStart(2, '0')}-01`
-    return { startDate: start, endDate: todayStr() }
-  }
-  if (range === 'lastMonth') {
-    const lm     = month === 0 ? 11 : month - 1
-    const lmYear = month === 0 ? year - 1 : year
-    const lastDay = new Date(lmYear, lm + 1, 0).getDate()
-    const pad = n => String(n).padStart(2, '0')
-    return {
-      startDate: `${lmYear}-${pad(lm + 1)}-01`,
-      endDate:   `${lmYear}-${pad(lm + 1)}-${pad(lastDay)}`,
-    }
-  }
-  if (range === '90daysAgo') {
-    return { startDate: '90daysAgo', endDate: 'today' }
-  }
-  // custom
-  return { startDate: customStart || todayStr(), endDate: customEnd || todayStr() }
-}
-
-function formatDateLabel(range, customStart, customEnd) {
-  const { startDate, endDate } = getDateParams(range, customStart, customEnd)
-  if (range === 'thisMonth')  return 'Este mes'
-  if (range === 'lastMonth')  return 'Mes anterior'
-  if (range === '90daysAgo')  return 'Últimos 90 días'
-  const fmt = d => {
-    if (!d || d === 'today' || d === 'yesterday') return d
-    const [y, m, dd] = d.split('-')
-    return `${dd}/${m}/${y}`
-  }
-  return `${fmt(startDate)} → ${fmt(endDate)}`
-}
+import { getDateParams, formatDateLabel } from '../../components/marketing/web/webTabHelpers'
 
 // ─── Tests: getDateParams ─────────────────────────────────────────────────────
 

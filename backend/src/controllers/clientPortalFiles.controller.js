@@ -5,7 +5,7 @@
 // projectFiles.controller.js reusando sus helpers (shapeItem, buildPath),
 // solo que resolviendo projectId/workspaceId desde req.clientPortal en vez de
 // req.workspace/req.params.id (mismo patrón que contentPortal.controller.js
-// respecto de content.controller.js).
+// respecto de content/_shared.js).
 const prisma = require('../lib/prisma')
 const objectStorage = require('../services/objectStorage.service')
 const { safeContentDisposition } = require('../lib/contentDisposition')

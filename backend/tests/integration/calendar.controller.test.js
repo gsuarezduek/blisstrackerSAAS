@@ -108,7 +108,7 @@ describe('POST /api/calendar/events', () => {
     // Tarea "reserva" del organizador: el evento (2027-03-25) es a futuro -> scheduledFor con esa fecha.
     expect(prisma.task.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
-        description: 'Sync semanal', projectId: 7, userId: 1, workDayId: 900,
+        description: '10:00 Sync semanal', projectId: 7, userId: 1, workDayId: 900,
         scheduledFor: '2027-03-25', scheduledTime: '10:00', scheduledDurationMins: 30,
       }),
     })
@@ -205,7 +205,7 @@ describe('POST /api/calendar/events/:id/respond', () => {
     expect(res.status).toBe(200)
     expect(prisma.task.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
-        description: 'Sync', projectId: 7, userId: 2, workDayId: 900,
+        description: '10:00 Sync', projectId: 7, userId: 2, workDayId: 900,
         scheduledFor: '2027-03-25', scheduledTime: '10:00', scheduledDurationMins: 30,
         createdById: 1, // organizador != invitado -> queda como quien la delegó
       }),

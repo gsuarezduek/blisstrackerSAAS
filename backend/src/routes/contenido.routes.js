@@ -32,30 +32,39 @@ router.use(requireFeatureFlag('contenido'))
 router.use(moduleAccessGuard('contenido'))
 router.param('id', requireProjectAccess)
 
-const content  = require('../controllers/content.controller')
-const assets   = require('../controllers/contentAssets.controller')
-const comments = require('../controllers/contentComments.controller')
-const files    = require('../controllers/contentFiles.controller')
+// Content.controller.js se dividió en sub-controllers por responsabilidad
+// (mismo patrón que controllers/tasks/ y controllers/ventas/): content/_shared.js
+// tiene los helpers comunes (resolveCtx, formatPiece, loadPiece, etc.), reusados
+// también por contentAssets/contentComments/contentFiles/contentPortal/clientPortal.
+const pieces    = require('../controllers/content/pieces.controller')
+const trash     = require('../controllers/content/trash.controller')
+const kanban    = require('../controllers/content/kanban.controller')
+const history   = require('../controllers/content/history.controller')
+const dashboard = require('../controllers/content/dashboard.controller')
+const approval  = require('../controllers/content/approval.controller')
+const assets    = require('../controllers/contentAssets.controller')
+const comments  = require('../controllers/contentComments.controller')
+const files     = require('../controllers/contentFiles.controller')
 
 // Piezas. La lectura queda abierta a cualquier miembro activo; las mutaciones
 // validan canWrite() adentro del handler.
-router.get   ('/projects/:id/pieces',               content.listPieces)
-router.post  ('/projects/:id/pieces',               content.createPiece)
+router.get   ('/projects/:id/pieces',               pieces.listPieces)
+router.post  ('/projects/:id/pieces',               pieces.createPiece)
 // Antes de '/pieces/:pid': si no, ':pid' matchea "months"/"trash" como si fueran un id.
-router.get   ('/projects/:id/pieces/months',         content.listMonths)
-router.get   ('/projects/:id/pieces/trash',          content.listTrash)
-router.get   ('/projects/:id/pieces/:pid',           content.getPiece)
-router.patch ('/projects/:id/pieces/:pid',           content.updatePiece)
-router.delete('/projects/:id/pieces/:pid',           content.deletePiece)
-router.post  ('/projects/:id/pieces/:pid/restore',   content.restorePiece)
-router.delete('/projects/:id/pieces/:pid/purge',     content.purgePiece)
-router.patch ('/projects/:id/pieces/:pid/position',  content.movePiece)
-router.patch ('/projects/:id/pieces/:pid/star',      content.starPiece)
-router.get   ('/projects/:id/pieces/:pid/history',   content.getHistory)
-router.post  ('/projects/:id/pieces/:pid/send-to-dashboard', content.sendToDashboard)
+router.get   ('/projects/:id/pieces/months',         history.listMonths)
+router.get   ('/projects/:id/pieces/trash',          trash.listTrash)
+router.get   ('/projects/:id/pieces/:pid',           pieces.getPiece)
+router.patch ('/projects/:id/pieces/:pid',           pieces.updatePiece)
+router.delete('/projects/:id/pieces/:pid',           pieces.deletePiece)
+router.post  ('/projects/:id/pieces/:pid/restore',   trash.restorePiece)
+router.delete('/projects/:id/pieces/:pid/purge',     trash.purgePiece)
+router.patch ('/projects/:id/pieces/:pid/position',  kanban.movePiece)
+router.patch ('/projects/:id/pieces/:pid/star',      kanban.starPiece)
+router.get   ('/projects/:id/pieces/:pid/history',   history.getHistory)
+router.post  ('/projects/:id/pieces/:pid/send-to-dashboard', dashboard.sendToDashboard)
 
-router.get   ('/projects/:id/summary',     content.getSummary)
-router.post  ('/projects/:id/request-approval', content.requestApproval)
+router.get   ('/projects/:id/summary',     history.getSummary)
+router.post  ('/projects/:id/request-approval', approval.requestApproval)
 
 // Assets. presign/confirm es el camino normal (subida directa a R2); el
 // multipart es el fallback sin R2 configurado (solo imagen, ver contentAssets.controller.js).
