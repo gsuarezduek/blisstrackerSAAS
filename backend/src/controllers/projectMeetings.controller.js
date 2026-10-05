@@ -2,6 +2,10 @@ const prisma = require('../lib/prisma')
 const { todayString } = require('../utils/dates')
 const { isAdmin, canWrite } = require('../lib/projectAccess')
 const { closeMeeting, ensureWorkDay, createDashboardTaskForTodo, startMeetingParticipants } = require('../lib/projectMeetingLifecycle')
+const { openai } = require('../lib/openai')
+const { toFile } = require('openai')
+const { createMessage } = require('../lib/claude')
+const { parseAIJson } = require('../utils/parseAIJson')
 
 const VALID_TYPE = ['internal', 'client']
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
@@ -456,8 +460,74 @@ async function deleteTodo(req, res, next) {
   } catch (err) { next(err) }
 }
 
+// ─── RESUMEN AUTOMÁTICO (prototipo) ──────────────────────────────────────────
+// Transcribe un audio corto (grabado en el navegador durante la reunión) con
+// Whisper y lo resume con Claude. No persiste nada — es solo para evaluar si la
+// calidad del resultado sirve antes de integrarlo de verdad al modelo de datos.
+// Separado a propósito de las notas manuales de la reunión (`notes`).
+async function transcribeMeetingTest(req, res, next) {
+  try {
+    const workspaceId = req.workspace.id
+    const projectId = await resolveProjectId(req.params.id, workspaceId)
+    if (!projectId) return res.status(404).json({ error: 'Proyecto no encontrado' })
+    if (!(await canWrite(req, projectId))) return res.status(403).json({ error: 'No tenés acceso a este proyecto' })
+
+    const meeting = await prisma.projectMeeting.findFirst({ where: { id: Number(req.params.mid), projectId, workspaceId } })
+    if (!meeting) return res.status(404).json({ error: 'Reunión no encontrada' })
+
+    if (!req.file) return res.status(400).json({ error: 'Falta el audio' })
+    if (!openai) return res.status(503).json({ error: 'Transcripción no configurada (falta OPENAI_API_KEY)' })
+
+    const transcription = await openai.audio.transcriptions.create({
+      file:  await toFile(req.file.buffer, req.file.originalname || 'audio.webm'),
+      model: 'whisper-1',
+      language: 'es',
+    })
+    const transcript = (transcription.text || '').trim()
+    if (!transcript) return res.json({ transcript: '', summary: null })
+
+    const msg = await createMessage(
+      {
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 800,
+        messages: [{
+          role: 'user',
+          content: `Esta es la transcripción de una reunión de equipo (puede tener errores de transcripción, corregilos por contexto si es obvio). Resumila en español rioplatense.
+
+TRANSCRIPCIÓN:
+"""
+${transcript}
+"""
+
+Respondé SOLO con un JSON válido, sin markdown ni texto adicional:
+{
+  "resumen": "2-4 oraciones con lo esencial de la reunión",
+  "temas": ["tema tratado 1", "tema tratado 2"],
+  "decisiones": ["decisión o acuerdo tomado, si hubo"],
+  "pendientes": ["compromiso o tarea mencionada, con responsable si se nombró"]
+}
+Si una lista no aplica (ej: no hubo decisiones), devolvela vacía [].`,
+        }],
+      },
+      { workspaceId, userId: req.user.userId, source: 'meetingTranscribeTest' },
+    )
+
+    const textBlock = msg.content.find(b => b.type === 'text')
+    const parsed = parseAIJson(textBlock?.text ?? '')
+    const summary = {
+      resumen:     typeof parsed.resumen === 'string' ? parsed.resumen : '',
+      temas:       Array.isArray(parsed.temas) ? parsed.temas : [],
+      decisiones:  Array.isArray(parsed.decisiones) ? parsed.decisiones : [],
+      pendientes:  Array.isArray(parsed.pendientes) ? parsed.pendientes : [],
+    }
+
+    res.json({ transcript, summary })
+  } catch (err) { next(err) }
+}
+
 module.exports = {
   listMeetings, createMeeting, updateMeeting, deleteMeeting, startMeeting, finishMeeting,
   addParticipant, removeParticipant,
   createTodo, updateTodo, deleteTodo,
+  transcribeMeetingTest,
 }

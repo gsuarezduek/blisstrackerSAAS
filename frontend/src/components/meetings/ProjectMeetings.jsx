@@ -3,6 +3,7 @@ import api from '../../api/client'
 import { avatarUrl } from '../../utils/avatarUrl'
 import CollaborativeRichTextEditor from '../CollaborativeRichTextEditor'
 import HowToButton from '../HowToButton'
+import MeetingAutoSummaryTest from './MeetingAutoSummaryTest'
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
 
@@ -298,7 +299,7 @@ function MeetingTimer({ meeting, canEdit, onStart, onFinish }) {
 // ─── MeetingCard ──────────────────────────────────────────────────────────────
 
 function MeetingCard({ meeting, members, canEdit, expanded, onToggle, onSave, onDelete, onStart, onFinish,
-                       onAddParticipant, onRemoveParticipant, onAddTodo, onUpdateTodo, onDeleteTodo }) {
+                       onAddParticipant, onRemoveParticipant, onAddTodo, onUpdateTodo, onDeleteTodo, onTranscribeTest }) {
   const tm = typeMeta(meeting.type)
 
   const [confirmDelete, setConfirmDelete] = useState(false)
@@ -453,6 +454,11 @@ function MeetingCard({ meeting, members, canEdit, expanded, onToggle, onSave, on
                 : 'Al iniciar la reunión se contará el tiempo de cada participante en este proyecto. No se puede iniciar si alguien tiene una tarea en curso.'}
             </p>
           </div>
+
+          {/* Resumen automático (prototipo) — aparte de las notas manuales de abajo */}
+          {canEdit && (
+            <MeetingAutoSummaryTest meetingId={meeting.id} onTranscribe={onTranscribeTest} />
+          )}
 
           {/* Notas — colaborativas en tiempo real (ver CollaborativeRichTextEditor) */}
           <div>
@@ -708,6 +714,17 @@ export default function ProjectMeetings({ projectId, canEdit, deepLinkMeetingId 
     catch { setError('No se pudo eliminar la tarea') }
   }
 
+  // Prototipo de resumen automático: sube el audio grabado en el navegador, no
+  // toca el estado de la reunión (no se guarda nada) — devuelve { transcript, summary }.
+  async function handleTranscribeTest(meetingId, blob, filename) {
+    const formData = new FormData()
+    formData.append('audio', blob, filename)
+    const { data } = await api.post(`/projects/${projectId}/meetings/${meetingId}/transcribe-test`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+    return data
+  }
+
   if (loading) {
     return <p className="text-sm text-gray-400 dark:text-gray-500 text-center py-10">Cargando reuniones…</p>
   }
@@ -785,6 +802,7 @@ export default function ProjectMeetings({ projectId, canEdit, deepLinkMeetingId 
               onAddTodo={handleAddTodo}
               onUpdateTodo={handleUpdateTodo}
               onDeleteTodo={handleDeleteTodo}
+              onTranscribeTest={handleTranscribeTest}
             />
           ))}
         </div>

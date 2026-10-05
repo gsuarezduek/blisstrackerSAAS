@@ -16,6 +16,26 @@ const { requireProjectAccess } = require('../middleware/projectPrivacy')
 
 const uploadPortalBanner = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } })
 
+// Audio del prototipo de resumen automático de reuniones: tope generoso para ~5 min
+// grabados en el navegador (webm/opus ronda 1-3 MB para eso, pero varía por browser).
+const MEETING_AUDIO_MAX_MB = 20
+const uploadMeetingAudio = multer({ storage: multer.memoryStorage(), limits: { fileSize: MEETING_AUDIO_MAX_MB * 1024 * 1024 } })
+
+// Mismo patrón que chat.routes.js: traduce el error de multer a una respuesta legible
+// en vez de dejarlo caer al handler global (que lo devolvería como 500).
+function uploadAudio(req, res, next) {
+  uploadMeetingAudio.single('audio')(req, res, (err) => {
+    if (err instanceof multer.MulterError) {
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(413).json({ error: `El audio supera el máximo de ${MEETING_AUDIO_MAX_MB} MB (~5 min).` })
+      }
+      return res.status(400).json({ error: `No se pudo subir el audio: ${err.message}` })
+    }
+    if (err) return next(err)
+    next()
+  })
+}
+
 router.use(auth)
 router.use(resolveWorkspace)
 
@@ -82,6 +102,7 @@ router.delete('/:id/meetings/:mid/participants/:uid',       meetings.removeParti
 router.post('/:id/meetings/:mid/todos',                     meetings.createTodo)
 router.patch('/:id/meetings/:mid/todos/:tid',               meetings.updateTodo)
 router.delete('/:id/meetings/:mid/todos/:tid',              meetings.deleteTodo)
+router.post('/:id/meetings/:mid/transcribe-test',           uploadAudio, meetings.transcribeMeetingTest)
 
 // Archivos del proyecto (repositorio tipo Drive sobre R2 — ver projectFiles.controller.js)
 router.get('/:id/files',                    projectFiles.listFiles)

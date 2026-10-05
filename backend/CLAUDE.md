@@ -13,6 +13,7 @@ FRONTEND_URL=http://localhost:5173
 GOOGLE_CLIENT_ID=xxxx.apps.googleusercontent.com
 GOOGLE_CLIENT_SECRET=...              # client secret del OAuth app de Google Cloud
 ANTHROPIC_API_KEY=sk-ant-...
+OPENAI_API_KEY=sk-...                  # (opcional, prototipo) habilita Whisper para "Resumen automático (prueba)" en Reuniones del proyecto. Sin ella, POST .../meetings/:mid/transcribe-test devuelve 503
 STRIPE_SECRET_KEY=sk_live_...          # o sk_test_... en desarrollo
 STRIPE_WEBHOOK_SECRET=whsec_...        # secret del webhook en Stripe Dashboard
 STRIPE_PRICE_ID=price_...             # ID del precio por seat/mes en Stripe
