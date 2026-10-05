@@ -284,6 +284,10 @@ export default function SuperAdmin() {
     if (selected?.id === id) setSelected(s => ({ ...s, status: newStatus }))
   }
 
+  function handleWorkspaceDeleted(id) {
+    setWorkspaces(ws => ws.filter(w => w.id !== id))
+  }
+
   const currentNavItem = NAV_ITEMS_FLAT.find(n => n.id === section)
 
   function renderSection() {
@@ -405,6 +409,7 @@ export default function SuperAdmin() {
           workspace={selected}
           onClose={() => setSelected(null)}
           onStatusChange={handleStatusChange}
+          onDeleted={handleWorkspaceDeleted}
         />
       )}
     </div>

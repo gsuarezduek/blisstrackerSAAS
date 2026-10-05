@@ -294,6 +294,33 @@ async function updateWorkspaceBillingExempt(req, res, next) {
 }
 
 /**
+ * DELETE /api/superadmin/workspaces/:id
+ * Borrado inmediato y definitivo de un workspace, para los casos que el flujo normal
+ * (owner pide la baja desde Preferencias, espera 48hs) no puede resolver — ej: un
+ * workspace viejo sin ningún miembro con rol owner/admin activo, que por eso tampoco
+ * puede autopromoverse ni pedir su propia baja. Reusa `executeWorkspaceDeletion`, el
+ * mismo motor que corre el cron de bajas vencidas. Body: { confirmSlug } — debe
+ * coincidir exacto con el slug del workspace, para no borrar el equivocado con un click.
+ */
+async function deleteWorkspace(req, res, next) {
+  try {
+    const id = Number(req.params.id)
+    const { confirmSlug } = req.body
+
+    const workspace = await prisma.workspace.findUnique({ where: { id }, select: { id: true, slug: true, name: true } })
+    if (!workspace) return res.status(404).json({ error: 'Workspace no encontrado' })
+    if (confirmSlug !== workspace.slug) {
+      return res.status(400).json({ error: 'El slug no coincide. Escribilo exactamente para confirmar el borrado.' })
+    }
+
+    const { executeWorkspaceDeletion } = require('./workspace/deletion.controller')
+    await executeWorkspaceDeletion(id)
+    console.log(`[superadmin] staff#${req.user.userId} eliminó el workspace#${id} (${workspace.slug})`)
+    res.json({ ok: true })
+  } catch (err) { next(err) }
+}
+
+/**
  * POST /api/superadmin/impersonate
  * Genera un JWT para entrar a un workspace como su owner/admin.
  * Body: { workspaceId }
@@ -1089,4 +1116,4 @@ async function getMetrics(req, res, next) {
   } catch (err) { next(err) }
 }
 
-module.exports = { listWorkspaces, getWorkspace, updateWorkspaceStatus, updateTokenLimit, updateStorageLimit, updateStorageQuotas, updateWorkspaceBillingExempt, impersonate, getStats, listFeedback, markFeedbackRead, listEmailLogs, getBillingOverview, listPayments, getAiTokenStats, getWhatsappUsageStats, listUsers, toggleUserActive, toggleUserDailyInsight, toggleUserSuperAdmin, getConversionFunnel, getMetrics }
+module.exports = { listWorkspaces, getWorkspace, updateWorkspaceStatus, updateTokenLimit, updateStorageLimit, updateStorageQuotas, updateWorkspaceBillingExempt, deleteWorkspace, impersonate, getStats, listFeedback, markFeedbackRead, listEmailLogs, getBillingOverview, listPayments, getAiTokenStats, getWhatsappUsageStats, listUsers, toggleUserActive, toggleUserDailyInsight, toggleUserSuperAdmin, getConversionFunnel, getMetrics }

@@ -71,12 +71,13 @@ export function StatCard({ label, value, sub, valueColor }) {
 
 // ─── Workspace Detail Modal ───────────────────────────────────────────────────
 
-export function WorkspaceDetailModal({ workspace, onClose, onStatusChange }) {
+export function WorkspaceDetailModal({ workspace, onClose, onStatusChange, onDeleted }) {
   const [detail,        setDetail]        = useState(null)
   const [loading,       setLoading]       = useState(true)
   const [newStatus,     setNewStatus]     = useState('')
   const [saving,        setSaving]        = useState(false)
   const [impersonating, setImpersonating] = useState(false)
+  const [deleting,      setDeleting]      = useState(false)
   const [tokenLimit,    setTokenLimit]    = useState('')
   const [savingLimit,   setSavingLimit]   = useState(false)
   const [storageLimit,      setStorageLimit]      = useState('')
@@ -180,6 +181,22 @@ export function WorkspaceDetailModal({ workspace, onClose, onStatusChange }) {
     } finally { setSaving(false) }
   }
 
+  async function handleDelete() {
+    const typed = prompt(
+      `Esto borra "${workspace.name}" y TODOS sus datos (proyectos, tareas, miembros, etc.) de forma permanente e irreversible.\n\nEscribí el slug "${workspace.slug}" para confirmar:`
+    )
+    if (typed === null) return
+    if (typed !== workspace.slug) return alert('El slug no coincide. No se borró nada.')
+    setDeleting(true)
+    try {
+      await api.delete(`/superadmin/workspaces/${workspace.id}`, { data: { confirmSlug: typed } })
+      onDeleted(workspace.id)
+      onClose()
+    } catch (err) {
+      alert(err.response?.data?.error || 'Error al eliminar el workspace')
+    } finally { setDeleting(false) }
+  }
+
   async function handleImpersonate() {
     setImpersonating(true)
     try {
@@ -265,6 +282,11 @@ export function WorkspaceDetailModal({ workspace, onClose, onStatusChange }) {
                   : 'bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200'
               }`}>
               {savingExempt ? '...' : detail?.billingExempt ? '✓ Exento de billing' : 'Eximir de billing'}
+            </button>
+            <button onClick={handleDelete} disabled={deleting || loading}
+              title="Borrado inmediato y permanente — no pasa por el flujo normal de 48hs ni requiere un owner"
+              className="px-3 py-2 bg-red-600 hover:bg-red-700 disabled:opacity-40 text-white text-sm font-medium rounded-xl transition-colors ml-auto">
+              {deleting ? 'Eliminando...' : 'Eliminar workspace'}
             </button>
           </div>
 
