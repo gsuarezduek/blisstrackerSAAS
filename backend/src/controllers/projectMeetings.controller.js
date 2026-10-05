@@ -85,6 +85,8 @@ function formatMeeting(m) {
     startedAt:    m.startedAt,
     endedAt:      m.endedAt,
     durationMins: m.durationMins,
+    aiTranscript: m.aiTranscript ?? null,
+    aiSummary:    m.aiSummary ?? null,
     running:      !!m.startedAt && !m.endedAt,
     started:      !!m.startedAt,
     createdAt:    m.createdAt,
@@ -461,10 +463,11 @@ async function deleteTodo(req, res, next) {
 }
 
 // ─── RESUMEN AUTOMÁTICO (prototipo) ──────────────────────────────────────────
-// Transcribe un audio corto (grabado en el navegador durante la reunión) con
-// Whisper y lo resume con Claude. No persiste nada — es solo para evaluar si la
-// calidad del resultado sirve antes de integrarlo de verdad al modelo de datos.
-// Separado a propósito de las notas manuales de la reunión (`notes`).
+// Transcribe el audio grabado en el navegador durante la reunión con Whisper y lo
+// resume con Claude. Se guarda en la propia reunión (aiTranscript/aiSummary) para
+// no perderse al recargar — separado a propósito de las notas manuales (`notes`).
+const WHISPER_MAX_BYTES = 24 * 1024 * 1024 // tope real de la API de Whisper: 25 MB
+
 async function transcribeMeetingTest(req, res, next) {
   try {
     const workspaceId = req.workspace.id
@@ -476,6 +479,7 @@ async function transcribeMeetingTest(req, res, next) {
     if (!meeting) return res.status(404).json({ error: 'Reunión no encontrada' })
 
     if (!req.file) return res.status(400).json({ error: 'Falta el audio' })
+    if (req.file.size > WHISPER_MAX_BYTES) return res.status(413).json({ error: 'El audio es demasiado largo/pesado para transcribir de una sola vez (tope de Whisper: 25 MB). Probá grabar menos tiempo.' })
     if (!openai) return res.status(503).json({ error: 'Transcripción no configurada (falta OPENAI_API_KEY)' })
 
     const transcription = await openai.audio.transcriptions.create({
@@ -520,6 +524,11 @@ Si una lista no aplica (ej: no hubo decisiones), devolvela vacía [].`,
       decisiones:  Array.isArray(parsed.decisiones) ? parsed.decisiones : [],
       pendientes:  Array.isArray(parsed.pendientes) ? parsed.pendientes : [],
     }
+
+    await prisma.projectMeeting.update({
+      where: { id: meeting.id },
+      data:  { aiTranscript: transcript, aiSummary: summary },
+    })
 
     res.json({ transcript, summary })
   } catch (err) { next(err) }

@@ -16,9 +16,10 @@ const { requireProjectAccess } = require('../middleware/projectPrivacy')
 
 const uploadPortalBanner = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } })
 
-// Audio del prototipo de resumen automático de reuniones: tope generoso para ~5 min
-// grabados en el navegador (webm/opus ronda 1-3 MB para eso, pero varía por browser).
-const MEETING_AUDIO_MAX_MB = 20
+// Audio del resumen automático de reuniones: el tope real lo pone la propia API de
+// Whisper (25 MB por request) — ver WHISPER_MAX_BYTES en projectMeetings.controller.js.
+// Multer corta un poco antes para no gastar banda con algo que Whisper va a rechazar.
+const MEETING_AUDIO_MAX_MB = 24
 const uploadMeetingAudio = multer({ storage: multer.memoryStorage(), limits: { fileSize: MEETING_AUDIO_MAX_MB * 1024 * 1024 } })
 
 // Mismo patrón que chat.routes.js: traduce el error de multer a una respuesta legible
@@ -27,7 +28,7 @@ function uploadAudio(req, res, next) {
   uploadMeetingAudio.single('audio')(req, res, (err) => {
     if (err instanceof multer.MulterError) {
       if (err.code === 'LIMIT_FILE_SIZE') {
-        return res.status(413).json({ error: `El audio supera el máximo de ${MEETING_AUDIO_MAX_MB} MB (~5 min).` })
+        return res.status(413).json({ error: `El audio supera el máximo de ${MEETING_AUDIO_MAX_MB} MB (tope de Whisper). Probá grabar menos tiempo.` })
       }
       return res.status(400).json({ error: `No se pudo subir el audio: ${err.message}` })
     }

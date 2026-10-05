@@ -2486,6 +2486,9 @@ model ProjectMeeting {
   endedAt      DateTime? // cronómetro: se setea al finalizar
   durationMins Int? // duración en minutos, congelada al finalizar
 
+  aiTranscript String? // transcripción cruda del audio grabado en el navegador (Whisper) — resumen automático, aparte de `notes`
+  aiSummary    Json? // { resumen, temas[], decisiones[], pendientes[] } generado por Claude a partir de aiTranscript
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

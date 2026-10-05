@@ -455,9 +455,14 @@ function MeetingCard({ meeting, members, canEdit, expanded, onToggle, onSave, on
             </p>
           </div>
 
-          {/* Resumen automático (prototipo) — aparte de las notas manuales de abajo */}
+          {/* Resumen automático — aparte de las notas manuales de abajo */}
           {canEdit && (
-            <MeetingAutoSummaryTest meetingId={meeting.id} onTranscribe={onTranscribeTest} />
+            <MeetingAutoSummaryTest
+              meetingId={meeting.id}
+              savedTranscript={meeting.aiTranscript}
+              savedSummary={meeting.aiSummary}
+              onTranscribe={onTranscribeTest}
+            />
           )}
 
           {/* Notas — colaborativas en tiempo real (ver CollaborativeRichTextEditor) */}
@@ -714,14 +719,18 @@ export default function ProjectMeetings({ projectId, canEdit, deepLinkMeetingId 
     catch { setError('No se pudo eliminar la tarea') }
   }
 
-  // Prototipo de resumen automático: sube el audio grabado en el navegador, no
-  // toca el estado de la reunión (no se guarda nada) — devuelve { transcript, summary }.
+  // Resumen automático: sube el audio grabado en el navegador y, si detectó voz,
+  // guarda transcript+summary en la reunión (persistido server-side) — devuelve
+  // { transcript, summary } para que el componente avise si no detectó voz esta vez.
   async function handleTranscribeTest(meetingId, blob, filename) {
     const formData = new FormData()
     formData.append('audio', blob, filename)
     const { data } = await api.post(`/projects/${projectId}/meetings/${meetingId}/transcribe-test`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     })
+    if (data.summary) {
+      setMeetings(prev => prev.map(m => m.id === meetingId ? { ...m, aiTranscript: data.transcript, aiSummary: data.summary } : m))
+    }
     return data
   }
 
