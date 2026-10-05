@@ -68,7 +68,7 @@ export const BLOCK_SPECS = {
   },
   pricing: {
     label: 'Inversión (tabla de planes)', icon: '$',
-    hint: 'La tabla y los precios salen de los planes; no se editan acá.',
+    hint: 'La tabla sale de los planes; para editar el monto usá la sección "Inversión" arriba del editor.',
     fields: [f('heading', 'Título de sección'), f('intro', 'Introducción', 'area'), f('note', 'Nota debajo de la tabla', 'area')],
     blank: () => ({ type: 'pricing', heading: 'Inversión', intro: '', note: '' }),
   },

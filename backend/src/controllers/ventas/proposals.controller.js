@@ -174,8 +174,10 @@ async function createProposal(req, res, next) {
   }
 }
 
-// PATCH /api/ventas/leads/:id/proposals/:pid  { content?, doc?, title?, status?, signatureId? }
+// PATCH /api/ventas/leads/:id/proposals/:pid  { content?, doc?, title?, status?, signatureId?, plans? }
 // `content` = HTML de propuestas legacy; `doc` = documento estructurado (se normaliza sin resucitar bloques borrados).
+// `plans` = los mismos planes guardados, con precio/moneda/+IVA/etiqueta editados a mano (la tabla de
+// inversión del `doc` la lee de acá, no de la IA) — `services` de cada plan viaja igual, no se reconstruye.
 async function updateProposal(req, res, next) {
   try {
     const workspaceId = req.workspace.id
@@ -183,7 +185,7 @@ async function updateProposal(req, res, next) {
     const existing = await prisma.proposal.findFirst({ where: { id: pid, workspaceId, leadId: Number(req.params.id) }, select: { id: true } })
     if (!existing) return res.status(404).json({ error: 'Propuesta no encontrada' })
 
-    const { content, doc, title, status, signatureId } = req.body
+    const { content, doc, title, status, signatureId, plans } = req.body
     const data = {}
     if (content !== undefined) data.content = content
     if (doc !== undefined) {
@@ -192,6 +194,19 @@ async function updateProposal(req, res, next) {
     }
     if (title   !== undefined) data.title = title?.trim() || null
     if (signatureId !== undefined) data.signatureId = typeof signatureId === 'string' && signatureId.trim() ? signatureId.trim() : null
+    if (plans !== undefined) {
+      if (!Array.isArray(plans) || plans.length === 0) return res.status(400).json({ error: 'Se requiere al menos un plan' })
+      data.plans = plans.map((p, i) => {
+        const priceNum = p?.price === '' || p?.price == null ? null : Number(p.price)
+        return {
+          label: typeof p?.label === 'string' && p.label.trim() ? p.label.trim() : `Plan ${i + 1}`,
+          price: Number.isFinite(priceNum) ? priceNum : null,
+          currency: typeof p?.currency === 'string' && p.currency.trim() ? p.currency.trim() : 'ARS',
+          plusIva: p?.plusIva === true,
+          services: Array.isArray(p?.services) ? p.services.filter(s => s && typeof s.name === 'string').map(s => ({ name: s.name, description: s.description ?? null })) : [],
+        }
+      })
+    }
     if (status  !== undefined) {
       if (!['draft', 'confirmed'].includes(status)) return res.status(400).json({ error: 'Estado de propuesta inválido' })
       data.status = status

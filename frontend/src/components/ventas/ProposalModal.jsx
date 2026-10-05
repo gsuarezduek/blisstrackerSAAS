@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import api from '../../api/client'
 import RichTextEditor from '../RichTextEditor'
+import ConfirmModal from '../ConfirmModal'
 import { exportProposalPdf } from './proposalPdf'
 import ProposalDocView from './ProposalDocView'
 import ProposalDocEditor from './ProposalDocEditor'
@@ -11,6 +12,11 @@ const label = 'block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1'
 const CURRENCIES = ['ARS', 'USD', 'EUR']
 
 function newPlan(label, currency) { return { id: crypto.randomUUID(), label, price: '', currency, plusIva: true, serviceIds: [] } }
+
+// Snapshot de "lo último guardado" para detectar cambios pendientes al cerrar el editor.
+function snapshotOf(p) {
+  return { title: p.title || '', doc: p.doc || null, content: p.content || '', signatureId: p.signatureId || '', plans: p.plans || [] }
+}
 
 // Modal de propuesta. Tres pasos: (1) form: armar planes de precio (servicios + precio mensual, ej.
 // Básico/Completo) + objetivos; (2) brief: la IA analiza el caso y muestra qué entendió, hace
@@ -41,9 +47,33 @@ export default function ProposalModal({ leadId, companyName, currency: defaultCu
   const [accent, setAccent] = useState('')
   const [signatures, setSignatures] = useState([])
   const [signatureId, setSignatureId] = useState(initial?.signatureId || '')
+  const [editPlans, setEditPlans] = useState(() => Array.isArray(initial?.plans) ? initial.plans.map(p => ({ ...p })) : [])
+  const [savedSnapshot, setSavedSnapshot] = useState(() => initial ? snapshotOf(initial) : null)
+  const [confirmClose, setConfirmClose] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [copied, setCopied] = useState(false)
+
+  // El paso `edit` (revisar/guardar una propuesta ya generada) es el único con "cambios sin
+  // guardar" que vale la pena avisar — en `form`/`brief` todavía no hay nada persistido.
+  const isDirty = step === 'edit' && !!savedSnapshot && JSON.stringify({ title, doc, content, signatureId, plans: editPlans }) !== JSON.stringify(savedSnapshot)
+  const dirtyRef = useRef(false)
+  useEffect(() => { dirtyRef.current = isDirty })
+
+  // Cerrar la pestaña con cambios sin guardar en la propuesta → preguntar, mismo criterio
+  // que AutosaveNotes.jsx para notas/situación.
+  useEffect(() => {
+    function handleBeforeUnload(e) {
+      if (dirtyRef.current) { e.preventDefault(); e.returnValue = '' }
+    }
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload)
+  }, [])
+
+  function requestClose() {
+    if (dirtyRef.current) setConfirmClose(true)
+    else onClose()
+  }
 
   useEffect(() => { api.get('/services').then(({ data }) => setServices(data)).catch(() => {}) }, [])
 
@@ -101,6 +131,8 @@ export default function ProposalModal({ leadId, companyName, currency: defaultCu
       setDoc(data.doc || null)
       setTab('preview')
       setSignatureId(data.signatureId || '')
+      setEditPlans(Array.isArray(data.plans) ? data.plans.map(p => ({ ...p })) : [])
+      setSavedSnapshot(snapshotOf(data))
       setStep('edit')
       onSaved?.() // refresca la lista con la nueva versión
     } catch (err) {
@@ -125,9 +157,12 @@ export default function ProposalModal({ leadId, companyName, currency: defaultCu
     setSaving(true); setError('')
     try {
       const { data } = await api.patch(`/ventas/leads/${leadId}/proposals/${proposal.id}`, {
-        title: title.trim() || null, ...(doc ? { doc } : { content }), signatureId: signatureId || null, ...(confirm ? { status: 'confirmed' } : {}),
+        title: title.trim() || null, ...(doc ? { doc } : { content }), signatureId: signatureId || null,
+        ...(editPlans.length > 0 ? { plans: editPlans } : {}), ...(confirm ? { status: 'confirmed' } : {}),
       })
       setProposal(data)
+      setEditPlans(Array.isArray(data.plans) ? data.plans.map(p => ({ ...p })) : [])
+      setSavedSnapshot(snapshotOf(data))
       onSaved?.()
       if (confirm) onClose()
     } catch (err) {
@@ -135,6 +170,10 @@ export default function ProposalModal({ leadId, companyName, currency: defaultCu
     } finally {
       setSaving(false)
     }
+  }
+
+  function updateEditPlan(i, field, value) {
+    setEditPlans(ps => ps.map((p, j) => (j === i ? { ...p, [field]: value } : p)))
   }
 
   return (
@@ -145,7 +184,7 @@ export default function ProposalModal({ leadId, companyName, currency: defaultCu
             {step === 'form' ? 'Nueva propuesta' : step === 'brief' ? 'Antes de redactar…' : (proposal?.title || 'Propuesta')}
             {proposal?.version ? <span className="ml-2 text-xs text-gray-400">v{proposal.version}</span> : ''}
           </h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 text-xl leading-none">×</button>
+          <button onClick={requestClose} className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 text-xl leading-none">×</button>
         </div>
 
         {error && <p className="text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 rounded-lg px-3 py-2 mb-3">{error}</p>}
@@ -262,6 +301,26 @@ export default function ProposalModal({ leadId, companyName, currency: defaultCu
                 </div>
               )}
             </div>
+            {editPlans.length > 0 && (
+              <div>
+                <label className={label}>Inversión</label>
+                <div className="space-y-1.5">
+                  {editPlans.map((plan, i) => (
+                    <div key={i} className="flex items-center gap-2 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-1.5">
+                      <span className="flex-1 text-sm font-medium text-gray-700 dark:text-gray-200 truncate">{plan.label}</span>
+                      <select className="border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-2 py-1.5 text-sm shrink-0" value={plan.currency} onChange={e => updateEditPlan(i, 'currency', e.target.value)}>
+                        {CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
+                      </select>
+                      <input type="number" min="0" placeholder="Precio/mes" className="w-28 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-2 py-1.5 text-sm shrink-0" value={plan.price ?? ''} onChange={e => updateEditPlan(i, 'price', e.target.value === '' ? '' : Number(e.target.value))} />
+                      <label className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400 shrink-0 select-none">
+                        <input type="checkbox" className="accent-primary-600" checked={!!plan.plusIva} onChange={e => updateEditPlan(i, 'plusIva', e.target.checked)} />
+                        + IVA
+                      </label>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             {doc ? (
               <div>
                 <div className="flex gap-1 mb-3 border-b border-gray-200 dark:border-gray-700">
@@ -274,7 +333,7 @@ export default function ProposalModal({ leadId, companyName, currency: defaultCu
                 </div>
                 {tab === 'preview' ? (
                   <div className="bg-white text-gray-800 rounded-xl border border-gray-200 dark:border-gray-600 p-6 sm:p-8 max-h-[65vh] overflow-y-auto">
-                    <ProposalDocView doc={doc} plans={proposal?.plans} accent={accent} title={title} />
+                    <ProposalDocView doc={doc} plans={editPlans} accent={accent} title={title} />
                   </div>
                 ) : (
                   <div className="max-h-[65vh] overflow-y-auto pr-1">
@@ -288,9 +347,10 @@ export default function ProposalModal({ leadId, companyName, currency: defaultCu
                 <RichTextEditor defaultContent={content} onChange={setContent} minHeight={480} autoFocus={false} resizable />
               </div>
             )}
+            {isDirty && !saving && <p className="text-xs text-amber-600 dark:text-amber-400 -mb-1">Cambios sin guardar</p>}
             <div className="flex flex-wrap gap-2 pt-1">
-              <button onClick={onClose} className="border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 font-medium rounded-xl py-2.5 px-4 text-sm">Cerrar</button>
-              <button onClick={() => exportProposalPdf({ ...proposal, title, content, doc, signatureId }, { companyName })} className="border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 font-medium rounded-xl py-2.5 px-4 text-sm">PDF</button>
+              <button onClick={requestClose} className="border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 font-medium rounded-xl py-2.5 px-4 text-sm">Cerrar</button>
+              <button onClick={() => exportProposalPdf({ ...proposal, title, content, doc, plans: editPlans, signatureId }, { companyName })} className="border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 font-medium rounded-xl py-2.5 px-4 text-sm">PDF</button>
               <button
                 onClick={copyPublicLink}
                 disabled={proposal?.status !== 'confirmed'}
@@ -305,6 +365,17 @@ export default function ProposalModal({ leadId, companyName, currency: defaultCu
           </div>
         )}
       </div>
+
+      <ConfirmModal
+        open={confirmClose}
+        title="Cambios sin guardar"
+        message="Esta propuesta tiene cambios sin guardar. Si cerrás ahora se van a perder."
+        confirmLabel="Cerrar sin guardar"
+        cancelLabel="Seguir editando"
+        danger
+        onCancel={() => setConfirmClose(false)}
+        onConfirm={() => { setConfirmClose(false); onClose() }}
+      />
     </div>
   )
 }
