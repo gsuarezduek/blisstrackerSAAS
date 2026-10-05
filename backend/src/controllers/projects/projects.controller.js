@@ -178,12 +178,23 @@ async function update(req, res, next) {
       ? await prisma.project.findFirst({ where: { id: projectId, workspaceId }, select: { active: true, monthlyHours: true, timezone: true } })
       : null
 
+    // El canal de Chat del proyecto sigue automáticamente el estado `active`:
+    // se archiva al desactivar, se desarchiva al reactivar — mismo criterio que
+    // "nuevo proyecto → nuevo canal" (ensureProjectChannel en projects.service.js).
+    // Solo en la transición real (no al re-guardar el mismo valor).
+    let chatChannelWrite = null
     if (active      !== undefined) {
       data.active = active
       // Marca/limpia la fecha de baja solo en la transición (no pisa la original si se re-guarda inactivo).
       if (cur) {
         if (cur.active && active === false)      data.lostAt = new Date()
         else if (!cur.active && active === true) data.lostAt = null
+        if (cur.active !== active) {
+          chatChannelWrite = prisma.chatChannel.updateMany({
+            where: { projectId, kind: 'project' },
+            data: { archived: !active },
+          })
+        }
       }
     }
     if (websiteUrl  !== undefined) data.websiteUrl = websiteUrl || null
@@ -233,8 +244,9 @@ async function update(req, res, next) {
       data,
       include: includeDetails,
     })
-    const project = monthlyHoursLogWrite
-      ? (await prisma.$transaction([projectUpdate, monthlyHoursLogWrite]))[0]
+    const extraWrites = [monthlyHoursLogWrite, chatChannelWrite].filter(Boolean)
+    const project = extraWrites.length > 0
+      ? (await prisma.$transaction([projectUpdate, ...extraWrites]))[0]
       : await projectUpdate
 
     if (newMemberIds.length > 0) {
