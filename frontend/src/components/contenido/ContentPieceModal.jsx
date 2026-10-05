@@ -322,14 +322,26 @@ export default function ContentPieceModal({ piece, members = [], clientContacts 
                       />
                     ) : activeAsset.kind === 'link' ? (
                       activeAssetDrive ? (
-                        <iframe
-                          src={driveEmbedUrl(activeAssetDrive)}
-                          className="w-full h-full"
-                          style={{ border: 0 }}
-                          allow="autoplay"
-                          loading="lazy"
-                          title="Google Drive"
-                        />
+                        <>
+                          <a
+                            href={activeAsset.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            title={activeAsset.url}
+                            className="absolute top-2 left-2 z-10 flex items-center gap-1 max-w-[75%] px-2.5 py-1.5 rounded-lg text-xs font-medium bg-black/60 hover:bg-black/80 text-white transition-colors"
+                          >
+                            <Icon as={Link2} size={14} className="shrink-0" />
+                            <span className="truncate">{activeAsset.url}</span>
+                          </a>
+                          <iframe
+                            src={driveEmbedUrl(activeAssetDrive)}
+                            className="w-full h-full"
+                            style={{ border: 0 }}
+                            allow="autoplay"
+                            loading="lazy"
+                            title="Google Drive"
+                          />
+                        </>
                       ) : (
                         <a
                           href={activeAsset.url}
