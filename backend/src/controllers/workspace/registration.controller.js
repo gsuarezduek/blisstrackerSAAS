@@ -19,11 +19,21 @@ async function getMine(req, res, next) {
       where: { userId: req.user.userId, active: true },
       include: { workspace: { select: { id: true, name: true, slug: true, status: true } } },
     })
+    const workspaceIds = members.map(m => m.workspace.id)
+    const unreadGroups = workspaceIds.length
+      ? await prisma.notification.groupBy({
+          by: ['workspaceId'],
+          where: { userId: req.user.userId, workspaceId: { in: workspaceIds }, read: false },
+          _count: true,
+        })
+      : []
+    const unreadByWorkspace = Object.fromEntries(unreadGroups.map(g => [g.workspaceId, g._count]))
     res.json(members.map(m => ({
-      id:   m.workspace.id,
-      name: m.workspace.name,
-      slug: m.workspace.slug,
-      role: m.role,
+      id:          m.workspace.id,
+      name:        m.workspace.name,
+      slug:        m.workspace.slug,
+      role:        m.role,
+      hasUnread:   !!unreadByWorkspace[m.workspace.id],
     })))
   } catch (err) { next(err) }
 }

@@ -119,9 +119,14 @@ export default function Navbar() {
 
   useEffect(() => {
     if (!user) return
-    api.get('/workspaces/mine')
-      .then(r => setOtherWorkspaces((r.data || []).filter(w => w.slug !== currentSlug)))
-      .catch(() => {})
+    function fetchMine() {
+      api.get('/workspaces/mine')
+        .then(r => setOtherWorkspaces((r.data || []).filter(w => w.slug !== currentSlug)))
+        .catch(() => {})
+    }
+    fetchMine()
+    const t = setInterval(fetchMine, 120000)
+    return () => clearInterval(t)
   }, [user, currentSlug])
 
   async function handleSwitch(targetSlug) {
@@ -139,6 +144,7 @@ export default function Navbar() {
 
   const isAdmin   = user?.isAdmin === true
   const avatarSrc = avatarUrl(user?.avatar)
+  const otherWorkspacesUnread = otherWorkspaces.some(ws => ws.hasUnread)
   const { enabled: marketingEnabled } = useFeatureFlag('marketing')
   const { enabled: eosEnabled }       = useFeatureFlag('eos')
   const { enabled: gamificationEnabled } = useFeatureFlag('gamification')
@@ -235,6 +241,7 @@ export default function Navbar() {
           icon:     <IcoWorkspace />,
           onClick:  () => handleSwitch(ws.slug),
           disabled: !!switchLoading,
+          dot:      ws.hasUnread && switchLoading !== ws.slug,
         })),
         {
           key:       'new-workspace',
@@ -283,6 +290,7 @@ export default function Navbar() {
               >
                 {item.icon}
                 {item.label}
+                {item.dot && <span className="w-1.5 h-1.5 bg-red-500 rounded-full flex-shrink-0" />}
               </Link>
             )
           }
@@ -298,6 +306,7 @@ export default function Navbar() {
             >
               {item.icon}
               {item.label}
+              {item.dot && <span className="w-1.5 h-1.5 bg-red-500 rounded-full flex-shrink-0" />}
             </button>
           )
         })}
@@ -465,11 +474,16 @@ export default function Navbar() {
                   <p className="text-sm font-medium text-gray-900 dark:text-white leading-tight">{user?.name}</p>
                   <p className="text-xs text-gray-500 dark:text-gray-400">{labelFor(user?.role)}</p>
                 </div>
-                <img
-                  src={avatarSrc}
-                  alt="avatar"
-                  className="w-8 h-8 rounded-full object-cover border border-gray-200 dark:border-gray-600 flex-shrink-0"
-                />
+                <div className="relative flex-shrink-0">
+                  <img
+                    src={avatarSrc}
+                    alt="avatar"
+                    className="w-8 h-8 rounded-full object-cover border border-gray-200 dark:border-gray-600"
+                  />
+                  {otherWorkspacesUnread && (
+                    <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white dark:border-gray-800" />
+                  )}
+                </div>
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"
                   className={`w-4 h-4 text-gray-400 transition-transform ${profileOpen ? 'rotate-180' : ''}`}>
                   <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" />
@@ -509,11 +523,16 @@ export default function Navbar() {
 
             {/* User info */}
             <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-100 dark:border-gray-700">
-              <img
-                src={avatarSrc}
-                alt="avatar"
-                className="w-10 h-10 rounded-full object-cover border border-gray-200 dark:border-gray-600 flex-shrink-0"
-              />
+              <div className="relative flex-shrink-0">
+                <img
+                  src={avatarSrc}
+                  alt="avatar"
+                  className="w-10 h-10 rounded-full object-cover border border-gray-200 dark:border-gray-600"
+                />
+                {otherWorkspacesUnread && (
+                  <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white dark:border-gray-800" />
+                )}
+              </div>
               <div>
                 <p className="text-sm font-semibold text-gray-900 dark:text-white">{user?.name}</p>
                 <p className="text-xs text-gray-500 dark:text-gray-400">{labelFor(user?.role)}</p>
