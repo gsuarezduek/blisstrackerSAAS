@@ -104,6 +104,14 @@ async function createCheckout(req, res, next) {
       ? `https://${workspace.slug}.${process.env.APP_DOMAIN || 'blisstracker.app'}`
       : (process.env.FRONTEND_URL || 'http://localhost:5173')
 
+    // Código de invitación redimido al registrarse (descuento/meses gratis): se aplica solo,
+    // vía el cupón de Stripe que se creó al dar de alta el código (ver lib/invitationCodes.js).
+    const workspaceWithCode = await prisma.workspace.findUnique({
+      where:  { id: workspace.id },
+      select: { invitationCode: { select: { stripeCouponId: true } } },
+    })
+    const couponId = workspaceWithCode?.invitationCode?.stripeCouponId || null
+
     const session = await stripe.checkout.sessions.create({
       customer:    customerId,
       mode:        'subscription',
@@ -114,6 +122,7 @@ async function createCheckout(req, res, next) {
       subscription_data: {
         metadata: { workspaceId: String(workspace.id), slug: workspace.slug },
       },
+      ...(couponId ? { discounts: [{ coupon: couponId }] } : {}),
     })
 
     res.json({ url: session.url })

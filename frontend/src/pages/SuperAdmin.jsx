@@ -15,6 +15,7 @@ import { SectionAvatars } from './superadmin/avatars'
 import { SectionLanding } from './superadmin/landing'
 import { SectionBlog } from './superadmin/blog'
 import { SectionBilling } from './superadmin/billing'
+import { SectionInvitationCodes } from './superadmin/invitationCodes'
 import { SectionFeatureFlags } from './superadmin/featureFlags'
 import { SectionAiTokens } from './superadmin/aiTokens'
 import { SectionWhatsappUsage } from './superadmin/whatsappUsage'
@@ -86,6 +87,17 @@ const NAV_GROUPS = [
         icon: (
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
             <path fillRule="evenodd" d="M1 4a1 1 0 011-1h16a1 1 0 011 1v2a1 1 0 01-1 1H2a1 1 0 01-1-1V4zm0 6a1 1 0 011-1h16a1 1 0 011 1v6a1 1 0 01-1 1H2a1 1 0 01-1-1v-6zm8 4a1 1 0 100-2 1 1 0 000 2zm3 1a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
+          </svg>
+        ),
+      },
+      {
+        id: 'invitation-codes',
+        label: 'Códigos de invitación',
+        implemented: true,
+        description: 'Códigos opcionales que un usuario puede ingresar al registrarse, con un beneficio asociado: descuento, meses gratis, trial extendido u otro.',
+        icon: (
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+            <path fillRule="evenodd" d="M4 4a2 2 0 00-2 2v1h16V6a2 2 0 00-2-2H4zm16 5H2v5a2 2 0 002 2h12a2 2 0 002-2V9zM4 13a1 1 0 011-1h1a1 1 0 110 2H5a1 1 0 01-1-1zm5-1a1 1 0 100 2h1a1 1 0 100-2H9z" clipRule="evenodd" />
           </svg>
         ),
       },
@@ -321,6 +333,7 @@ export default function SuperAdmin() {
     if (section === 'avatars')       return <SectionAvatars />
     if (section === 'feature-flags') return <SectionFeatureFlags />
     if (section === 'billing')       return <SectionBilling />
+    if (section === 'invitation-codes') return <SectionInvitationCodes />
     if (section === 'ai-tokens')     return <SectionAiTokens />
     if (section === 'whatsapp-usage') return <SectionWhatsappUsage />
     if (section === 'scraping')      return <SectionScraping />

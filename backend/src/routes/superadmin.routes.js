@@ -21,6 +21,7 @@ const st    = require('../controllers/storage.controller')
 const land  = require('../controllers/landing.controller')
 const apt   = require('../controllers/apifyTokens.controller')
 const blog  = require('../controllers/blog.controller')
+const ic    = require('../controllers/superadmin/invitationCodes.controller')
 
 const AVATAR_MAX_MB = 2
 const upload = multer({
@@ -109,6 +110,12 @@ router.post('/announcements',             ann.create)
 router.patch('/announcements/:id',        ann.update)
 router.patch('/announcements/:id/toggle', ann.toggle)
 router.delete('/announcements/:id',       ann.remove)
+
+// Códigos de invitación
+router.get('/invitation-codes',        ic.list)
+router.post('/invitation-codes',       ic.create)
+router.patch('/invitation-codes/:id',  ic.update)
+router.delete('/invitation-codes/:id', ic.remove)
 
 // Feature Flags
 router.get('/feature-flags',         ff.list)

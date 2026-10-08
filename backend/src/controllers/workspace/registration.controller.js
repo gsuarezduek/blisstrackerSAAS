@@ -8,6 +8,7 @@ const { seedDefaults } = require('../../services/workspaceSeed.service')
 const { validatePassword } = require('../../lib/passwordPolicy')
 const { createAndSendVerificationEmail } = require('../../lib/emailVerification')
 const { normalizeEmail } = require('../../lib/normalizeEmail')
+const { describeBenefit, validateCodeForRedemption } = require('../../lib/invitationCodes')
 
 /**
  * GET /api/workspaces/mine
@@ -47,7 +48,7 @@ async function getMine(req, res, next) {
  */
 async function createWorkspace(req, res, next) {
   try {
-    const { workspaceName, slug } = req.body
+    const { workspaceName, slug, invitationCode } = req.body
     const authedUserId = req.user?.userId ?? null
 
     let ownerName, ownerEmail, ownerPassword
@@ -70,8 +71,23 @@ async function createWorkspace(req, res, next) {
       getSetting('defaultMonthlyTokenLimit'),
       getSetting('defaultStorageLimitMb'),
     ])
+
+    // Código de invitación (opcional): se valida antes de abrir la transacción para fallar
+    // rápido con un 400 descriptivo. Si el beneficio es 'extra_trial_days', redefine el largo
+    // del trial (reemplaza al default, no se suma). El resto de los beneficios (descuento/meses
+    // gratis) no tienen efecto inmediato acá — se aplican solos más adelante en el Checkout
+    // (ver billing.controller.js `createCheckout`), vía el cupón de Stripe guardado en el código.
+    let invitationCodeRow = null
+    if (invitationCode) {
+      try {
+        invitationCodeRow = await validateCodeForRedemption(invitationCode, prisma)
+      } catch (err) {
+        return res.status(err.status || 400).json({ error: err.error || 'Código de invitación inválido' })
+      }
+    }
+
     const trialEndsAt = new Date()
-    trialEndsAt.setDate(trialEndsAt.getDate() + trialDays)
+    trialEndsAt.setDate(trialEndsAt.getDate() + (invitationCodeRow?.benefitType === 'extra_trial_days' ? invitationCodeRow.benefitValue : trialDays))
 
     let existingOwner = null
     let hashed = null
@@ -100,9 +116,23 @@ async function createWorkspace(req, res, next) {
     }
 
     const result = await prisma.$transaction(async (tx) => {
+      // Revalidar el código dentro de la transacción (vigencia/cupo pueden haber cambiado
+      // entre el check de arriba y este punto) e incrementar el uso atómicamente.
+      let redeemedCodeId = null
+      if (invitationCodeRow) {
+        const fresh = await validateCodeForRedemption(invitationCodeRow.code, tx)
+        await tx.invitationCode.update({ where: { id: fresh.id }, data: { usesCount: { increment: 1 } } })
+        redeemedCodeId = fresh.id
+      }
+
       // Crear workspace
       const workspace = await tx.workspace.create({
-        data: { name: workspaceName, slug, status: 'trialing', trialEndsAt, monthlyTokenLimit: defaultTokenLimit, storageLimitMb: defaultStorageLimit },
+        data: {
+          name: workspaceName, slug, status: 'trialing', trialEndsAt,
+          monthlyTokenLimit: defaultTokenLimit, storageLimitMb: defaultStorageLimit,
+          invitationCodeId: redeemedCodeId,
+          invitationCodeRedeemedAt: redeemedCodeId ? new Date() : null,
+        },
       })
 
       // Reutiliza al owner ya resuelto arriba (sesión activa, o email con cuenta existente);
@@ -225,6 +255,11 @@ async function createWorkspace(req, res, next) {
       token,
     })
   } catch (err) {
+    // Código de invitación perdió vigencia/cupo justo entre el check previo y la
+    // revalidación dentro de la transacción (carrera entre dos registros concurrentes).
+    if (err?.status && err?.error) {
+      return res.status(err.status).json({ error: err.error })
+    }
     console.error('[createWorkspace] error:', err.message, err.meta ?? '')
     if (err.code === 'P2002') {
       const target = err.meta?.target ?? []
@@ -239,6 +274,23 @@ async function createWorkspace(req, res, next) {
     }
     next(err)
   }
+}
+
+/**
+ * GET /api/workspaces/check-invitation-code?code=XXXX
+ * Verifica en tiempo real si un código de invitación es válido, para mostrarle al usuario
+ * el beneficio en el formulario de registro antes de enviarlo.
+ */
+async function checkInvitationCode(req, res, next) {
+  try {
+    const { code } = req.query
+    try {
+      const ic = await validateCodeForRedemption(code, prisma)
+      return res.json({ valid: true, benefitLabel: describeBenefit(ic) })
+    } catch (err) {
+      return res.json({ valid: false, reason: err.error || 'Código inválido' })
+    }
+  } catch (err) { next(err) }
 }
 
 /**
@@ -279,4 +331,4 @@ async function getInfo(req, res, next) {
   } catch (err) { next(err) }
 }
 
-module.exports = { getMine, createWorkspace, checkSlug, getInfo }
+module.exports = { getMine, createWorkspace, checkSlug, checkInvitationCode, getInfo }

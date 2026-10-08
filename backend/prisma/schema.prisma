@@ -69,6 +69,9 @@ model Workspace {
   vacationAccrualIntervalMonths Int       @default(1)
   vacationAccrualActivatedAt    DateTime?
   billingExempt                 Boolean   @default(false) // Exento de billing (ej: workspace bliss). Nunca pasa a past_due por superar el free tier.
+  invitationCodeId              Int?      // Código de invitación usado al registrarse (opcional, uno solo por workspace)
+  invitationCode                InvitationCode? @relation(fields: [invitationCodeId], references: [id], onDelete: SetNull)
+  invitationCodeRedeemedAt      DateTime?
   demoSeeded                    Boolean   @default(false) // True si tiene proyecto "Demo — Aprendé BlissTracker"
   onboardingCompletedAt         DateTime? // null = todavía no completó/saltó el wizard de onboarding (selector de módulos + tour)
   voiceChannelSeededAt          DateTime? // null = todavía no se sembró el canal de voz default (kind:'custom', medium:'voice').
@@ -216,6 +219,28 @@ model Workspace {
   googleCalendarConnections  GoogleCalendarConnection[]
 
   @@index([slug])
+}
+
+// Código de invitación con beneficio (descuento/período gratis/trial extendido/otro) que
+// un usuario puede ingresar al registrarse. Gestionado desde SuperAdmin → Negocio → Códigos
+// de invitación. Un workspace lo redime como máximo una vez (Workspace.invitationCodeId).
+model InvitationCode {
+  id             Int       @id @default(autoincrement())
+  code           String    @unique // normalizado UPPERCASE
+  description    String? // nota interna, no se le muestra al usuario
+  benefitType    String // 'discount_percent' | 'discount_fixed' | 'free_months' | 'extra_trial_days' | 'custom'
+  benefitValue   Int       @default(0) // % (1-100) | monto en centavos | meses | días | 0 para 'custom'
+  currency       String? // solo discount_fixed, default 'usd'
+  benefitLabel   String? // texto a mostrar al usuario; requerido para 'custom', autogenerado para el resto
+  stripeCouponId String? // cupón de Stripe creado al dar de alta el código (discount_percent/discount_fixed/free_months); null si no aplica o Stripe no está configurado
+  maxUses        Int? // null = ilimitado
+  usesCount      Int       @default(0)
+  active         Boolean   @default(true)
+  expiresAt      DateTime?
+  createdAt      DateTime  @default(now())
+  createdById    Int?
+  createdBy      User?       @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  workspaces     Workspace[]
 }
 
 model WorkspaceMember {
@@ -413,6 +438,7 @@ model User {
   calendarEventParticipations    CalendarEventParticipant[]  @relation("CalendarEventParticipant")
   calendarEventRecurrencesOrganized CalendarEventRecurrence[] @relation("CalendarEventRecurrenceOrganizer")
   googleCalendarConnections      GoogleCalendarConnection[]
+  invitationCodesCreated         InvitationCode[]
 }
 
 model UserLogin {

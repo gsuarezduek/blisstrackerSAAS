@@ -20,6 +20,7 @@ const upload = multer({
 // tiene sesión, crea un workspace ADICIONAL para ese usuario sin pedirle contraseña.
 router.post('/',          optionalAuth, registration.createWorkspace)
 router.get('/check-slug', registration.checkSlug)
+router.get('/check-invitation-code', registration.checkInvitationCode)
 router.get('/info',       registration.getInfo)
 
 // Rutas públicas de invitaciones

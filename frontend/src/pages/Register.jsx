@@ -24,6 +24,14 @@ const SLUG_STATUS = {
   invalid:   'invalid',
 }
 
+// Estados de validación del código de invitación (opcional)
+const INV_CODE_STATUS = {
+  idle:      null,
+  checking:  'checking',
+  valid:     'valid',
+  invalid:   'invalid',
+}
+
 export default function Register() {
   const { user } = useAuth()
   // Usuario ya logueado: está creando un workspace ADICIONAL, no una cuenta nueva —
@@ -40,6 +48,9 @@ export default function Register() {
   const [emailExists,    setEmailExists]    = useState(false)
   const [acceptedTerms,  setAcceptedTerms]  = useState(true)
   const [slugStatus,     setSlugStatus]     = useState(SLUG_STATUS.idle)
+  const [invitationCode, setInvitationCode] = useState('')
+  const [invCodeStatus,  setInvCodeStatus]  = useState(INV_CODE_STATUS.idle)
+  const [invCodeMessage, setInvCodeMessage] = useState('')
   const navigate = useNavigate()
 
   // Track inicio del signup flow (mount) — solo para el registro público
@@ -65,6 +76,34 @@ export default function Register() {
     }, 400)
     return () => clearTimeout(t)
   }, [slug])
+
+  // Verificar código de invitación (opcional, con debounce) — aplica en ambos flujos, el
+  // beneficio es del workspace, no de la cuenta.
+  useEffect(() => {
+    if (!invitationCode.trim()) {
+      setInvCodeStatus(INV_CODE_STATUS.idle)
+      setInvCodeMessage('')
+      return
+    }
+    setInvCodeStatus(INV_CODE_STATUS.checking)
+    const t = setTimeout(() => {
+      api.get(`/workspaces/check-invitation-code?code=${encodeURIComponent(invitationCode.trim())}`)
+        .then(r => {
+          if (r.data.valid) {
+            setInvCodeStatus(INV_CODE_STATUS.valid)
+            setInvCodeMessage(r.data.benefitLabel)
+          } else {
+            setInvCodeStatus(INV_CODE_STATUS.invalid)
+            setInvCodeMessage(r.data.reason || 'Código inválido')
+          }
+        })
+        .catch(() => {
+          setInvCodeStatus(INV_CODE_STATUS.invalid)
+          setInvCodeMessage('No se pudo validar el código')
+        })
+    }, 400)
+    return () => clearTimeout(t)
+  }, [invitationCode])
 
   // Verificar si el email ya tiene cuenta (con debounce) — no aplica si ya estamos logueados
   useEffect(() => {
@@ -105,9 +144,11 @@ export default function Register() {
     try {
       // Logueado: el backend reutiliza la cuenta de la sesión (via el JWT que ya manda
       // el cliente axios) — no hace falta re-mandar nombre/email/contraseña.
+      const trimmedCode = invitationCode.trim()
       const body = isAddingWorkspace
         ? { workspaceName, slug }
         : { workspaceName, slug, ownerName, ownerEmail, ownerPassword }
+      if (trimmedCode) body.invitationCode = trimmedCode
       const { data } = await api.post('/workspaces', body)
 
       if (!isAddingWorkspace) {
@@ -167,6 +208,8 @@ export default function Register() {
     && slugStatus !== SLUG_STATUS.taken
     && slugStatus !== SLUG_STATUS.checking
     && slugStatus !== SLUG_STATUS.invalid
+    && invCodeStatus !== INV_CODE_STATUS.checking
+    && invCodeStatus !== INV_CODE_STATUS.invalid
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 px-6 py-12">
@@ -318,6 +361,35 @@ export default function Register() {
               </label>
             </>
           )}
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+              Código de invitación <span className="text-gray-400 font-normal">(opcional)</span>
+            </label>
+            <input
+              type="text"
+              value={invitationCode}
+              onChange={e => setInvitationCode(e.target.value.toUpperCase())}
+              placeholder="Ej: BIENVENIDA20"
+              className={`w-full border rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:border-transparent transition-shadow dark:bg-gray-700 dark:text-gray-100 dark:placeholder-gray-500 ${
+                invCodeStatus === INV_CODE_STATUS.invalid ? 'border-red-400 focus:ring-red-400' :
+                invCodeStatus === INV_CODE_STATUS.valid   ? 'border-green-400 focus:ring-green-400' :
+                'border-gray-300 dark:border-gray-600 focus:ring-primary-500'
+              }`}
+            />
+            {invCodeStatus === INV_CODE_STATUS.checking && (
+              <p className="text-xs text-gray-400 mt-1 flex items-center gap-1">
+                <span className="inline-block w-3 h-3 border border-gray-400 border-t-transparent rounded-full animate-spin" />
+                Verificando código…
+              </p>
+            )}
+            {invCodeStatus === INV_CODE_STATUS.valid && (
+              <p className="text-xs text-green-600 dark:text-green-400 mt-1">Código válido: {invCodeMessage}</p>
+            )}
+            {invCodeStatus === INV_CODE_STATUS.invalid && (
+              <p className="text-xs text-red-500 mt-1">{invCodeMessage}</p>
+            )}
+          </div>
 
           {error && (
             <div className="bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 text-sm rounded-xl px-4 py-3">
