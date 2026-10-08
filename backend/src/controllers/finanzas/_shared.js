@@ -8,6 +8,20 @@ function businessError(status, message) {
 }
 
 /**
+ * Fechas "solo día" (YYYY-MM-DD) → mediodía UTC, mismo patrón que
+ * controllers/ventas/leads.controller.js `parseDate` — evita que se corran de
+ * día al guardarse/filtrarse en timezone ART (UTC-3), que llevaría una
+ * medianoche UTC al día anterior. `undefined` = valor inválido (el caller
+ * decide si eso es un 400).
+ */
+function parseDate(v) {
+  if (v == null || v === '') return null
+  const s = String(v)
+  const d = /^\d{4}-\d{2}-\d{2}$/.test(s) ? new Date(`${s}T12:00:00Z`) : new Date(s)
+  return isNaN(d.getTime()) ? undefined : d
+}
+
+/**
  * Normaliza un valor de monto/porcentaje a string para pasarle a un campo
  * Decimal de Prisma (acepta number o string, nunca aritmética propia). Lanza
  * 400 si no es un número finito.
@@ -132,4 +146,4 @@ async function resolveAndApplyTaxes(tx, { workspaceId, accountId, taxIds, baseAm
   return createdLines
 }
 
-module.exports = { businessError, toDecimalInput, trimmedOrNull, assertNoTaxCycle, resolveAndApplyTaxes }
+module.exports = { businessError, toDecimalInput, trimmedOrNull, assertNoTaxCycle, resolveAndApplyTaxes, parseDate }

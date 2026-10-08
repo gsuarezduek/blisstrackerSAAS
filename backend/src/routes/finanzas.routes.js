@@ -10,6 +10,7 @@ const items      = require('../controllers/finanzas/items.controller')
 const taxes      = require('../controllers/finanzas/taxes.controller')
 const movements  = require('../controllers/finanzas/movements.controller')
 const transfers  = require('../controllers/finanzas/transfers.controller')
+const audit      = require('../controllers/finanzas/audit.controller')
 
 // Todo el módulo Finanzas requiere: autenticación + workspace + acceso al
 // módulo (admin/owner o rol configurable, ver moduleAccess.js) + que el
@@ -51,10 +52,22 @@ router.post('/items',            items.createItem)
 router.patch('/items/:id',       items.updateItem)
 router.delete('/items/:id',      workspaceAdminOnly, items.deleteItem)
 
-// Carga de movimientos y transferencias (modal "+ Cargar", sección 4.7):
-// abierto a cualquiera con acceso al módulo — es la operación del día a día,
-// no "Configuración".
-router.post('/movements',        movements.createMovement)
+// Carga de movimientos y transferencias (modal "+ Cargar", sección 4.7) +
+// Ingresos/Egresos con filtros + Editar movimiento (4.1/4.9): abierto a
+// cualquiera con acceso al módulo — es la operación del día a día, no
+// "Configuración". Los movimientos generados automáticamente por un impuesto
+// (sourceMovementId != null) no son editables/eliminables directo, eso lo
+// valida el controller (409), no el router.
+router.get('/movements',             movements.listMovements)
+router.get('/movements/:id',         movements.getMovement)
+router.post('/movements',            movements.createMovement)
+router.patch('/movements/:id',       movements.updateMovement)
+router.delete('/movements/:id',      movements.deleteMovement)
+router.post('/movements/:id/restore', movements.restoreMovement)
+
 router.post('/transfers',        transfers.createTransfer)
+
+// Historial genérico (sección 4.9) — cualquiera con acceso al módulo.
+router.get('/audit',             audit.listAudit)
 
 module.exports = router

@@ -2,7 +2,7 @@ const prisma = require('../../lib/prisma')
 const { logFinanceAudit } = require('../../lib/financeAudit')
 const { toDecimal } = require('../../lib/financeMoney')
 const { isValidTransferReason } = require('../../lib/financeCatalog')
-const { resolveAndApplyTaxes } = require('./_shared')
+const { resolveAndApplyTaxes, parseDate } = require('./_shared')
 
 const TRANSFER_INCLUDE = {
   fromAccount: { select: { id: true, name: true, currency: true } },
@@ -19,7 +19,8 @@ async function createTransfer(req, res, next) {
     const { date, reason, fromAccountId, fromAmount, fromIsFund, toAccountId, toAmount, toIsFund, note, taxIds } = req.body
 
     if (!isValidTransferReason(reason)) return res.status(400).json({ error: 'Motivo inválido' })
-    if (!date) return res.status(400).json({ error: 'Fecha requerida' })
+    const parsedDate = parseDate(date)
+    if (!parsedDate) return res.status(400).json({ error: 'Fecha inválida' })
     if (!Number.isInteger(fromAccountId) || !Number.isInteger(toAccountId)) return res.status(400).json({ error: 'Cuentas requeridas' })
     // Misma cuenta solo tiene sentido como aporte/rescate (un lado "fondos", el
     // otro "disponible") — misma cuenta Y mismo lado (ambos disponible o ambos
@@ -55,7 +56,7 @@ async function createTransfer(req, res, next) {
     const transferId = await prisma.$transaction(async (tx) => {
       const transfer = await tx.financeTransfer.create({
         data: {
-          workspaceId, date: new Date(date), reason, fromAccountId, fromAmount: fromAmountDecimal.toString(), fromIsFund: !!fromIsFund,
+          workspaceId, date: parsedDate, reason, fromAccountId, fromAmount: fromAmountDecimal.toString(), fromIsFund: !!fromIsFund,
           toAccountId, toAmount: toAmountDecimal.toString(), toIsFund: !!toIsFund,
           exchangeRate: exchangeRate ? exchangeRate.toString() : null, note: note?.trim() || null, createdById: req.user.userId,
         },

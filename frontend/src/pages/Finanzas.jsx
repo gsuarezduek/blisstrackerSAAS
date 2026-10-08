@@ -9,6 +9,7 @@ import { Icon } from '../components/ui/Icon'
 import api from '../api/client'
 import FinanzasConfiguracion from '../components/finanzas/FinanzasConfiguracion'
 import LoadMovementModal from '../components/finanzas/LoadMovementModal'
+import MovementsTab from '../components/finanzas/MovementsTab'
 
 const TABS = [
   { id: 'ingresos',  label: 'Ingresos' },
@@ -63,9 +64,14 @@ export default function Finanzas() {
   const tab = VALID.has(searchParams.get('tab')) ? searchParams.get('tab') : 'ingresos'
   function setTab(id) { setSearchParams({ tab: id }, { replace: true }) }
 
+  // Fuerza que MovementsTab recargue su lista cuando se guarda algo desde el
+  // modal global "+ Cargar" (que vive acá, no dentro de la pestaña).
+  const [refreshKey, setRefreshKey] = useState(0)
+
   function handleMovementSaved() {
     setShowLoadModal(false)
     loadShared()
+    setRefreshKey(k => k + 1)
   }
 
   if (flagLoading) {
@@ -122,7 +128,17 @@ export default function Finanzas() {
               </select>
             </div>
 
-            <ComingSoon label={TABS.find(t => t.id === tab)?.label} />
+            {(tab === 'ingresos' || tab === 'egresos') ? (
+              <MovementsTab
+                key={tab}
+                type={tab === 'ingresos' ? 'income' : 'expense'}
+                accounts={accounts} categories={categories} items={items} taxes={taxes}
+                onDataChange={loadShared}
+                refreshKey={refreshKey}
+              />
+            ) : (
+              <ComingSoon label={TABS.find(t => t.id === tab)?.label} />
+            )}
           </>
         )}
 
