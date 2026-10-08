@@ -20,6 +20,7 @@
  * flag `demoSeeded = true` para no recrearlo automáticamente.
  */
 const prisma = require('../lib/prisma')
+const { seedFinanceCategories } = require('./financeSeed.service')
 
 function daysAgo(d) {
   return new Date(Date.now() - d * 24 * 60 * 60 * 1000)
@@ -58,6 +59,11 @@ async function seedDefaults(workspaceId, tx = prisma) {
   if (!existingRole) {
     await tx.userRole.create({ data: { workspaceId, name: 'PROJECT_MANAGER', label: 'Project Manager' } })
   }
+
+  // Categorías default de Finanzas (ver financeSeed.service.js) — mismo criterio
+  // que Service/UserRole arriba: sin huella visible mientras el flag `finanzas`
+  // no esté habilitado, así que se siembra siempre.
+  await seedFinanceCategories(workspaceId, tx)
 }
 
 async function seedWorkspace(workspaceId, ownerId, tx = prisma) {

@@ -47,6 +47,7 @@ model Workspace {
   projectFilesMaxMbOverride      Int?
   contentStorageMaxMbOverride    Int?
   chatAttachmentMaxMbOverride    Int?
+  financeAttachmentsMaxMbOverride Int? // ídem para FinanceAttachment (comprobantes/facturas de Finanzas)
   attendanceTrackingEnabled     Boolean   @default(true) // Seguimiento de horarios y puntualidad en RRHH. OFF = oculta puntualidad/tardanzas (ej: equipos full freelance sin horarios)
   productivityEnabled           Boolean   @default(true) // Muestra la sección de Productividad (nav + página) para los admins
   productivityDigestEnabled     Boolean   @default(true) // Aviso semanal por mail a admins/owners con las personas en alerta de Productividad
@@ -217,6 +218,25 @@ model Workspace {
   calendarEventParticipants  CalendarEventParticipant[]
   calendarEventRecurrences   CalendarEventRecurrence[]
   googleCalendarConnections  GoogleCalendarConnection[]
+  financeAccounts            FinanceAccount[]
+  financeTaxes               FinanceTax[]
+  financeAccountTaxes        FinanceAccountTax[]
+  financeCategories          FinanceCategory[]
+  financeItems               FinanceItem[]
+  financeMovements           FinanceMovement[]
+  financeMovementTaxes       FinanceMovementTax[]
+  financeChecks              FinanceCheck[]
+  financeTransfers           FinanceTransfer[]
+  financeFundValuations      FinanceFundValuation[]
+  financeInvoices            FinanceInvoice[]
+  financeAttachments         FinanceAttachment[]
+  financeExtras              FinanceExtra[]
+  financeExtraPayments       FinanceExtraPayment[]
+  financeNextActions         FinanceNextAction[]
+  financeTasks               FinanceTask[]
+  financeWorkspaceNote       FinanceWorkspaceNote?
+  financeAiSummary           FinanceAiSummary?
+  financeAuditLogs           FinanceAuditLog[]
 
   @@index([slug])
 }
@@ -439,6 +459,27 @@ model User {
   calendarEventRecurrencesOrganized CalendarEventRecurrence[] @relation("CalendarEventRecurrenceOrganizer")
   googleCalendarConnections      GoogleCalendarConnection[]
   invitationCodesCreated         InvitationCode[]
+  financeAccountsCreated         FinanceAccount[]            @relation("FinanceAccountCreatedBy")
+  financeMovementsCreated        FinanceMovement[]           @relation("FinanceMovementCreatedBy")
+  financeMovementsDeleted        FinanceMovement[]           @relation("FinanceMovementDeletedBy")
+  financeChecksDeleted           FinanceCheck[]              @relation("FinanceCheckDeletedBy")
+  financeTransfersCreated        FinanceTransfer[]           @relation("FinanceTransferCreatedBy")
+  financeTransfersDeleted        FinanceTransfer[]           @relation("FinanceTransferDeletedBy")
+  financeFundValuationsCreated   FinanceFundValuation[]      @relation("FinanceFundValuationCreatedBy")
+  financeFundValuationsDeleted   FinanceFundValuation[]      @relation("FinanceFundValuationDeletedBy")
+  financeInvoicesCreated         FinanceInvoice[]            @relation("FinanceInvoiceCreatedBy")
+  financeInvoicesDeleted         FinanceInvoice[]            @relation("FinanceInvoiceDeletedBy")
+  financeAttachmentsUploaded     FinanceAttachment[]         @relation("FinanceAttachmentUploadedBy")
+  financeAttachmentsDeleted      FinanceAttachment[]         @relation("FinanceAttachmentDeletedBy")
+  financeExtrasCreated           FinanceExtra[]              @relation("FinanceExtraCreatedBy")
+  financeExtrasDeleted           FinanceExtra[]              @relation("FinanceExtraDeletedBy")
+  financeNextActionsCreated      FinanceNextAction[]         @relation("FinanceNextActionCreatedBy")
+  financeNextActionsDeleted      FinanceNextAction[]         @relation("FinanceNextActionDeletedBy")
+  financeTasksDone               FinanceTask[]               @relation("FinanceTaskDoneBy")
+  financeTasksCreated            FinanceTask[]               @relation("FinanceTaskCreatedBy")
+  financeTasksDeleted            FinanceTask[]               @relation("FinanceTaskDeletedBy")
+  financeWorkspaceNotesUpdated   FinanceWorkspaceNote[]
+  financeAuditLogs               FinanceAuditLog[]
 }
 
 model UserLogin {
@@ -624,6 +665,7 @@ model Project {
   deletedTaskNotices     DeletedTaskNotice[]
   calendarEvents         CalendarEvent[]
   calendarEventRecurrences CalendarEventRecurrence[]
+  financeItems           FinanceItem[]
 
   @@unique([workspaceId, name])
   @@index([workspaceId])
@@ -4362,4 +4404,519 @@ model DeviceToken {
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@index([userId, workspaceId])
+}
+
+// ─── FINANZAS ────────────────────────────────────────────────────────────────
+// Módulo de finanzas internas de la agencia (ingresos/egresos/saldos/cuenta
+// corriente de clientes). Workspace-level, independiente del flag `ventas` —
+// por eso el "cliente" de Finanzas (FinanceItem.tracksAccount) se vincula
+// opcionalmente a un Project (ver FinanceItem.projectId), no a Company/Contact
+// del CRM. Montos en Decimal (nunca Float) para precisión exacta con BTC.
+// Catálogos de configuración (Account/Category/Item/Tax) usan `active` como
+// ciclo de vida (no se pueden borrar con movimientos, solo desactivar).
+// Entidades transaccionales usan soft-delete (`deletedAt`/`deletedById`, mismo
+// patrón que ProjectFile) sin cron de purga — se pueden restaurar siempre.
+// Ver docs/claude/finanzas.md para reglas de negocio (impuestos, cheques,
+// cuenta corriente de clientes, tareas generadas por reglas).
+
+model FinanceAccount {
+  id             Int       @id @default(autoincrement())
+  workspaceId    Int
+  workspace      Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  name           String
+  type           String // 'bank' | 'wallet' | 'cash' | 'crypto_wallet'
+  currency       String // 'ARS' | 'USD' | 'BTC' — abierto a futuro, no enum
+  initialBalance Decimal   @db.Decimal(20, 8) @default(0) // se carga una sola vez (regla de negocio en el controller, no constraint de DB)
+  hasInvestments Boolean   @default(false)
+  active         Boolean   @default(true) // no se borra si tiene movimientos: se desactiva
+  createdById    Int?
+  createdBy      User?     @relation("FinanceAccountCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  taxes          FinanceAccountTax[]
+  movements      FinanceMovement[]
+  transfersFrom  FinanceTransfer[]      @relation("TransferFromAccount")
+  transfersTo    FinanceTransfer[]      @relation("TransferToAccount")
+  fundValuations FinanceFundValuation[]
+  checksCredited FinanceCheck[]         @relation("CheckCreditedAccount")
+
+  @@index([workspaceId])
+  @@index([workspaceId, active])
+}
+
+// Catálogo de impuestos. `baseTaxId` permite un impuesto calculado sobre OTRO
+// impuesto (ej. "IVA s/ comisión" con base = "Comisión transferencia") — se
+// valida ausencia de ciclos (y un tope de 5 niveles) en el controller al
+// crear/editar. Nunca se aplica solo: ver FinanceAccountTax.
+model FinanceTax {
+  id          Int       @id @default(autoincrement())
+  workspaceId Int
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  name        String
+  percentage  Decimal   @db.Decimal(6, 3)
+  appliesTo   String // 'income' | 'expense' | 'both'
+  baseType    String // 'movement' | 'other_tax'
+  baseTaxId   Int?
+  baseTax     FinanceTax?  @relation("TaxBase", fields: [baseTaxId], references: [id], onDelete: SetNull)
+  dependents  FinanceTax[] @relation("TaxBase")
+  active      Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  accounts      FinanceAccountTax[]
+  movementLines FinanceMovementTax[]
+
+  @@index([workspaceId])
+  @@index([workspaceId, active])
+}
+
+// N a N: qué impuestos se OFRECEN al cargar un movimiento en esta cuenta.
+// Toggle de configuración puro (borrado físico al destildar) — el histórico de
+// lo efectivamente aplicado queda en FinanceMovementTax, que copia nombre/%.
+model FinanceAccountTax {
+  id          Int            @id @default(autoincrement())
+  workspaceId Int
+  workspace   Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  accountId   Int
+  account     FinanceAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  taxId       Int
+  tax         FinanceTax     @relation(fields: [taxId], references: [id], onDelete: Cascade)
+  createdAt   DateTime       @default(now())
+
+  @@unique([accountId, taxId])
+  @@index([workspaceId])
+}
+
+model FinanceCategory {
+  id          Int       @id @default(autoincrement())
+  workspaceId Int
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  name        String
+  type        String // 'income' | 'expense'
+  active      Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  items     FinanceItem[]
+  movements FinanceMovement[]
+
+  @@index([workspaceId])
+  @@index([workspaceId, type, active])
+}
+
+// Item = contraparte de un movimiento (proveedor, concepto genérico, O cliente
+// si tracksAccount=true). Los campos de contacto/CUIT/servicio solo aplican a
+// clientes. `projectId` es un link opcional de navegación hacia el Project que
+// representa a ese cliente en el resto del sistema — no hay sync en vivo.
+model FinanceItem {
+  id                Int       @id @default(autoincrement())
+  workspaceId       Int
+  workspace         Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  name              String
+  categoryId        Int
+  category          FinanceCategory @relation(fields: [categoryId], references: [id])
+  tracksAccount     Boolean   @default(false) // = "es cliente" (cuenta corriente)
+  active            Boolean   @default(true)
+
+  // Solo relevantes si tracksAccount = true
+  contactName       String?
+  phone             String?
+  email             String?
+  taxId             String? // CUIT
+  contractedService String?
+  notes             String? // autoguardado (AutosaveNotes)
+
+  projectId Int?
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  movements   FinanceMovement[]
+  invoices    FinanceInvoice[]
+  extras      FinanceExtra[]
+  nextActions FinanceNextAction[]
+
+  @@index([workspaceId])
+  @@index([workspaceId, active])
+  @@index([workspaceId, tracksAccount])
+  @@index([categoryId])
+  @@index([projectId])
+}
+
+model FinanceMovement {
+  id          Int       @id @default(autoincrement())
+  workspaceId Int
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  type        String // 'income' | 'expense'
+  date        DateTime
+  itemId      Int
+  item        FinanceItem     @relation(fields: [itemId], references: [id])
+  categoryId  Int
+  category    FinanceCategory @relation(fields: [categoryId], references: [id])
+  accountId   Int
+  account     FinanceAccount  @relation(fields: [accountId], references: [id])
+  amount      Decimal   @db.Decimal(20, 8)
+  note        String?
+
+  // Egreso hijo generado por un impuesto tildado en otro movimiento (categoría
+  // "Impuestos bancarios"). No editable directo — se recalcula/elimina al
+  // editar/eliminar el movimiento origen.
+  sourceMovementId Int?
+  sourceMovement   FinanceMovement?  @relation("MovementChildren", fields: [sourceMovementId], references: [id], onDelete: Cascade)
+  childMovements   FinanceMovement[] @relation("MovementChildren")
+
+  paymentMethod      String? // solo type='income': 'transfer' | 'check'
+  accountApplication String? // solo income + item.tracksAccount: 'invoice' | 'on_account' | 'no_effect'
+  invoiceId          Int?
+  invoice            FinanceInvoice? @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+
+  createdById Int?
+  createdBy   User?     @relation("FinanceMovementCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+  deletedById Int?
+  deletedBy   User?     @relation("FinanceMovementDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
+
+  taxes           FinanceMovementTax[] @relation("MovementTaxLines")
+  generatedForTax FinanceMovementTax?  @relation("TaxGeneratedMovement")
+  check           FinanceCheck?
+  extraPayment    FinanceExtraPayment?
+
+  @@index([workspaceId])
+  @@index([workspaceId, type, date])
+  @@index([workspaceId, accountId])
+  @@index([itemId])
+  @@index([categoryId])
+  @@index([sourceMovementId])
+  @@index([invoiceId])
+}
+
+// Impuesto efectivamente aplicado a UN movimiento o UNA transferencia (XOR,
+// validado en código). Snapshot de nombre/%/baseType al momento de tildarlo —
+// cambios posteriores al catálogo FinanceTax no afectan líneas ya cargadas.
+model FinanceMovementTax {
+  id          Int       @id @default(autoincrement())
+  workspaceId Int
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  movementId  Int?
+  movement    FinanceMovement? @relation("MovementTaxLines", fields: [movementId], references: [id], onDelete: Cascade)
+  transferId  Int?
+  transfer    FinanceTransfer? @relation(fields: [transferId], references: [id], onDelete: Cascade)
+  taxId       Int
+  tax         FinanceTax @relation(fields: [taxId], references: [id])
+  name        String // snapshot
+  percentage  Decimal   @db.Decimal(6, 3) // snapshot
+  baseType    String // snapshot: 'movement' | 'other_tax'
+
+  // Self-FK: la OTRA fila de este mismo movimiento/transferencia de la que se
+  // toma el monto base, cuando baseType='other_tax'.
+  baseTaxLineId Int?
+  baseTaxLine   FinanceMovementTax?  @relation("TaxLineBase", fields: [baseTaxLineId], references: [id], onDelete: SetNull)
+  dependents    FinanceMovementTax[] @relation("TaxLineBase")
+
+  baseAmount Decimal @db.Decimal(20, 8)
+  amount     Decimal @db.Decimal(20, 8)
+
+  generatedMovementId Int?             @unique
+  generatedMovement   FinanceMovement? @relation("TaxGeneratedMovement", fields: [generatedMovementId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+
+  @@index([workspaceId])
+  @@index([movementId])
+  @@index([transferId])
+}
+
+// Un ingreso cobrado con cheque: no suma al disponible ni genera impuestos
+// hasta acreditarse (ver movements.controller.js / checks.controller.js).
+model FinanceCheck {
+  id                      Int       @id @default(autoincrement())
+  workspaceId             Int
+  workspace               Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  movementId              Int       @unique
+  movement                FinanceMovement @relation(fields: [movementId], references: [id], onDelete: Cascade)
+  number                  String
+  issuingBank             String
+  estimatedCollectionDate DateTime
+  status                  String    @default("pending") // pending | credited | rejected
+  creditedAt              DateTime?
+  creditedAccountId       Int?
+  creditedAccount         FinanceAccount? @relation("CheckCreditedAccount", fields: [creditedAccountId], references: [id], onDelete: SetNull)
+  rejectedAt              DateTime?
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
+  deletedAt               DateTime?
+  deletedById             Int?
+  deletedBy               User?     @relation("FinanceCheckDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId])
+  @@index([workspaceId, status])
+}
+
+// Movimiento de dinero entre cuentas (o entre disponible y fondos de UNA
+// cuenta) — no cuenta como ingreso/egreso operativo. `fromIsFund`/`toIsFund`
+// permiten expresar tanto un aporte (disponible→fondos) como un rescate
+// (fondos→disponible) en cualquiera de los dos lados.
+model FinanceTransfer {
+  id            Int       @id @default(autoincrement())
+  workspaceId   Int
+  workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  date          DateTime
+  reason        String // 'buy_usd' | 'sell_usd' | 'fund_contribution' | 'fund_redemption' | 'account_transfer'
+  fromAccountId Int
+  fromAccount   FinanceAccount @relation("TransferFromAccount", fields: [fromAccountId], references: [id])
+  fromAmount    Decimal   @db.Decimal(20, 8)
+  fromIsFund    Boolean   @default(false)
+  toAccountId   Int
+  toAccount     FinanceAccount @relation("TransferToAccount", fields: [toAccountId], references: [id])
+  toAmount      Decimal   @db.Decimal(20, 8)
+  toIsFund      Boolean   @default(false)
+  exchangeRate  Decimal?  @db.Decimal(20, 8) // fromAmount / toAmount cuando difieren las monedas
+  note          String?
+  createdById   Int?
+  createdBy     User?     @relation("FinanceTransferCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  deletedAt     DateTime?
+  deletedById   Int?
+  deletedBy     User?     @relation("FinanceTransferDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
+
+  taxes FinanceMovementTax[]
+
+  @@index([workspaceId])
+  @@index([workspaceId, date])
+  @@index([fromAccountId])
+  @@index([toAccountId])
+}
+
+model FinanceFundValuation {
+  id           Int       @id @default(autoincrement())
+  workspaceId  Int
+  workspace    Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  accountId    Int
+  account      FinanceAccount @relation(fields: [accountId], references: [id])
+  date         DateTime
+  value        Decimal   @db.Decimal(20, 8)
+  periodResult Decimal?  @db.Decimal(20, 8) // snapshot: value - valorAnterior - aportes + rescates del período
+  createdById  Int?
+  createdBy    User?     @relation("FinanceFundValuationCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  deletedAt    DateTime?
+  deletedById  Int?
+  deletedBy    User?     @relation("FinanceFundValuationDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId])
+  @@index([accountId, date])
+}
+
+model FinanceInvoice {
+  id          Int       @id @default(autoincrement())
+  workspaceId Int
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  itemId      Int // debe tener tracksAccount = true
+  item        FinanceItem @relation(fields: [itemId], references: [id])
+  number      String
+  issueDate   DateTime
+  dueDate     DateTime
+  concept     String
+  amount      Decimal   @db.Decimal(20, 8)
+  currency    String    @default("ARS")
+  // Estado (pagada/parcial/vencida/pendiente) NO se persiste — se calcula a
+  // partir de los FinanceMovement.invoiceId vivos + dueDate.
+  createdById Int?
+  createdBy   User?     @relation("FinanceInvoiceCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+  deletedById Int?
+  deletedBy   User?     @relation("FinanceInvoiceDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
+
+  attachments FinanceAttachment[]
+  collections FinanceMovement[]
+
+  @@index([workspaceId])
+  @@index([itemId])
+  @@index([workspaceId, dueDate])
+}
+
+// Adjunto de factura — habla directo con objectStorage.service.js (R2), no con
+// ProjectFile (que exige un Project y está profundamente asumido así en el
+// resto del repo). Mismo patrón pending/ready que ProjectFile.
+model FinanceAttachment {
+  id           Int       @id @default(autoincrement())
+  workspaceId  Int
+  workspace    Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  invoiceId    Int
+  invoice      FinanceInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  name         String
+  mimeType     String?
+  objectKey    String? // key en R2: finance/<workspaceId>/<uuid>.<ext>
+  sizeBytes    Int?
+  status       String    @default("pending") // pending | ready
+  uploadedById Int?
+  uploadedBy   User?     @relation("FinanceAttachmentUploadedBy", fields: [uploadedById], references: [id], onDelete: SetNull)
+  createdAt    DateTime  @default(now())
+  confirmedAt  DateTime?
+  deletedAt    DateTime?
+  deletedById  Int?
+  deletedBy    User?     @relation("FinanceAttachmentDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId])
+  @@index([invoiceId])
+}
+
+model FinanceExtra {
+  id            Int       @id @default(autoincrement())
+  workspaceId   Int
+  workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  date          DateTime
+  itemId        Int
+  item          FinanceItem @relation(fields: [itemId], references: [id])
+  action        String
+  total         Decimal   @db.Decimal(20, 8)
+  companyAmount Decimal   @db.Decimal(20, 8)
+  teamAmount    Decimal   @db.Decimal(20, 8) // = total - companyAmount al guardar
+  status        String    @default("in_progress") // in_progress | finished | collected
+  teamPaid      Boolean   @default(false)
+  notes         String?
+  createdById   Int?
+  createdBy     User?     @relation("FinanceExtraCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  deletedAt     DateTime?
+  deletedById   Int?
+  deletedBy     User?     @relation("FinanceExtraDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
+
+  payments FinanceExtraPayment[]
+
+  @@index([workspaceId])
+  @@index([itemId])
+  @@index([workspaceId, status])
+}
+
+// Sin soft-delete propio: editar el split de un Extra reemplaza las filas sin
+// movementId dentro de una transacción (ver lib/financeAudit.js para el log
+// del cambio contra el FinanceExtra padre). Las cuotas ya cobradas (con
+// movementId) quedan fijas.
+model FinanceExtraPayment {
+  id          Int       @id @default(autoincrement())
+  workspaceId Int
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  extraId     Int
+  extra       FinanceExtra @relation(fields: [extraId], references: [id], onDelete: Cascade)
+  number      Int
+  percentage  Decimal   @db.Decimal(6, 3)
+  amount      Decimal   @db.Decimal(20, 8)
+  movementId  Int?      @unique
+  movement    FinanceMovement? @relation(fields: [movementId], references: [id], onDelete: SetNull)
+  createdAt   DateTime  @default(now())
+
+  @@unique([extraId, number])
+  @@index([workspaceId])
+  @@index([movementId])
+}
+
+model FinanceNextAction {
+  id               Int       @id @default(autoincrement())
+  workspaceId      Int
+  workspace        Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  itemId           Int
+  item             FinanceItem @relation(fields: [itemId], references: [id])
+  text             String
+  date             DateTime
+  recurrence       String    @default("once") // once | monthly | yearly
+  completed        Boolean   @default(false)
+  completedAt      DateTime?
+  previousActionId Int? // trazabilidad: la ocurrencia anterior que generó esta
+  previousAction   FinanceNextAction?  @relation("NextActionChain", fields: [previousActionId], references: [id], onDelete: SetNull)
+  nextOccurrences  FinanceNextAction[] @relation("NextActionChain")
+  createdById      Int?
+  createdBy        User?     @relation("FinanceNextActionCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  deletedAt        DateTime?
+  deletedById      Int?
+  deletedBy        User?     @relation("FinanceNextActionDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId])
+  @@index([itemId])
+  @@index([workspaceId, completed, date])
+}
+
+// Tareas de la pestaña Pendientes: manuales o generadas por reglas (motor
+// on-demand, ver docs/claude/finanzas.md). `origin`+`originId` es polimórfico
+// sin FK de DB (apunta a Check/Invoice/Extra/NextAction según `origin`). La
+// unicidad (workspaceId, origin, originId) para kind='generated' se agrega a
+// mano en el SQL de la migración (Prisma no soporta índices únicos parciales
+// en el schema) — ver migración de la Etapa 1.
+model FinanceTask {
+  id             Int       @id @default(autoincrement())
+  workspaceId    Int
+  workspace      Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  kind           String // 'manual' | 'generated'
+  origin         String? // 'check' | 'invoice' | 'extra' | 'next_action' | 'check_rejected' | 'manual'
+  originId       Int?
+  title          String
+  detail         String?
+  amount         Decimal?  @db.Decimal(20, 8)
+  date           DateTime?
+  status         String    @default("open") // open | done | postponed
+  postponedUntil DateTime?
+  doneAt         DateTime?
+  doneById       Int?
+  doneBy         User?     @relation("FinanceTaskDoneBy", fields: [doneById], references: [id], onDelete: SetNull)
+  createdById    Int? // solo kind='manual'
+  createdBy      User?     @relation("FinanceTaskCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+  deletedById    Int?
+  deletedBy      User?     @relation("FinanceTaskDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, status])
+  @@index([workspaceId, kind])
+  @@index([origin, originId])
+}
+
+// Nota libre de la pestaña Pendientes — 1 por workspace, autoguardado.
+model FinanceWorkspaceNote {
+  id          Int       @id @default(autoincrement())
+  workspaceId Int       @unique
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  content     String?
+  updatedById Int?
+  updatedBy   User?     @relation(fields: [updatedById], references: [id], onDelete: SetNull)
+  updatedAt   DateTime  @updatedAt
+}
+
+// Cache del "Resumen de la semana" generado por IA — 1 por workspace.
+model FinanceAiSummary {
+  id          Int       @id @default(autoincrement())
+  workspaceId Int       @unique
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  content     String
+  generatedAt DateTime
+}
+
+// Auditoría genérica campo-a-campo para todas las entidades editables de
+// Finanzas (ver lib/financeAudit.js). `changes` solo se llena en 'update'.
+model FinanceAuditLog {
+  id          Int       @id @default(autoincrement())
+  workspaceId Int
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  entityType  String // catálogo en financeCatalog.js
+  entityId    Int
+  action      String // 'create' | 'update' | 'delete' | 'restore'
+  summary     String // línea legible, ej: "Cambió el monto: $ 1.120.000 → $ 1.200.000"
+  changes     Json? // [{ field, label, oldValue, newValue }]
+  userId      Int?
+  user        User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  createdAt   DateTime  @default(now())
+
+  @@index([workspaceId, entityType, entityId, createdAt])
+  @@index([workspaceId, createdAt])
 }

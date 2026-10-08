@@ -1,4 +1,4 @@
-import { ChartColumn, Compass, Handshake, Trophy, CalendarDays, Users, Puzzle } from 'lucide-react'
+import { ChartColumn, Compass, Handshake, Trophy, CalendarDays, Users, Puzzle, Landmark } from 'lucide-react'
 
 /**
  * Catálogo de módulos opcionales (feature flags que el workspace puede prender/apagar).
@@ -44,6 +44,12 @@ export const MODULE_CATALOG = {
     label: 'RRHH',
     detail: 'Legajos, ingresos, licencias, vacaciones (con acumulación automática configurable), y beneficios de horas libres / días home. Configurable por rol — a diferencia de EOS/Gamification, incluye datos personales sensibles (DNI, salud, cuenta bancaria) para quien tenga acceso.',
     tourBody: 'En "RRHH" gestionás legajos, licencias, vacaciones y los beneficios de horas libres / días home del equipo.',
+  },
+  finanzas: {
+    icon: Landmark,
+    label: 'Finanzas',
+    detail: 'Finanzas internas de la agencia: ingresos, egresos, saldos por cuenta/moneda, cuenta corriente de clientes (facturas y cobros), extras puntuales y un tablero de pendientes asistido por IA. Configurable por rol — dato sensible, igual que Ventas/RRHH; la Configuración del módulo es admin/owner siempre.',
+    tourBody: 'En "Finanzas" cargás ingresos/egresos, ves saldos por cuenta y la cuenta corriente de tus clientes.',
   },
 }
 

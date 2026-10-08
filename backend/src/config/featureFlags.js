@@ -51,6 +51,11 @@ const FEATURE_FLAGS = [
     name: 'Calendario',
     description: 'Disponibilidad del equipo: horario laboral por persona, tareas con hora que bloquean franjas, reuniones agendadas que requieren aceptación de los invitados y filtro de huecos comunes entre varias personas.',
   },
+  {
+    key: 'finanzas',
+    name: 'Sección Finanzas',
+    description: 'Finanzas internas de la agencia: ingresos, egresos, saldos por cuenta/moneda, cuenta corriente de clientes (facturas y cobros), extras puntuales y un tablero de pendientes asistido por IA. Acceden admins y los roles configurables (Admin → Equipo); la Configuración del módulo (cuentas/categorías/items/impuestos) es admin/owner siempre.',
+  },
 ]
 
 module.exports = { FEATURE_FLAGS }

@@ -152,6 +152,7 @@ export default function Navbar() {
   const { enabled: contenidoEnabled } = useFeatureFlag('contenido')
   const { enabled: rrhhEnabled }      = useFeatureFlag('rrhh')
   const { enabled: calendarioEnabled } = useFeatureFlag('calendario')
+  const { enabled: finanzasEnabled }  = useFeatureFlag('finanzas')
 
   // ── Links de navegación principal ────────────────────────────────────────
   // FUENTE ÚNICA: cualquier cambio aquí aplica en desktop Y mobile automáticamente.
@@ -184,6 +185,7 @@ export default function Navbar() {
     ...(contenidoEnabled && user?.moduleAccess?.contenido ? [{ to: '/contenido', label: 'Contenido' }] : []),
     ...(rrhhEnabled && user?.moduleAccess?.rrhh ? [{ to: '/admin/rrhh', label: 'RRHH' }] : []),
     ...(calendarioEnabled && user?.moduleAccess?.calendario ? [{ to: '/calendario', label: 'Calendario' }] : []),
+    ...(finanzasEnabled && user?.moduleAccess?.finanzas ? [{ to: '/finanzas', label: 'Finanzas' }] : []),
   ]
 
   // ── Sublinks de Administración ────────────────────────────────────────────

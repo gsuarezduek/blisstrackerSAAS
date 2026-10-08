@@ -102,6 +102,7 @@ const Gamification     = lazyWithReload(() => import('./pages/Gamification'))
 const Ventas           = lazyWithReload(() => import('./pages/Ventas'))
 const Contenido        = lazyWithReload(() => import('./pages/Contenido'))
 const Calendario       = lazyWithReload(() => import('./pages/Calendario'))
+const Finanzas         = lazyWithReload(() => import('./pages/Finanzas'))
 const LegalPage        = lazyWithReload(() => import('./pages/TermsPage'))
 const ReportOrClientPortal = lazyWithReload(() => import('./pages/ReportOrClientPortal'))
 const ReportPrint      = lazyWithReload(() => import('./pages/ReportPrint'))
@@ -157,6 +158,18 @@ function RRHHRoute({ children }) {
   return children
 }
 
+// Módulo Finanzas: acceden admins/owners y el rol configurable (user.moduleAccess.finanzas).
+// Mismo criterio que RRHH (dato sensible, opt-in explícito por rol) — a
+// diferencia de EOS/Gamification.
+function FinanceRoute({ children }) {
+  const { user, loading, workspaceSuspended } = useAuth()
+  if (loading) return <LoadingSpinner size="lg" fullPage />
+  if (workspaceSuspended) return <WorkspaceSuspendedScreen />
+  if (!user) return <Navigate to="/login" replace />
+  if (!user.isAdmin && !user.moduleAccess?.finanzas) return <Navigate to="/" replace />
+  return children
+}
+
 function RootPage() {
   if (!isWorkspaceSubdomain()) return <Landing />
   return <PrivateRoute><Dashboard /></PrivateRoute>
@@ -208,6 +221,7 @@ export default function App() {
           <Route path="/marketing"  element={<PrivateRoute><Marketing /></PrivateRoute>} />
           <Route path="/contenido"  element={<PrivateRoute><Contenido /></PrivateRoute>} />
           <Route path="/calendario" element={<PrivateRoute><Calendario /></PrivateRoute>} />
+          <Route path="/finanzas"   element={<FinanceRoute><Finanzas /></FinanceRoute>} />
           <Route path="/billing"    element={<PrivateRoute><Billing  /></PrivateRoute>} />
           <Route path="/reports"             element={<AdminRoute><Reports      /></AdminRoute>} />
           <Route path="/superadmin" element={<SuperAdminRoute><SuperAdmin /></SuperAdminRoute>} />

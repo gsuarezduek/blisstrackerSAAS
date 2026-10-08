@@ -23,7 +23,7 @@
  * poder abrirse a otros roles por error de configuración.
  */
 
-const MODULE_KEYS = ['ventas', 'marketing', 'contenido', 'rrhh', 'calendario']
+const MODULE_KEYS = ['ventas', 'marketing', 'contenido', 'rrhh', 'calendario', 'finanzas']
 
 // allMembers por defecto de cada módulo cuando el workspace no configuró nada.
 const MODULE_ACCESS_DEFAULTS = {
@@ -34,6 +34,10 @@ const MODULE_ACCESS_DEFAULTS = {
   // Todos necesitan ver/agendar su propia disponibilidad — mismo default que
   // marketing/contenido, no admin-only.
   calendario:   { allMembers: true },
+  // Dato sensible (dinero), mismo criterio que ventas/rrhh — opt-in explícito
+  // por rol. La Configuración del módulo (cuentas/categorías/items/impuestos)
+  // es admin/owner siempre, sin importar esta config (ver finanzas.routes.js).
+  finanzas:     { allMembers: false },
 }
 
 /**

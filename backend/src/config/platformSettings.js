@@ -362,6 +362,16 @@ const PLATFORM_SETTINGS = [
     help:    'Las fotos/documentos adjuntos a mensajes del chat interno se borran —primero de R2, después la fila— pasados estos días desde que se subieron. El mensaje en sí queda (solo desaparece el adjunto). Se aplica en la limpieza semanal (domingos 03:00 ART), así que un adjunto puede vivir hasta ~6 días más que el valor configurado.',
   },
   {
+    key:     'financeAttachmentsMaxMbPerWorkspace',
+    type:    'integer',
+    default: 2048,
+    min:     0,
+    max:     1_000_000,
+    group:   'operational',
+    label:   'Storage de adjuntos de Finanzas por workspace (MB)',
+    help:    'Tope de bytes acumulados en FinanceAttachment (comprobantes/facturas adjuntos a Finanzas) por workspace. Se chequea al pedir la URL de subida. 0 = ilimitado. Cuota independiente de Archivos/Contenido/Chat — default más bajo porque son documentos livianos (PDF/imágenes de facturas), no media pesado.',
+  },
+  {
     key:     'whatsappBotDocumentMaxMb',
     type:    'integer',
     default: 10,
