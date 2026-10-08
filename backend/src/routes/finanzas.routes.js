@@ -8,6 +8,8 @@ const accounts   = require('../controllers/finanzas/accounts.controller')
 const categories = require('../controllers/finanzas/categories.controller')
 const items      = require('../controllers/finanzas/items.controller')
 const taxes      = require('../controllers/finanzas/taxes.controller')
+const movements  = require('../controllers/finanzas/movements.controller')
+const transfers  = require('../controllers/finanzas/transfers.controller')
 
 // Todo el módulo Finanzas requiere: autenticación + workspace + acceso al
 // módulo (admin/owner o rol configurable, ver moduleAccess.js) + que el
@@ -48,5 +50,11 @@ router.get('/items/:id',         items.getItem)
 router.post('/items',            items.createItem)
 router.patch('/items/:id',       items.updateItem)
 router.delete('/items/:id',      workspaceAdminOnly, items.deleteItem)
+
+// Carga de movimientos y transferencias (modal "+ Cargar", sección 4.7):
+// abierto a cualquiera con acceso al módulo — es la operación del día a día,
+// no "Configuración".
+router.post('/movements',        movements.createMovement)
+router.post('/transfers',        transfers.createTransfer)
 
 module.exports = router

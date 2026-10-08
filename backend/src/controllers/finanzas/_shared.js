@@ -1,5 +1,6 @@
 // Helpers compartidos por los controllers del módulo Finanzas.
 const { MAX_TAX_CHAIN_DEPTH } = require('../../lib/financeCatalog')
+const { toDecimal, computeTaxAmount } = require('../../lib/financeMoney')
 
 /** Error de negocio con status HTTP — mismo patrón que assertNoActiveTask (tasks/_shared.js). */
 function businessError(status, message) {
@@ -54,4 +55,81 @@ async function assertNoTaxCycle(tx, workspaceId, taxId, baseTaxId) {
   }
 }
 
-module.exports = { businessError, toDecimalInput, trimmedOrNull, assertNoTaxCycle }
+/**
+ * Resuelve los impuestos tildados (`taxIds`) sobre un movimiento o una
+ * transferencia (sección 3.2 del spec): valida que estén ofrecidos en la
+ * cuenta, valida que todo impuesto con base "other_tax" tenga su base también
+ * tildada (si no, 400 — no hay un estado "0 y deshabilitado" del lado
+ * backend, eso lo resuelve el frontend deshabilitando el checkbox), calcula
+ * en dos pasadas (primero base='movement', después base='other_tax' contra
+ * la línea hermana recién creada) y genera un egreso hijo en "Impuestos
+ * bancarios" por cada impuesto tildado.
+ *
+ * Alcance v1: soporta cadenas de hasta 2 niveles (un impuesto con base en
+ * OTRO que a su vez tenga base en el movimiento) — el catálogo permite
+ * encadenar hasta 5 a nivel de configuración (ver MAX_TAX_CHAIN_DEPTH), pero
+ * aplicar una cadena de 3+ niveles a un movimiento real no está soportado
+ * todavía (caso de uso no visto en la práctica).
+ *
+ * @param {import('@prisma/client').Prisma.TransactionClient} tx
+ * @param {{ workspaceId: number, accountId: number, taxIds: number[], baseAmount: import('@prisma/client').Prisma.Decimal, currency: string, date: Date, itemId: number|null, movementId?: number, transferId?: number }} params
+ * @returns {Promise<Array>} las filas FinanceMovementTax creadas
+ */
+async function resolveAndApplyTaxes(tx, { workspaceId, accountId, taxIds, baseAmount, currency, date, itemId, movementId, transferId }) {
+  const uniqueIds = [...new Set(taxIds)]
+  if (uniqueIds.length === 0) return []
+
+  // FinanceAccountTax es solo el set OFRECIDO por default (los checkboxes que
+  // aparecen ya listados al elegir la cuenta) — "+ Agregar otro impuesto" en
+  // el modal permite tildar cualquier otro impuesto del catálogo del
+  // workspace para esta carga puntual, así que acá solo se valida que el id
+  // exista en el workspace, no que esté en FinanceAccountTax.
+  const taxRows = await tx.financeTax.findMany({ where: { id: { in: uniqueIds }, workspaceId } })
+  if (taxRows.length !== uniqueIds.length) throw businessError(400, 'Alguno de los impuestos elegidos no existe en este workspace')
+  const tiltedSet = new Set(uniqueIds)
+  for (const t of taxRows) {
+    if (t.baseType === 'other_tax' && !tiltedSet.has(t.baseTaxId)) {
+      throw businessError(400, `No podés aplicar "${t.name}" sin aplicar también su impuesto base`)
+    }
+  }
+
+  const bankTaxCategory = await tx.financeCategory.findFirst({
+    where: { workspaceId, type: 'expense', name: { equals: 'Impuestos bancarios', mode: 'insensitive' } },
+  })
+  if (!bankTaxCategory) throw businessError(400, 'No se encontró la categoría "Impuestos bancarios" — recreala en Configuración.')
+
+  const createdLines = []
+  const resolvedByTaxId = new Map() // taxId -> { lineId, amount: Decimal }
+
+  async function applyOne(t, baseAmountDecimal, baseTaxLineId) {
+    const amount = computeTaxAmount(baseAmountDecimal, t.percentage, currency)
+    const childMovement = await tx.financeMovement.create({
+      data: {
+        workspaceId, type: 'expense', date, itemId: itemId ?? null, categoryId: bankTaxCategory.id, accountId,
+        amount: amount.toString(), sourceMovementId: movementId ?? null,
+      },
+    })
+    const line = await tx.financeMovementTax.create({
+      data: {
+        workspaceId, movementId: movementId ?? null, transferId: transferId ?? null, taxId: t.id, name: t.name,
+        percentage: t.percentage, baseType: t.baseType, baseTaxLineId: baseTaxLineId ?? null,
+        baseAmount: baseAmountDecimal.toString(), amount: amount.toString(), generatedMovementId: childMovement.id,
+      },
+    })
+    resolvedByTaxId.set(t.id, { lineId: line.id, amount })
+    createdLines.push(line)
+  }
+
+  for (const t of taxRows.filter(t => t.baseType === 'movement')) {
+    await applyOne(t, toDecimal(baseAmount), null)
+  }
+  for (const t of taxRows.filter(t => t.baseType === 'other_tax')) {
+    const base = resolvedByTaxId.get(t.baseTaxId)
+    if (!base) throw businessError(400, `No se pudo resolver la base de "${t.name}" (cadenas de más de 2 niveles no soportadas al cargar un movimiento)`)
+    await applyOne(t, base.amount, base.lineId)
+  }
+
+  return createdLines
+}
+
+module.exports = { businessError, toDecimalInput, trimmedOrNull, assertNoTaxCycle, resolveAndApplyTaxes }

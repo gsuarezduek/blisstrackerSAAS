@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import Navbar from '../components/Navbar'
 import LoadingSpinner from '../components/LoadingSpinner'
@@ -6,7 +6,9 @@ import { useAuth } from '../context/AuthContext'
 import { useFeatureFlag } from '../hooks/useFeatureFlag'
 import { Lock } from 'lucide-react'
 import { Icon } from '../components/ui/Icon'
+import api from '../api/client'
 import FinanzasConfiguracion from '../components/finanzas/FinanzasConfiguracion'
+import LoadMovementModal from '../components/finanzas/LoadMovementModal'
 
 const TABS = [
   { id: 'ingresos',  label: 'Ingresos' },
@@ -33,9 +35,38 @@ export default function Finanzas() {
   const { enabled, loading: flagLoading } = useFeatureFlag('finanzas')
   const [searchParams, setSearchParams] = useSearchParams()
   const [showConfig, setShowConfig] = useState(false)
+  const [showLoadModal, setShowLoadModal] = useState(false)
+
+  // Datos compartidos por el modal "+ Cargar" (y, en etapas siguientes, por
+  // las pestañas Ingresos/Egresos/Saldos) — se cargan una vez acá arriba,
+  // mismo patrón que `loadShared` en pages/Ventas.jsx.
+  const [accounts, setAccounts] = useState([])
+  const [categories, setCategories] = useState([])
+  const [items, setItems] = useState([])
+  const [taxes, setTaxes] = useState([])
+
+  const loadShared = useCallback(async () => {
+    const [a, c, i, t] = await Promise.all([
+      api.get('/finanzas/accounts'),
+      api.get('/finanzas/categories'),
+      api.get('/finanzas/items'),
+      api.get('/finanzas/taxes'),
+    ])
+    setAccounts(a.data)
+    setCategories(c.data)
+    setItems(i.data)
+    setTaxes(t.data)
+  }, [])
+
+  useEffect(() => { if (enabled) loadShared() }, [enabled, loadShared])
 
   const tab = VALID.has(searchParams.get('tab')) ? searchParams.get('tab') : 'ingresos'
   function setTab(id) { setSearchParams({ tab: id }, { replace: true }) }
+
+  function handleMovementSaved() {
+    setShowLoadModal(false)
+    loadShared()
+  }
 
   if (flagLoading) {
     return <div className="min-h-screen bg-gray-50 dark:bg-gray-900"><Navbar /><div className="py-20"><LoadingSpinner /></div></div>
@@ -73,7 +104,7 @@ export default function Finanzas() {
                 {user?.isAdmin && (
                   <button onClick={() => setShowConfig(true)} className="border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-xl px-4 py-2 text-sm font-medium">Configuración</button>
                 )}
-                <button disabled className="bg-primary-600 text-white font-semibold rounded-xl px-4 py-2 text-sm opacity-50 cursor-not-allowed" title="Se habilita en la Etapa 3">+ Cargar</button>
+                <button onClick={() => setShowLoadModal(true)} className="bg-primary-600 hover:bg-primary-700 text-white font-semibold rounded-xl px-4 py-2 text-sm transition-colors">+ Cargar</button>
               </div>
             </div>
 
@@ -93,6 +124,15 @@ export default function Finanzas() {
 
             <ComingSoon label={TABS.find(t => t.id === tab)?.label} />
           </>
+        )}
+
+        {showLoadModal && (
+          <LoadMovementModal
+            accounts={accounts} categories={categories} items={items} taxes={taxes}
+            defaultMode={tab === 'egresos' ? 'expense' : 'income'}
+            onClose={() => setShowLoadModal(false)}
+            onSaved={handleMovementSaved}
+          />
         )}
       </main>
     </div>

@@ -4551,8 +4551,15 @@ model FinanceMovement {
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   type        String // 'income' | 'expense'
   date        DateTime
-  itemId      Int
-  item        FinanceItem     @relation(fields: [itemId], references: [id])
+  // Nullable: los egresos de "Impuestos bancarios" generados por una
+  // TRANSFERENCIA no tienen un item/contraparte natural (no es un cargo a un
+  // cliente/proveedor). Los generados por un MOVIMIENTO sí heredan el itemId
+  // del movimiento padre (sigue siendo el mismo cliente/proveedor) — ver
+  // movements.controller.js / transfers.controller.js. Para una carga manual
+  // normal desde el modal "+ Cargar", itemId sigue siendo obligatorio
+  // (validado en el controller, no acá).
+  itemId      Int?
+  item        FinanceItem?    @relation(fields: [itemId], references: [id])
   categoryId  Int
   category    FinanceCategory @relation(fields: [categoryId], references: [id])
   accountId   Int
