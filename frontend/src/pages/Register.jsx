@@ -152,10 +152,10 @@ export default function Register() {
       </p>
     )
     if (slugStatus === SLUG_STATUS.available) return (
-      <p className="text-xs text-green-600 dark:text-green-400 mt-1">✓ Subdominio disponible</p>
+      <p className="text-xs text-green-600 dark:text-green-400 mt-1">Subdominio disponible</p>
     )
     if (slugStatus === SLUG_STATUS.taken) return (
-      <p className="text-xs text-red-500 mt-1">✗ Este subdominio ya está en uso</p>
+      <p className="text-xs text-red-500 mt-1">Este subdominio ya está en uso</p>
     )
     if (slugStatus === SLUG_STATUS.invalid) return (
       <p className="text-xs text-amber-500 mt-1">Solo letras minúsculas, números y guiones</p>

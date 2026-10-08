@@ -1,3 +1,5 @@
+import { X } from 'lucide-react'
+import { Icon } from '../../components/ui/Icon'
 
 
 export const PALETTE = [
@@ -326,7 +328,7 @@ export function SectionBrandManual() {
               <div className={`rounded-xl flex items-center justify-center p-5 h-24 relative overflow-hidden ${!bg ? 'bg-[#F5EFE6]' : ''}`} style={bg ? { background: bg } : {}}>
                 <div className="relative" style={{ border: '2px dashed #E67A1F', borderRadius: 8, padding: 6 }}>
                   <img src="/blisstracker_logo.svg" width={40} height={40} alt="" style={style || {}} />
-                  <span className="absolute -top-2 -right-2 text-red-500 text-lg font-bold leading-none">✕</span>
+                  <span className="absolute -top-2 -right-2 text-red-500 text-lg font-bold leading-none"><Icon as={X} size={16} /></span>
                 </div>
               </div>
               <p className="text-xs font-semibold text-gray-700 dark:text-gray-300 leading-tight">{label}</p>
@@ -343,7 +345,7 @@ export function SectionBrandManual() {
               <div className="rounded-xl flex items-center justify-center p-5 h-24 bg-[#F5EFE6] relative overflow-hidden">
                 <div className="relative" style={{ border: '2px dashed #E67A1F', borderRadius: 8, padding: 6 }}>
                   <img src="/blisstracker_logo.svg" width={40} height={40} alt="" style={style || {}} />
-                  <span className="absolute -top-2 -right-2 text-red-500 text-lg font-bold leading-none">✕</span>
+                  <span className="absolute -top-2 -right-2 text-red-500 text-lg font-bold leading-none"><Icon as={X} size={16} /></span>
                 </div>
               </div>
               <p className="text-xs font-semibold text-gray-700 dark:text-gray-300 leading-tight">{label}</p>

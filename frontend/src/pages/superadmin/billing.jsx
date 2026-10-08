@@ -77,7 +77,7 @@ export function SectionBilling() {
     { id: 'active',    label: `Activos (${data.activeCount})` },
     { id: 'trialing',  label: `Trial (${data.trialingCount})` },
     { id: 'past_due',  label: `Pago pendiente (${data.pastDueCount})` },
-    { id: 'attention', label: `⚠ Atención (${data.trialingSoon + data.pastDueCount})` },
+    { id: 'attention', label: `Atención (${data.trialingSoon + data.pastDueCount})` },
   ]
 
   return (

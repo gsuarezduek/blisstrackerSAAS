@@ -2,6 +2,8 @@ import { useState, useEffect, useRef } from 'react'
 import api from '../../api/client'
 import LoadingSpinner from '../../components/LoadingSpinner'
 import RichTextEditor from '../../components/RichTextEditor'
+import { PenLine } from 'lucide-react'
+import { Icon } from '../../components/ui/Icon'
 
 const API_URL = import.meta.env.VITE_API_URL
 
@@ -366,7 +368,7 @@ export function SectionBlog() {
         : filtered.length === 0
           ? (
               <div className="text-center py-16 text-gray-400">
-                <p className="text-4xl mb-3">✍️</p>
+                <p className="mb-3"><Icon as={PenLine} size={32} className="inline-block text-gray-300 dark:text-gray-600" /></p>
                 <p className="font-medium text-gray-500 dark:text-gray-400">
                   {posts.length === 0 ? 'No hay posts creados aún.' : 'Sin resultados para este filtro.'}
                 </p>

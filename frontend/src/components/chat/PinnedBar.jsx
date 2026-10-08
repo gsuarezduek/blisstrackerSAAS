@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { avatarUrl } from '../../utils/avatarUrl'
 import UserLink from '../UserLink'
+import { Pin } from 'lucide-react'
+import { Icon } from '../ui/Icon'
 
 // Barra colapsable de mensajes fijados, arriba de la lista. Cualquier miembro puede
 // fijar/desfijar (ver chat.controller.js togglePin) — no hay gating de permisos acá.
@@ -17,7 +19,7 @@ export default function PinnedBar({ pinned, onUnpin, onJump }) {
         onClick={() => setExpanded(v => !v)}
         className="w-full flex items-center gap-2 px-4 py-1.5 text-xs font-medium text-amber-700 dark:text-amber-300 hover:bg-amber-100/60 dark:hover:bg-amber-900/20 transition-colors"
       >
-        <span>📌</span>
+        <span><Icon as={Pin} size={15} /></span>
         <span className="flex-1 text-left">{pinned.length} mensaje{pinned.length === 1 ? '' : 's'} fijado{pinned.length === 1 ? '' : 's'}</span>
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"
           className={`w-3.5 h-3.5 transition-transform ${expanded ? 'rotate-180' : ''}`}>

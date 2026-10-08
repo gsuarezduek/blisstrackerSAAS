@@ -1,4 +1,6 @@
 import { useVoiceCall } from '../context/VoiceCallContext'
+import { Mic, MicOff, X } from 'lucide-react'
+import { Icon } from './ui/Icon'
 
 // Indicador flotante persistente de la llamada de voz activa — visible mientras el
 // panel de Chat está cerrado o mirando otro canal (la llamada sobrevive a que el
@@ -19,21 +21,21 @@ export default function VoiceCallIndicator() {
           <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
           <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500" />
         </span>
-        <span className="truncate max-w-[140px]">🔊 {activeCall.channelName}</span>
+        <span className="truncate max-w-[140px]">{activeCall.channelName}</span>
       </button>
       <button
         onClick={toggleMute}
         title={activeCall.muted ? 'Desmutear' : 'Mutear'}
         className="p-1.5 text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700"
       >
-        {activeCall.muted ? '🔇' : '🎙️'}
+        {activeCall.muted ? <Icon as={MicOff} size={14} /> : <Icon as={Mic} size={14} />}
       </button>
       <button
         onClick={leaveCall}
         title="Salir de la llamada"
         className="p-1.5 text-gray-400 hover:text-red-600 dark:hover:text-red-400 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700"
       >
-        ✕
+        <Icon as={X} size={16} />
       </button>
     </div>
   )

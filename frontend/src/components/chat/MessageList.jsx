@@ -8,6 +8,7 @@ import { groupReactions } from './reactions'
 import { chatAttachmentUrl } from '../../utils/chatAttachmentUrl'
 import { fmtBytes, iconFor } from '../../lib/fileIcons'
 import { Icon } from '../ui/Icon'
+import { Pin, SmilePlus } from 'lucide-react'
 
 const GROUP_WINDOW_MS = 5 * 60 * 1000
 
@@ -290,7 +291,7 @@ export default function MessageList({
                     </UserLink>
                     <span className="text-xs text-gray-400 dark:text-gray-500">{timeLabel(m.createdAt)}</span>
                     {m.pinnedAt && (
-                      <span title={m.pinnedBy ? `Fijado por ${m.pinnedBy.name}` : 'Fijado'} className="text-xs text-amber-500 dark:text-amber-400">📌</span>
+                      <span title={m.pinnedBy ? `Fijado por ${m.pinnedBy.name}` : 'Fijado'} className="text-xs text-amber-500 dark:text-amber-400"><Icon as={Pin} size={15} /></span>
                     )}
                   </div>
                 )}
@@ -301,10 +302,10 @@ export default function MessageList({
                     className="block w-full text-left mb-1 pl-2 py-0.5 border-l-2 border-gray-300 dark:border-gray-600 text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 truncate"
                   >
                     <span className="font-medium">
-                      {m.replyTo.systemType ? '⚙️ Mensaje del sistema' : (m.replyTo.author?.name || 'Alguien')}
+                      {m.replyTo.systemType ? 'Mensaje del sistema' : (m.replyTo.author?.name || 'Alguien')}
                     </span>
                     {' — '}
-                    {m.replyTo.gifUrl ? '🖼️ GIF' : m.replyTo.attachment ? '📎 Archivo' : (m.replyTo.content || '')}
+                    {m.replyTo.gifUrl ? 'GIF' : m.replyTo.attachment ? 'Archivo' : (m.replyTo.content || '')}
                   </button>
                 )}
                 {editingId === m.id ? (
@@ -377,7 +378,7 @@ export default function MessageList({
                       className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded hover:bg-gray-100 dark:hover:bg-gray-700"
                       title="Reaccionar"
                     >
-                      🙂
+                      <Icon as={SmilePlus} size={15} />
                     </button>
                     {reactingId === m.id && (
                       <MessageReactionPicker
@@ -400,14 +401,14 @@ export default function MessageList({
                           onClick={() => { setMenuOpenId(null); onTogglePin(m) }}
                           className="w-full text-left px-3 py-1.5 text-xs text-amber-600 dark:text-amber-400 hover:bg-gray-50 dark:hover:bg-gray-700"
                         >
-                          📌 {m.pinnedAt ? 'Desfijar' : 'Fijar'}
+                          {m.pinnedAt ? 'Desfijar' : 'Fijar'}
                         </button>
                         {canEdit && m.content != null && (
                           <button
                             onClick={() => startEdit(m)}
                             className="w-full text-left px-3 py-1.5 text-xs text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700"
                           >
-                            ✏️ Editar
+                            Editar
                           </button>
                         )}
                         {canDelete && (
@@ -415,7 +416,7 @@ export default function MessageList({
                             onClick={() => { setMenuOpenId(null); onDelete(m) }}
                             className="w-full text-left px-3 py-1.5 text-xs text-red-600 dark:text-red-400 hover:bg-gray-50 dark:hover:bg-gray-700"
                           >
-                            🗑 Eliminar
+                            Eliminar
                           </button>
                         )}
                       </div>

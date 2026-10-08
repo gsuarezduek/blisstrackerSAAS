@@ -1,4 +1,6 @@
 import { useState, useRef } from 'react'
+import { Pencil, X } from 'lucide-react'
+import { Icon } from '../../ui/Icon'
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Sección: Valores Medulares (lista con add/edit/remove)
@@ -122,8 +124,8 @@ export default function CoreValuesSection({ items, onChange }) {
                         )}
                       </div>
                       <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                        <button onClick={() => startEdit(i)} className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-xs" title="Editar">✏️</button>
-                        <button onClick={() => handleRemove(i)} className="p-1 text-gray-400 hover:text-red-500 text-xs" title="Eliminar">✕</button>
+                        <button onClick={() => startEdit(i)} className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-xs" title="Editar"><Icon as={Pencil} size={15} /></button>
+                        <button onClick={() => handleRemove(i)} className="p-1 text-gray-400 hover:text-red-500 text-xs" title="Eliminar"><Icon as={X} size={16} /></button>
                       </div>
                     </>
                   )}

@@ -15,11 +15,13 @@ import { todayYMD, shiftDay, weekDates, weekdayLabel, weekRangeLabel } from '../
 import { useCalendarSocket } from '../components/calendar/useCalendarSocket'
 import { useFeatureFlag } from '../hooks/useFeatureFlag'
 import GoogleCalendarConnectButton from '../components/calendar/GoogleCalendarConnectButton'
+import { Lock } from 'lucide-react'
+import { Icon } from '../components/ui/Icon'
 
 const VIEWS = [
-  { id: 'semana', label: '🗓️ Semana' },
-  { id: 'equipo', label: '👥 Equipo' },
-  { id: 'mes',    label: '📅 Mes' },
+  { id: 'semana', label: 'Semana' },
+  { id: 'equipo', label: 'Equipo' },
+  { id: 'mes',    label: 'Mes' },
 ]
 const VALID_VIEWS = new Set(VIEWS.map(v => v.id))
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
@@ -164,7 +166,8 @@ export default function Calendario() {
         id: `${b.kind}-${b.refId ?? `${b.date}${b.start}`}`,
         start: b.start,
         end: b.end,
-        title: (b.recurrenceId ? '🔁 ' : '') + (b.title || (b.kind === 'task' ? 'Tarea' : 'Ocupado')),
+        title: b.title || (b.kind === 'task' ? 'Tarea' : 'Ocupado'),
+        recurring: !!b.recurrenceId,
         tentative: b.tentative,
         tone: b.kind === 'task' ? 'task' : 'event',
         onClick: b.kind === 'calendar_event' && b.refId ? () => openEventById(b.refId) : undefined,
@@ -235,7 +238,7 @@ export default function Calendario() {
 
         {!moduleAllowed ? (
           <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-10 text-center">
-            <div className="text-4xl mb-4">🔒</div>
+            <div className="mb-4"><Icon as={Lock} size={32} className="inline-block text-gray-300 dark:text-gray-600" /></div>
             <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-2">Sección no disponible</h3>
             <p className="text-sm text-gray-400 dark:text-gray-500 max-w-sm mx-auto">
               {enabled

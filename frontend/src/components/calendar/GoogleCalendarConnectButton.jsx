@@ -18,7 +18,7 @@ export default function GoogleCalendarConnectButton() {
         title={`Conectado como ${status.accountEmail}`}
         className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/40 transition-colors"
       >
-        📅 Google Calendar conectado
+        Google Calendar conectado
       </button>
     )
   }
@@ -30,7 +30,7 @@ export default function GoogleCalendarConnectButton() {
       title="Empuja tus reuniones agendadas a tu Google Calendar"
       className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors disabled:opacity-60"
     >
-      {connecting ? 'Conectando…' : '📅 Conectar Google Calendar'}
+      {connecting ? 'Conectando…' : 'Conectar Google Calendar'}
     </button>
   )
 }

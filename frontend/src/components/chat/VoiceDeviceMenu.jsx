@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useVoiceCall } from '../../context/VoiceCallContext'
+import { Settings } from 'lucide-react'
+import { Icon } from '../ui/Icon'
 
 // Menú de selección de micrófono/salida de audio para la sala de voz. La salida
 // (setSinkId) no está soportada en Safari — supportsOutputSelection lo indica y esa
@@ -34,7 +36,7 @@ export default function VoiceDeviceMenu() {
         title="Elegir micrófono / salida de audio"
         className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded hover:bg-gray-100 dark:hover:bg-gray-700"
       >
-        ⚙️
+        <Icon as={Settings} size={14} />
       </button>
       {open && (
         <div className="absolute right-0 top-full mt-1 w-56 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg p-2.5 z-20 space-y-2.5">

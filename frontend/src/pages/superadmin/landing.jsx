@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import api from '../../api/client'
+import { X } from 'lucide-react'
+import { Icon } from '../../components/ui/Icon'
 
 const API_URL = import.meta.env.VITE_API_URL || ''
 const trustedLogoUrl = (id) => `${API_URL}/api/landing/trusted-companies/${id}/image`
@@ -59,7 +61,7 @@ function AccentWordsEditor({ words, onChange }) {
               <span className="flex-1 text-sm text-gray-800 dark:text-gray-100">{w}</span>
               <button type="button" onClick={() => move(i, 'up')} disabled={i === 0} className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-30 text-gray-500 text-xs">↑</button>
               <button type="button" onClick={() => move(i, 'down')} disabled={i === words.length - 1} className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-30 text-gray-500 text-xs">↓</button>
-              <button type="button" onClick={() => remove(i)} className="text-gray-400 hover:text-red-600 dark:hover:text-red-400 text-xs px-1">✕</button>
+              <button type="button" onClick={() => remove(i)} className="text-gray-400 hover:text-red-600 dark:hover:text-red-400 text-xs px-1"><Icon as={X} size={16} /></button>
             </div>
           ))}
         </div>
@@ -218,7 +220,7 @@ function CardListEditor({ items, onChange, fields, addLabel = '+ Agregar' }) {
           <div className="flex flex-col gap-0.5 pt-0.5">
             <button type="button" onClick={() => move(i, 'up')} disabled={i === 0} className={reorderBtnCls}>↑</button>
             <button type="button" onClick={() => move(i, 'down')} disabled={i === items.length - 1} className={reorderBtnCls}>↓</button>
-            <button type="button" onClick={() => remove(i)} className="p-1 text-gray-400 hover:text-red-600 dark:hover:text-red-400 text-xs">✕</button>
+            <button type="button" onClick={() => remove(i)} className="p-1 text-gray-400 hover:text-red-600 dark:hover:text-red-400 text-xs"><Icon as={X} size={16} /></button>
           </div>
         </div>
       ))}
@@ -292,7 +294,7 @@ function SaveBar({ saving, saved, onSave, error }) {
         >
           {saving ? 'Guardando…' : 'Guardar'}
         </button>
-        {saved && <span className="text-sm text-emerald-500">✓ Guardado</span>}
+        {saved && <span className="text-sm text-emerald-500">Guardado</span>}
       </div>
     </>
   )
@@ -331,7 +333,7 @@ function SectionsEditor() {
           <CardListEditor
             items={form.problemCards}
             onChange={v => set('problemCards', v)}
-            fields={[{ key: 'emoji', label: '🪟', narrow: true }, { key: 'title', label: 'Título' }, { key: 'desc', label: 'Descripción', multiline: true }]}
+            fields={[{ key: 'emoji', label: 'Ícono', narrow: true }, { key: 'title', label: 'Título' }, { key: 'desc', label: 'Descripción', multiline: true }]}
           />
         </SectionField>
       </div>
@@ -364,7 +366,7 @@ function SectionsEditor() {
           <CardListEditor
             items={form.featureCards}
             onChange={v => set('featureCards', v)}
-            fields={[{ key: 'icon', label: '🎯', narrow: true }, { key: 'title', label: 'Título' }, { key: 'desc', label: 'Descripción', multiline: true }]}
+            fields={[{ key: 'icon', label: 'Ícono', narrow: true }, { key: 'title', label: 'Título' }, { key: 'desc', label: 'Descripción', multiline: true }]}
           />
         </SectionField>
       </div>
@@ -449,7 +451,7 @@ function FaqEditor({ groups, onChange }) {
             <input value={g.group} onChange={e => setGroupName(gi, e.target.value)} className={`${inputCls} font-semibold flex-1`} />
             <button type="button" onClick={() => moveGroup(gi, 'up')} disabled={gi === 0} className={reorderBtnCls}>↑</button>
             <button type="button" onClick={() => moveGroup(gi, 'down')} disabled={gi === groups.length - 1} className={reorderBtnCls}>↓</button>
-            <button type="button" onClick={() => removeGroup(gi)} className="text-xs text-gray-400 hover:text-red-600 dark:hover:text-red-400 px-1">✕ grupo</button>
+            <button type="button" onClick={() => removeGroup(gi)} className="text-xs text-gray-400 hover:text-red-600 dark:hover:text-red-400 px-1">grupo</button>
           </div>
 
           <div className="space-y-2 pl-1">
@@ -457,7 +459,7 @@ function FaqEditor({ groups, onChange }) {
               <div key={ii} className="bg-gray-50 dark:bg-gray-700/40 rounded-lg p-2.5 space-y-1.5">
                 <div className="flex items-center gap-2">
                   <input value={item.q} onChange={e => setItem(gi, ii, 'q', e.target.value)} placeholder="Pregunta" className={`${inputCls} flex-1`} />
-                  <button type="button" onClick={() => removeItem(gi, ii)} className="text-gray-400 hover:text-red-600 dark:hover:text-red-400 text-xs px-1">✕</button>
+                  <button type="button" onClick={() => removeItem(gi, ii)} className="text-gray-400 hover:text-red-600 dark:hover:text-red-400 text-xs px-1"><Icon as={X} size={16} /></button>
                 </div>
                 <textarea value={item.a} onChange={e => setItem(gi, ii, 'a', e.target.value)} placeholder="Respuesta" rows={2} className={`${inputCls} resize-y`} />
               </div>

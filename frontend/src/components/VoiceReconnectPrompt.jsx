@@ -1,4 +1,6 @@
 import { useVoiceCall } from '../context/VoiceCallContext'
+import { X } from 'lucide-react'
+import { Icon } from './ui/Icon'
 
 // Banner flotante ofreciendo reconectar a la sala de voz en la que estaba el usuario
 // antes de un F5 completo (ver voiceCallSession.js) — nunca reconecta sola, siempre
@@ -12,7 +14,7 @@ export default function VoiceReconnectPrompt() {
   return (
     <div className="fixed bottom-6 left-6 z-40 flex items-center gap-2 bg-white dark:bg-gray-800 pl-3 pr-2 py-2 rounded-full shadow-lg border border-gray-200 dark:border-gray-700">
       <span className="text-sm text-gray-700 dark:text-gray-200 truncate max-w-[180px]">
-        🔊 Estabas en «{pendingReconnect.channelName}» — ¿reconectar?
+        Estabas en «{pendingReconnect.channelName}» — ¿reconectar?
       </span>
       <button
         onClick={acceptReconnect}
@@ -25,7 +27,7 @@ export default function VoiceReconnectPrompt() {
         title="Descartar"
         className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 flex-shrink-0"
       >
-        ✕
+        <Icon as={X} size={16} />
       </button>
     </div>
   )

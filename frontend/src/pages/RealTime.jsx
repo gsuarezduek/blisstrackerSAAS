@@ -10,7 +10,7 @@ import TaskCommentsModal from '../components/TaskCommentsModal'
 import { fmtMins, fmtDuration, activeSeconds } from '../utils/format'
 import { roleColor } from '../utils/roleColor'
 import { useAuth } from '../context/AuthContext'
-import { Lock } from 'lucide-react'
+import { Lock, Palmtree } from 'lucide-react'
 import { Icon } from '../components/ui/Icon'
 
 const REFRESH_INTERVAL = 30 // seconds
@@ -74,7 +74,7 @@ function FollowToggle({ task }) {
           : 'bg-white dark:bg-gray-800 border-primary-200 dark:border-primary-700 text-primary-500 dark:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/30'
       }`}
     >
-      {following ? '👁 Siguiendo' : '👁 Seguir'}
+      {following ? 'Siguiendo' : 'Seguir'}
     </button>
   )
 }
@@ -165,9 +165,9 @@ function UserCard({ entry, now, onOpenUser, onOpenTask, ownUserId }) {
       <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400 border-t dark:border-gray-700 pt-3">
         <div className="flex gap-4">
           <span>✓ <strong className="text-gray-700 dark:text-gray-300">{stats.completed}</strong> completadas</span>
-          <span>⏳ <strong className="text-gray-700 dark:text-gray-300">{stats.pending}</strong> pendientes</span>
+          <span><strong className="text-gray-700 dark:text-gray-300">{stats.pending}</strong> pendientes</span>
           {stats.blocked > 0 && (
-            <span>⚠ <strong className="text-red-600 dark:text-red-400">{stats.blocked}</strong> bloqueadas</span>
+            <span><strong className="text-red-600 dark:text-red-400">{stats.blocked}</strong> bloqueadas</span>
           )}
         </div>
         <span className="font-medium text-gray-600 dark:text-gray-400">{fmtMins(stats.totalMinutes)} registradas</span>
@@ -310,7 +310,7 @@ export default function RealTime() {
           </div>
           {onLeave.length > 0 && (
             <div className="bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-xl px-4 py-2 flex items-center gap-2">
-              <span className="text-sm">🏖️</span>
+              <span className="text-gray-400"><Icon as={Palmtree} size={14} /></span>
               <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{onLeave.length} de licencia</span>
             </div>
           )}
@@ -335,7 +335,7 @@ export default function RealTime() {
         {/* De licencia hoy — solo si hay alguien. Vista de equipo: no se muestra el tipo. */}
         {filteredOnLeave.length > 0 && (
           <section className="mb-8">
-            <h2 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-4">🏖️ Licencias</h2>
+            <h2 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-4">Licencias</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
               {filteredOnLeave.map(u => (
                 <div key={u.id} className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-5 flex items-center gap-3.5">

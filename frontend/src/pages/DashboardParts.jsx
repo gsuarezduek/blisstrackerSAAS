@@ -83,7 +83,7 @@ function TrackedTaskRow({ task: t, onClick, onRemove, removeTitle, isNew }) {
               {dur && (
                 <>
                   <span className="text-gray-300 dark:text-gray-600">·</span>
-                  <span>⏱ {dur}</span>
+                  <span>{dur}</span>
                 </>
               )}
             </>

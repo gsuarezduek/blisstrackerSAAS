@@ -2,6 +2,8 @@ import { useState, useEffect, useRef, useCallback, Fragment } from 'react'
 import { useTheme } from '../context/ThemeContext'
 import { useAuth } from '../context/AuthContext'
 import api, { getWorkspaceSlug } from '../api/client'
+import { X } from 'lucide-react'
+import { Icon } from './ui/Icon'
 
 /**
  * Pizarra de Notas Desplegable.
@@ -444,7 +446,7 @@ export default function NotesBoard() {
             className="chalk-font text-lg px-2 leading-none rounded chalk-hover"
             title="Cerrar"
           >
-            ✕
+            <Icon as={X} size={16} />
           </button>
         )}
       </div>

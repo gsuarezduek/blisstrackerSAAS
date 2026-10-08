@@ -2,6 +2,8 @@ import { useState } from 'react'
 import api from '../api/client'
 import { useFeatureFlag } from '../hooks/useFeatureFlag'
 import { useGoogleIntegration } from '../hooks/useGoogleIntegration'
+import { X } from 'lucide-react'
+import { Icon } from './ui/Icon'
 
 // Integraciones Google (OAuth compartido vía useGoogleIntegration) — deben reflejar
 // 1 a 1 lo que soporta Marketing (GA4, Search Console, Ads, YouTube).
@@ -9,27 +11,23 @@ const GOOGLE_INTEGRATIONS = [
   {
     key:   'google_analytics',
     label: 'Google Analytics',
-    icon:  '📊',
     desc:  'Ver sesiones, usuarios y páginas en Marketing → Web',
     requiredField: 'propertyId',
   },
   {
     key:   'google_search_console',
     label: 'Search Console',
-    icon:  '🔍',
     desc:  'Ver clicks, impresiones y palabras clave en Marketing → SEO',
   },
   {
     key:   'google_ads',
     label: 'Google Ads',
-    icon:  '📣',
     desc:  'Ver campañas, clics y conversiones en Marketing → Anuncios',
     requiredField: 'customerId',
   },
   {
     key:   'google_youtube',
     label: 'YouTube',
-    icon:  '▶️',
     desc:  'Suscriptores, vistas y videos en Marketing → YouTube',
   },
 ]
@@ -40,7 +38,6 @@ const SOCIAL_INTEGRATIONS = [
   {
     key:      'instagram',
     label:    'Instagram',
-    icon:     '📸',
     desc:     'Seguidores, engagement y métricas de publicaciones',
     authPath: (projectId) => `/marketing/integrations/meta/auth-url?projectId=${projectId}`,
     popup:    'instagram_oauth',
@@ -48,7 +45,6 @@ const SOCIAL_INTEGRATIONS = [
   {
     key:      'facebook',
     label:    'Facebook',
-    icon:     '📘',
     desc:     'Seguidores y métricas de la Página',
     authPath: (projectId) => `/marketing/integrations/facebook/auth-url?projectId=${projectId}`,
     popup:    'facebook_oauth',
@@ -56,7 +52,6 @@ const SOCIAL_INTEGRATIONS = [
   {
     key:      'linkedin',
     label:    'LinkedIn',
-    icon:     '💼',
     desc:     'Seguidores y métricas de la Company Page',
     authPath: (projectId) => `/marketing/integrations/linkedin/auth-url?projectId=${projectId}`,
     popup:    'linkedin_oauth',
@@ -64,7 +59,6 @@ const SOCIAL_INTEGRATIONS = [
   {
     key:      'tiktok',
     label:    'TikTok',
-    icon:     '🎵',
     desc:     'Seguidores, vistas y métricas de videos',
     authPath: (projectId) => `/marketing/integrations/tiktok/auth-url?projectId=${projectId}`,
     popup:    'tiktok_oauth',
@@ -72,7 +66,6 @@ const SOCIAL_INTEGRATIONS = [
   {
     key:      'meta_ads',
     label:    'Meta Ads',
-    icon:     '📣',
     desc:     'Campañas de Facebook e Instagram Ads',
     authPath: (projectId) => `/marketing/integrations/meta-ads/auth-url?projectId=${projectId}`,
     popup:    'metaads_oauth',
@@ -113,7 +106,6 @@ function IntegrationChip({ integ, state, loading, expanded, onClick }) {
       title={integ.desc}
       className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-medium transition-all disabled:opacity-50 disabled:cursor-wait ${CHIP_STATE_CLASS[state]} ${expanded ? 'ring-2 ring-primary-400 ring-offset-1 ring-offset-white dark:ring-offset-gray-800' : ''}`}
     >
-      <span className="text-sm leading-none">{integ.icon}</span>
       <span>{integ.label}</span>
       {loading ? (
         <span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse" />
@@ -254,7 +246,6 @@ export default function ProjectInfoTab({ project, onSave }) {
       <div className="w-full border border-gray-200 dark:border-gray-600 rounded-xl p-4 space-y-3 mt-1">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2.5 min-w-0">
-            <span className="text-xl flex-shrink-0">{integ.icon}</span>
             <div className="min-w-0">
               <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{integ.label}</p>
               <p className="text-xs text-gray-400 truncate">{integ.desc}</p>
@@ -283,7 +274,7 @@ export default function ProjectInfoTab({ project, onSave }) {
               className="text-gray-300 hover:text-gray-500 dark:hover:text-gray-300 transition-colors"
               title="Cerrar"
             >
-              ✕
+              <Icon as={X} size={16} />
             </button>
           </div>
         </div>
@@ -532,7 +523,7 @@ export default function ProjectInfoTab({ project, onSave }) {
       {/* Sitio web */}
       <div>
         <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1.5">
-          🌐 Sitio web
+          Sitio web
         </label>
         <input
           type="text"
@@ -552,7 +543,7 @@ export default function ProjectInfoTab({ project, onSave }) {
           disabled={saving || !isDirty()}
           className="px-4 py-2 bg-primary-600 hover:bg-primary-700 disabled:opacity-50 text-white text-sm font-medium rounded-xl transition-colors"
         >
-          {saving ? 'Guardando…' : saved ? '✓ Guardado' : 'Guardar'}
+          {saving ? 'Guardando…' : saved ? 'Guardado' : 'Guardar'}
         </button>
         {saved && <span className="text-sm text-emerald-500">Los cambios se guardaron correctamente</span>}
       </div>

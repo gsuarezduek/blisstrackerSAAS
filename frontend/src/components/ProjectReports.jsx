@@ -4,6 +4,8 @@ import LoadingSpinner from './LoadingSpinner'
 import RoleBadge from './RoleBadge'
 import { linkify } from '../utils/linkify'
 import { fmtMins } from '../utils/format'
+import { ChartColumn, Pencil } from 'lucide-react'
+import { Icon } from './ui/Icon'
 
 // Misma clasificación de estado que Reports.jsx (deriveProjectStatus), acá aplicada
 // mes a mes contra las horas contratadas VIGENTES EN ESE MES (m.monthlyHours, que ya
@@ -54,7 +56,7 @@ function fmtTaskDate(iso) {
 function ReportStatCard({ icon, label, value, sub, valueClassName }) {
   return (
     <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-4 flex items-center gap-4">
-      <span className="text-2xl flex-shrink-0">{icon}</span>
+      {icon && <span className="text-2xl flex-shrink-0">{icon}</span>}
       <div className="min-w-0">
         <p className={`text-2xl font-bold leading-none ${valueClassName || 'text-gray-900 dark:text-white'}`}>{value}</p>
         <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{label}</p>
@@ -362,22 +364,19 @@ export default function ProjectReports({ projectId }) {
       {project?.hoursEnabled && (
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <ReportStatCard
-            icon="📝"
-            label="Horas contratadas"
+                        label="Horas contratadas"
             value={project.monthlyHours != null ? `${project.monthlyHours}h/mes` : 'Sin configurar'}
           />
           {avgUtilization != null && (
             <ReportStatCard
-              icon="📊"
-              label="Promedio de uso"
+                            label="Promedio de uso"
               value={`${Math.round(avgUtilization)}%`}
               sub="meses cerrados, sin contar el actual"
             />
           )}
           {remainingHours != null && (
             <ReportStatCard
-              icon="⏳"
-              label="Horas disponibles este mes"
+                            label="Horas disponibles este mes"
               value={`${remainingHours < 0 ? '−' : ''}${Math.abs(Math.round(remainingHours * 10) / 10)}h`}
               valueClassName={remainingHours < 0 ? 'text-red-600 dark:text-red-400' : undefined}
               sub={remainingHours < 0
@@ -488,7 +487,7 @@ export default function ProjectReports({ projectId }) {
                                   <span className="text-gray-700 dark:text-gray-300 truncate text-left">{linkify(task.description)}</span>
                                 </div>
                                 <div className="flex items-center gap-1.5 flex-shrink-0 ml-3">
-                                  {task.isOverride && <span className="text-amber-500 text-xs">✎</span>}
+                                  {task.isOverride && <span className="text-amber-500 inline-flex" title="Duración editada a mano"><Icon as={Pencil} size={11} /></span>}
                                   <span className="text-xs text-gray-400 dark:text-gray-500 tabular-nums">{fmtTaskDate(task.completedAt)}</span>
                                   <span className="text-gray-500 dark:text-gray-400">{fmtMins(task.minutes)}</span>
                                 </div>
@@ -508,7 +507,7 @@ export default function ProjectReports({ projectId }) {
 
       {enriched.length === 0 && (
         <div className="text-center py-16 text-gray-400">
-          <p className="text-3xl mb-2">📊</p>
+          <p className="mb-2"><Icon as={ChartColumn} size={28} className="inline-block text-gray-300 dark:text-gray-600" /></p>
           <p>Todavía no hay tareas completadas en este proyecto.</p>
         </div>
       )}

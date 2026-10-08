@@ -2,6 +2,9 @@ import { useState, useEffect } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import axios from 'axios'
 import PasswordInput from '../components/PasswordInput'
+import { TriangleAlert } from 'lucide-react'
+import { Icon } from '../components/ui/Icon'
+import BlissLogo from '../components/BlissLogo'
 
 const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001'
 const APP_DOMAIN = import.meta.env.VITE_APP_DOMAIN || 'blisstracker.app'
@@ -87,7 +90,7 @@ export default function JoinWorkspace() {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center px-4">
         <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-8 max-w-sm w-full text-center">
-          <div className="text-4xl mb-4">⚠️</div>
+          <div className="mb-4"><Icon as={TriangleAlert} size={32} className="inline-block text-amber-500" /></div>
           <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Invitación inválida</h2>
           <p className="text-sm text-gray-500 dark:text-gray-400">{invError}</p>
         </div>
@@ -100,10 +103,7 @@ export default function JoinWorkspace() {
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-8 max-w-sm w-full">
         {/* Logo / Marca */}
         <div className="text-center mb-6">
-          <div className="inline-flex items-center justify-center w-14 h-14 bg-primary-100 dark:bg-primary-900/30 rounded-2xl mb-3">
-            <span className="text-2xl">🐝</span>
-          </div>
-          <h1 className="text-xl font-bold text-gray-900 dark:text-white">BlissTracker</h1>
+          <BlissLogo variant="lockup" className="h-8 w-auto mx-auto" />
         </div>
 
         {/* Info de la invitación */}

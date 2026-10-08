@@ -2,6 +2,8 @@ import { useState, useEffect, useRef } from 'react'
 import api from '../../api/client'
 import { avatarUrl } from '../../utils/avatarUrl'
 import LoadingSpinner from '../LoadingSpinner'
+import { Settings } from 'lucide-react'
+import { Icon } from '../ui/Icon'
 
 const DEBOUNCE_MS = 300
 
@@ -81,13 +83,13 @@ export default function ChannelSearch({ channelId, onClose }) {
               {m.author ? (
                 <img src={avatarUrl(m.author.avatar)} alt={m.author.name} className="w-5 h-5 rounded-full object-cover border border-gray-200 dark:border-gray-600" />
               ) : (
-                <span className="w-5 h-5 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center text-[10px]">⚙️</span>
+                <span className="w-5 h-5 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center text-gray-400"><Icon as={Settings} size={11} /></span>
               )}
               <span className="text-xs font-semibold text-gray-700 dark:text-gray-200">{m.author?.name || 'Sistema'}</span>
               <span className="text-[11px] text-gray-400 dark:text-gray-500">{dateLabel(m.createdAt)}</span>
             </div>
             <p className="text-sm text-gray-600 dark:text-gray-300 leading-snug pl-7 line-clamp-2">
-              {m.content || (m.gifUrl ? '🖼️ GIF' : '')}
+              {m.content || (m.gifUrl ? 'GIF' : '')}
             </p>
           </div>
         ))}

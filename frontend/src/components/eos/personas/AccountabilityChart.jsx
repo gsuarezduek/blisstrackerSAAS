@@ -54,7 +54,7 @@ export default function AccountabilityChart({ members, nodes, onCreateNode, onUp
           {/* Toolbar */}
           <div className="flex items-center justify-between gap-2 flex-wrap">
             <div className="flex gap-0.5 bg-gray-100 dark:bg-gray-700 rounded-xl p-1">
-              {[{ id: 'tree', label: '🌳 Vista árbol' }, { id: 'list', label: '☰ Vista lista' }].map(v => (
+              {[{ id: 'tree', label: 'Vista árbol' }, { id: 'list', label: 'Vista lista' }].map(v => (
                 <button key={v.id} onClick={() => setView(v.id)}
                   className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
                     view === v.id

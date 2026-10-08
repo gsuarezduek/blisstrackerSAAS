@@ -4,6 +4,8 @@ import EmojiGifPicker from './EmojiGifPicker'
 import { avatarUrl } from '../../utils/avatarUrl'
 import { connectSocket } from '../../lib/socket'
 import { fmtBytes } from '../../lib/fileIcons'
+import { Paperclip, Smile, X } from 'lucide-react'
+import { Icon } from '../ui/Icon'
 
 // Mismo tope que ATTACHMENT_MAX_BYTES en chat.controller.js — chequeo temprano
 // en el cliente, el backend lo vuelve a validar igual.
@@ -153,7 +155,7 @@ export default function MessageInput({ onSend, onSendMedia, members, replyingTo,
               Respondiendo a {replyingTo.systemType ? 'un mensaje del sistema' : (replyingTo.author?.name || 'alguien')}
             </p>
             <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
-              {replyingTo.gifUrl ? '🖼️ GIF' : replyingTo.attachment ? '📎 Archivo' : (replyingTo.content || '')}
+              {replyingTo.gifUrl ? 'GIF' : replyingTo.attachment ? 'Archivo' : (replyingTo.content || '')}
             </p>
           </div>
           <button
@@ -162,14 +164,14 @@ export default function MessageInput({ onSend, onSendMedia, members, replyingTo,
             title="Cancelar respuesta"
             className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 rounded flex-shrink-0"
           >
-            ✕
+            <Icon as={X} size={16} />
           </button>
         </div>
       )}
       {file && (
         <div className="flex items-center gap-2 mb-2 pl-2.5 pr-1.5 py-1.5 rounded-lg bg-gray-50 dark:bg-gray-700/60 border-l-2 border-primary-400">
           <span className="flex-1 min-w-0 text-xs text-gray-600 dark:text-gray-300 truncate">
-            📎 {file.name} <span className="text-gray-400">({fmtBytes(file.size)})</span>
+            {file.name} <span className="text-gray-400">({fmtBytes(file.size)})</span>
           </span>
           <button
             type="button"
@@ -177,11 +179,11 @@ export default function MessageInput({ onSend, onSendMedia, members, replyingTo,
             title="Quitar archivo"
             className="p-1 text-gray-400 hover:text-red-500 rounded flex-shrink-0"
           >
-            ✕
+            <Icon as={X} size={16} />
           </button>
         </div>
       )}
-      {error && <p className="text-xs text-red-600 dark:text-red-400 mb-1.5">⚠️ {error}</p>}
+      {error && <p className="text-xs text-red-600 dark:text-red-400 mb-1.5">{error}</p>}
       <div className="flex items-end gap-2">
         <div ref={pickerRef} className="relative flex-shrink-0">
           <button
@@ -190,7 +192,7 @@ export default function MessageInput({ onSend, onSendMedia, members, replyingTo,
             className="w-9 h-9 flex items-center justify-center rounded-full bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors text-base"
             title="Emoji y GIF"
           >
-            😊
+            <Icon as={Smile} size={18} />
           </button>
           {showPicker && (
             <EmojiGifPicker
@@ -209,7 +211,7 @@ export default function MessageInput({ onSend, onSendMedia, members, replyingTo,
           className="w-9 h-9 flex-shrink-0 flex items-center justify-center rounded-full bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-40 transition-colors"
           title="Adjuntar archivo"
         >
-          📎
+          <Icon as={Paperclip} size={16} />
         </button>
 
         <div className="flex-1 relative">

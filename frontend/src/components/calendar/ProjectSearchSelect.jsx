@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { Star } from 'lucide-react'
+import { Icon } from '../ui/Icon'
 
 const byName = (a, b) => a.name.localeCompare(b.name, 'es', { sensitivity: 'base' })
 
@@ -90,7 +92,7 @@ export default function ProjectSearchSelect({ projects, value, onChange, placeho
                       String(value) === String(p.id) ? 'bg-primary-50 dark:bg-primary-900/20' : ''}`}
                   >
                     <span className="text-gray-700 dark:text-gray-300 truncate">
-                      {group.label === 'Destacados' && '⭐ '}{p.name}
+                      {group.label === 'Destacados' && <Icon as={Star} size={12} className="inline-block mr-1 align-[-1px] text-amber-400 fill-amber-400" />}{p.name}
                     </span>
                   </button>
                 ))}

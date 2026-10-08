@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react'
 import api from '../../api/client'
 import ConfirmModal from '../../components/ConfirmModal'
 import { timeAgo } from './shared'
+import { X } from 'lucide-react'
+import { Icon } from '../../components/ui/Icon'
 
 export const SETTINGS_GROUP_LABELS = {
   commercial:  'Comercial',
@@ -83,14 +85,14 @@ export function PricingTiersEditor({ value, onChange }) {
           <span className="text-xs text-gray-500 dark:text-gray-400">/ seat / mes</span>
           {tiers.length > 1 && (
             <button onClick={() => removeTier(i)} title="Eliminar tier"
-              className="ml-auto text-xs text-red-500 hover:text-red-700">✕</button>
+              className="ml-auto text-xs text-red-500 hover:text-red-700"><Icon as={X} size={16} /></button>
           )}
         </div>
       ))}
       <button onClick={addTier}
         className="text-xs text-primary-600 dark:text-primary-400 hover:underline">+ Agregar tier</button>
       <p className="text-xs text-amber-600 dark:text-amber-400 leading-snug">
-        ⚠ Cambiar los tiers acá no actualiza Stripe. Tenés que sincronizar manualmente en el dashboard de Stripe.
+        Cambiar los tiers acá no actualiza Stripe. Tenés que sincronizar manualmente en el dashboard de Stripe.
       </p>
     </div>
   )

@@ -5,6 +5,8 @@ import ConfirmModal from '../../components/ConfirmModal'
 import { fmtBytes, StatCard, STATUS_LABELS } from './shared'
 import { TokenBar } from './aiTokens'
 import { MetricChart } from './metrics'
+import { TriangleAlert } from 'lucide-react'
+import { Icon } from '../../components/ui/Icon'
 
 const STORAGE_CATEGORY_LABELS = {
   archivos:         'Archivos (Nube)',
@@ -100,7 +102,7 @@ export function SectionStorage() {
 
       {/* ── Object Storage (R2) — lo que realmente crece con Archivos/Contenido ── */}
       <div className="space-y-4">
-        <h3 className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">☁️ Object Storage (R2)</h3>
+        <h3 className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Object Storage (R2)</h3>
 
         <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5">
           <div className="flex items-baseline justify-between flex-wrap gap-2">
@@ -140,7 +142,7 @@ export function SectionStorage() {
         {/* Workspaces inactivos que siguen ocupando espacio — candidatos a limpiar */}
         {inactiveWithUsage.length > 0 && (
           <div className="bg-white dark:bg-gray-800 rounded-xl border border-amber-200 dark:border-amber-900/50 p-5">
-            <h4 className="font-semibold text-gray-900 dark:text-white text-sm">⚠️ Workspaces inactivos con storage</h4>
+            <h4 className="font-semibold text-gray-900 dark:text-white text-sm">Workspaces inactivos con storage</h4>
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 mb-3">
               Ya no son un cliente activo (vencido/suspendido/cancelado) pero su storage sigue costando en R2 — candidatos a exportar y borrar.
             </p>
@@ -169,7 +171,7 @@ export function SectionStorage() {
               <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
                 {socialImages.orphan.count > 0
                   ? <>Hay <b>{socialImages.orphan.count.toLocaleString()}</b> imágenes ({fmtBytes(socialImages.orphan.bytes)}) que ningún informe ni snapshot referencia — se generan al refrescar RRSS (las URLs firmadas de los CDN cambian en cada scrape). Borrarlas libera espacio real en R2, sin afectar nada visible.</>
-                  : <>No hay imágenes huérfanas. Todo lo guardado está en uso. 🎉</>}
+                  : <>No hay imágenes huérfanas. Todo lo guardado está en uso.</>}
               </p>
             </div>
             <button
@@ -188,7 +190,7 @@ export function SectionStorage() {
 
       {/* ── Base de datos (Postgres) ── */}
       <div className="space-y-4">
-        <h3 className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">🗄️ Base de datos (Postgres)</h3>
+        <h3 className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Base de datos (Postgres)</h3>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <StatCard label="Tamaño total de la base" value={fmtBytes(database.totalBytes)} />
@@ -232,7 +234,7 @@ export function SectionStorage() {
         const maxTotal = withUsage[0]?.total || 1
         return (
           <div className="space-y-4">
-            <h3 className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">📊 Ranking por workspace</h3>
+            <h3 className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Ranking por workspace</h3>
             <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
               <div className="px-5 py-3.5 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between">
                 <p className="text-xs font-normal text-gray-400">{withUsage.length} con datos</p>
@@ -255,7 +257,7 @@ export function SectionStorage() {
                           <span className="w-5 flex-shrink-0 text-xs font-bold text-gray-300 dark:text-gray-600 tabular-nums">{idx + 1}</span>
                           <div className="w-36 flex-shrink-0 min-w-0">
                             <p className="text-xs font-medium text-gray-800 dark:text-gray-200 truncate">
-                              {w.name} {inactive && <span title={STATUS_LABELS[w.status]?.label}>⚠️</span>}
+                              {w.name} {inactive && <span title={STATUS_LABELS[w.status]?.label} className="inline-flex align-[-2px]"><Icon as={TriangleAlert} size={14} className="text-amber-500" /></span>}
                             </p>
                             <p className="text-[10px] text-gray-400 dark:text-gray-500">{w.slug}</p>
                           </div>

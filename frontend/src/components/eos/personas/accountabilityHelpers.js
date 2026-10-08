@@ -23,7 +23,7 @@ export function printAccountabilityChart(nodes, members) {
       <div class="node depth-${depth}">
         <div class="card">
           <div class="seat">${node.seat}</div>
-          ${person ? `<div class="person">👤 ${person}</div>` : '<div class="person unassigned">Sin asignar</div>'}
+          ${person ? `<div class="person">${person}</div>` : '<div class="person unassigned">Sin asignar</div>'}
           ${accs.length ? `<ul class="accs">${accs.map(a => `<li>${a}</li>`).join('')}</ul>` : ''}
         </div>
         ${childrenHtml}
@@ -73,7 +73,7 @@ export function printAccountabilityChart(nodes, members) {
   </style>
 </head>
 <body>
-  <button class="print-btn" onclick="window.print()">🖨️ Imprimir / Guardar como PDF</button>
+  <button class="print-btn" onclick="window.print()">Imprimir / Guardar como PDF</button>
   <h1>Organigrama de Rendición de Cuentas</h1>
   <p class="subtitle">Generado desde BlissTracker · ${new Date().toLocaleDateString('es-AR', { day: '2-digit', month: 'long', year: 'numeric' })}</p>
   ${treeHtml || '<p style="color:#9ca3af;font-style:italic">El organigrama está vacío.</p>'}

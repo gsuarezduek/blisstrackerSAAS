@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import api from '../../api/client'
 import { fmtTokens, fmtCost } from './shared'
+import { Bot } from 'lucide-react'
+import { Icon } from '../../components/ui/Icon'
 
 export const SERVICE_LABELS = {
   insight:         'Insight diario',
@@ -126,7 +128,7 @@ export function SectionAiTokens() {
 
           {data.totalTokens === 0 ? (
             <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl py-12 text-center">
-              <p className="text-3xl mb-2">🤖</p>
+              <p className="mb-2"><Icon as={Bot} size={28} className="inline-block text-gray-300 dark:text-gray-600" /></p>
               <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
                 No hay logs de tokens para este período.
               </p>

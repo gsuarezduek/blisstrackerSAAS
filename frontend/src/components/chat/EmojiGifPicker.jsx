@@ -102,7 +102,7 @@ export default function EmojiGifPicker({ onSelectEmoji, onSelectGif, onClose }) 
               : 'text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300'
           }`}
         >
-          😊 Emoji
+          Emoji
         </button>
         <button
           type="button"
@@ -113,7 +113,7 @@ export default function EmojiGifPicker({ onSelectEmoji, onSelectGif, onClose }) 
               : 'text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300'
           }`}
         >
-          🎬 GIF
+          GIF
         </button>
       </div>
       {tab === 'emoji' ? <EmojiPicker onSelect={onSelectEmoji} /> : <GifTab onSelect={onSelectGif} />}

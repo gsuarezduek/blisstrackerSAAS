@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react'
 import api from '../../api/client'
 import { avatarUrl } from '../../utils/avatarUrl'
 import LoadingSpinner from '../../components/LoadingSpinner'
+import { X } from 'lucide-react'
+import { Icon } from '../../components/ui/Icon'
 
 export const STATUS_LABELS = {
   trialing:  { label: 'Trial',      color: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300' },
@@ -221,7 +223,7 @@ export function WorkspaceDetailModal({ workspace, onClose, onStatusChange, onDel
           </div>
           <div className="flex items-center gap-2">
             <StatusBadge status={workspace.status} />
-            <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 ml-2">✕</button>
+            <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 ml-2"><Icon as={X} size={16} /></button>
           </div>
         </div>
 
@@ -229,7 +231,7 @@ export function WorkspaceDetailModal({ workspace, onClose, onStatusChange, onDel
           <div className="flex flex-wrap gap-3">
             <button onClick={handleImpersonate} disabled={impersonating}
               className="px-4 py-2 bg-primary-600 hover:bg-primary-700 disabled:opacity-50 text-white text-sm font-medium rounded-xl transition-colors">
-              {impersonating ? 'Entrando...' : '🔑 Entrar al workspace'}
+              {impersonating ? 'Entrando...' : 'Entrar al workspace'}
             </button>
             <div className="flex items-center gap-2">
               <select value={newStatus} onChange={e => setNewStatus(e.target.value)}
@@ -281,7 +283,7 @@ export function WorkspaceDetailModal({ workspace, onClose, onStatusChange, onDel
                   ? 'bg-green-600 hover:bg-green-700 text-white'
                   : 'bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200'
               }`}>
-              {savingExempt ? '...' : detail?.billingExempt ? '✓ Exento de billing' : 'Eximir de billing'}
+              {savingExempt ? '...' : detail?.billingExempt ? 'Exento de billing' : 'Eximir de billing'}
             </button>
             <button onClick={handleDelete} disabled={deleting || loading}
               title="Borrado inmediato y permanente — no pasa por el flujo normal de 48hs ni requiere un owner"

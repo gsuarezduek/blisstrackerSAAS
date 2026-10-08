@@ -5,8 +5,9 @@ import { useAuth } from '../context/AuthContext'
 import useActiveGames from '../hooks/useActiveGames'
 import { avatarUrl } from '../utils/avatarUrl'
 import './situation-editor.css'
+import { Trophy, X } from 'lucide-react'
+import { Icon } from './ui/Icon'
 
-const MEDAL = ['🥇', '🥈', '🥉']
 
 // La descripción del juego puede ser HTML (RichTextEditor) o texto plano (legacy).
 const looksLikeHtml = (s) => /<[a-z][\s\S]*>/i.test(s || '')
@@ -82,10 +83,10 @@ export default function GamificationFab() {
           <div className="relative bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md mx-4 sm:mx-0 max-h-[80vh] flex flex-col z-10">
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-700">
               <h3 className="font-semibold text-gray-900 dark:text-white">
-                🏆 Juegos y desafíos
+                Juegos y desafíos
                 {games.length > 1 && <span className="ml-1.5 text-xs font-normal text-gray-400">({games.length} activos)</span>}
               </h3>
-              <button onClick={() => setOpen(false)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">✕</button>
+              <button onClick={() => setOpen(false)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"><Icon as={X} size={16} /></button>
             </div>
 
             {/* Pestañas cuando hay varios juegos, para no perderse los de abajo */}
@@ -146,10 +147,10 @@ function GamePanel({ game, userId, voting, onVote, onRefresh }) {
               ? <div className="situation-content text-xs text-gray-500 dark:text-gray-400 mt-0.5" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(game.description) }} />
               : <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 whitespace-pre-line">{game.description}</p>
           )}
-          {game.prize && <p className="text-xs text-amber-600 dark:text-amber-400 mt-0.5">🎁 {game.prize}</p>}
+          {game.prize && <p className="text-xs text-amber-600 dark:text-amber-400 mt-0.5">{game.prize}</p>}
           {game.endDate && !game.finished && (
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-              📅 {game.startDate ? `${fmtDate(game.startDate)} – ` : ''}{fmtDate(game.endDate)}
+              {game.startDate ? `${fmtDate(game.startDate)} – ` : ''}{fmtDate(game.endDate)}
               <span className="mx-1">·</span>
               <span className="font-medium text-primary-600 dark:text-primary-400">{countdown(game.endDate)}</span>
             </p>
@@ -161,7 +162,7 @@ function GamePanel({ game, userId, voting, onVote, onRefresh }) {
       {/* Ganador (juego finalizado) */}
       {game.finished && game.winnerSubject && (
         <div className="mt-2 mb-1 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-900/40 px-3 py-2 text-sm">
-          🏆 <span className="font-semibold text-amber-700 dark:text-amber-300">{game.winnerSubject.label}</span>
+          <Icon as={Trophy} size={13} className="inline-block text-amber-500 mr-1" /><span className="font-semibold text-amber-700 dark:text-amber-300">{game.winnerSubject.label}</span>
           <span className="text-amber-600 dark:text-amber-400"> · {isVote ? `${game.winnerSubject.score} votos` : formatScore(game.winnerSubject.score, false, metricMeta)}</span>
         </div>
       )}
@@ -169,9 +170,9 @@ function GamePanel({ game, userId, voting, onVote, onRefresh }) {
       {/* Votación en curso */}
       {isVote && !game.finished ? (
         <div className="mt-2 space-y-1">
-          {hidden && <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">🔒 Los votos se revelan recién al cierre.</p>}
+          {hidden && <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Los votos se revelan recién al cierre.</p>}
           {game.myVote
-            ? <p className="text-xs text-green-600 dark:text-green-400 mb-1">✓ Ya votaste. Podés cambiar tu voto.</p>
+            ? <p className="text-xs text-green-600 dark:text-green-400 mb-1">Ya votaste. Podés cambiar tu voto.</p>
             : <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Elegí a tu candidato:</p>}
           {subjects.map((s) => {
             const isSelf = String(userId) === s.subjectId
@@ -199,7 +200,7 @@ function GamePanel({ game, userId, voting, onVote, onRefresh }) {
       ) : isQuiz && !game.finished ? (
         <div className="mt-2">
           {game.mySubmission
-            ? <p className="text-sm text-green-600 dark:text-green-400 mb-2">✓ Ya respondiste{quizHasScore ? <> · tu puntaje: <strong>{game.mySubmission.score}</strong></> : '.'}</p>
+            ? <p className="text-sm text-green-600 dark:text-green-400 mb-2">Ya respondiste{quizHasScore ? <> · tu puntaje: <strong>{game.mySubmission.score}</strong></> : '.'}</p>
             : <QuizTaker gameId={game.id} questionCount={game.questionCount} onDone={onRefresh} withPoints={quizWithPoints} hasScore={quizHasScore} />}
           {quizHasScore && (game.mySubmission || subjects.length > 0) && <QuizRanking subjects={subjects} />}
         </div>
@@ -210,7 +211,7 @@ function GamePanel({ game, userId, voting, onVote, onRefresh }) {
           {rankSubjects.map((s, i) => (
             <li key={s.subjectId} className="flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg bg-gray-50 dark:bg-gray-700/50 text-sm">
               <span className="flex items-center gap-2 min-w-0">
-                <span className="w-5 text-center">{MEDAL[i] || `${i + 1}.`}</span>
+                <span className="w-5 text-center">{`${i + 1}.`}</span>
                 <span className="truncate text-gray-800 dark:text-gray-100">{s.label}</span>
               </span>
               <span className="text-xs font-medium text-gray-600 dark:text-gray-300 shrink-0">{formatScore(s.score, isVote, metricMeta)}</span>
@@ -248,7 +249,7 @@ function QuizRanking({ subjects }) {
       {subjects.map((s, i) => (
         <li key={s.subjectId} className="flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg bg-gray-50 dark:bg-gray-700/50 text-sm">
           <span className="flex items-center gap-2 min-w-0">
-            <span className="w-5 text-center">{MEDAL[i] || `${i + 1}.`}</span>
+            <span className="w-5 text-center">{`${i + 1}.`}</span>
             {s.avatar && <img src={avatarUrl(s.avatar)} alt="" className="w-6 h-6 rounded-full object-cover" />}
             <span className="truncate text-gray-800 dark:text-gray-100">{s.label}</span>
           </span>
@@ -314,7 +315,7 @@ function QuizTaker({ gameId, questionCount, onDone, withPoints, hasScore }) {
   if (!quiz) {
     return (
       <button onClick={open} className="w-full text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 rounded-lg py-2 transition-colors">
-        📝 Responder cuestionario{questionCount ? ` (${questionCount} preguntas)` : ''}
+        Responder cuestionario{questionCount ? ` (${questionCount} preguntas)` : ''}
       </button>
     )
   }

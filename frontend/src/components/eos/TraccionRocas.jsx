@@ -2,6 +2,8 @@ import { useState, useEffect, useRef } from 'react'
 import api from '../../api/client'
 import { adminMemberOptions } from '../../utils/adminMembers'
 import { avatarUrl } from '../../utils/avatarUrl'
+import { Mountain } from 'lucide-react'
+import { Icon } from '../ui/Icon'
 
 export const STATUS_ROCK = {
   not_started: {
@@ -247,7 +249,7 @@ export function QuickAddRock({ onAdd }) {
 
   return (
     <div className="flex items-center gap-2 px-3 py-2 border border-dashed border-gray-300 dark:border-gray-600 rounded-xl">
-      <span className="text-gray-400 text-sm">🪨</span>
+      <span className="text-gray-400"><Icon as={Mountain} size={14} /></span>
       <input
         ref={inputRef}
         type="text"
@@ -369,7 +371,7 @@ export function RocasSection() {
           {/* Rock list */}
           {sorted.length === 0 && (
             <div className="text-center py-8">
-              <p className="text-4xl mb-3">🪨</p>
+              <p className="mb-3"><Icon as={Mountain} size={32} className="inline-block text-gray-300 dark:text-gray-600" /></p>
               <p className="text-sm text-gray-500 dark:text-gray-400">
                 No hay rocas para {quarterLabel(quarter)}.
               </p>

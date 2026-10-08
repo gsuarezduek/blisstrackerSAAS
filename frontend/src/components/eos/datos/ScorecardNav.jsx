@@ -1,3 +1,5 @@
+import { Zap } from 'lucide-react'
+import { Icon } from '../../ui/Icon'
 // Piezas de navegación/UI reutilizadas por todo el Scorecard EOS: badge
 // "Automático", navegación de año, encabezado de período (‹ Hoy ›) y las
 // pestañas Datos/Notas/Histórico.
@@ -7,7 +9,7 @@ export function AutoBadge({ className = '' }) {
   return (
     <span title="Dato automático"
       className={`inline-flex items-center justify-center w-4 h-4 rounded text-[10px] bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-300 ${className}`}>
-      ⚡
+      <Icon as={Zap} size={10} />
     </span>
   )
 }

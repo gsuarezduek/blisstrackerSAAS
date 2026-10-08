@@ -6,6 +6,8 @@ import RichTextEditor from '../components/RichTextEditor'
 import ConfirmModal from '../components/ConfirmModal'
 import { useFeatureFlag } from '../hooks/useFeatureFlag'
 import '../components/situation-editor.css'
+import { Pencil, Target, Trash2, Trophy, X } from 'lucide-react'
+import { Icon } from '../components/ui/Icon'
 
 // La descripción puede ser HTML (RichTextEditor) o texto plano (desafíos legacy).
 // Se detecta HTML por la presencia de un tag; el texto plano se renderiza respetando
@@ -81,7 +83,7 @@ export default function Gamification() {
     if (!window.confirm('¿Finalizar el juego y proclamar al ganador según el ranking actual?')) return
     const { data } = await api.post(`/gamification/games/${game.id}/finish`)
     load()
-    if (data.winner) window.alert(`🏆 Ganador: ${data.winner.label} (${data.winner.score} pts)`)
+    if (data.winner) window.alert(`Ganador: ${data.winner.label} (${data.winner.score} pts)`)
     else window.alert('El juego se finalizó, pero todavía nadie tiene puntaje.')
   }
   async function remove() {
@@ -123,7 +125,7 @@ export default function Gamification() {
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
         <Navbar />
         <main className="max-w-3xl mx-auto px-4 py-16 text-center">
-          <p className="text-5xl mb-4">🏆</p>
+          <p className="mb-4"><Icon as={Trophy} size={40} className="inline-block text-gray-300 dark:text-gray-600" /></p>
           <h1 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Gamification no está habilitado</h1>
           <p className="text-sm text-gray-500 dark:text-gray-400">Pedile al equipo de BlissTracker que active el módulo, o revisá Preferencias → Módulos adicionales.</p>
         </main>
@@ -137,9 +139,9 @@ export default function Gamification() {
       <main className="max-w-5xl mx-auto px-4 py-8">
         <div className="mb-6 flex items-start justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">🏆 Gamification</h1>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Gamification</h1>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-              Creá juegos y desafíos para el equipo. Cuando un juego está <strong>activo</strong> y dentro de su ventana, aparece para todos con el botón flotante 🏆.
+              Creá juegos y desafíos para el equipo. Cuando un juego está <strong>activo</strong> y dentro de su ventana, aparece para todos con el botón flotante de juegos.
             </p>
           </div>
           <button
@@ -177,7 +179,7 @@ export default function Gamification() {
           <p className="text-sm text-gray-400">Cargando…</p>
         ) : games.length === 0 ? (
           <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-10 text-center">
-            <p className="text-4xl mb-3">🎯</p>
+            <p className="mb-3"><Icon as={Target} size={32} className="inline-block text-gray-300 dark:text-gray-600" /></p>
             <p className="text-gray-700 dark:text-gray-200 font-medium mb-1">Todavía no hay juegos</p>
             <p className="text-sm text-gray-500 dark:text-gray-400 mb-5">Creá tu primer desafío: una competencia, una votación o un puntaje manual.</p>
             <button onClick={() => setEditing({})} className="px-4 py-2 text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 rounded-xl">+ Nuevo juego</button>
@@ -187,7 +189,7 @@ export default function Gamification() {
             {games.length > 1 && (
               <p className="text-xs text-gray-400 dark:text-gray-500">
                 {filter === 'active'
-                  ? 'Usá ▲▼ para ordenar los juegos activos. Por defecto el más nuevo va primero (arriba); el orden se respeta también en el botón flotante 🏆 que ve el equipo.'
+                  ? 'Usá ▲▼ para ordenar los juegos activos. Por defecto el más nuevo va primero (arriba); el orden se respeta también en el botón flotante que ve el equipo.'
                   : 'Para reordenar los juegos, cambiá el filtro a «Activos».'}
               </p>
             )}
@@ -284,30 +286,30 @@ function GameCard({ game, reorderable, canMoveUp, canMoveDown, onMoveUp, onMoveD
               : <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5 line-clamp-2 whitespace-pre-line">{game.description}</p>
           )}
           <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-xs text-gray-500 dark:text-gray-400">
-            <span>👥 {SUBJECT_LABEL[game.subjectType]}</span>
+            <span>{SUBJECT_LABEL[game.subjectType]}</span>
             <span>
-              👁 {game.status === 'finished'
-                ? 'Visible en 🏆 unos días más (podés ocultarlo ya con "Ocultar del 🏆")'
+              {game.status === 'finished'
+                ? 'Visible en unos días más (podés ocultarlo ya con "Ocultar del equipo")'
                 : game.status === 'archived'
-                  ? 'Oculto del 🏆 del equipo'
+                  ? 'Oculto del del equipo'
                   : visibilitySummary(game.visibilityRule)}
             </span>
-            {game.prize && <span>🎁 {game.prize}</span>}
-            {game.winnerSubject && <span className="text-blue-600 dark:text-blue-300">🏆 {game.winnerSubject.label} ({game.winnerSubject.score})</span>}
+            {game.prize && <span>{game.prize}</span>}
+            {game.winnerSubject && <span className="text-blue-600 dark:text-blue-300">{game.winnerSubject.label} ({game.winnerSubject.score})</span>}
           </div>
         </div>
       </div>
 
       <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-gray-100 dark:border-gray-700">
         {game.status === 'draft' && <Btn onClick={onActivate} kind="primary">▶ Activar</Btn>}
-        {game.status === 'active' && <Btn onClick={onPause}>⏸ Pausar</Btn>}
-        {game.scoring === 'manual' && game.status !== 'finished' && <Btn onClick={onScores}>🔢 Cargar puntos</Btn>}
-        {(game.scoring === 'vote' || game.scoring === 'quiz') && <Btn onClick={onDetail}>{game.scoring === 'vote' ? '👁 Ver votación' : '👁 Ver resultados'}</Btn>}
-        <Btn onClick={onEdit}>✏️ Editar</Btn>
-        {['draft', 'active'].includes(game.status) && <Btn onClick={onFinish}>🏁 Finalizar</Btn>}
-        {game.status === 'finished' && <Btn onClick={onArchive}>🗄 Ocultar del 🏆</Btn>}
-        {game.status === 'archived' && <Btn onClick={onUnarchive}>↩ Reactivar</Btn>}
-        <Btn onClick={onRemove} kind="danger">🗑 Eliminar</Btn>
+        {game.status === 'active' && <Btn onClick={onPause}>Pausar</Btn>}
+        {game.scoring === 'manual' && game.status !== 'finished' && <Btn onClick={onScores}>Cargar puntos</Btn>}
+        {(game.scoring === 'vote' || game.scoring === 'quiz') && <Btn onClick={onDetail}>{game.scoring === 'vote' ? 'Ver votación' : 'Ver resultados'}</Btn>}
+        <Btn onClick={onEdit}>Editar</Btn>
+        {['draft', 'active'].includes(game.status) && <Btn onClick={onFinish}>Finalizar</Btn>}
+        {game.status === 'finished' && <Btn onClick={onArchive}>Ocultar del equipo</Btn>}
+        {game.status === 'archived' && <Btn onClick={onUnarchive}>Reactivar</Btn>}
+        <Btn onClick={onRemove} kind="danger">Eliminar</Btn>
       </div>
         </div>
       </div>
@@ -609,7 +611,7 @@ function GameEditor({ game, catalog, metrics, metricCategories, members, project
           )}
           {scoring === 'manual' && effSubjectType !== 'team' && (
             <p className="text-xs text-gray-500 dark:text-gray-400 -mt-1 mb-3">
-              Después de guardar el juego vas a poder cargar los puntos con el botón <strong>🔢 Cargar puntos</strong>.
+              Después de guardar el juego vas a poder cargar los puntos con el botón <strong>Cargar puntos</strong>.
             </p>
           )}
           {scoring === 'quiz' && (
@@ -620,7 +622,7 @@ function GameEditor({ game, catalog, metrics, metricCategories, members, project
           {effSubjectType === 'team' && (
             isNew ? (
               <p className="text-xs text-gray-500 dark:text-gray-400 -mt-1 mb-3">
-                Guardá el juego y volvé a abrirlo (✏️ Editar) para armar los equipos y luego cargar sus puntos.
+                Guardá el juego y volvé a abrirlo (Editar) para armar los equipos y luego cargar sus puntos.
               </p>
             ) : (
               <Field label="Equipos">
@@ -731,8 +733,8 @@ function TeamsManager({ game, members, projects }) {
             <span className="text-xs text-gray-400 ml-2">{(t.memberIds || []).length} pers · {(t.projectIds || []).length} proy</span>
           </span>
           <span className="flex gap-1 shrink-0">
-            <button onClick={() => setEditing(t)} className="text-xs px-2 py-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700">✏️</button>
-            <button onClick={() => del(t.id)} className="text-xs px-2 py-1 rounded-lg text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20">🗑</button>
+            <button onClick={() => setEditing(t)} className="text-xs px-2 py-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"><Icon as={Pencil} size={15} /></button>
+            <button onClick={() => del(t.id)} className="text-xs px-2 py-1 rounded-lg text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"><Icon as={Trash2} size={15} /></button>
           </span>
         </div>
       ))}
@@ -810,7 +812,7 @@ function ManualScores({ game, members, projects, onClose, onSaved }) {
   return (
     <Modal onClose={onClose} title={`Puntos · ${game.title}`}>
       {isTeam && rows.length === 0 ? (
-        <p className="text-sm text-gray-500 dark:text-gray-400">Este juego no tiene equipos. Agregalos desde <strong>✏️ Editar</strong> y volvé a cargar los puntos.</p>
+        <p className="text-sm text-gray-500 dark:text-gray-400">Este juego no tiene equipos. Agregalos desde <strong>Editar</strong> y volvé a cargar los puntos.</p>
       ) : (
         <>
           <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">Cargá el puntaje de cada participante. El de mayor puntaje gana.</p>
@@ -826,7 +828,7 @@ function ManualScores({ game, members, projects, onClose, onSaved }) {
                   className={`${inputCls} flex-1 ${row.locked ? 'bg-gray-50 dark:bg-gray-800' : ''}`}
                 />
                 <input type="number" value={row.points} onChange={(e) => update(i, { points: e.target.value })} className="w-24 px-2 py-2 rounded-xl border border-gray-300 dark:border-gray-600 dark:bg-gray-700 text-sm" />
-                {!isTeam && <button onClick={() => removeRow(i)} className="text-gray-400 hover:text-red-500 px-1">✕</button>}
+                {!isTeam && <button onClick={() => removeRow(i)} className="text-gray-400 hover:text-red-500 px-1"><Icon as={X} size={16} /></button>}
               </div>
             ))}
             {suggestions.length > 0 && <datalist id="ms-sug">{suggestions.map((s) => <option key={s} value={s} />)}</datalist>}
@@ -872,7 +874,7 @@ function QuizEditor({ questions, setQuestions, withPoints }) {
               {q.kind === 'open' ? 'Abierta' : 'Opción múltiple'}
             </span>
             <input value={q.text} onChange={(e) => updateQ(i, { text: e.target.value })} placeholder="Enunciado de la pregunta" className={`${inputCls} flex-1`} />
-            <button type="button" onClick={() => removeQ(i)} className="text-gray-400 hover:text-red-500 px-1">🗑</button>
+            <button type="button" onClick={() => removeQ(i)} className="text-gray-400 hover:text-red-500 px-1"><Icon as={Trash2} size={15} /></button>
           </div>
           {q.kind === 'open' ? (
             <div className="pl-5">
@@ -886,7 +888,7 @@ function QuizEditor({ questions, setQuestions, withPoints }) {
                 <div key={o.id} className="flex items-center gap-2 pl-5">
                   {withPoints && <input type="radio" name={`correct-${i}`} checked={q.correctOptionId === o.id} onChange={() => updateQ(i, { correctOptionId: o.id })} title="Correcta" />}
                   <input value={o.text} onChange={(e) => updateOpt(i, oi, e.target.value)} placeholder={`Opción ${oi + 1}`} className={`${inputCls} flex-1`} />
-                  {q.options.length > 2 && <button type="button" onClick={() => removeOpt(i, oi)} className="text-gray-400 hover:text-red-500 px-1">✕</button>}
+                  {q.options.length > 2 && <button type="button" onClick={() => removeOpt(i, oi)} className="text-gray-400 hover:text-red-500 px-1"><Icon as={X} size={16} /></button>}
                 </div>
               ))}
               <div className="flex items-center justify-between pl-5">
@@ -999,7 +1001,7 @@ function GameDetailModal({ game, onClose }) {
                 {subjects.length === 0 && <li className="text-xs text-gray-400">{game.scoring === 'vote' ? 'Todavía nadie recibió votos.' : 'Sin datos todavía.'}</li>}
                 {subjects.map((s, i) => (
                   <li key={s.subjectId} className="flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg bg-gray-50 dark:bg-gray-700/50 text-sm">
-                    <span className="truncate text-gray-800 dark:text-gray-100">{['🥇', '🥈', '🥉'][i] || `${i + 1}.`} {s.label}</span>
+                    <span className="truncate text-gray-800 dark:text-gray-100">{`${i + 1}.`} {s.label}</span>
                     <span className="text-xs font-medium text-gray-600 dark:text-gray-300">{s.score} {game.scoring === 'vote' ? (s.score === 1 ? 'voto' : 'votos') : 'pts'}</span>
                   </li>
                 ))}
@@ -1056,7 +1058,7 @@ function Modal({ title, children, onClose }) {
         <div onClick={(e) => e.stopPropagation()} className="relative bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-lg my-8 p-5 z-10">
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-semibold text-gray-900 dark:text-white">{title}</h3>
-            <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">✕</button>
+            <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"><Icon as={X} size={16} /></button>
           </div>
           {children}
         </div>

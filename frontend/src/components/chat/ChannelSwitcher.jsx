@@ -1,5 +1,7 @@
 import { useState, useMemo } from 'react'
 import { useVoiceCall } from '../../context/VoiceCallContext'
+import { Lock, Volume2 } from 'lucide-react'
+import { Icon } from '../ui/Icon'
 
 function ChannelRow({ channel, active, onSelect, voiceCount }) {
   const isVoice = channel.medium === 'voice'
@@ -15,7 +17,7 @@ function ChannelRow({ channel, active, onSelect, voiceCount }) {
       }`}
     >
       <span className={`text-gray-400 dark:text-gray-500 ${active ? '!text-primary-500' : ''}`}>
-        {channel.isPrivate ? '🔒' : isVoice ? '🔊' : '#'}
+        {channel.isPrivate ? <Icon as={Lock} size={13} className="inline-block" /> : isVoice ? <Icon as={Volume2} size={14} className="inline-block" /> : '#'}
       </span>
       <span className={`flex-1 truncate ${unread && !active ? 'font-semibold text-gray-900 dark:text-white' : ''}`}>
         {channel.name}
@@ -177,7 +179,7 @@ export default function ChannelSwitcher({ channels, activeChannelId, onSelect, i
           onClick={onFeedback}
           className="w-full flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-gray-400 dark:text-gray-500 hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
         >
-          <span className="text-base leading-none">📝</span> Feedback
+          Feedback
         </button>
       </div>
     </div>

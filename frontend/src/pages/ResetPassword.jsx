@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { useSearchParams, useNavigate, Link } from 'react-router-dom'
 import api from '../api/client'
 import PasswordInput from '../components/PasswordInput'
+import { TriangleAlert } from 'lucide-react'
+import { Icon } from '../components/ui/Icon'
 
 export default function ResetPassword() {
   const [searchParams] = useSearchParams()
@@ -35,7 +37,7 @@ export default function ResetPassword() {
     return (
       <div className="min-h-screen bg-gradient-to-br from-primary-700 to-primary-500 dark:from-gray-900 dark:to-gray-800 flex items-center justify-center p-4">
         <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md p-8 text-center space-y-4">
-          <div className="text-5xl">⚠️</div>
+          <div><Icon as={TriangleAlert} size={40} className="inline-block text-amber-500" /></div>
           <p className="text-gray-700 dark:text-gray-300 font-medium">Enlace inválido</p>
           <Link to="/login" className="text-sm text-primary-600 dark:text-primary-400 hover:underline">
             ← Volver al login

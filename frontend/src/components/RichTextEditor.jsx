@@ -18,6 +18,8 @@ import Link from '@tiptap/extension-link'
 import Highlight from '@tiptap/extension-highlight'
 import { useEffect } from 'react'
 import './situation-editor.css'
+import { X } from 'lucide-react'
+import { Icon } from './ui/Icon'
 
 function promptForLink(editor) {
   const previousUrl = editor.getAttributes('link').href
@@ -139,7 +141,7 @@ export function Toolbar({ editor }) {
           onMouseDown={e => { e.preventDefault(); editor.chain().focus().unsetColor().run() }}
           className="w-4 h-4 rounded-full border border-gray-300 dark:border-gray-500 bg-white dark:bg-gray-700 hover:scale-125 transition-transform text-[8px] flex items-center justify-center text-gray-500"
         >
-          ✕
+          <Icon as={X} size={16} />
         </button>
       </div>
 
@@ -163,7 +165,7 @@ export function Toolbar({ editor }) {
           onMouseDown={e => { e.preventDefault(); editor.chain().focus().unsetHighlight().run() }}
           className="w-4 h-4 rounded border border-gray-300 dark:border-gray-500 bg-white dark:bg-gray-700 hover:scale-125 transition-transform text-[8px] flex items-center justify-center text-gray-500"
         >
-          ✕
+          <Icon as={X} size={16} />
         </button>
       </div>
     </div>

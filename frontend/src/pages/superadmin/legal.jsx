@@ -106,7 +106,7 @@ export function LegalDocEditor({ docKey, publicPath, placeholder }) {
           >
             {saving ? 'Guardando…' : 'Guardar y publicar'}
           </button>
-          {saved && <span className="text-sm text-emerald-500">✓ Publicado correctamente</span>}
+          {saved && <span className="text-sm text-emerald-500">Publicado correctamente</span>}
         </div>
       </div>
 

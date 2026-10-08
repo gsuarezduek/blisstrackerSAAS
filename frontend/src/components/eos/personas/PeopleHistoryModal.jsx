@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import api from '../../../api/client'
 import PeopleAnalyzer from './PeopleAnalyzer'
+import { Inbox } from 'lucide-react'
+import { Icon } from '../../ui/Icon'
 
 // ─── Historial mensual del People Score ───────────────────────────────────────
 // Snapshot automático: cada visita al tab actualiza la captura del mes en curso, así se
@@ -33,7 +35,7 @@ function PeopleHistoryList({ snapshots, year, years, onYearChange, onSelectMonth
         <div className="flex justify-center py-10"><div className="w-5 h-5 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" /></div>
       ) : withData.length === 0 ? (
         <div className="text-center py-10 text-gray-400">
-          <p className="text-3xl mb-2">📭</p>
+          <p className="mb-2"><Icon as={Inbox} size={28} className="inline-block text-gray-300 dark:text-gray-600" /></p>
           <p className="text-sm font-medium">Todavía no hay historial</p>
           <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">Se guarda una captura automática cada mes.</p>
         </div>
@@ -101,10 +103,10 @@ export default function PeopleHistoryModal({ onClose }) {
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-gray-700 shrink-0">
           {detailMonth ? (
             <button onClick={() => setDetailMonth(null)} className="flex items-center gap-1.5 text-base font-semibold text-gray-900 dark:text-white hover:underline">
-              ← 📈 Historial del People Score
+              ← Historial del People Score
             </button>
           ) : (
-            <h2 className="text-base font-semibold text-gray-900 dark:text-white">📈 Historial del People Score</h2>
+            <h2 className="text-base font-semibold text-gray-900 dark:text-white">Historial del People Score</h2>
           )}
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-xl leading-none">×</button>
         </div>

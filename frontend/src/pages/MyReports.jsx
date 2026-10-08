@@ -8,6 +8,8 @@ import MyProductivity from '../components/MyProductivity'
 import api from '../api/client'
 import { useAuth } from '../context/AuthContext'
 import { fmtMins } from '../utils/format'
+import { ClipboardList, Pencil } from 'lucide-react'
+import { Icon } from '../components/ui/Icon'
 
 export default function MyReports() {
   const { user } = useAuth()
@@ -122,7 +124,7 @@ export default function MyReports() {
                           <span className="text-gray-700 dark:text-gray-300 text-left whitespace-pre-wrap break-words">{linkify(task.description)}</span>
                         </div>
                         <div className="flex items-center gap-1.5 flex-shrink-0 ml-3">
-                          {task.isOverride && <span className="text-amber-500 text-xs">✎</span>}
+                          {task.isOverride && <span className="text-amber-500 inline-flex" title="Duración editada a mano"><Icon as={Pencil} size={11} /></span>}
                           <span className="text-gray-500 dark:text-gray-400">{fmtMins(task.minutes)}</span>
                         </div>
                       </button>
@@ -136,7 +138,7 @@ export default function MyReports() {
 
         {!loading && data && byProject.length === 0 && (
           <div className="text-center py-16 text-gray-400">
-            <p className="text-3xl mb-2">📋</p>
+            <p className="mb-2"><Icon as={ClipboardList} size={28} className="inline-block text-gray-300 dark:text-gray-600" /></p>
             <p>No hay tareas completadas en este período</p>
           </div>
         )}

@@ -36,8 +36,8 @@ export function SectionFeedback() {
           {[
             { id: 'all',        label: 'Todos' },
             { id: 'unread',     label: `Sin leer (${unreadCount})` },
-            { id: 'SUGGESTION', label: '💡' },
-            { id: 'BUG',        label: '🐛' },
+            { id: 'SUGGESTION', label: 'Sugerencias' },
+            { id: 'BUG',        label: 'Errores' },
           ].map(f => (
             <button key={f.id} onClick={() => setFilter(f.id)}
               className={`text-xs px-2.5 py-1 rounded-full font-medium transition-colors ${
@@ -67,7 +67,7 @@ export function SectionFeedback() {
                     ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400'
                     : 'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400'
                 }`}>
-                  {f.type === 'BUG' ? '🐛 Error' : '💡 Sugerencia'}
+                  {f.type === 'BUG' ? 'Error' : 'Sugerencia'}
                 </span>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm text-gray-800 dark:text-gray-200 leading-relaxed">{f.message}</p>

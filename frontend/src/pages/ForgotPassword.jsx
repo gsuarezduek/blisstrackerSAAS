@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import api from '../api/client'
+import { Mail } from 'lucide-react'
+import { Icon } from '../components/ui/Icon'
 
 export default function ForgotPassword() {
   const [email, setEmail] = useState('')
@@ -32,7 +34,7 @@ export default function ForgotPassword() {
 
         {sent ? (
           <div className="text-center space-y-4">
-            <div className="text-5xl">📧</div>
+            <div><Icon as={Mail} size={40} className="inline-block text-primary-500" /></div>
             <p className="text-gray-700 dark:text-gray-300 font-medium">
               Si el email está registrado, recibirás un enlace para cambiar tu contraseña.
             </p>

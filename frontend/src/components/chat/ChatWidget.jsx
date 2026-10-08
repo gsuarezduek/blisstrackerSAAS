@@ -13,6 +13,8 @@ import VoiceRoomBar from './VoiceRoomBar'
 import ChannelSearch from './ChannelSearch'
 import ChatSoundToggle from './ChatSoundToggle'
 import FeedbackModal from '../FeedbackModal'
+import { Lock, LockOpen, Menu, Search, Settings, Volume2 } from 'lucide-react'
+import { Icon } from '../ui/Icon'
 
 // Panel de Chat interno (no una página/sección aparte) — sin botón propio, es
 // FloatingDock (frontend/src/components/FloatingDock.jsx) quien decide cuándo
@@ -352,14 +354,14 @@ export default function ChatWidget() {
                     title="Ver todos los canales"
                     className="p-1.5 text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 flex-shrink-0"
                   >
-                    ☰
+                    <Icon as={Menu} size={16} />
                   </button>
                   <div ref={switcherRef} className="relative min-w-0 flex-1">
                     <button
                       onClick={() => setSwitcherOpen(v => !v)}
                       className="flex items-center gap-1 font-semibold text-gray-900 dark:text-white hover:text-primary-600 dark:hover:text-primary-400 transition-colors max-w-full"
                     >
-                      <span className="truncate">{activeChannel.isPrivate ? '🔒' : activeChannel.medium === 'voice' ? '🔊' : '#'} {activeChannel.name}</span>
+                      <span className="truncate">{activeChannel.isPrivate ? <Icon as={Lock} size={14} className="inline-block align-[-2px] mr-1" /> : activeChannel.medium === 'voice' ? <Icon as={Volume2} size={15} className="inline-block align-[-2px] mr-1" /> : '# '}{activeChannel.name}</span>
                       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"
                         className={`w-3.5 h-3.5 flex-shrink-0 transition-transform ${switcherOpen ? 'rotate-180' : ''}`}>
                         <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" />
@@ -382,7 +384,7 @@ export default function ChatWidget() {
                       title="Editar canal"
                       className="p-1.5 text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 flex-shrink-0"
                     >
-                      ⚙️
+                      <Icon as={Settings} size={16} />
                     </button>
                   )}
                   {user?.isAdmin && (
@@ -391,7 +393,7 @@ export default function ChatWidget() {
                       title={activeChannel.isPrivate ? 'Canal privado — clic para abrirlo a todo el equipo' : 'Canal abierto — clic para hacerlo privado (solo administradores)'}
                       className="p-1.5 text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 flex-shrink-0"
                     >
-                      {activeChannel.isPrivate ? '🔒' : '🔓'}
+                      {activeChannel.isPrivate ? <Icon as={Lock} size={16} /> : <Icon as={LockOpen} size={16} />}
                     </button>
                   )}
                   <button
@@ -399,7 +401,7 @@ export default function ChatWidget() {
                     title="Buscar en este canal"
                     className="p-1.5 text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 flex-shrink-0"
                   >
-                    🔍
+                    <Icon as={Search} size={16} />
                   </button>
                   <ChatSoundToggle pref={soundPref} onChange={setSoundPref} />
                   <button
@@ -416,7 +418,7 @@ export default function ChatWidget() {
                   <>
                 {activeChannel.isPrivate && (
                   <div className="px-4 py-1.5 bg-amber-50 dark:bg-amber-900/20 border-b border-amber-100 dark:border-amber-800/40 flex-shrink-0">
-                    <p className="text-[11px] font-medium text-amber-700 dark:text-amber-300">🔒 Canal privado — solo lo ven los administradores.</p>
+                    <p className="text-[11px] font-medium text-amber-700 dark:text-amber-300">Canal privado — solo lo ven los administradores.</p>
                   </div>
                 )}
 

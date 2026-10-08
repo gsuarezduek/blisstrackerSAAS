@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { CHAT_SOUND_OPTIONS } from '../../lib/chatSound'
+import { Star, Volume2, VolumeX } from 'lucide-react'
+import { Icon } from '../ui/Icon'
 
 const LABELS = {
   mentions: { label: 'Solo menciones', hint: 'Sonar cuando me mencionan a mí, a @everyone o a @equipo' },
@@ -23,7 +25,7 @@ export default function ChatSoundToggle({ pref, onChange }) {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-  const icon = pref === 'none' ? '🔇' : pref === 'favorites' ? '⭐' : '🔊'
+  const icon = pref === 'none' ? VolumeX : pref === 'favorites' ? Star : Volume2
 
   return (
     <div ref={ref} className="relative flex-shrink-0">
@@ -32,7 +34,7 @@ export default function ChatSoundToggle({ pref, onChange }) {
         title={`Notificaciones de sonido: ${LABELS[pref]?.label || ''}`}
         className="p-1.5 text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"
       >
-        {icon}
+        <Icon as={icon} size={16} />
       </button>
       {open && (
         <div className="absolute top-full right-0 mt-1 w-64 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-xl shadow-lg z-20 py-1 overflow-hidden">

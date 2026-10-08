@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
 import { avatarUrl } from '../../../utils/avatarUrl'
 import { formatVal, goalStatus, goalDisplay } from './scorecardHelpers'
+import { CircleAlert, CircleCheck } from 'lucide-react'
+import { Icon } from '../../ui/Icon'
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // QuickEntryCard — tarjeta de carga del período actual
@@ -81,7 +83,7 @@ export default function QuickEntryCard({ metric, owner, initialValue, onSave }) 
         />
         {hasGoal && numVal != null && (
           <span className="absolute -top-2 -right-1.5 text-base bg-white dark:bg-gray-800 rounded-full leading-none">
-            {onTrack ? '✅' : '🔴'}
+            {onTrack ? <Icon as={CircleCheck} size={16} className="text-green-500" /> : <Icon as={CircleAlert} size={16} className="text-red-500" />}
           </span>
         )}
       </div>

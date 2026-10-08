@@ -99,7 +99,7 @@ export default function ChannelFormModal({ channel, onClose, onSaved, onDeleted 
                       : 'border-gray-200 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'
                   }`}
                 >
-                  🔊 Voz
+                  Voz
                 </button>
               </div>
             </div>
@@ -132,7 +132,7 @@ export default function ChannelFormModal({ channel, onClose, onSaved, onDeleted 
 
         {confirmDelete && (
           <div className="mt-3 p-3 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/50">
-            <p className="text-xs text-red-700 dark:text-red-300 mb-2">¿Eliminar {channel.medium === 'voice' ? '🔊' : '#'} {channel.name}? Se borran también sus mensajes. No se puede deshacer.</p>
+            <p className="text-xs text-red-700 dark:text-red-300 mb-2">¿Eliminar {channel.medium === 'voice' ? '' : '#'}{channel.name}? Se borran también sus mensajes. No se puede deshacer.</p>
             <div className="flex items-center gap-2">
               <button
                 onClick={handleDelete}

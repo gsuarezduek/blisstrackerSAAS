@@ -146,7 +146,7 @@ function Metric({ label, value, team, hint }) {
 // Nota suave que reemplaza al semáforo crudo (no expone etiquetas "down"/"stuck").
 function softNote(d) {
   if (!d.hasData) return null
-  if (d.status === 'up') return { cls: 'text-green-700 dark:text-green-400', text: '💪 Vas por encima de tu ritmo del mes pasado.' }
+  if (d.status === 'up') return { cls: 'text-green-700 dark:text-green-400', text: 'Vas por encima de tu ritmo del mes pasado.' }
   if (d.stats.stuckTasks > 0) return { cls: 'text-amber-700 dark:text-amber-400', text: `Tenés ${d.stats.stuckTasks} tarea${d.stats.stuckTasks !== 1 ? 's' : ''} frenada${d.stats.stuckTasks !== 1 ? 's' : ''} hace más de una semana — quizá valga la pena retomarlas o cerrarlas.` }
   if (d.status === 'inactive' || d.status === 'down') return { cls: 'text-gray-600 dark:text-gray-300', text: 'Tu ritmo bajó respecto al mes pasado. Puede ser un buen momento para reorganizar prioridades.' }
   return null

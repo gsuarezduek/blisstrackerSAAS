@@ -1,3 +1,5 @@
+import { Pause } from 'lucide-react'
+import { Icon } from './ui/Icon'
 export default function InactivityModal({
   phase,           // 'auto_paused' | null
   taskDescription,
@@ -10,7 +12,7 @@ export default function InactivityModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm px-4">
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-sm w-full p-6">
         <div className="text-center mb-5">
-          <div className="text-4xl mb-3">⏸️</div>
+          <div className="mb-3"><Icon as={Pause} size={32} className="inline-block text-primary-500" /></div>
           <h2 className="text-lg font-bold text-gray-900 dark:text-white">
             Tarea pausada por inactividad
           </h2>

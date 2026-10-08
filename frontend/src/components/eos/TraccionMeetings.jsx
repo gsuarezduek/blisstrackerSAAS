@@ -3,6 +3,8 @@ import api from '../../api/client'
 import { adminMemberOptions } from '../../utils/adminMembers'
 import { avatarUrl } from '../../utils/avatarUrl'
 import CollaborativeRichTextEditor from '../CollaborativeRichTextEditor'
+import { CalendarDays, Check, ClipboardList, Repeat, X } from 'lucide-react'
+import { Icon } from '../ui/Icon'
 
 export function currentWeekStr() {
   const now = new Date()
@@ -160,7 +162,7 @@ export function MeetingTimer({ meeting, onStart, onFinish }) {
   }
 
   if (meeting?.durationMins != null) {
-    return <span className="text-sm font-semibold text-gray-700 dark:text-gray-200">⏱ {fmtDuration(meeting.durationMins)}</span>
+    return <span className="text-sm font-semibold text-gray-700 dark:text-gray-200">{fmtDuration(meeting.durationMins)}</span>
   }
 
   return (
@@ -210,7 +212,7 @@ export function TodoDashboardLink({ todo, meetingProjectReady, onSend }) {
     const done = todo.task?.status === 'COMPLETED'
     const recurring = !done && todo.task?.recurrenceId
     const future    = !done && !recurring && todo.task?.scheduledFor
-    const icon  = done ? '📋' : recurring ? '🔁' : future ? '📅' : '📋'
+    const icon  = done ? Check : recurring ? Repeat : future ? CalendarDays : ClipboardList
     const label = done ? 'Hecha' : recurring ? 'Recurrente' : future ? 'Programada' : 'En dashboard'
     const title = done
       ? 'Tarea completada en el dashboard'
@@ -226,7 +228,7 @@ export function TodoDashboardLink({ todo, meetingProjectReady, onSend }) {
             : 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300'
         }`}
       >
-        {icon} {label}
+        <Icon as={icon} size={11} /> {label}
       </span>
     )
   }
@@ -238,7 +240,7 @@ export function TodoDashboardLink({ todo, meetingProjectReady, onSend }) {
         title="Asigná un responsable para enviarla al dashboard"
         className="shrink-0 text-gray-300 dark:text-gray-600 text-sm px-1 cursor-not-allowed select-none"
       >
-        📋
+        <Icon as={ClipboardList} size={15} />
       </span>
     )
   }
@@ -250,7 +252,7 @@ export function TodoDashboardLink({ todo, meetingProjectReady, onSend }) {
         title="Configurá el proyecto de EOS en Preferencias → Módulos adicionales"
         className="shrink-0 text-gray-300 dark:text-gray-600 text-sm px-1 cursor-not-allowed select-none"
       >
-        📋
+        <Icon as={ClipboardList} size={15} />
       </span>
     )
   }
@@ -299,12 +301,12 @@ export function TodoDashboardLink({ todo, meetingProjectReady, onSend }) {
         title="Enviar al dashboard del responsable"
         className={`opacity-0 group-hover:opacity-100 text-gray-400 hover:text-primary-500 text-sm transition-all px-1 disabled:opacity-50 ${open ? 'opacity-100 text-primary-500' : ''}`}
       >
-        📋
+        <Icon as={ClipboardList} size={15} />
       </button>
       {open && (
         <div className="absolute right-0 top-full mt-1 z-20 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg w-64 p-3 space-y-2.5 text-left">
           <div className="flex gap-1">
-            {[['now', 'Ahora'], ['future', '📅 Futura'], ['recurring', '🔁 Recurrente']].map(([val, lbl]) => (
+            {[['now', 'Ahora'], ['future', 'Futura'], ['recurring', 'Recurrente']].map(([val, lbl]) => (
               <button
                 key={val}
                 type="button"
@@ -514,7 +516,7 @@ export function TodoItem({ todo, members, meetingProjectReady, onUpdate, onDelet
         onClick={() => { if (confirm('¿Eliminar este To-Do?')) onDelete(todo.id) }}
         className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 text-sm transition-all px-1"
       >
-        ✕
+        <Icon as={X} size={16} />
       </button>
     </div>
   )
@@ -600,7 +602,7 @@ export function MeetingCard({ week, meeting, members, meetingProjectReady, onSav
               ? 'bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300'
               : 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300'
           }`}>
-            {type === 'annual' ? '🎯 Reunión Anual' : '📊 Reunión Trimestral'}
+            {type === 'annual' ? 'Reunión Anual' : 'Reunión Trimestral'}
           </span>
         )}
       </div>
@@ -670,7 +672,7 @@ export function MeetingCard({ week, meeting, members, meetingProjectReady, onSav
                     className="text-gray-400 hover:text-red-500 ml-0.5"
                     title="Quitar"
                   >
-                    ✕
+                    <Icon as={X} size={16} />
                   </button>
                 )}
               </span>
@@ -962,7 +964,7 @@ export function MeetingSection() {
               onClick={() => setShowSpecials(v => !v)}
               className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/40 border border-amber-200 dark:border-amber-800 transition-colors"
             >
-              📋 Trimestrales / Anuales
+              Trimestrales / Anuales
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className={`w-3 h-3 transition-transform ${showSpecials ? 'rotate-180' : ''}`}>
                 <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" />
               </svg>
@@ -992,7 +994,7 @@ export function MeetingSection() {
                           <span className="text-gray-800 dark:text-gray-200">{weekLabel(m.week)}</span>
                         </div>
                         {m.durationMins != null && (
-                          <span className="text-xs text-gray-400 dark:text-gray-500">⏱ {fmtDuration(m.durationMins)}</span>
+                          <span className="text-xs text-gray-400 dark:text-gray-500">{fmtDuration(m.durationMins)}</span>
                         )}
                       </button>
                     )

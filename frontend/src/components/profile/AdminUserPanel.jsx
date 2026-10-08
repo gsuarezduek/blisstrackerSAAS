@@ -15,12 +15,12 @@ import { PeriodSelector, periodParams, PersonProductivityDetail } from '../admin
 // Solo se monta si el usuario que MIRA el perfil es admin (ver UserProfile.jsx).
 
 const BASE_TABS = [
-  { id: 'productividad', label: '📈 Productividad' },
-  { id: 'ingresos', label: '🕐 Ingresos' },
-  { id: 'legajo', label: '📋 Legajo' },
-  { id: 'vacaciones', label: '🏖️ Vacaciones y Licencias' },
-  { id: 'people', label: '🧭 People Analyzer', eosOnly: true },
-  { id: 'preferencias', label: '🤖 Preferencias IA' },
+  { id: 'productividad', label: 'Productividad' },
+  { id: 'ingresos', label: 'Ingresos' },
+  { id: 'legajo', label: 'Legajo' },
+  { id: 'vacaciones', label: 'Vacaciones y Licencias' },
+  { id: 'people', label: 'People Analyzer', eosOnly: true },
+  { id: 'preferencias', label: 'Preferencias IA' },
 ]
 
 export default function AdminUserPanel({ userId, userName }) {
@@ -49,7 +49,7 @@ export default function AdminUserPanel({ userId, userName }) {
   return (
     <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden">
       <div className="px-5 pt-4">
-        <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide">🔒 Panel de administración</p>
+        <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide">Panel de administración</p>
       </div>
       <div className="flex gap-1 px-3 pt-3 overflow-x-auto">
         {tabs.map(t => (

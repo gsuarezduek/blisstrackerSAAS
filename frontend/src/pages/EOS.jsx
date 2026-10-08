@@ -11,47 +11,49 @@ import ProcesosTab from '../components/eos/ProcesosTab'
 import AsuntosTab from '../components/eos/AsuntosTab'
 import TraccionTab from '../components/eos/TraccionTab'
 import EvaluacionTab from '../components/eos/EvaluacionTab'
+import { Lock } from 'lucide-react'
+import { Icon } from '../components/ui/Icon'
 
 const TABS = [
   {
     id: 'vision',
-    label: '🧭 Visión',
+    label: 'Visión',
     title: 'Visión',
     description: 'Define hacia dónde va la empresa: propósito, valores, metas a 10 años, estrategia y objetivos a 1 año.',
   },
   {
     id: 'personas',
-    label: '👥 Personas',
+    label: 'Personas',
     title: 'Personas',
     description: 'Las personas correctas en los roles correctos. Evaluación del equipo según valores y responsabilidades.',
   },
   {
     id: 'datos',
-    label: '📊 Datos',
+    label: 'Datos',
     title: 'Datos',
     description: 'Scorecard semanal con métricas clave. Cada número tiene un responsable y un objetivo.',
   },
   {
     id: 'asuntos',
-    label: '🔍 Asuntos',
+    label: 'Asuntos',
     title: 'Asuntos',
     description: 'Lista de issues identificados. Se priorizan, discuten y resuelven en las reuniones de liderazgo.',
   },
   {
     id: 'procesos',
-    label: '⚙️ Procesos',
+    label: 'Procesos',
     title: 'Procesos',
     description: 'Documentación y seguimiento de los procesos centrales del negocio.',
   },
   {
     id: 'traccion',
-    label: '🚀 Tracción',
+    label: 'Tracción',
     title: 'Tracción',
     description: 'Reuniones, Rocks trimestrales y revisión semanal del pulso del equipo.',
   },
   {
     id: 'evaluacion',
-    label: '📋 Evaluación',
+    label: 'Evaluación',
     title: 'Evaluación Organizacional',
     description: '18 preguntas distribuidas en los 6 componentes EOS. El equipo de liderazgo califica del 1 al 5 y el sistema genera un análisis de IA.',
   },
@@ -102,7 +104,7 @@ export default function EOS() {
         <Navbar />
         <main className="max-w-6xl mx-auto px-4 py-8">
           <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-8 text-center">
-            <p className="text-5xl mb-4">🔒</p>
+            <p className="mb-4"><Icon as={Lock} size={40} className="inline-block text-gray-300 dark:text-gray-600" /></p>
             <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Sección no disponible</h2>
             <p className="text-sm text-gray-500 dark:text-gray-400">El módulo EOS no está habilitado para este workspace.</p>
           </div>
@@ -127,7 +129,7 @@ export default function EOS() {
             onClick={() => { handleTabChange('vision'); setVtoMode(v => !v) }}
             className="shrink-0 flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 rounded-xl transition-colors shadow-sm"
           >
-            📄 {vtoMode ? 'Cerrar VTO' : 'Ver VTO'}
+            {vtoMode ? 'Cerrar VTO' : 'Ver VTO'}
           </button>
         </div>
 
@@ -141,7 +143,7 @@ export default function EOS() {
           >
             {TABS.map(t => (
               <option key={t.id} value={t.id}>
-                {t.label}{t.id === 'asuntos' && weeklyOpenCount > 0 ? ` 🔴 (${weeklyOpenCount})` : ''}
+                {t.label}{t.id === 'asuntos' && weeklyOpenCount > 0 ? ` (${weeklyOpenCount})` : ''}
               </option>
             ))}
           </select>

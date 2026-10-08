@@ -232,7 +232,7 @@ export function SectionUsers() {
                               u.dailyInsightStatus === 'mixed' ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300' :
                                                                   'bg-gray-100 text-gray-400 dark:bg-gray-700 dark:text-gray-500'
                             }`}>
-                            🧠 Insight {u.dailyInsightStatus === 'on' ? 'ON' : u.dailyInsightStatus === 'off' ? 'OFF' : u.dailyInsightStatus === 'mixed' ? 'mixto' : '—'}
+                            Insight {u.dailyInsightStatus === 'on' ? 'ON' : u.dailyInsightStatus === 'off' ? 'OFF' : u.dailyInsightStatus === 'mixed' ? 'mixto' : '—'}
                           </span>
                         </>
                       )}

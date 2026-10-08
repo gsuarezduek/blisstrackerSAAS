@@ -1,5 +1,7 @@
 import { avatarUrl } from '../../../utils/avatarUrl'
 import { Avatar } from './personasUI'
+import { Pencil, X } from 'lucide-react'
+import { Icon } from '../../ui/Icon'
 
 // ─── Vista árbol: tarjeta de nodo ─────────────────────────────────────────────
 
@@ -14,7 +16,7 @@ function OrgCard({ node, allNodes, members, onEdit, onDelete, onAddChild }) {
         <button onClick={() => onAddChild(node.id)} title="Agregar subordinado"
           className="w-6 h-6 bg-primary-600 hover:bg-primary-700 text-white rounded-full text-sm font-bold flex items-center justify-center shadow">+</button>
         <button onClick={() => onEdit(node)} title="Editar"
-          className="w-6 h-6 bg-gray-500 hover:bg-gray-600 text-white rounded-full text-xs flex items-center justify-center shadow">✎</button>
+          className="w-6 h-6 bg-gray-500 hover:bg-gray-600 text-white rounded-full text-xs flex items-center justify-center shadow"><Icon as={Pencil} size={12} /></button>
         <button onClick={() => onDelete(node.id)} title="Eliminar"
           className="w-6 h-6 bg-red-500 hover:bg-red-600 text-white rounded-full text-sm font-bold flex items-center justify-center shadow">×</button>
       </div>
@@ -134,8 +136,8 @@ function ListNodeCard({ node, members, onEdit, onDelete, onAddChild }) {
           </div>
           <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
             <button onClick={() => onAddChild(node.id)} title="Agregar subordinado" className="p-1 text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 text-xs">＋</button>
-            <button onClick={() => onEdit(node)}        title="Editar"              className="p-1 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 text-xs">✎</button>
-            <button onClick={() => onDelete(node.id)}   title="Eliminar"            className="p-1 text-gray-400 hover:text-red-500 text-xs">✕</button>
+            <button onClick={() => onEdit(node)}        title="Editar"              className="p-1 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 text-xs"><Icon as={Pencil} size={14} /></button>
+            <button onClick={() => onDelete(node.id)}   title="Eliminar"            className="p-1 text-gray-400 hover:text-red-500 text-xs"><Icon as={X} size={16} /></button>
           </div>
         </div>
         {node.accountabilities.length > 0 && (

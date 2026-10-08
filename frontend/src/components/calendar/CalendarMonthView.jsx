@@ -1,6 +1,8 @@
 import { useMemo } from 'react'
 import MonthGrid from './MonthGrid'
 import { monthLabel, todayYMD } from './dateHelpers'
+import { Repeat } from 'lucide-react'
+import { Icon } from '../ui/Icon'
 
 const STATUS_DOT = { confirmed: 'bg-green-500', pending: 'bg-amber-400', partial: 'bg-red-400' }
 const MAX_CHIPS_PER_DAY = 4
@@ -57,7 +59,7 @@ export default function CalendarMonthView({ events, month, onMonthChange, onOpen
                     >
                       <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${STATUS_DOT[e.confirmationStatus] || 'bg-gray-300'}`} />
                       <span className="text-[11px] text-gray-700 dark:text-gray-300 truncate">
-                        {e.recurrenceId && <span title="Reunión recurrente">🔁 </span>}
+                        {e.recurrenceId && <span title="Reunión recurrente" className="inline-flex align-[-1px] mr-0.5"><Icon as={Repeat} size={11} /></span>}
                         {e.startTime} {e.title}
                       </span>
                     </div>

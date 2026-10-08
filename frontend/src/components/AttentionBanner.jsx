@@ -1,3 +1,5 @@
+import { CircleAlert, Info, TriangleAlert } from 'lucide-react'
+import { Icon } from './ui/Icon'
 // Banner de "esto necesita tu atención" — se monta arriba de todo, antes de la
 // grilla de métricas crudas, en paneles densos (RRHH, Productividad). Mismo
 // espíritu que DailyInsightBlock (frontend/src/pages/DashboardParts.jsx) pero
@@ -12,9 +14,9 @@ const SEVERITY_TEXT = {
   warning:  'text-amber-700 dark:text-amber-400',
   info:     'text-gray-600 dark:text-gray-400',
 }
-const SEVERITY_ICON = { critical: '⚠️', warning: '🎯', info: '💡' }
+const SEVERITY_ICON = { critical: TriangleAlert, warning: CircleAlert, info: Info }
 
-export default function AttentionBanner({ items = [], emptyLabel = '✅ Nadie necesita atención.' }) {
+export default function AttentionBanner({ items = [], emptyLabel = 'Nadie necesita atención.' }) {
   if (items.length === 0) {
     return (
       <div className="flex items-center gap-2.5 border rounded-xl px-4 py-3 mb-3 bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800">
@@ -36,7 +38,7 @@ export default function AttentionBanner({ items = [], emptyLabel = '✅ Nadie ne
               item.onClick ? 'cursor-pointer hover:brightness-95 dark:hover:brightness-110 transition-all' : ''
             }`}
           >
-            <span className="text-base flex-shrink-0">{SEVERITY_ICON[severity]}</span>
+            <span className="flex-shrink-0 mt-0.5"><Icon as={SEVERITY_ICON[severity]} size={16} /></span>
             <span className={`text-sm font-semibold leading-snug flex-1 min-w-0 ${SEVERITY_TEXT[severity]}`}>{item.label}</span>
             {item.detail && (
               <span className={`hidden sm:inline text-xs flex-shrink-0 max-w-[45%] truncate ${SEVERITY_TEXT[severity]} opacity-75`}>{item.detail}</span>

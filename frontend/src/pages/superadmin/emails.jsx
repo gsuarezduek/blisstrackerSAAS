@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import api from '../../api/client'
 import { EMAIL_TYPE_LABELS, timeAgo } from './shared'
+import { Check, X } from 'lucide-react'
+import { Icon } from '../../components/ui/Icon'
 
 export function SectionEmails() {
   const [logs,       setLogs]       = useState([])
@@ -43,8 +45,8 @@ export function SectionEmails() {
           <div className="flex gap-1">
             {[
               { id: 'all',    label: 'Todos' },
-              { id: 'sent',   label: '✓ Enviados' },
-              { id: 'failed', label: '✕ Fallidos' },
+              { id: 'sent',   label: 'Enviados' },
+              { id: 'failed', label: 'Fallidos' },
             ].map(f => (
               <button key={f.id} onClick={() => setFilter(f.id)}
                 className={`text-xs px-2.5 py-1 rounded-full font-medium transition-colors ${
@@ -71,7 +73,7 @@ export function SectionEmails() {
               return (
                 <div key={log.id} className="px-5 py-3.5 flex items-start gap-3">
                   <span className={`flex-shrink-0 mt-0.5 text-xs font-bold w-4 ${log.status === 'sent' ? 'text-green-500' : 'text-red-500'}`}>
-                    {log.status === 'sent' ? '✓' : '✕'}
+                    {log.status === 'sent' ? <Icon as={Check} size={12} /> : <Icon as={X} size={12} />}
                   </span>
                   <div className="flex-1 min-w-0">
                     <div className="flex flex-wrap items-center gap-2 mb-1">

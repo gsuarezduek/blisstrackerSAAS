@@ -4,6 +4,8 @@ import { useAuth } from '../../context/AuthContext'
 import { avatarUrl } from '../../utils/avatarUrl'
 import PeoplePicker from './PeoplePicker'
 import ProjectSearchSelect from './ProjectSearchSelect'
+import { Repeat } from 'lucide-react'
+import { Icon } from '../ui/Icon'
 
 const STATUS_LABEL = { accepted: 'Confirmado', declined: 'Rechazó', pending: 'Sin responder' }
 const STATUS_DOT = { accepted: 'bg-green-500', declined: 'bg-red-500', pending: 'bg-gray-300' }
@@ -187,12 +189,12 @@ export default function EventDetailModal({ event, onClose, onChanged, onDeleted,
               <div>
                 <div className="flex items-start justify-between gap-2">
                   <h3 className="text-base font-bold text-gray-900 dark:text-white">
-                    {isRecurring && <span title="Reunión recurrente" className="mr-1">🔁</span>}
+                    {isRecurring && <span title="Reunión recurrente" className="inline-flex align-[-2px] mr-1.5 text-gray-400"><Icon as={Repeat} size={16} /></span>}
                     {event.title}
                   </h3>
                   {canEdit && (
                     <button onClick={startEdit} className="text-xs text-primary-600 hover:underline shrink-0 whitespace-nowrap">
-                      ✏️ Editar
+                      Editar
                     </button>
                   )}
                 </div>
@@ -211,15 +213,15 @@ export default function EventDetailModal({ event, onClose, onChanged, onDeleted,
                   : myParticipation.status === 'declined' ? 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400'
                   : 'bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400'
                 }`}>
-                  {myParticipation.status === 'accepted' && <>✓ Ya aceptaste esta invitación{isRecurring ? ' (toda la serie)' : ''}</>}
-                  {myParticipation.status === 'declined' && <>✕ Rechazaste esta invitación</>}
-                  {myParticipation.status === 'pending' && <>⏳ Todavía no respondiste esta invitación</>}
+                  {myParticipation.status === 'accepted' && <>Ya aceptaste esta invitación{isRecurring ? ' (toda la serie)' : ''}</>}
+                  {myParticipation.status === 'declined' && <>Rechazaste esta invitación</>}
+                  {myParticipation.status === 'pending' && <>Todavía no respondiste esta invitación</>}
                 </div>
               )}
 
               {event.meetLink && (
                 <a href={event.meetLink} target="_blank" rel="noreferrer" className="text-sm text-primary-600 hover:underline break-all">
-                  🔗 {event.meetLink}
+                  {event.meetLink}
                 </a>
               )}
 
@@ -245,7 +247,7 @@ export default function EventDetailModal({ event, onClose, onChanged, onDeleted,
 
               {isRecurring && (
                 <p className="text-[11px] text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 rounded-lg px-3 py-2">
-                  🔁 Esta reunión es parte de una serie — el día no se puede mover para una sola ocurrencia. Al guardar vas a elegir si el cambio aplica solo acá o a esta y las siguientes.
+                  Esta reunión es parte de una serie — el día no se puede mover para una sola ocurrencia. Al guardar vas a elegir si el cambio aplica solo acá o a esta y las siguientes.
                 </p>
               )}
 
@@ -383,7 +385,7 @@ export default function EventDetailModal({ event, onClose, onChanged, onDeleted,
                 <div className="flex flex-col gap-2">
                   {isRecurring && (
                     <p className="text-[11px] text-gray-400 dark:text-gray-500 text-center">
-                      🔁 Es una reunión recurrente — aceptar aplica a toda la serie.
+                      Es una reunión recurrente — aceptar aplica a toda la serie.
                     </p>
                   )}
                   <div className="flex gap-3">

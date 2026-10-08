@@ -11,6 +11,8 @@ import { YearNav, SectionTabs } from './datos/ScorecardNav'
 import { CurrentPeriodPanel, MonthNotesPanel } from './datos/CurrentPeriodPanel'
 import ScorecardTable from './datos/ScorecardTable'
 import { MetricModal, ConfirmModal, AutoMetricPicker } from './datos/MetricModals'
+import { ChartColumn } from 'lucide-react'
+import { Icon } from '../ui/Icon'
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // DatosTab — componente principal
@@ -318,7 +320,7 @@ export default function DatosTab() {
                 onClick={() => setAutoPicker(true)}
                 className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium border border-indigo-200 dark:border-indigo-800 text-indigo-600 dark:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded-xl transition-colors"
               >
-                ⚡ Dato automático
+                Dato automático
               </button>
             )}
             <button
@@ -350,7 +352,7 @@ export default function DatosTab() {
       {/* Estado vacío */}
       {metrics.length === 0 && (
         <div className="bg-white dark:bg-gray-800 border border-dashed border-gray-200 dark:border-gray-700 rounded-2xl p-10 text-center">
-          <p className="text-3xl mb-3">📊</p>
+          <p className="mb-3"><Icon as={ChartColumn} size={28} className="inline-block text-gray-300 dark:text-gray-600" /></p>
           <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Sin métricas todavía</p>
           <p className="text-sm text-gray-500 dark:text-gray-400 mb-4 max-w-md mx-auto">
             Agregá los números que importan: leads, facturación, propuestas enviadas, clientes atendidos…
@@ -388,8 +390,8 @@ export default function DatosTab() {
             active={weeklyTab}
             onChange={setWeeklyTab}
             tabs={[
-              { key: 'datos',     label: '📊 Datos' },
-              { key: 'historico', label: '📈 Histórico' },
+              { key: 'datos',     label: 'Datos' },
+              { key: 'historico', label: 'Histórico' },
             ]}
           />
 
@@ -460,9 +462,9 @@ export default function DatosTab() {
               if (key === 'historico') fetchNotesYear(monthYear, true)
             }}
             tabs={[
-              { key: 'datos',     label: '📊 Datos' },
-              { key: 'notas',     label: '📝 Notas', dot: !!notesIndex[panelMonth] },
-              { key: 'historico', label: '📈 Histórico' },
+              { key: 'datos',     label: 'Datos' },
+              { key: 'notas',     label: 'Notas', dot: !!notesIndex[panelMonth] },
+              { key: 'historico', label: 'Histórico' },
             ]}
           />
 

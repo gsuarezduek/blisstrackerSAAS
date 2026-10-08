@@ -1,5 +1,7 @@
 import { useVoiceCall } from '../../context/VoiceCallContext'
 import VoiceDeviceMenu from './VoiceDeviceMenu'
+import { Mic, MicOff, TriangleAlert } from 'lucide-react'
+import { Icon } from '../ui/Icon'
 
 // A partir de esta cantidad de personas en la misma sala, el mesh P2P (cada
 // participante conecta directo con todos los demás) empieza a exigir más de la
@@ -10,7 +12,7 @@ function CapacityWarning({ count }) {
   if (count < VOICE_CAPACITY_WARNING) return null
   return (
     <p className="text-[11px] text-amber-600 dark:text-amber-400">
-      ⚠️ Ya son {count} en la sala — a partir de acá la calidad puede empezar a fallar. Recomendado: hasta 6.
+      Ya son {count} en la sala — a partir de acá la calidad puede empezar a fallar. Recomendado: hasta 6.
     </p>
   )
 }
@@ -30,12 +32,12 @@ export default function VoiceRoomBar({ channel }) {
           <div className="flex flex-wrap gap-1.5">
             {preview.map(p => (
               <span key={p.userId} className="flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
-                🎙️ {p.name}
+                {p.name}
               </span>
             ))}
           </div>
         ) : (
-          <p className="text-xs text-gray-500 dark:text-gray-400">🔊 Nadie conectado todavía</p>
+          <p className="text-xs text-gray-500 dark:text-gray-400">Nadie conectado todavía</p>
         )}
         <CapacityWarning count={preview.length} />
         <div className="flex items-center gap-2">
@@ -43,7 +45,7 @@ export default function VoiceRoomBar({ channel }) {
             onClick={() => joinCall(channel)}
             className="text-xs font-semibold px-3 py-1.5 bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition-colors"
           >
-            🎙️ Unirse{preview.length > 0 ? ` (${preview.length})` : ''}
+            Unirse{preview.length > 0 ? ` (${preview.length})` : ''}
           </button>
           <VoiceDeviceMenu />
         </div>
@@ -55,7 +57,7 @@ export default function VoiceRoomBar({ channel }) {
     <div className="px-4 py-2.5 border-b border-gray-100 dark:border-gray-700 flex-shrink-0 space-y-2">
       <div className="flex flex-wrap gap-1.5">
         <span className={`flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 ${speakingIds?.has('self') ? 'ring-2 ring-green-400' : ''}`}>
-          {activeCall.muted ? '🔇' : '🎙️'} Vos
+          {activeCall.muted ? <Icon as={MicOff} size={12} className="inline-block" /> : <Icon as={Mic} size={12} className="inline-block" />} Vos
         </span>
         {activeCall.participants.map(p => (
           <span
@@ -63,7 +65,7 @@ export default function VoiceRoomBar({ channel }) {
             title={connectionIssues?.has(p.socketId) ? 'Problema de conexión con este participante' : undefined}
             className={`flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 ${speakingIds?.has(p.socketId) ? 'ring-2 ring-green-400' : ''}`}
           >
-            {connectionIssues?.has(p.socketId) ? '⚠️' : p.muted ? '🔇' : '🎙️'} {p.name}
+            {connectionIssues?.has(p.socketId) ? <Icon as={TriangleAlert} size={12} className="inline-block text-amber-500" /> : p.muted ? <Icon as={MicOff} size={12} className="inline-block" /> : <Icon as={Mic} size={12} className="inline-block" />} {p.name}
           </span>
         ))}
       </div>
@@ -73,7 +75,7 @@ export default function VoiceRoomBar({ channel }) {
           onClick={toggleMute}
           className="text-xs font-medium px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
         >
-          {activeCall.muted ? '🔇 Desmutear' : '🎙️ Mutear'}
+          {activeCall.muted ? 'Desmutear' : 'Mutear'}
         </button>
         <button
           onClick={leaveCall}

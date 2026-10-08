@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react'
 import api from '../../api/client'
 import { fmtTokens, fmtCost } from './shared'
 import { TokenBar } from './aiTokens'
+import { MessageCircle } from 'lucide-react'
+import { Icon } from '../../components/ui/Icon'
 
 function currentMonthStr() {
   return new Date().toISOString().slice(0, 7)
@@ -81,7 +83,7 @@ export function SectionWhatsappUsage() {
 
           {data.byWorkspace.length === 0 ? (
             <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl py-12 text-center">
-              <p className="text-3xl mb-2">💬</p>
+              <p className="mb-2"><Icon as={MessageCircle} size={28} className="inline-block text-gray-300 dark:text-gray-600" /></p>
               <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Sin actividad de WhatsApp este mes.</p>
             </div>
           ) : (

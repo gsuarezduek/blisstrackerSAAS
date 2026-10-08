@@ -2,12 +2,14 @@ import { useState, useEffect } from 'react'
 import api from '../../api/client'
 import LoadingSpinner from '../../components/LoadingSpinner'
 import { linkify } from '../../utils/linkify'
+import { Megaphone } from 'lucide-react'
+import { Icon } from '../../components/ui/Icon'
 
 export const ANN_TYPES = [
   { value: 'info',        label: 'ℹ️ Información',   color: 'bg-blue-50 border-blue-200 dark:bg-blue-900/20 dark:border-blue-700',   badge: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300' },
-  { value: 'feature',     label: '✨ Nueva función',  color: 'bg-primary-50 border-primary-200 dark:bg-primary-900/20 dark:border-primary-700', badge: 'bg-primary-100 text-primary-700 dark:bg-primary-900/40 dark:text-primary-300' },
-  { value: 'warning',     label: '⚠️ Aviso',          color: 'bg-yellow-50 border-yellow-200 dark:bg-yellow-900/20 dark:border-yellow-700', badge: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300' },
-  { value: 'maintenance', label: '🔧 Mantenimiento',  color: 'bg-red-50 border-red-200 dark:bg-red-900/20 dark:border-red-700',     badge: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300' },
+  { value: 'feature',     label: 'Nueva función',  color: 'bg-primary-50 border-primary-200 dark:bg-primary-900/20 dark:border-primary-700', badge: 'bg-primary-100 text-primary-700 dark:bg-primary-900/40 dark:text-primary-300' },
+  { value: 'warning',     label: 'Aviso',          color: 'bg-yellow-50 border-yellow-200 dark:bg-yellow-900/20 dark:border-yellow-700', badge: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300' },
+  { value: 'maintenance', label: 'Mantenimiento',  color: 'bg-red-50 border-red-200 dark:bg-red-900/20 dark:border-red-700',     badge: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300' },
 ]
 
 export function annType(value) {
@@ -320,7 +322,7 @@ export function SectionAnnouncements({ workspaces }) {
         : filtered.length === 0
           ? (
               <div className="text-center py-16 text-gray-400">
-                <p className="text-4xl mb-3">📢</p>
+                <p className="mb-3"><Icon as={Megaphone} size={32} className="inline-block text-gray-300 dark:text-gray-600" /></p>
                 <p className="font-medium text-gray-500 dark:text-gray-400">
                   {announcements.length === 0 ? 'No hay anuncios creados aún.' : 'Sin resultados para este filtro.'}
                 </p>

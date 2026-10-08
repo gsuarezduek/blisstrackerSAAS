@@ -38,7 +38,7 @@ export default function OAuthPopup() {
 
       {status === 'ok' ? (
         <p className="text-sm text-green-600 dark:text-green-400 font-medium">
-          ✅ Cuenta de Google conectada. Podés cerrar esta ventana.
+          Cuenta de Google conectada. Podés cerrar esta ventana.
         </p>
       ) : !linkToken ? (
         <p className="text-sm text-red-600 dark:text-red-400 max-w-xs">Link inválido o incompleto.</p>

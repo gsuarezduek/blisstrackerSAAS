@@ -41,7 +41,7 @@ function BriefCard({ brief, answers, onOpen }) {
       <div className="mt-auto pt-1">
         <div className="flex items-center justify-between text-xs text-gray-400 dark:text-gray-500 mb-1">
           <span>{answered}/{total} campos</span>
-          {brief.estimate && <span>⏱ {brief.estimate}</span>}
+          {brief.estimate && <span>{brief.estimate}</span>}
         </div>
         <div className="h-1.5 rounded-full bg-gray-100 dark:bg-gray-700 overflow-hidden">
           <div
@@ -86,7 +86,7 @@ function BriefView({ brief, answers, canEdit, onBack, onEdit }) {
           <h2 className="text-lg font-bold text-gray-900 dark:text-white">{brief.title}</h2>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{brief.intro}</p>
           <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
-            {answered}/{total} campos completados{brief.estimate ? ` · ⏱ ${brief.estimate}` : ''}
+            {answered}/{total} campos completados{brief.estimate ? ` · ${brief.estimate}` : ''}
           </p>
         </div>
 
@@ -194,7 +194,7 @@ function BriefEditor({ projectId, brief, initialAnswers, canEdit, onBack, onSave
           </h2>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{brief.intro}</p>
           <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
-            {answered}/{total} campos completados{brief.estimate ? ` · ⏱ ${brief.estimate}` : ''}
+            {answered}/{total} campos completados{brief.estimate ? ` · ${brief.estimate}` : ''}
           </p>
         </div>
 
@@ -258,7 +258,7 @@ function BriefEditor({ projectId, brief, initialAnswers, canEdit, onBack, onSave
             disabled={saving || !dirty}
             className="px-4 py-2 bg-primary-600 hover:bg-primary-700 disabled:opacity-50 text-white text-sm font-medium rounded-xl transition-colors"
           >
-            {saving ? 'Guardando…' : saved ? '✓ Guardado' : 'Guardar brief'}
+            {saving ? 'Guardando…' : saved ? 'Guardado' : 'Guardar brief'}
           </button>
           {saved && !dirty && <span className="text-sm text-emerald-500">Los cambios se guardaron correctamente</span>}
           {dirty && !saving && <span className="text-xs text-gray-400 dark:text-gray-500">Cambios sin guardar</span>}

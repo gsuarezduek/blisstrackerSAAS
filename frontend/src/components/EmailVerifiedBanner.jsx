@@ -31,7 +31,7 @@ export default function EmailVerifiedBanner() {
   return (
     <div className="relative z-40 px-4 py-2.5 text-sm flex items-center justify-center gap-3 bg-amber-500 text-white flex-wrap">
       <span className="text-center">
-        📧 Todavía no verificaste tu email ({user.email}). Revisá tu casilla y hacé click en el enlace.
+        Todavía no verificaste tu email ({user.email}). Revisá tu casilla y hacé click en el enlace.
         {error && <span className="ml-2 opacity-90">{error}</span>}
       </span>
       <button

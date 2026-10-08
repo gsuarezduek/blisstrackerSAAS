@@ -9,8 +9,8 @@ export default function TraccionTab() {
   const [subTab, setSubTab] = useState('rocks')
 
   const SUB_TABS = [
-    { id: 'rocks',   label: '🪨 Rocas',       title: 'Rocas Trimestrales' },
-    { id: 'meeting', label: '📋 Reunión L10',  title: 'Reunión Level 10' },
+    { id: 'rocks',   label: 'Rocas',       title: 'Rocas Trimestrales' },
+    { id: 'meeting', label: 'Reunión L10',  title: 'Reunión Level 10' },
   ]
 
   const current = SUB_TABS.find(t => t.id === subTab)

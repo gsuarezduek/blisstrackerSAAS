@@ -8,7 +8,7 @@ import RoleBadge from '../RoleBadge'
 import UserLink from '../UserLink'
 import DateRangeFilter from '../DateRangeFilter'
 import HowToButton from '../HowToButton'
-import { Clock, Palmtree, Search, X } from 'lucide-react'
+import { Clock, Palmtree, Pencil, Search, X } from 'lucide-react'
 import { Icon } from '../ui/Icon'
 
 // Arma los query params de período para cualquier request de Productividad, a partir del
@@ -453,7 +453,7 @@ function ProjectBars({ porProyecto, userId, mode, customRange }) {
                       <span className="text-gray-600 dark:text-gray-300 truncate">{linkify(task.description)}</span>
                     </div>
                     <div className="flex items-center gap-1.5 shrink-0">
-                      {task.isOverride && <span className="text-amber-500">✎</span>}
+                      {task.isOverride && <span className="text-amber-500 inline-flex" title="Duración editada a mano"><Icon as={Pencil} size={11} /></span>}
                       <span className="text-gray-400 dark:text-gray-500">{fmtHours(Math.round(task.minutes / 60 * 10) / 10)}</span>
                     </div>
                   </div>

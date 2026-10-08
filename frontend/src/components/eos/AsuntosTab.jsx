@@ -2,6 +2,8 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import api from '../../api/client'
 import { adminMemberOptions } from '../../utils/adminMembers'
 import { avatarUrl } from '../../utils/avatarUrl'
+import { X } from 'lucide-react'
+import { Icon } from '../ui/Icon'
 
 // ─── Constantes ──────────────────────────────────────────────────────────────
 
@@ -149,14 +151,14 @@ function IssueCard({ issue, members, onUpdate, onDelete }) {
                 onClick={() => onUpdate(issue.id, { status: 'solved' })}
                 className="text-xs font-medium px-3 py-1.5 rounded-lg bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 hover:bg-green-200 dark:hover:bg-green-900/50 transition-colors"
               >
-                ✓ Resolver
+                Resolver
               </button>
             ) : (
               <button
                 onClick={() => onUpdate(issue.id, { status: 'open' })}
                 className="text-xs font-medium px-3 py-1.5 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
               >
-                ↩ Reabrir
+                Reabrir
               </button>
             )}
 
@@ -173,7 +175,7 @@ function IssueCard({ issue, members, onUpdate, onDelete }) {
               onClick={() => onDelete(issue.id)}
               className="text-xs font-medium px-2 py-1.5 rounded-lg text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
             >
-              ✕
+              <Icon as={X} size={16} />
             </button>
           </div>
         </div>

@@ -5,6 +5,8 @@ import { TokenBar } from './aiTokens'
 import { SectionSettings } from './settings'
 import ConfirmModal from '../../components/ConfirmModal'
 import PasswordInput from '../../components/PasswordInput'
+import { Globe, Pencil, Trash2 } from 'lucide-react'
+import { Icon } from '../../components/ui/Icon'
 
 const ACTION_LABELS = {
   connect:                     'Conexión',
@@ -39,7 +41,7 @@ function AccountsUsagePanel({ accounts, loading, onRefresh }) {
           onClick={onRefresh}
           className="text-xs font-medium text-primary-600 dark:text-primary-400 hover:underline flex-shrink-0"
         >
-          ↻ Refrescar
+          Refrescar
         </button>
       </div>
       {loading ? (
@@ -206,7 +208,7 @@ function TokensPanel({ tokens, loading, onChanged }) {
                 ) : (
                   <div className="flex items-center gap-1.5">
                     <span className="text-sm font-medium text-gray-900 dark:text-white truncate">{t.label}</span>
-                    <button onClick={() => { setEditId(t.id); setEditLabel(t.label) }} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-xs flex-shrink-0" title="Renombrar">✏️</button>
+                    <button onClick={() => { setEditId(t.id); setEditLabel(t.label) }} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-xs flex-shrink-0" title="Renombrar"><Icon as={Pencil} size={15} /></button>
                   </div>
                 )}
                 {changeId === t.id ? (
@@ -238,7 +240,7 @@ function TokensPanel({ tokens, loading, onChanged }) {
                 <button onClick={() => handleToggle(t.id)} title={t.active ? 'Desactivar' : 'Reactivar'} className="text-xs font-medium text-primary-600 dark:text-primary-400 hover:underline px-2">
                   {t.active ? 'Desactivar' : 'Reactivar'}
                 </button>
-                <button onClick={() => setDeleteId(t.id)} title="Eliminar" className="p-1 rounded hover:bg-red-50 dark:hover:bg-red-900/20 text-red-400 hover:text-red-600 transition-colors">🗑</button>
+                <button onClick={() => setDeleteId(t.id)} title="Eliminar" className="p-1 rounded hover:bg-red-50 dark:hover:bg-red-900/20 text-red-400 hover:text-red-600 transition-colors"><Icon as={Trash2} size={15} /></button>
               </div>
             </div>
           ))}
@@ -386,7 +388,7 @@ export function SectionScraping() {
         <p className="text-sm text-red-500 text-center py-8">Error al cargar el consumo de Apify.</p>
       ) : usage.totalCalls === 0 ? (
         <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl py-12 text-center">
-          <p className="text-3xl mb-2">🕸️</p>
+          <p className="mb-2"><Icon as={Globe} size={28} className="inline-block text-gray-300 dark:text-gray-600" /></p>
           <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Sin llamados a Apify registrados para este período.</p>
         </div>
       ) : (

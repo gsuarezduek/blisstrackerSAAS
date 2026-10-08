@@ -17,7 +17,7 @@ class ErrorBoundary extends React.Component {
     if (this.state.error) {
       return (
         <div className="flex flex-col items-center justify-center h-screen bg-gray-50 dark:bg-gray-900 text-center px-4">
-          <p className="text-4xl mb-4">⚠️</p>
+          <p className="mb-4"><Icon as={TriangleAlert} size={32} className="inline-block text-amber-500" /></p>
           <p className="text-lg font-semibold text-gray-800 dark:text-white mb-2">Algo salió mal</p>
           <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">{this.state.error.message}</p>
           <button
@@ -40,6 +40,8 @@ import GlobalShortcuts from './components/GlobalShortcuts'
 import OAuthPopup from './pages/OAuthPopup'
 import AuthCallback from './pages/AuthCallback'
 import OAuthResult from './pages/OAuthResult'
+import { TriangleAlert } from 'lucide-react'
+import { Icon } from './components/ui/Icon'
 
 // Lazy: el resto de las páginas se parte en chunks propios (code splitting). Antes
 // TODO viajaba en un único bundle (SuperAdmin 4k líneas, Marketing con sus tabs, EOS…);

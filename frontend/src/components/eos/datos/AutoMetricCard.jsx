@@ -1,6 +1,8 @@
 import { avatarUrl } from '../../../utils/avatarUrl'
 import { formatVal, goalStatus, goalDisplay, TODAY_WEEK, TODAY_MONTH } from './scorecardHelpers'
 import { AutoBadge } from './ScorecardNav'
+import { CircleAlert, CircleCheck } from 'lucide-react'
+import { Icon } from '../../ui/Icon'
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // AutoMetricCard — tarjeta de solo-lectura de una métrica automática (valor + top 3)
@@ -31,18 +33,18 @@ const NAME_ROW_KEYS = new Set([
 // Mensaje cuando no hay detalle (valor presente pero lista vacía). null = no mostrar nada.
 function autoEmptyHint(autoKey) {
   switch (autoKey) {
-    case 'tardanzas':           return 'Nadie llegó tarde 🎉'
+    case 'tardanzas':           return 'Nadie llegó tarde'
     case 'ocupacion':
     case 'delta_horas':         return 'Sin personas con horario cargado'
     case 'proyectos_nuevos':    return 'Sin altas este mes'
-    case 'proyectos_perdidos':  return 'Sin bajas 🎉'
+    case 'proyectos_perdidos':  return 'Sin bajas'
     case 'tareas_completadas':  return 'Sin tareas completadas'
     case 'propuestas_enviadas': return 'Sin propuestas generadas'
     case 'todos_completados':   return 'Sin to-dos completados'
-    case 'faltas':              return 'Sin faltas registradas 🎉'
+    case 'faltas':              return 'Sin faltas registradas'
     case 'informes_entregados': return 'Sin informes este mes'
     case 'seguidores_nuevos':   return 'Sin datos de redes'
-    case 'objetivos_cumplidos': return '¡Todos cumplidos! 🎉'
+    case 'objetivos_cumplidos': return '¡Todos cumplidos!'
     default:                    return null
   }
 }
@@ -167,7 +169,7 @@ export default function AutoMetricCard({ metric, value, detail, period, monthSta
           <>
             <span className={`text-2xl font-bold tabular-nums ${valColor}`}>{formatVal(value)}</span>
             {metric.unit && <span className={`text-sm font-medium ${valColor}`}>{metric.unit}</span>}
-            {hasGoal && <span className="ml-1 text-base">{onTrack ? '✅' : '🔴'}</span>}
+            {hasGoal && <span className="ml-1 inline-flex align-[-2px]">{onTrack ? <Icon as={CircleCheck} size={16} className="text-green-500" /> : <Icon as={CircleAlert} size={16} className="text-red-500" />}</span>}
           </>
         ) : (
           <AutoEmptyValue metric={metric} period={period} status={monthStatus} />

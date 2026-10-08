@@ -14,7 +14,7 @@ export function SectionCard({ title, desc, onHelp, onHistory, children }) {
         </div>
         <div className="flex items-center gap-3 shrink-0">
           {onHistory && (
-            <button onClick={onHistory} className="text-xs text-gray-500 dark:text-gray-400 hover:underline font-medium">📈 Historial</button>
+            <button onClick={onHistory} className="text-xs text-gray-500 dark:text-gray-400 hover:underline font-medium">Historial</button>
           )}
           {onHelp && (
             <button onClick={onHelp} className="text-xs text-primary-600 dark:text-primary-400 hover:underline font-medium">? Ayuda</button>

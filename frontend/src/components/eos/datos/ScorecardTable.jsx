@@ -2,6 +2,8 @@ import { useState, useEffect, useRef } from 'react'
 import { avatarUrl } from '../../../utils/avatarUrl'
 import { formatVal, goalStatus, goalDisplay, metricValueAt } from './scorecardHelpers'
 import { AutoBadge } from './ScorecardNav'
+import { Pencil, X } from 'lucide-react'
+import { Icon } from '../../ui/Icon'
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // ScoreCell — celda editable de scorecard (tabla histórica)
@@ -57,7 +59,7 @@ function ScoreCell({ metricId, period, initialValue, goal, lowerIsBetter, unit, 
           onChange={e => setVal(e.target.value)}
           onBlur={save}
           onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur() }}
-          placeholder={isCurrent ? '✎' : '—'}
+          placeholder={isCurrent ? '+' : '—'}
           className={`w-full text-right bg-transparent focus:outline-none focus:bg-primary-50 dark:focus:bg-primary-900/20 transition-colors ${textColor} ${saving ? 'opacity-40' : ''} ${
             isWeekly
               ? `text-xs py-2 ${showDollar ? 'pl-4 pr-1' : 'px-1'}`
@@ -259,9 +261,9 @@ export default function ScorecardTable({
                 }`}>
                   <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity justify-center">
                     <button onClick={() => onEdit(metric)} title="Editar"
-                      className="p-1 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 text-xs transition-colors">✎</button>
+                      className="p-1 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 text-xs transition-colors"><Icon as={Pencil} size={14} /></button>
                     <button onClick={() => onDelete(metric.id)} title="Eliminar"
-                      className="p-1 text-gray-400 hover:text-red-500 text-xs transition-colors">✕</button>
+                      className="p-1 text-gray-400 hover:text-red-500 text-xs transition-colors"><Icon as={X} size={16} /></button>
                   </div>
                 </td>
               </tr>

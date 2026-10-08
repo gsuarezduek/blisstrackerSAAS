@@ -134,7 +134,7 @@ export default function AutosaveNotes({
     saving: 'Guardando…',
     saved:  'Guardado ✓',
     dirty:  'Cambios sin guardar',
-    error:  '⚠ No se pudo guardar',
+    error:  'No se pudo guardar',
   }[status]
 
   return (

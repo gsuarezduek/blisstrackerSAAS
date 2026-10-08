@@ -1,12 +1,14 @@
 import { useState, useEffect } from 'react'
 import api from '../../api/client'
 import { avatarUrl } from '../../utils/avatarUrl'
+import { ClipboardList } from 'lucide-react'
+import { Icon } from '../ui/Icon'
 
 // ─── Preguntas (espejo del backend) ──────────────────────────────────────────
 
 const CATEGORIES = [
   {
-    id: 'vision', label: 'Visión', emoji: '🧭',
+    id: 'vision', label: 'Visión',
     questions: [
       { id: 1, text: 'Todos los líderes comparten la misma visión y están alineados al 100% sobre hacia dónde va la empresa.' },
       { id: 2, text: 'Todos en la organización conocen y pueden articular el Core Focus, los Core Values y los objetivos estratégicos (10, 3 y 1 año).' },
@@ -14,7 +16,7 @@ const CATEGORIES = [
     ],
   },
   {
-    id: 'personas', label: 'Personas', emoji: '👥',
+    id: 'personas', label: 'Personas',
     questions: [
       { id: 4, text: 'El 100% de los líderes son "personas correctas": comparten los valores de la empresa y están en el puesto adecuado.' },
       { id: 5, text: 'El 100% de los empleados son "personas correctas en puestos correctos": hacen lo que mejor hacen y les apasiona.' },
@@ -22,7 +24,7 @@ const CATEGORIES = [
     ],
   },
   {
-    id: 'datos', label: 'Datos', emoji: '📊',
+    id: 'datos', label: 'Datos',
     questions: [
       { id: 7, text: 'El equipo de liderazgo revisa semanalmente un Scorecard con indicadores que reflejan el pulso real del negocio.' },
       { id: 8, text: 'Cada función/área tiene métricas claras y sabe en todo momento cómo está rindiendo.' },
@@ -30,7 +32,7 @@ const CATEGORIES = [
     ],
   },
   {
-    id: 'asuntos', label: 'Asuntos', emoji: '🔍',
+    id: 'asuntos', label: 'Asuntos',
     questions: [
       { id: 10, text: 'Somos excelentes identificando, discutiendo y resolviendo problemas rápido y de forma permanente.' },
       { id: 11, text: 'Mantenemos una lista de issues activa, priorizada y la trabajamos con regularidad.' },
@@ -38,7 +40,7 @@ const CATEGORIES = [
     ],
   },
   {
-    id: 'procesos', label: 'Procesos', emoji: '⚙️',
+    id: 'procesos', label: 'Procesos',
     questions: [
       { id: 13, text: 'Los procesos clave están documentados, simplificados y seguidos de manera consistente por todos.' },
       { id: 14, text: 'Contamos con un proceso consistente para incorporar y capacitar a nuevas personas.' },
@@ -46,7 +48,7 @@ const CATEGORIES = [
     ],
   },
   {
-    id: 'traccion', label: 'Tracción', emoji: '🚀',
+    id: 'traccion', label: 'Tracción',
     questions: [
       { id: 16, text: 'Todos establecen Rocas trimestrales y son responsables de cumplirlas (meta: 80% o más).' },
       { id: 17, text: 'Realizamos Level 10 Meetings semanales con agenda consistente, eficiencia y alta puntuación.' },
@@ -117,8 +119,7 @@ function CategoryBar({ category, avg }) {
 
   return (
     <div className="flex items-center gap-3">
-      <span className="text-sm w-5">{category.emoji}</span>
-      <span className="text-xs text-gray-600 dark:text-gray-400 w-20 shrink-0">{category.label}</span>
+            <span className="text-xs text-gray-600 dark:text-gray-400 w-20 shrink-0">{category.label}</span>
       <div className="flex-1 bg-gray-100 dark:bg-gray-700 rounded-full h-2">
         <div className={`h-2 rounded-full transition-all ${color}`} style={{ width: `${pct}%` }} />
       </div>
@@ -170,7 +171,7 @@ function Questionnaire({ onSubmit, loading }) {
         <div key={cat.id} className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl overflow-hidden">
           <div className="px-5 py-3 bg-gray-50 dark:bg-gray-700/50 border-b border-gray-200 dark:border-gray-700">
             <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200">
-              {cat.emoji} {cat.label}
+              {cat.label}
             </h3>
           </div>
           <div className="divide-y divide-gray-100 dark:divide-gray-700">
@@ -264,7 +265,7 @@ function ResultCard({ result, closedAt, respondentCount }) {
             {/* Fortalezas */}
             {analysis.fortalezas?.length > 0 && (
               <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-2xl p-5">
-                <h3 className="text-xs font-semibold uppercase tracking-wide text-green-700 dark:text-green-400 mb-3">✓ Fortalezas</h3>
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-green-700 dark:text-green-400 mb-3">Fortalezas</h3>
                 <ul className="space-y-2">
                   {analysis.fortalezas.map((f, i) => (
                     <li key={i} className="flex items-start gap-2 text-sm text-green-800 dark:text-green-300">
@@ -278,7 +279,7 @@ function ResultCard({ result, closedAt, respondentCount }) {
             {/* Áreas de atención */}
             {analysis.areasDeAtencion?.length > 0 && (
               <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-2xl p-5">
-                <h3 className="text-xs font-semibold uppercase tracking-wide text-red-700 dark:text-red-400 mb-3">⚠ Áreas de atención</h3>
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-red-700 dark:text-red-400 mb-3">Áreas de atención</h3>
                 <ul className="space-y-2">
                   {analysis.areasDeAtencion.map((a, i) => (
                     <li key={i} className="flex items-start gap-2 text-sm text-red-800 dark:text-red-300">
@@ -293,7 +294,7 @@ function ResultCard({ result, closedAt, respondentCount }) {
           {/* Recomendaciones */}
           {analysis.recomendaciones?.length > 0 && (
             <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-2xl p-5">
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-blue-700 dark:text-blue-400 mb-3">🚀 Próximos pasos recomendados</h3>
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-blue-700 dark:text-blue-400 mb-3">Próximos pasos recomendados</h3>
               <ol className="space-y-2">
                 {analysis.recomendaciones.map((r, i) => (
                   <li key={i} className="flex items-start gap-2 text-sm text-blue-800 dark:text-blue-300">
@@ -464,7 +465,7 @@ export default function EvaluacionTab() {
           {/* Sin round activo */}
           {!currentRound && (
             <div className="text-center py-12 space-y-4">
-              <p className="text-5xl">📋</p>
+              <p><Icon as={ClipboardList} size={40} className="inline-block text-gray-300 dark:text-gray-600" /></p>
               <div>
                 <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-200 mb-1">Evaluación Organizacional EOS</h3>
                 <p className="text-sm text-gray-500 dark:text-gray-400 max-w-md mx-auto">
@@ -512,7 +513,7 @@ export default function EvaluacionTab() {
           {currentRound && hasSubmitted && (
             <div className="space-y-4">
               <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-xl px-5 py-4">
-                <p className="text-sm font-semibold text-green-800 dark:text-green-300 mb-1">✓ Ya enviaste tu evaluación</p>
+                <p className="text-sm font-semibold text-green-800 dark:text-green-300 mb-1">Ya enviaste tu evaluación</p>
                 <p className="text-xs text-green-600 dark:text-green-400">
                   El resultado se calcula con todas las respuestas disponibles. Podés generar el análisis ahora o esperar a que más líderes respondan.
                 </p>
@@ -547,7 +548,7 @@ export default function EvaluacionTab() {
                 disabled={closing}
                 className="w-full py-3 text-sm font-semibold text-white bg-primary-600 hover:bg-primary-700 disabled:opacity-40 rounded-xl transition-colors"
               >
-                {closing ? 'Generando análisis…' : `✨ Ver resultado y análisis IA (${currentRound.respondentCount} ${currentRound.respondentCount === 1 ? 'respuesta' : 'respuestas'})`}
+                {closing ? 'Generando análisis…' : `Ver resultado y análisis IA (${currentRound.respondentCount} ${currentRound.respondentCount === 1 ? 'respuesta' : 'respuestas'})`}
               </button>
 
               {currentRound.respondentCount < adminMembers.length && (

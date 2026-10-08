@@ -4,14 +4,16 @@ import { avatarUrl } from '../../utils/avatarUrl'
 import CollaborativeRichTextEditor from '../CollaborativeRichTextEditor'
 import HowToButton from '../HowToButton'
 import MeetingAutoSummaryTest from './MeetingAutoSummaryTest'
+import { CalendarDays, Search, X } from 'lucide-react'
+import { Icon } from '../ui/Icon'
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
 
 const MEETING_TYPES = [
-  { value: 'internal', label: 'Interna (equipo)', short: 'Interna', emoji: '👥',
+  { value: 'internal', label: 'Interna (equipo)', short: 'Interna',
     badge: 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300',
     border: 'border-blue-200 dark:border-blue-800' },
-  { value: 'client',   label: 'Con cliente',      short: 'Cliente', emoji: '🤝',
+  { value: 'client',   label: 'Con cliente',      short: 'Cliente',
     badge: 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300',
     border: 'border-emerald-200 dark:border-emerald-800' },
 ]
@@ -193,7 +195,7 @@ function TodoItem({ todo, members, canEdit, onUpdate, onDelete }) {
           onClick={() => { if (confirm('¿Eliminar esta tarea de la reunión?')) onDelete(todo.id) }}
           className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 text-sm transition-all px-1"
         >
-          ✕
+          <Icon as={X} size={16} />
         </button>
       )}
     </div>
@@ -278,7 +280,7 @@ function MeetingTimer({ meeting, canEdit, onStart, onFinish }) {
   if (meeting.durationMins != null) {
     return (
       <span className="text-sm font-semibold text-gray-700 dark:text-gray-200">
-        ⏱ {fmtDuration(meeting.durationMins)}
+        {fmtDuration(meeting.durationMins)}
       </span>
     )
   }
@@ -327,7 +329,7 @@ function MeetingCard({ meeting, members, canEdit, expanded, onToggle, onSave, on
       {/* Header (colapsable) */}
       <div className="flex items-center gap-3 px-4 py-3 cursor-pointer select-none" onClick={onToggle}>
         <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full shrink-0 ${tm.badge}`}>
-          {tm.emoji} {tm.short}
+          {tm.short}
         </span>
         {meeting.title ? (
           <span className="flex items-baseline gap-2 min-w-0">
@@ -344,10 +346,10 @@ function MeetingCard({ meeting, members, canEdit, expanded, onToggle, onSave, on
           </span>
         )}
         {!meeting.running && meeting.durationMins != null && (
-          <span className="text-[11px] text-gray-400 dark:text-gray-500">⏱ {fmtDuration(meeting.durationMins)}</span>
+          <span className="text-[11px] text-gray-400 dark:text-gray-500">{fmtDuration(meeting.durationMins)}</span>
         )}
         {totalCount > 0 && (
-          <span className="text-[11px] text-gray-400 dark:text-gray-500">✓ {doneCount}/{totalCount}</span>
+          <span className="text-[11px] text-gray-400 dark:text-gray-500">{doneCount}/{totalCount}</span>
         )}
         <span className={`text-gray-400 text-xs transition-transform ${expanded ? 'rotate-90' : ''}`}>▶</span>
       </div>
@@ -431,7 +433,7 @@ function MeetingCard({ meeting, members, canEdit, expanded, onToggle, onSave, on
                         className="text-gray-400 hover:text-red-500 ml-0.5"
                         title="Quitar"
                       >
-                        ✕
+                        <Icon as={X} size={16} />
                       </button>
                     )}
                   </span>
@@ -500,7 +502,7 @@ function MeetingCard({ meeting, members, canEdit, expanded, onToggle, onSave, on
               {canEdit && <QuickAddTodo onAdd={title => onAddTodo(meeting.id, title)} />}
             </div>
             <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-1.5 leading-snug">
-              📋 Al finalizar la reunión, las tareas con responsable pasan solas al dashboard de esa persona (en este proyecto). Si cambiás el responsable, la tarea se mueve; al completarla, se tilda sola acá.
+              Al finalizar la reunión, las tareas con responsable pasan solas al dashboard de esa persona (en este proyecto). Si cambiás el responsable, la tarea se mueve; al completarla, se tilda sola acá.
             </p>
           </div>
 
@@ -760,7 +762,7 @@ export default function ProjectMeetings({ projectId, canEdit, deepLinkMeetingId 
 
       {total > 3 && (
         <div className="relative mb-3">
-          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm pointer-events-none">🔍</span>
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none flex"><Icon as={Search} size={15} /></span>
           <input
             type="text"
             value={query}
@@ -774,7 +776,7 @@ export default function ProjectMeetings({ projectId, canEdit, deepLinkMeetingId 
               className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-sm"
               title="Limpiar"
             >
-              ✕
+              <Icon as={X} size={16} />
             </button>
           )}
         </div>
@@ -782,7 +784,7 @@ export default function ProjectMeetings({ projectId, canEdit, deepLinkMeetingId 
 
       {meetings.length === 0 ? (
         <div className="text-center py-12">
-          <p className="text-4xl mb-3">🗓️</p>
+          <p className="mb-3"><Icon as={CalendarDays} size={32} className="inline-block text-gray-300 dark:text-gray-600" /></p>
           <p className="text-sm text-gray-500 dark:text-gray-400">No hay reuniones registradas.</p>
           {canEdit && (
             <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">Creá la primera con "+ Nueva reunión".</p>

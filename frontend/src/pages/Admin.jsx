@@ -9,12 +9,12 @@ import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 
 const TABS = [
-  { id: 'projects',  label: '📁 Proyectos' },
-  { id: 'team',      label: '👥 Equipo' },
-  { id: 'services',  label: '🛠 Servicios' },
-  { id: 'roles',     label: '🏷 Roles' },
-  { id: 'legajo',    label: '📋 Legajo' },
-  { id: 'empresa',   label: '🏢 Empresa' },
+  { id: 'projects',  label: 'Proyectos' },
+  { id: 'team',      label: 'Equipo' },
+  { id: 'services',  label: 'Servicios' },
+  { id: 'roles',     label: 'Roles' },
+  { id: 'legajo',    label: 'Legajo' },
+  { id: 'empresa',   label: 'Empresa' },
 ]
 
 const VALID_TABS = new Set(TABS.map(t => t.id))

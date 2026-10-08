@@ -2,6 +2,8 @@ import { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react
 import api from '../../api/client'
 import { renderMarkdown } from '../../utils/processMarkdown'
 import { printProcess } from '../../utils/printProcess'
+import { Pencil, Workflow, X } from 'lucide-react'
+import { Icon } from '../ui/Icon'
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Constantes de estado
@@ -224,11 +226,11 @@ function ProcessList({ processes, roles, selectedId, onSelect, onAdd, onEdit, on
                     <button
                       onClick={e => { e.stopPropagation(); onEdit(p) }}
                       title="Editar"
-                      className="p-0.5 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 text-xs leading-none mt-1">✎</button>
+                      className="p-0.5 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 text-xs leading-none mt-1"><Icon as={Pencil} size={13} /></button>
                     <button
                       onClick={e => { e.stopPropagation(); setConfirm(p.id) }}
                       title="Eliminar"
-                      className="p-0.5 text-gray-400 hover:text-red-500 text-xs leading-none">✕</button>
+                      className="p-0.5 text-gray-400 hover:text-red-500 text-xs leading-none"><Icon as={X} size={16} /></button>
                   </div>
                 </button>
               </li>
@@ -422,7 +424,7 @@ function StepItem({ step, isFirst, isLast, onUpdate, onDelete, onMoveUp, onMoveD
         <button onClick={onMoveDown} disabled={isLast}  title="Bajar"
           className="p-1 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 disabled:opacity-20 text-xs transition-colors leading-none">▼</button>
         <button onClick={() => setConfirmDel(true)} title="Eliminar"
-          className="p-1 text-gray-400 hover:text-red-500 text-xs transition-colors leading-none">✕</button>
+          className="p-1 text-gray-400 hover:text-red-500 text-xs transition-colors leading-none"><Icon as={X} size={16} /></button>
       </div>
 
       {confirmDel && (
@@ -526,7 +528,7 @@ function ProcessDetail({ process, roles, onUpdate, onStepCreate, onStepUpdate, o
             {/* Botón editar nombre/rol */}
             <button onClick={() => onEdit(process)}
               className="p-1.5 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 text-sm rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-              title="Editar nombre y rol">✎</button>
+              title="Editar nombre y rol"><Icon as={Pencil} size={14} /></button>
           </div>
         </div>
       </div>
@@ -763,7 +765,7 @@ export default function ProcesosTab() {
       {/* Estado vacío total */}
       {processes.length === 0 ? (
         <div className="bg-white dark:bg-gray-800 border border-dashed border-gray-200 dark:border-gray-700 rounded-2xl p-10 text-center">
-          <p className="text-3xl mb-3">⚙️</p>
+          <p className="mb-3"><Icon as={Workflow} size={28} className="inline-block text-gray-300 dark:text-gray-600" /></p>
           <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Sin procesos documentados</p>
           <p className="text-sm text-gray-500 dark:text-gray-400 mb-4 max-w-md mx-auto">
             Los procesos centrales son los 6–10 que, si todos los siguen correctamente, hacen que el negocio funcione bien. Comenzá agregando el primero.

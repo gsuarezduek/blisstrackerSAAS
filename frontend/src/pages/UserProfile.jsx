@@ -13,6 +13,8 @@ import { renderRichText } from '../utils/richText'
 import { fmtMins } from '../utils/format'
 import { useAuth } from '../context/AuthContext'
 import useMembers from '../hooks/useMembers'
+import { Ban } from 'lucide-react'
+import { Icon } from '../components/ui/Icon'
 
 const STATUS_LABEL = { IN_PROGRESS: 'En curso', PENDING: 'Pendiente', PAUSED: 'Pausada', BLOCKED: 'Bloqueada' }
 const STATUS_CLASS = {
@@ -83,7 +85,7 @@ export default function UserProfile() {
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
         <Navbar />
         <div className="max-w-2xl mx-auto px-4 py-20 text-center text-gray-500 dark:text-gray-400">
-          <p className="text-4xl mb-3">🚫</p>
+          <p className="mb-3"><Icon as={Ban} size={32} className="inline-block text-gray-300 dark:text-gray-600" /></p>
           <p>{error || 'Perfil no disponible'}</p>
           <Link to="/realtime" className="text-primary-600 hover:underline text-sm mt-4 inline-block">← Volver a Actividad</Link>
         </div>
@@ -128,7 +130,7 @@ export default function UserProfile() {
             )}
             {onLeave && (
               <span className="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full font-medium bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 mt-2">
-                🌴 De licencia ({LEAVE_LABEL[onLeave.type] || onLeave.type}) hasta {fmtDate(onLeave.endDate)}
+                De licencia ({LEAVE_LABEL[onLeave.type] || onLeave.type}) hasta {fmtDate(onLeave.endDate)}
               </span>
             )}
           </div>
@@ -310,7 +312,7 @@ function TaskRow({ task, ownerId, onOpen, person, showScheduled }) {
           {task.project?.name}
           {' · '}creada {fmtDate(task.createdAt)}
           {showScheduled && task.scheduledFor && <> · programada {fmtDate(task.scheduledFor)}</>}
-          {(task._count?.comments ?? 0) > 0 && <> · 💬 {task._count.comments}</>}
+          {(task._count?.comments ?? 0) > 0 && <> · {task._count.comments}</>}
         </p>
         {person
           ? <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{person}</p>

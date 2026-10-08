@@ -1,4 +1,6 @@
 import { useState, useRef } from 'react'
+import { Pencil, X } from 'lucide-react'
+import { Icon } from '../../ui/Icon'
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // UI primitivos
@@ -31,7 +33,7 @@ export function SectionCard({ title, desc, saving, saved, onHelp, children }) {
         </div>
         <div className="flex items-center gap-3 shrink-0">
           {saving  && <span className="text-xs text-gray-400">Guardando…</span>}
-          {!saving && saved && <span className="text-xs text-green-500">✓ Guardado</span>}
+          {!saving && saved && <span className="text-xs text-green-500">Guardado</span>}
           {onHelp && (
             <button onClick={onHelp} className="text-xs text-primary-600 dark:text-primary-400 hover:underline font-medium">? Ayuda</button>
           )}
@@ -126,8 +128,8 @@ export function ItemsList({ items, onChange, maxItems, minItems = 0, placeholder
                 <span className="flex-1 text-sm text-gray-800 dark:text-gray-200 cursor-pointer hover:text-primary-600 dark:hover:text-primary-400" onDoubleClick={() => startEdit(i)} title="Doble clic para editar">{v}</span>
               )}
               <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                {editing !== i && <button onClick={() => startEdit(i)} className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-xs">✏️</button>}
-                <button onClick={() => handleRemove(i)} className="p-1 text-gray-400 hover:text-red-500 text-xs">✕</button>
+                {editing !== i && <button onClick={() => startEdit(i)} className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-xs"><Icon as={Pencil} size={15} /></button>}
+                <button onClick={() => handleRemove(i)} className="p-1 text-gray-400 hover:text-red-500 text-xs"><Icon as={X} size={16} /></button>
               </div>
             </li>
           ))}
@@ -142,7 +144,7 @@ export function ItemsList({ items, onChange, maxItems, minItems = 0, placeholder
         const atMax   = items.length >= maxItems && minItems === 0
         const color   = tooFew ? 'text-amber-500' : perfect ? 'text-green-500' : atMax ? 'text-amber-500' : 'text-gray-400'
         const label   = tooFew  ? ` · necesitás exactamente ${minItems}`
-          : perfect && minItems === maxItems ? ' · ✓ completo'
+          : perfect && minItems === maxItems ? ' · completo'
           : atMax   ? ' · máximo alcanzado'
           : ''
         return <p className={`text-xs font-medium ${color}`}>{items.length} / {maxItems}{label}</p>

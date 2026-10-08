@@ -8,6 +8,8 @@ import EditDurationModal from '../components/EditDurationModal'
 import RoleBadge from '../components/RoleBadge'
 import api from '../api/client'
 import { fmtMins } from '../utils/format'
+import { ChartColumn, Pencil, Search, X } from 'lucide-react'
+import { Icon } from '../components/ui/Icon'
 
 function fmtTaskDate(iso) {
   return new Date(iso).toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })
@@ -222,7 +224,7 @@ function ByProjectView({ data, sortBy, search, statusFilter, loading, onEditTask
                                 <span className="text-gray-700 dark:text-gray-300 truncate text-left">{linkify(task.description)}</span>
                               </div>
                               <div className="flex items-center gap-1.5 flex-shrink-0 ml-3">
-                                {task.isOverride && <span className="text-amber-500 text-xs">✎</span>}
+                                {task.isOverride && <span className="text-amber-500 inline-flex" title="Duración editada a mano"><Icon as={Pencil} size={11} /></span>}
                                 <span className="text-xs text-gray-400 dark:text-gray-500 tabular-nums">{fmtTaskDate(task.completedAt)}</span>
                                 <span className="text-gray-500 dark:text-gray-400">{fmtMins(task.minutes)}</span>
                               </div>
@@ -242,7 +244,7 @@ function ByProjectView({ data, sortBy, search, statusFilter, loading, onEditTask
 
       {sorted.length === 0 && (
         <div className="text-center py-16 text-gray-400">
-          <p className="text-3xl mb-2">📊</p>
+          <p className="mb-2"><Icon as={ChartColumn} size={28} className="inline-block text-gray-300 dark:text-gray-600" /></p>
           <p>{data.length === 0 ? 'No hay datos para el período seleccionado' : 'Ningún proyecto coincide con los filtros'}</p>
         </div>
       )}
@@ -342,7 +344,7 @@ export default function Reports() {
 
         <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
           <div className="relative w-full sm:w-64">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">🔍</span>
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 flex"><Icon as={Search} size={15} /></span>
             <input
               type="text"
               value={search}
@@ -356,7 +358,7 @@ export default function Reports() {
                 className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-sm"
                 aria-label="Limpiar búsqueda"
               >
-                ✕
+                <Icon as={X} size={16} />
               </button>
             )}
           </div>

@@ -1,4 +1,6 @@
 import { useMemo } from 'react'
+import { Repeat } from 'lucide-react'
+import { Icon } from '../ui/Icon'
 
 function toMins(hhmm) {
   const [h, m] = hhmm.split(':').map(Number)
@@ -15,7 +17,7 @@ const HOUR_HEIGHT_PX = 48
  * varias personas en un mismo día) — el caller decide vía `columns`.
  *
  * `columns`: [{ key, label, subLabel? }]
- * `getBlocks(key)`: → [{ id, start:"HH:MM", end:"HH:MM", title, tentative?, tone?, onClick? }]
+ * `getBlocks(key)`: → [{ id, start:"HH:MM", end:"HH:MM", title, recurring?, tentative?, tone?, onClick? }]
  * `getWorkWindow(key)`: → { start, end } | null (null = todo el día disponible, sin sombreado)
  * `isFullDayOff(key)`: → boolean (licencia aprobada — sombrea toda la columna)
  * `isPast(key)`: → boolean (día ya transcurrido — la columna se pinta en gris suave,
@@ -148,7 +150,7 @@ export default function WeekTimeGrid({
                       }`}
                       style={{ top: `${topPct(b.start)}%`, height: `${Math.max(heightPct(b.start, b.end), 3)}%` }}
                     >
-                      <span className="text-[10px] font-medium text-gray-700 dark:text-gray-200 truncate block">{b.title}</span>
+                      <span className="text-[10px] font-medium text-gray-700 dark:text-gray-200 truncate block">{b.recurring && <Icon as={Repeat} size={10} className="inline-block mr-0.5 align-[-1px]" />}{b.title}</span>
                     </div>
                   ))}
                 </div>

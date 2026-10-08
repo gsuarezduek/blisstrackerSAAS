@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import RoleBadge from '../../RoleBadge'
 import { Avatar, ConfirmModal } from './personasUI'
+import { X } from 'lucide-react'
+import { Icon } from '../../ui/Icon'
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Regla de las 3 Faltas
@@ -173,7 +175,7 @@ export default function ThreeStrikes({ members, strikesMap, onAddStrike, onRemov
                       <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">{s.reason}</p>
                     </div>
                     <button onClick={() => setConfirmDel({ strikeId: s.id })}
-                      className="p-1 text-gray-400 hover:text-red-500 transition-colors shrink-0" title="Eliminar falta">✕</button>
+                      className="p-1 text-gray-400 hover:text-red-500 transition-colors shrink-0" title="Eliminar falta"><Icon as={X} size={16} /></button>
                   </div>
                 ))}
               </div>

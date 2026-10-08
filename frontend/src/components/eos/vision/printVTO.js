@@ -106,7 +106,7 @@ export function printVTO(data, workspaceName, rocks, members, issues, quarter) {
   </style>
 </head>
 <body>
-  <button class="print-btn" onclick="window.print()">🖨️ Imprimir / Guardar como PDF</button>
+  <button class="print-btn" onclick="window.print()">Imprimir / Guardar como PDF</button>
   <h1>Vision/Traction Organizer™</h1>
   <p class="subtitle">${workspaceName} · ${new Date().toLocaleDateString('es-AR', { year: 'numeric', month: 'long' })}</p>
 

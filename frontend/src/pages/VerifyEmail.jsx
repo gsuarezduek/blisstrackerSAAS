@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { useSearchParams, Link, useNavigate } from 'react-router-dom'
 import api from '../api/client'
 import { useAuth } from '../context/AuthContext'
+import { CircleCheck, Hourglass, TriangleAlert } from 'lucide-react'
+import { Icon } from '../components/ui/Icon'
 
 export default function VerifyEmail() {
   const [searchParams] = useSearchParams()
@@ -37,7 +39,7 @@ export default function VerifyEmail() {
     <div className="min-h-screen bg-gradient-to-br from-primary-700 to-primary-500 dark:from-gray-900 dark:to-gray-800 flex items-center justify-center p-4">
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md p-8 text-center space-y-4">
         <div className="text-5xl">
-          {status === 'loading' ? '⏳' : status === 'ok' ? '✅' : '⚠️'}
+          {status === 'loading' ? <Icon as={Hourglass} size={40} className="text-gray-400" /> : status === 'ok' ? <Icon as={CircleCheck} size={40} className="text-green-500" /> : <Icon as={TriangleAlert} size={40} className="text-amber-500" />}
         </div>
         <h1 className="text-xl font-bold text-gray-900 dark:text-white">
           {status === 'loading' ? 'Confirmando...' : status === 'ok' ? 'Email verificado' : 'No se pudo verificar'}

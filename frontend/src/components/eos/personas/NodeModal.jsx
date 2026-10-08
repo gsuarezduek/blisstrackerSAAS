@@ -1,5 +1,7 @@
 import { useState } from 'react'
 import { getDescendantIds, buildParentOptions } from './accountabilityHelpers'
+import { X } from 'lucide-react'
+import { Icon } from '../../ui/Icon'
 
 // ─── NodeModal ────────────────────────────────────────────────────────────────
 
@@ -85,7 +87,7 @@ export default function NodeModal({ node, allNodes, members, initialParentId, on
                   <li key={i} className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
                     <span className="text-gray-400">·</span>
                     <span className="flex-1">{a}</span>
-                    <button onClick={() => setAccs(accs.filter((_, idx) => idx !== i))} className="text-gray-400 hover:text-red-500 text-xs">✕</button>
+                    <button onClick={() => setAccs(accs.filter((_, idx) => idx !== i))} className="text-gray-400 hover:text-red-500 text-xs"><Icon as={X} size={16} /></button>
                   </li>
                 ))}
               </ul>

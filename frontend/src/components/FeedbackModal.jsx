@@ -77,7 +77,7 @@ export default function FeedbackModal({ open, onClose }) {
                       : 'bg-white dark:bg-gray-700 border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600'
                   }`}
                 >
-                  💡 Sugerencia
+                  Sugerencia
                 </button>
                 <button
                   type="button"
@@ -88,7 +88,7 @@ export default function FeedbackModal({ open, onClose }) {
                       : 'bg-white dark:bg-gray-700 border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600'
                   }`}
                 >
-                  🐛 Error
+                  Error
                 </button>
               </div>
 
