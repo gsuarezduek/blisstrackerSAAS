@@ -10,6 +10,25 @@ const TRANSFER_INCLUDE = {
   taxes:       { include: { tax: { select: { id: true, name: true } }, generatedMovement: { select: { id: true, amount: true, categoryId: true } } } },
 }
 
+// GET /api/finanzas/transfers?accountId=&from=&to= — drill-down de cuenta en
+// Saldos (sección 4.2): las transferencias no tienen pestaña propia, se ven
+// desde la cuenta involucrada (de origen o destino).
+async function listTransfers(req, res, next) {
+  try {
+    const workspaceId = req.workspace.id
+    const { accountId, from, to } = req.query
+    const where = { workspaceId, deletedAt: null }
+    if (accountId) where.OR = [{ fromAccountId: Number(accountId) }, { toAccountId: Number(accountId) }]
+    if (from || to) {
+      const fromDate = parseDate(from)
+      const toDate = parseDate(to)
+      where.date = { ...(fromDate ? { gte: fromDate } : {}), ...(toDate ? { lte: toDate } : {}) }
+    }
+    const transfers = await prisma.financeTransfer.findMany({ where, orderBy: { date: 'desc' }, include: TRANSFER_INCLUDE })
+    res.json(transfers)
+  } catch (err) { next(err) }
+}
+
 // POST /api/finanzas/transfers — entre cuentas, o entre disponible y fondos de una
 // misma cuenta (sección 4.7 del spec, selector "Entre cuentas"). No cuenta como
 // ingreso/egreso. Los impuestos tildados van sobre la cuenta de ORIGEN (3.2/3.3).
@@ -82,4 +101,4 @@ async function createTransfer(req, res, next) {
   } catch (err) { next(err) }
 }
 
-module.exports = { createTransfer, TRANSFER_INCLUDE }
+module.exports = { createTransfer, listTransfers, TRANSFER_INCLUDE }

@@ -11,6 +11,9 @@ const taxes      = require('../controllers/finanzas/taxes.controller')
 const movements  = require('../controllers/finanzas/movements.controller')
 const transfers  = require('../controllers/finanzas/transfers.controller')
 const audit      = require('../controllers/finanzas/audit.controller')
+const checks        = require('../controllers/finanzas/checks.controller')
+const fundValuations = require('../controllers/finanzas/fundValuations.controller')
+const balances       = require('../controllers/finanzas/balances.controller')
 
 // Todo el módulo Finanzas requiere: autenticación + workspace + acceso al
 // módulo (admin/owner o rol configurable, ver moduleAccess.js) + que el
@@ -65,9 +68,19 @@ router.patch('/movements/:id',       movements.updateMovement)
 router.delete('/movements/:id',      movements.deleteMovement)
 router.post('/movements/:id/restore', movements.restoreMovement)
 
+router.get('/transfers',         transfers.listTransfers)
 router.post('/transfers',        transfers.createTransfer)
 
 // Historial genérico (sección 4.9) — cualquiera con acceso al módulo.
 router.get('/audit',             audit.listAudit)
+
+// Saldos (4.2) + acreditación/rechazo de cheques (3.4, 4.8) + valuación de
+// fondos (4.8) — operación del día a día, abierto a cualquiera con acceso.
+router.get('/balances',              balances.getBalances)
+router.get('/checks',                checks.listChecks)
+router.patch('/checks/:id/credit',   checks.creditCheck)
+router.patch('/checks/:id/reject',   checks.rejectCheck)
+router.get('/fund-valuations',       fundValuations.listValuations)
+router.post('/fund-valuations',      fundValuations.createValuation)
 
 module.exports = router

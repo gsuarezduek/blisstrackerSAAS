@@ -10,6 +10,7 @@ import api from '../api/client'
 import FinanzasConfiguracion from '../components/finanzas/FinanzasConfiguracion'
 import LoadMovementModal from '../components/finanzas/LoadMovementModal'
 import MovementsTab from '../components/finanzas/MovementsTab'
+import BalancesTab from '../components/finanzas/BalancesTab'
 
 const TABS = [
   { id: 'ingresos',  label: 'Ingresos' },
@@ -136,6 +137,8 @@ export default function Finanzas() {
                 onDataChange={loadShared}
                 refreshKey={refreshKey}
               />
+            ) : tab === 'saldos' ? (
+              <BalancesTab key={refreshKey} accounts={accounts} taxes={taxes} />
             ) : (
               <ComingSoon label={TABS.find(t => t.id === tab)?.label} />
             )}
