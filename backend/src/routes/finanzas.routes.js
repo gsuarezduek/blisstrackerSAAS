@@ -18,6 +18,10 @@ const summary        = require('../controllers/finanzas/summary.controller')
 const customers      = require('../controllers/finanzas/customers.controller')
 const invoices       = require('../controllers/finanzas/invoices.controller')
 const nextActions    = require('../controllers/finanzas/nextActions.controller')
+const extras         = require('../controllers/finanzas/extras.controller')
+const tasks          = require('../controllers/finanzas/tasks.controller')
+const workspaceNote  = require('../controllers/finanzas/workspaceNote.controller')
+const aiSummary      = require('../controllers/finanzas/aiSummary.controller')
 
 // Todo el módulo Finanzas requiere: autenticación + workspace + acceso al
 // módulo (admin/owner o rol configurable, ver moduleAccess.js) + que el
@@ -114,5 +118,23 @@ router.get('/next-actions',          nextActions.listNextActions)
 router.post('/next-actions',         nextActions.createNextAction)
 router.patch('/next-actions/:id',    nextActions.updateNextAction)
 router.delete('/next-actions/:id',   nextActions.deleteNextAction)
+
+// Extras (4.6) — abierto a cualquiera con acceso al módulo.
+router.get('/extras',                extras.listExtras)
+router.post('/extras',               extras.createExtra)
+router.patch('/extras/:id',          extras.updateExtra)
+router.delete('/extras/:id',         extras.deleteExtra)
+
+// Pendientes (4.6): tareas por reglas (motor on-demand) + nota del workspace + resumen IA.
+router.get('/tasks',                 tasks.listTasks)
+router.post('/tasks',                tasks.createTask)
+router.patch('/tasks/:id',           tasks.updateTask)
+router.delete('/tasks/:id',          tasks.deleteTask)
+
+router.get('/workspace-note',        workspaceNote.getNote)
+router.patch('/workspace-note',      workspaceNote.updateNote)
+
+router.get('/ai-summary',            aiSummary.getSummary)
+router.post('/ai-summary/refresh',   aiSummary.refreshSummary)
 
 module.exports = router

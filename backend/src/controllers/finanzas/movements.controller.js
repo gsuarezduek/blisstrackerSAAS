@@ -130,13 +130,26 @@ async function getMovement(req, res, next) {
 async function createMovement(req, res, next) {
   try {
     const workspaceId = req.workspace.id
-    const { type, date, itemId, categoryId, accountId, amount, note, paymentMethod, accountApplication, invoiceId, taxIds, check } = req.body
+    const { type, date, itemId, categoryId, accountId, amount, note, paymentMethod, accountApplication, invoiceId, taxIds, check, extraPaymentId } = req.body
 
     const parsedDate = parseDate(date)
     if (!parsedDate) return res.status(400).json({ error: 'Fecha inválida' })
 
     const resolved = await resolveMovementFields(workspaceId, { type, itemId, categoryId, accountId, amount, paymentMethod, accountApplication, invoiceId, check })
     const { item, account, amountDecimal, resolvedPaymentMethod, resolvedAccountApplication, resolvedInvoiceId } = resolved
+
+    // Si hay extras con pagos pendientes, ofrecer asociarlo a uno (3.6) — solo
+    // tiene sentido para ingresos de un item con seguimiento, no atado a cheque
+    // (el link se hace cuando el cobro es real, no cuando queda pendiente).
+    let extraPayment = null
+    if (extraPaymentId != null) {
+      if (!Number.isInteger(extraPaymentId)) return res.status(400).json({ error: 'extraPaymentId inválido' })
+      extraPayment = await prisma.financeExtraPayment.findFirst({
+        where: { id: extraPaymentId, workspaceId, movementId: null, extra: { itemId, deletedAt: null } },
+        include: { extra: true },
+      })
+      if (!extraPayment) return res.status(400).json({ error: 'Ese pago del extra no existe o ya está cobrado' })
+    }
 
     const cleanTaxIds = Array.isArray(taxIds) ? [...new Set(taxIds.filter(Number.isInteger))] : []
 
@@ -165,6 +178,13 @@ async function createMovement(req, res, next) {
           workspaceId, accountId, taxIds: cleanTaxIds, baseAmount: amountDecimal, currency: account.currency,
           date: movement.date, itemId: movement.itemId, movementId: movement.id,
         })
+      }
+
+      if (extraPayment) {
+        await tx.financeExtraPayment.update({ where: { id: extraPayment.id }, data: { movementId: movement.id } })
+        // Estado pasa a "cobrado" automáticamente cuando todos los pagos están cobrados (3.6).
+        const remaining = await tx.financeExtraPayment.count({ where: { extraId: extraPayment.extraId, movementId: null } })
+        if (remaining === 0) await tx.financeExtra.update({ where: { id: extraPayment.extraId }, data: { status: 'collected' } })
       }
 
       return movement.id

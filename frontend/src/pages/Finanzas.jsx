@@ -13,6 +13,7 @@ import MovementsTab from '../components/finanzas/MovementsTab'
 import BalancesTab from '../components/finanzas/BalancesTab'
 import SummaryTab from '../components/finanzas/SummaryTab'
 import CustomersTab from '../components/finanzas/CustomersTab'
+import PendingTab from '../components/finanzas/PendingTab'
 
 const TABS = [
   { id: 'ingresos',  label: 'Ingresos' },
@@ -23,16 +24,6 @@ const TABS = [
   { id: 'pendientes', label: 'Pendientes' },
 ]
 const VALID = new Set(TABS.map(t => t.id))
-
-// Las 6 pestañas se construyen incrementalmente (Etapas 3 a 8 del plan del
-// módulo) — hasta entonces muestran este placeholder en vez de contenido roto.
-function ComingSoon({ label }) {
-  return (
-    <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-10 text-center">
-      <p className="text-sm text-gray-500 dark:text-gray-400">La sección "{label}" todavía se está construyendo.</p>
-    </div>
-  )
-}
 
 export default function Finanzas() {
   const { user } = useAuth()
@@ -75,6 +66,14 @@ export default function Finanzas() {
     setShowLoadModal(false)
     loadShared()
     setRefreshKey(k => k + 1)
+  }
+
+  // "Ver ›" de una tarea de Pendientes salta a la pestaña relacionada con su
+  // origen (no hace deep-link al registro puntual — alcanza para orientarse).
+  const TASK_ORIGIN_TAB = { check: 'saldos', check_rejected: 'saldos', invoice: 'clientes', next_action: 'clientes' }
+  function handleTaskNavigate(task) {
+    const dest = TASK_ORIGIN_TAB[task.origin]
+    if (dest) setTab(dest)
   }
 
   if (flagLoading) {
@@ -146,7 +145,7 @@ export default function Finanzas() {
             ) : tab === 'clientes' ? (
               <CustomersTab accounts={accounts} categories={categories} items={items} taxes={taxes} onDataChange={loadShared} />
             ) : (
-              <ComingSoon label={TABS.find(t => t.id === tab)?.label} />
+              <PendingTab items={items} onNavigate={handleTaskNavigate} />
             )}
           </>
         )}
