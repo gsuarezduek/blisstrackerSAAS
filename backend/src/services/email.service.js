@@ -1,9 +1,9 @@
 /**
  * Barrel de compatibilidad: el envío de emails vive dividido por dominio en
  * `./email/` (_shared.js + accountEmails.js + workspaceEmails.js + rrhhEmails.js
- * + digestEmails.js + ventasWhatsappEmails.js + clientPortalEmails.js). Este
- * archivo reexporta todo con el mismo shape de siempre para que ningún
- * consumidor externo tenga que cambiar su import.
+ * + digestEmails.js + ventasWhatsappEmails.js + clientPortalEmails.js +
+ * financeEmails.js). Este archivo reexporta todo con el mismo shape de
+ * siempre para que ningún consumidor externo tenga que cambiar su import.
  */
 
 const shared = require('./email/_shared')
@@ -13,6 +13,7 @@ const rrhhEmails = require('./email/rrhhEmails')
 const digestEmails = require('./email/digestEmails')
 const ventasWhatsappEmails = require('./email/ventasWhatsappEmails')
 const clientPortalEmails = require('./email/clientPortalEmails')
+const financeEmails = require('./email/financeEmails')
 
 module.exports = {
   // helpers/infra reexportados tal cual (algunos consumidores los usan directo)
@@ -29,4 +30,5 @@ module.exports = {
   ...digestEmails,
   ...ventasWhatsappEmails,
   ...clientPortalEmails,
+  ...financeEmails,
 }

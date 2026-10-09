@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useEffect } from 'react'
 import api from '../../api/client'
 import { fmtMoney } from '../../utils/format'
 import { ACCOUNT_APPLICATIONS, TRANSFER_REASONS } from './financeCatalog'
@@ -15,8 +15,8 @@ const MODES = [
   { id: 'transfer', label: 'Entre cuentas' },
 ]
 
-export default function LoadMovementModal({ accounts, categories, items, taxes, defaultMode = 'income', onClose, onSaved }) {
-  const [mode, setMode] = useState(defaultMode)
+export default function LoadMovementModal({ accounts, categories, items, taxes, defaultMode = 'income', prefill, onClose, onSaved }) {
+  const [mode, setMode] = useState(prefill ? 'income' : defaultMode)
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={onClose}>
@@ -24,29 +24,31 @@ export default function LoadMovementModal({ accounts, categories, items, taxes, 
         <button onClick={onClose} aria-label="Cerrar" className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">✕</button>
         <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-4 pr-8">Nuevo movimiento</h2>
 
-        <div className="flex gap-1 bg-gray-100 dark:bg-gray-900 rounded-xl p-1 mb-5 w-fit">
-          {MODES.map(m => (
-            <button key={m.id} type="button" onClick={() => setMode(m.id)}
-              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${mode === m.id ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm' : 'text-gray-500 dark:text-gray-400'}`}>
-              {m.label}
-            </button>
-          ))}
-        </div>
+        {!prefill && (
+          <div className="flex gap-1 bg-gray-100 dark:bg-gray-900 rounded-xl p-1 mb-5 w-fit">
+            {MODES.map(m => (
+              <button key={m.id} type="button" onClick={() => setMode(m.id)}
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${mode === m.id ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm' : 'text-gray-500 dark:text-gray-400'}`}>
+                {m.label}
+              </button>
+            ))}
+          </div>
+        )}
 
         {mode === 'transfer' ? (
           <TransferForm accounts={accounts} taxes={taxes} onClose={onClose} onSaved={onSaved} />
         ) : (
-          <MovementForm type={mode} accounts={accounts} categories={categories} items={items} taxes={taxes} onClose={onClose} onSaved={onSaved} />
+          <MovementForm type={mode} accounts={accounts} categories={categories} items={items} taxes={taxes} prefill={prefill} onClose={onClose} onSaved={onSaved} />
         )}
       </div>
     </div>
   )
 }
 
-function MovementForm({ type, accounts, categories, items, taxes, onClose, onSaved }) {
+function MovementForm({ type, accounts, categories, items, taxes, prefill, onClose, onSaved }) {
   const isIncome = type === 'income'
-  const [item, setItem] = useState(null)
-  const [categoryId, setCategoryId] = useState('')
+  const [item, setItem] = useState(prefill?.item || null)
+  const [categoryId, setCategoryId] = useState(prefill?.item ? String(prefill.item.categoryId) : '')
   const [accountId, setAccountId] = useState('')
   const [date, setDate] = useState(today())
   const [amount, setAmount] = useState('')
@@ -55,7 +57,9 @@ function MovementForm({ type, accounts, categories, items, taxes, onClose, onSav
   const [checkNumber, setCheckNumber] = useState('')
   const [checkBank, setCheckBank] = useState('')
   const [checkDate, setCheckDate] = useState('')
-  const [accountApplication, setAccountApplication] = useState('on_account')
+  const [accountApplication, setAccountApplication] = useState(prefill?.invoiceId ? 'invoice' : 'on_account')
+  const [invoiceId, setInvoiceId] = useState(prefill?.invoiceId ? String(prefill.invoiceId) : '')
+  const [pendingInvoices, setPendingInvoices] = useState([])
   const [taxIds, setTaxIds] = useState(new Set())
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -63,6 +67,30 @@ function MovementForm({ type, accounts, categories, items, taxes, onClose, onSav
   const typeCategories = categories.filter(c => c.type === type && c.active)
   const account = accounts.find(a => a.id === Number(accountId)) || null
   const isCheck = isIncome && paymentMethod === 'check'
+
+  useEffect(() => {
+    if (!isIncome || !item?.tracksAccount || accountApplication !== 'invoice') { setPendingInvoices([]); return }
+    let cancelled = false
+    api.get('/finanzas/invoices', { params: { itemId: item.id } }).then(res => {
+      if (cancelled) return
+      const pending = res.data.filter(i => i.status !== 'paid').sort((a, b) => new Date(a.issueDate) - new Date(b.issueDate))
+      setPendingInvoices(pending)
+      if (!invoiceId && pending.length) {
+        const first = prefill?.invoiceId && pending.some(p => p.id === prefill.invoiceId) ? prefill.invoiceId : pending[0].id
+        setInvoiceId(String(first))
+      }
+    })
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [item?.id, accountApplication])
+
+  useEffect(() => {
+    if (prefill?.invoiceId && invoiceId === String(prefill.invoiceId) && !amount) {
+      const inv = pendingInvoices.find(i => i.id === prefill.invoiceId)
+      if (inv) setAmount(String(Number(inv.amount) - Number(inv.collected)))
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingInvoices])
 
   function handleItemChange(it) {
     setItem(it)
@@ -75,6 +103,7 @@ function MovementForm({ type, accounts, categories, items, taxes, onClose, onSav
     if (!accountId) { setError(`Elegí ${isIncome ? 'a qué cuenta entra' : 'de qué cuenta sale'}`); return }
     if (!amount || Number(amount) <= 0) { setError('Monto inválido'); return }
     if (isCheck && (!checkNumber.trim() || !checkBank.trim() || !checkDate)) { setError('Faltan datos del cheque'); return }
+    if (isIncome && item.tracksAccount && accountApplication === 'invoice' && !invoiceId) { setError('Elegí a qué factura se aplica'); return }
 
     setSaving(true); setError('')
     try {
@@ -84,7 +113,10 @@ function MovementForm({ type, accounts, categories, items, taxes, onClose, onSav
       }
       if (isIncome) {
         body.paymentMethod = paymentMethod
-        if (item.tracksAccount) body.accountApplication = accountApplication
+        if (item.tracksAccount) {
+          body.accountApplication = accountApplication
+          if (accountApplication === 'invoice') body.invoiceId = Number(invoiceId)
+        }
         if (isCheck) body.check = { number: checkNumber.trim(), issuingBank: checkBank.trim(), estimatedCollectionDate: checkDate }
         else body.taxIds = [...taxIds]
       } else {
@@ -101,7 +133,11 @@ function MovementForm({ type, accounts, categories, items, taxes, onClose, onSav
     <div className="space-y-4">
       <div>
         <label className={label}>Item</label>
-        <ItemPicker items={items} categories={categories} value={item?.id} onChange={handleItemChange} />
+        {prefill?.item ? (
+          <p className="text-sm text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-900/40 rounded-lg px-3 py-2">{prefill.item.name}</p>
+        ) : (
+          <ItemPicker items={items} categories={categories} value={item?.id} onChange={handleItemChange} />
+        )}
       </div>
 
       <div>
@@ -164,10 +200,20 @@ function MovementForm({ type, accounts, categories, items, taxes, onClose, onSav
       {isIncome && item?.tracksAccount && (
         <div>
           <label className={label}>Aplicar a cuenta</label>
-          <select className={input} value={accountApplication} onChange={e => setAccountApplication(e.target.value)}>
-            {ACCOUNT_APPLICATIONS.filter(o => o.key !== 'invoice').map(o => <option key={o.key} value={o.key}>{o.label}</option>)}
+          <select className={input} value={accountApplication} onChange={e => { setAccountApplication(e.target.value); setInvoiceId('') }}>
+            {ACCOUNT_APPLICATIONS.map(o => <option key={o.key} value={o.key}>{o.label}</option>)}
           </select>
-          <p className="text-xs text-gray-400 mt-1">Aplicar a una factura puntual se habilita junto con la pestaña Clientes.</p>
+          {accountApplication === 'invoice' && (
+            pendingInvoices.length > 0 ? (
+              <select className={`${input} mt-2`} value={invoiceId} onChange={e => setInvoiceId(e.target.value)}>
+                {pendingInvoices.map(inv => (
+                  <option key={inv.id} value={inv.id}>{inv.number} · pendiente {fmtMoney(Number(inv.amount) - Number(inv.collected), account?.currency)}</option>
+                ))}
+              </select>
+            ) : (
+              <p className="text-xs text-gray-400 mt-1">Este cliente no tiene facturas pendientes.</p>
+            )
+          )}
         </div>
       )}
 

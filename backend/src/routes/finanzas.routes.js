@@ -15,6 +15,9 @@ const checks        = require('../controllers/finanzas/checks.controller')
 const fundValuations = require('../controllers/finanzas/fundValuations.controller')
 const balances       = require('../controllers/finanzas/balances.controller')
 const summary        = require('../controllers/finanzas/summary.controller')
+const customers      = require('../controllers/finanzas/customers.controller')
+const invoices       = require('../controllers/finanzas/invoices.controller')
+const nextActions    = require('../controllers/finanzas/nextActions.controller')
 
 // Todo el módulo Finanzas requiere: autenticación + workspace + acceso al
 // módulo (admin/owner o rol configurable, ver moduleAccess.js) + que el
@@ -87,5 +90,29 @@ router.post('/fund-valuations',      fundValuations.createValuation)
 // Resumen (4.3): breakdown por categoría del mes + gráfico mensual.
 router.get('/summary/breakdown',     summary.getBreakdown)
 router.get('/summary/chart',         summary.getChart)
+
+// Clientes (4.4/4.5) — abierto a cualquiera con acceso al módulo.
+router.get('/customers',             customers.listCustomers)
+router.get('/customers/:id',         customers.getCustomer)
+router.get('/customers/:id/ledger',  customers.getLedger)
+
+// Facturas (4.5b, 4.8) + adjuntos — rutas estáticas antes que las `:id` por claridad.
+router.post('/invoices/download-zip', invoices.downloadZip)
+router.post('/invoices/send-email',   invoices.sendEmail)
+router.get('/invoices',               invoices.listInvoices)
+router.post('/invoices',              invoices.createInvoice)
+router.patch('/invoices/:id',         invoices.updateInvoice)
+router.delete('/invoices/:id',        invoices.deleteInvoice)
+router.post('/invoices/:id/restore',  invoices.restoreInvoice)
+router.post('/invoices/:id/attachments/presign',         invoices.presignAttachment)
+router.post('/invoices/:id/attachments/:attId/confirm',  invoices.confirmAttachment)
+router.get('/invoices/:id/attachments/:attId/download',  invoices.downloadAttachment)
+router.delete('/invoices/:id/attachments/:attId',        invoices.deleteAttachment)
+
+// Próximas acciones (4.5, columna lateral).
+router.get('/next-actions',          nextActions.listNextActions)
+router.post('/next-actions',         nextActions.createNextAction)
+router.patch('/next-actions/:id',    nextActions.updateNextAction)
+router.delete('/next-actions/:id',   nextActions.deleteNextAction)
 
 module.exports = router

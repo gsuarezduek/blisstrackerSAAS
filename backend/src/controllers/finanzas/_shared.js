@@ -7,6 +7,26 @@ function businessError(status, message) {
   return Object.assign(new Error(message), { status, isOperational: true })
 }
 
+function todayUTCNoon() {
+  const d = new Date()
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 12))
+}
+
+/**
+ * Estado de UNA factura (3.5): pagada (cobrado ≥ monto) / parcial (> 0) /
+ * vencida (sin pagar y venció) / pendiente. `collected` son los cobros
+ * aplicados específicamente a ESA factura (accountApplication='invoice'); un
+ * cobro "a cuenta" genérico no resuelve ninguna factura puntual. Compartido
+ * por customers.controller.js e invoices.controller.js.
+ */
+function computeInvoiceStatus(invoice, collected) {
+  const amount = toDecimal(invoice.amount)
+  if (collected.greaterThanOrEqualTo(amount)) return 'paid'
+  if (collected.greaterThan(0)) return 'partial'
+  if (new Date(invoice.dueDate) < todayUTCNoon()) return 'overdue'
+  return 'pending'
+}
+
 /**
  * Fechas "solo día" (YYYY-MM-DD) → mediodía UTC, mismo patrón que
  * controllers/ventas/leads.controller.js `parseDate` — evita que se corran de
@@ -146,4 +166,4 @@ async function resolveAndApplyTaxes(tx, { workspaceId, accountId, taxIds, baseAm
   return createdLines
 }
 
-module.exports = { businessError, toDecimalInput, trimmedOrNull, assertNoTaxCycle, resolveAndApplyTaxes, parseDate }
+module.exports = { businessError, toDecimalInput, trimmedOrNull, assertNoTaxCycle, resolveAndApplyTaxes, parseDate, computeInvoiceStatus }
