@@ -14,6 +14,7 @@ const audit      = require('../controllers/finanzas/audit.controller')
 const checks        = require('../controllers/finanzas/checks.controller')
 const fundValuations = require('../controllers/finanzas/fundValuations.controller')
 const balances       = require('../controllers/finanzas/balances.controller')
+const summary        = require('../controllers/finanzas/summary.controller')
 
 // Todo el módulo Finanzas requiere: autenticación + workspace + acceso al
 // módulo (admin/owner o rol configurable, ver moduleAccess.js) + que el
@@ -82,5 +83,9 @@ router.patch('/checks/:id/credit',   checks.creditCheck)
 router.patch('/checks/:id/reject',   checks.rejectCheck)
 router.get('/fund-valuations',       fundValuations.listValuations)
 router.post('/fund-valuations',      fundValuations.createValuation)
+
+// Resumen (4.3): breakdown por categoría del mes + gráfico mensual.
+router.get('/summary/breakdown',     summary.getBreakdown)
+router.get('/summary/chart',         summary.getChart)
 
 module.exports = router

@@ -11,6 +11,7 @@ import FinanzasConfiguracion from '../components/finanzas/FinanzasConfiguracion'
 import LoadMovementModal from '../components/finanzas/LoadMovementModal'
 import MovementsTab from '../components/finanzas/MovementsTab'
 import BalancesTab from '../components/finanzas/BalancesTab'
+import SummaryTab from '../components/finanzas/SummaryTab'
 
 const TABS = [
   { id: 'ingresos',  label: 'Ingresos' },
@@ -139,6 +140,8 @@ export default function Finanzas() {
               />
             ) : tab === 'saldos' ? (
               <BalancesTab key={refreshKey} accounts={accounts} taxes={taxes} />
+            ) : tab === 'resumen' ? (
+              <SummaryTab key={refreshKey} accounts={accounts} />
             ) : (
               <ComingSoon label={TABS.find(t => t.id === tab)?.label} />
             )}
