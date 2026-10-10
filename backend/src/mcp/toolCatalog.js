@@ -281,16 +281,24 @@ const tools = [
   },
   {
     name: 'task_create',
-    description: 'Crea una tarea nueva en un proyecto, asignada al usuario conectado por defecto.',
+    description: 'Crea una tarea nueva en un proyecto, asignada al usuario conectado por defecto. Opcionalmente futura (scheduledFor) o recurrente (recurrence) — mutuamente excluyentes.',
     inputSchema: {
       ...projectIdParam,
       description: z.string().describe('Descripción de la tarea'),
       targetUserId: z.number().int().optional().describe('Asignar a otro miembro del workspace (default: el usuario conectado)'),
+      scheduledFor: z.string().optional().describe('YYYY-MM-DD — tarea futura (one-off): no aparece en foco/backlog hasta esa fecha. Una fecha <= hoy se trata como tarea normal.'),
+      recurrence: z.object({
+        frequency: z.enum(['daily', 'weekly', 'monthly', 'annual']).describe('daily=diaria, weekly=semanal, monthly=mensual, annual=anual'),
+        weekdays: z.array(z.number().int().min(0).max(6)).optional().describe('Solo weekly: días de la semana, 0=domingo..6=sábado'),
+        dayOfMonth: z.number().int().min(1).max(31).optional().describe('Solo monthly/annual: día del mes (default: el día de hoy)'),
+        month: z.number().int().min(1).max(12).optional().describe('Solo annual: mes (default: el mes actual)'),
+        endDate: z.string().optional().describe('YYYY-MM-DD — última fecha en que se genera una ocurrencia. Omitido = nunca termina.'),
+      }).optional().describe('Si se manda, crea una serie recurrente en vez de una tarea normal'),
     },
-    request: ({ projectId, description, targetUserId }) => ({
+    request: ({ projectId, description, targetUserId, scheduledFor, recurrence }) => ({
       method: 'POST',
       path: '/tasks',
-      body: { projectId, description, targetUserId },
+      body: { projectId, description, targetUserId, scheduledFor, recurrence },
     }),
   },
   {
