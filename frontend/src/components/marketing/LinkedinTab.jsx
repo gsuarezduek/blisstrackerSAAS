@@ -351,7 +351,7 @@ export default function LinkedinTab({ projectId, onSelectProject, projects = [] 
 
       <AccountHeader brand={BRAND} integration={integration}
         avatarUrl={metrics?.org?.logoUrl} name={metrics?.org?.name}
-        link={metrics?.org?.vanityName && { href: `https://www.linkedin.com/company/${metrics.org.vanityName}`, label: `linkedin.com/company/${metrics.org.vanityName}` }}
+        profileUrl={metrics?.org?.vanityName && `https://www.linkedin.com/company/${metrics.org.vanityName}`}
         dataAt={scraped ? metrics?.lastScrapedAt : null}
         actions={scraped
           ? [{ key: 'refresh', label: 'Actualizar', onClick: handleRefreshScrape, busy: refreshing }]

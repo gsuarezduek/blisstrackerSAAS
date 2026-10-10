@@ -12,6 +12,14 @@ function fmtDate(d) {
   return new Date(d).toLocaleDateString('es-AR')
 }
 
+// El label de un link puede venir con %20/%C2%A1 (ej. texto prellenado de un
+// wa.me puesto como "sitio" en la bio) — se decodifica para que se lea como
+// texto normal; el truncate de abajo se encarga de que no se desborde.
+function readableLabel(label) {
+  if (!label) return label
+  try { return decodeURIComponent(label) } catch { return label }
+}
+
 /**
  * Encabezado de cuenta conectada, igual para todas las redes y anuncios:
  * foto/sello, nombre, detalle, link al perfil, cómo está conectada y cuándo
@@ -21,15 +29,16 @@ function fmtDate(d) {
  * @param {object}   integration     ProjectIntegration (connectedAt, scopes)
  * @param {string}   [avatarUrl]
  * @param {string}   name
+ * @param {string}   [profileUrl]    si viene, el nombre es clickable y abre el perfil en la red
  * @param {boolean}  [verified]
  * @param {ReactNode}[subtitle]      línea secundaria (siguiendo, vistas totales…)
- * @param {object}   [link]          { href, label }
+ * @param {object}   [link]          { href, label } — link secundario (ej. sitio en la bio)
  * @param {string}   [dataAt]        fecha de los datos mostrados (último scrape)
  * @param {object[]} [actions]       [{ key, label, onClick, busy, busyLabel }]
  * @param {ReactNode}[children]      bio / descripción
  */
 export default function AccountHeader({
-  brand, integration, avatarUrl, name, verified, subtitle, link, dataAt,
+  brand, integration, avatarUrl, name, profileUrl, verified, subtitle, link, dataAt,
   actions = [], onDisconnect, disconnecting, children,
 }) {
   const [imgError, setImgError] = useState(false)
@@ -48,14 +57,21 @@ export default function AccountHeader({
           <div className="flex items-start justify-between gap-x-4 gap-y-2 flex-wrap">
             <div className="min-w-0">
               <p className="font-semibold text-gray-900 dark:text-white flex items-center gap-1.5 flex-wrap">
-                <span className="truncate">{name || brand.label}</span>
+                {profileUrl ? (
+                  <a href={profileUrl} target="_blank" rel="noopener noreferrer" title="Ver perfil"
+                    className="truncate hover:underline hover:text-primary-600 dark:hover:text-primary-400">
+                    {name || brand.label}
+                  </a>
+                ) : (
+                  <span className="truncate">{name || brand.label}</span>
+                )}
                 {verified && <span className="text-sm" style={{ color: brand.color }} title="Cuenta verificada">✓</span>}
               </p>
               {subtitle && <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{subtitle}</p>}
               {link?.href && (
-                <a href={link.href} target="_blank" rel="noopener noreferrer"
-                  className="text-xs text-primary-600 dark:text-primary-400 hover:underline break-all">
-                  {link.label}
+                <a href={link.href} target="_blank" rel="noopener noreferrer" title={link.href}
+                  className="text-xs text-primary-600 dark:text-primary-400 hover:underline truncate block max-w-full">
+                  {readableLabel(link.label)}
                 </a>
               )}
             </div>

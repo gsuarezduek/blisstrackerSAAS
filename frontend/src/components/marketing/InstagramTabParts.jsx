@@ -32,6 +32,7 @@ export function AccountHeader({ metrics, integration, onDisconnect, disconnectin
     <NetworkAccountHeader brand={BRAND} integration={integration}
       avatarUrl={metrics?.profilePicUrl}
       name={metrics?.username ? `@${metrics.username}` : metrics?.name}
+      profileUrl={metrics?.username ? `https://instagram.com/${metrics.username}` : null}
       subtitle={metrics?.username && metrics?.name ? metrics.name : null}
       link={site && { href: site.startsWith('http') ? site : `https://${site}`, label: site }}
       dataAt={isScrape ? metrics?.lastScrapedAt : null}

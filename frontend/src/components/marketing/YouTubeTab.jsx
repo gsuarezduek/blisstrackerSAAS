@@ -223,6 +223,9 @@ export default function YouTubeTab({ projectId, onSelectProject, projects = [] }
 
       <AccountHeader brand={BRAND} integration={integration}
         avatarUrl={metrics?.avatarUrl} name={metrics?.title}
+        profileUrl={metrics?.customUrl
+          ? `https://www.youtube.com/${metrics.customUrl}`
+          : metrics?.channelId && `https://www.youtube.com/channel/${metrics.channelId}`}
         subtitle={metrics && `${fmtK(metrics.viewCountTotal)} vistas totales · ${fmtNum(metrics.videoCount)} videos`}
         onDisconnect={handleDisconnect} disconnecting={disconnecting}>
         <AccountBio>{metrics?.description}</AccountBio>

@@ -229,6 +229,7 @@ export default function TikTokTab({ projectId, onSelectProject, projects = [] })
 
       <AccountHeader brand={BRAND} integration={integration}
         avatarUrl={metrics?.avatarUrl} name={metrics?.displayName} verified={metrics?.isVerified}
+        profileUrl={metrics?.username && `https://www.tiktok.com/@${metrics.username}`}
         subtitle={metrics && `${fmtK(metrics.followingCount)} siguiendo · ${fmtK(metrics.likesCount)} likes totales`}
         onDisconnect={handleDisconnect} disconnecting={disconnecting}>
         <AccountBio>{metrics?.bioDescription}</AccountBio>

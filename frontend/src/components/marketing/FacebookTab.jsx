@@ -251,7 +251,7 @@ export default function FacebookTab({ projectId, onSelectProject, projects = [] 
 
       <AccountHeader brand={BRAND} integration={integration}
         name={metrics?.page?.name ?? integration?.propertyId}
-        link={integration?.propertyId && { href: `https://www.facebook.com/${integration.propertyId}`, label: `facebook.com/${integration.propertyId}` }}
+        profileUrl={integration?.propertyId && `https://www.facebook.com/${integration.propertyId}`}
         dataAt={metrics?.lastScrapedAt}
         actions={[{ key: 'refresh', label: 'Actualizar', onClick: handleRefresh, busy: refreshing }]}
         onDisconnect={handleDisconnect} disconnecting={disconnecting} />
