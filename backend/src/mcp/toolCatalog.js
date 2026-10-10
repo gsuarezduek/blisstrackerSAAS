@@ -329,6 +329,12 @@ const tools = [
     inputSchema: { taskId: z.number().int() },
     request: ({ taskId }) => ({ method: 'PATCH', path: `/tasks/${taskId}/unblock` }),
   },
+  {
+    name: 'task_set_duration',
+    description: 'Edita el tiempo registrado de una tarea ya completada (en minutos). Solo funciona sobre tareas COMPLETED; sobreescribe el tiempo que cuenta en Reportes/Productividad.',
+    inputSchema: { taskId: z.number().int(), minutes: z.number().int().min(0).describe('Minutos totales a registrar') },
+    request: ({ taskId, minutes }) => ({ method: 'PATCH', path: `/tasks/${taskId}/duration`, body: { minutes } }),
+  },
 ]
 
 module.exports = { tools }
