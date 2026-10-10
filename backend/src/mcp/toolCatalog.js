@@ -130,6 +130,106 @@ const tools = [
     request: ({ auditId }) => ({ method: 'GET', path: `/marketing/geo/audits/${auditId}` }),
   },
 
+  // ── SEO: Canibalización, Content Brief, On-Page Audit, Content Gap ────────
+  // Las 4 corren análisis propios (async salvo canibalización) y comparten la
+  // misma forma run/list/get/delete.
+  {
+    name: 'marketing_cannibal_run',
+    description: 'Dispara un análisis de canibalización SEO (keywords que compiten entre sí entre páginas del propio sitio) usando datos de Search Console.',
+    inputSchema: { ...projectIdParam, dateRange: z.enum(['30d', '90d', '180d']).optional().describe('Default 90d') },
+    request: ({ projectId, dateRange }) => ({ method: 'POST', path: `/marketing/projects/${projectId}/cannibal`, body: { dateRange } }),
+  },
+  {
+    name: 'marketing_cannibal_list',
+    description: 'Lista los reportes de canibalización SEO ya generados de un proyecto.',
+    inputSchema: { ...projectIdParam },
+    request: ({ projectId }) => ({ method: 'GET', path: `/marketing/projects/${projectId}/cannibal` }),
+  },
+  {
+    name: 'marketing_cannibal_get',
+    description: 'Detalle de un reporte de canibalización SEO.',
+    inputSchema: { ...projectIdParam, reportId: z.number().int() },
+    request: ({ projectId, reportId }) => ({ method: 'GET', path: `/marketing/projects/${projectId}/cannibal/${reportId}` }),
+  },
+  {
+    name: 'marketing_cannibal_delete',
+    description: 'Elimina un reporte de canibalización SEO.',
+    inputSchema: { ...projectIdParam, reportId: z.number().int() },
+    request: ({ projectId, reportId }) => ({ method: 'DELETE', path: `/marketing/projects/${projectId}/cannibal/${reportId}` }),
+  },
+  {
+    name: 'marketing_content_brief_run',
+    description: 'Genera un Content Brief con IA para una keyword: headings sugeridos, PAA, entidades y longitud vs el top 10 de Google.',
+    inputSchema: { ...projectIdParam, keyword: z.string().describe('Keyword objetivo, máx 120 caracteres') },
+    request: ({ projectId, keyword }) => ({ method: 'POST', path: `/marketing/projects/${projectId}/content-briefs`, body: { keyword } }),
+  },
+  {
+    name: 'marketing_content_briefs_list',
+    description: 'Lista los Content Briefs ya generados de un proyecto.',
+    inputSchema: { ...projectIdParam },
+    request: ({ projectId }) => ({ method: 'GET', path: `/marketing/projects/${projectId}/content-briefs` }),
+  },
+  {
+    name: 'marketing_content_brief_get',
+    description: 'Detalle de un Content Brief.',
+    inputSchema: { ...projectIdParam, briefId: z.number().int() },
+    request: ({ projectId, briefId }) => ({ method: 'GET', path: `/marketing/projects/${projectId}/content-briefs/${briefId}` }),
+  },
+  {
+    name: 'marketing_content_brief_delete',
+    description: 'Elimina un Content Brief.',
+    inputSchema: { ...projectIdParam, briefId: z.number().int() },
+    request: ({ projectId, briefId }) => ({ method: 'DELETE', path: `/marketing/projects/${projectId}/content-briefs/${briefId}` }),
+  },
+  {
+    name: 'marketing_onpage_audit_run',
+    description: 'Dispara una auditoría On-Page (crawler de hasta 15 páginas del sitio: title/meta/H1/alt/canonical/enlaces rotos + sugerencias de enlazado interno). Async: devuelve un auditId. Requiere websiteUrl configurado en el proyecto.',
+    inputSchema: { ...projectIdParam },
+    request: ({ projectId }) => ({ method: 'POST', path: `/marketing/projects/${projectId}/onpage/audit` }),
+  },
+  {
+    name: 'marketing_onpage_audits_list',
+    description: 'Lista las auditorías On-Page ya corridas de un proyecto.',
+    inputSchema: { ...projectIdParam },
+    request: ({ projectId }) => ({ method: 'GET', path: `/marketing/projects/${projectId}/onpage/audits` }),
+  },
+  {
+    name: 'marketing_onpage_audit_get',
+    description: 'Estado/detalle de una auditoría On-Page (score, findings por página, sugerencias de enlazado interno). Útil para hacer polling mientras status=running.',
+    inputSchema: { ...projectIdParam, auditId: z.number().int() },
+    request: ({ projectId, auditId }) => ({ method: 'GET', path: `/marketing/projects/${projectId}/onpage/audits/${auditId}` }),
+  },
+  {
+    name: 'marketing_onpage_audit_delete',
+    description: 'Elimina una auditoría On-Page.',
+    inputSchema: { ...projectIdParam, auditId: z.number().int() },
+    request: ({ projectId, auditId }) => ({ method: 'DELETE', path: `/marketing/projects/${projectId}/onpage/audits/${auditId}` }),
+  },
+  {
+    name: 'marketing_content_gap_run',
+    description: 'Dispara un análisis de Content Gap: compara la estructura propia vs el top 4 del SERP de una keyword y detecta temas/secciones que faltan. Async: devuelve un gapId. Requiere SERP_API_KEY configurado y que la keyword ya rankee.',
+    inputSchema: { ...projectIdParam, keyword: z.string().describe('Keyword objetivo, máx 120 caracteres') },
+    request: ({ projectId, keyword }) => ({ method: 'POST', path: `/marketing/projects/${projectId}/content-gap`, body: { keyword } }),
+  },
+  {
+    name: 'marketing_content_gaps_list',
+    description: 'Lista los análisis de Content Gap ya generados de un proyecto.',
+    inputSchema: { ...projectIdParam },
+    request: ({ projectId }) => ({ method: 'GET', path: `/marketing/projects/${projectId}/content-gaps` }),
+  },
+  {
+    name: 'marketing_content_gap_get',
+    description: 'Detalle de un análisis de Content Gap (gaps por prioridad, headings sugeridos).',
+    inputSchema: { ...projectIdParam, gapId: z.number().int() },
+    request: ({ projectId, gapId }) => ({ method: 'GET', path: `/marketing/projects/${projectId}/content-gaps/${gapId}` }),
+  },
+  {
+    name: 'marketing_content_gap_delete',
+    description: 'Elimina un análisis de Content Gap.',
+    inputSchema: { ...projectIdParam, gapId: z.number().int() },
+    request: ({ projectId, gapId }) => ({ method: 'DELETE', path: `/marketing/projects/${projectId}/content-gaps/${gapId}` }),
+  },
+
   // ── Marketing: escritura ─────────────────────────────────────────────────
   {
     name: 'marketing_geo_audit_run',
