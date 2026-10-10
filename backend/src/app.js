@@ -68,6 +68,7 @@ const searchRoutes            = require('./routes/search.routes')
 const whatsappRoutes          = require('./routes/whatsapp.routes')
 const whatsappMediaPublicRoutes = require('./routes/whatsappMediaPublic.routes')
 const chatAttachmentPublicRoutes = require('./routes/chatAttachmentPublic.routes')
+const mcpRoutes                = require('./routes/mcp.routes')
 const { handleWebhook }       = require('./webhooks/stripe.webhook')
 const { handleChakraWebhook } = require('./webhooks/whatsapp.webhook')
 
@@ -191,6 +192,9 @@ app.use('/api/finanzas',         finanzasRoutes)
 app.use('/api/chat',             chatRoutes)
 app.use('/api/search',           searchRoutes)
 app.use('/api/whatsapp',         whatsappRoutes)
+
+// MCP (Grok u otro cliente compatible) — auth propia (token estático), ver mcp/auth.js
+app.use('/api/mcp',              mcpRoutes)
 
 app.get('/api/health', (_, res) => res.json({ ok: true }))
 

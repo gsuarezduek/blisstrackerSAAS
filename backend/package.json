@@ -22,6 +22,7 @@
     "@google-analytics/data": "^5.2.1",
     "@hocuspocus/server": "3.4.4",
     "@hocuspocus/transformer": "3.4.4",
+    "@modelcontextprotocol/sdk": "^1.32.1",
     "@prisma/client": "^5.10.0",
     "@sparticuz/chromium": "^147.0.0",
     "@tiptap/core": "3.22.2",
