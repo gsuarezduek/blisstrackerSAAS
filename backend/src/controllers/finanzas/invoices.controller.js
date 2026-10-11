@@ -9,7 +9,7 @@ const { detectDocumentType } = require('../../lib/documentType')
 const { safeContentDisposition } = require('../../lib/contentDisposition')
 const { logFinanceAudit } = require('../../lib/financeAudit')
 const { toDecimal } = require('../../lib/financeMoney')
-const { getArcaClient, toMinorUnits, formatVoucherNumber } = require('../../lib/arcaClient')
+const { getArcaClient, toMinorUnits, formatVoucherNumber, buildArcaItems } = require('../../lib/arcaClient')
 const { isValidArcaVatRate } = require('../../lib/financeCatalog')
 const { parseDate, computeInvoiceStatus, businessError } = require('./_shared')
 
@@ -70,18 +70,6 @@ async function listInvoices(req, res, next) {
     if (status) shaped = shaped.filter(i => i.status === status)
     res.json(shaped)
   } catch (err) { next(err) }
-}
-
-// Arma el bloque `items` de `arca.issue()` según la condición fiscal del
-// emisor (confirmado en el spike leyendo los tipos del SDK): monotributo/
-// exento mandan el monto total sin discriminar IVA (AmountItem, el mismo
-// shape que probó el usuario en terminal); responsable_inscripto manda el
-// total CON IVA incluido + la alícuota (VatItem, `gross`+`vat`).
-function buildArcaItems(issuer, amountCents, ivaRate) {
-  if (issuer.taxCondition === 'responsable_inscripto') {
-    return [{ gross: amountCents, vat: Number(ivaRate) }]
-  }
-  return [{ amount: amountCents }]
 }
 
 /**
@@ -447,9 +435,8 @@ async function sendEmail(req, res, next) {
     if (emails.size === 0) return res.status(400).json({ error: 'El cliente no tiene mail cargado' })
     if (emails.size > 1) return res.status(400).json({ error: 'Las facturas seleccionadas son de clientes distintos' })
 
-    const workspace = await prisma.workspace.findUnique({ where: { id: workspaceId }, select: { name: true } })
     const to = [...emails][0]
-    await sendInvoicesEmail(to, invoices, { workspaceId, workspaceName: workspace.name })
+    await sendInvoicesEmail(to, invoices, { workspaceId, workspaceName: req.workspace.name, slug: req.workspace.slug })
 
     await logFinanceAudit({
       workspaceId, entityType: 'invoice', entityId: invoices[0].id, action: 'update', userId: req.user.userId,

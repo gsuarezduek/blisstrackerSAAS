@@ -82,4 +82,18 @@ function formatVoucherNumber(salesPoint, number) {
   return `${String(salesPoint).padStart(5, '0')}-${String(number).padStart(8, '0')}`
 }
 
-module.exports = { getArcaClient, toMinorUnits, fromMinorUnits, formatVoucherNumber }
+// Arma el bloque `items` de `arca.issue()` según la condición fiscal del
+// emisor (confirmado en el spike leyendo los tipos del SDK): monotributo/
+// exento mandan el monto total sin discriminar IVA (AmountItem, el mismo
+// shape que probó el usuario en terminal); responsable_inscripto manda el
+// total CON IVA incluido + la alícuota (VatItem, `gross`+`vat`). Se reusa tal
+// cual al armar el `VoucherDocumentInput` para el PDF (Etapa 3) — son
+// exactamente los mismos items con los que se emitió el comprobante.
+function buildArcaItems(issuer, amountCents, ivaRate) {
+  if (issuer.taxCondition === 'responsable_inscripto') {
+    return [{ gross: amountCents, vat: Number(ivaRate) }]
+  }
+  return [{ amount: amountCents }]
+}
+
+module.exports = { getArcaClient, toMinorUnits, fromMinorUnits, formatVoucherNumber, buildArcaItems, loadSdk }

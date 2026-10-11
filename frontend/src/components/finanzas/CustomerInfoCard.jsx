@@ -32,7 +32,7 @@ export default function CustomerInfoCard({ customer, issuers, onChanged }) {
   function startEdit() {
     setForm({
       contactName: customer.contactName || '', phone: customer.phone || '', email: customer.email || '',
-      taxId: customer.taxId || '', contractedService: customer.contractedService || '',
+      taxId: customer.taxId || '', address: customer.address || '', contractedService: customer.contractedService || '',
       ivaCondition: customer.ivaCondition || '', defaultIssuerId: customer.defaultIssuer?.id ? String(customer.defaultIssuer.id) : '',
     })
     setEditing(true); setError('')
@@ -67,6 +67,7 @@ export default function CustomerInfoCard({ customer, issuers, onChanged }) {
             <input className={input} placeholder="Teléfono" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} />
             <input className={input} placeholder="Mail" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} />
             <input className={input} placeholder="CUIT (o los 11 dígitos seguidos)" value={form.taxId} onChange={e => setForm({ ...form, taxId: e.target.value })} onBlur={e => setForm(f => ({ ...f, taxId: normalizeCuit(e.target.value) }))} />
+            <input className={input} placeholder="Dirección (para facturar electrónicamente)" value={form.address} onChange={e => setForm({ ...form, address: e.target.value })} />
             <input className={input} placeholder="Servicio contratado" value={form.contractedService} onChange={e => setForm({ ...form, contractedService: e.target.value })} />
             <select className={input} value={form.ivaCondition} onChange={e => setForm({ ...form, ivaCondition: e.target.value })}>
               <option value="">Condición de IVA (para facturar)</option>
@@ -88,6 +89,7 @@ export default function CustomerInfoCard({ customer, issuers, onChanged }) {
             <Row label="Teléfono">{customer.phone}</Row>
             <Row label="Mail">{customer.email}</Row>
             <Row label="CUIT">{customer.taxId}</Row>
+            <Row label="Dirección">{customer.address}</Row>
             <Row label="Servicio contratado">{customer.contractedService}</Row>
             <Row label="Condición de IVA">{customer.ivaCondition ? itemIvaConditionLabel(customer.ivaCondition) : null}</Row>
             <Row label="Emisor habitual">{customer.defaultIssuer?.name}</Row>

@@ -20,6 +20,10 @@ export default function IssuerModal({ issuer, onClose, onSaved, onDelete }) {
   const [salesPoint, setSalesPoint] = useState(issuer ? String(issuer.salesPoint) : '')
   const [environment, setEnvironment] = useState(issuer?.environment || 'test')
   const [active, setActive] = useState(issuer?.active ?? true)
+  const [tradeName, setTradeName] = useState(issuer?.tradeName || '')
+  const [address, setAddress] = useState(issuer?.address || '')
+  const [grossIncome, setGrossIncome] = useState(issuer?.grossIncome || '')
+  const [activitiesStartDate, setActivitiesStartDate] = useState(issuer?.activitiesStartDate ? issuer.activitiesStartDate.slice(0, 10) : '')
   const [certificate, setCertificate] = useState('')
   const [privateKey, setPrivateKey] = useState('')
   const [saving, setSaving] = useState(false)
@@ -32,7 +36,11 @@ export default function IssuerModal({ issuer, onClose, onSaved, onDelete }) {
     if (!Number.isInteger(Number(salesPoint)) || Number(salesPoint) <= 0) { setError('Punto de venta inválido'); return }
     setSaving(true); setError('')
     try {
-      const body = { name: name.trim(), cuit: normalizedCuit, taxCondition, salesPoint: Number(salesPoint), environment }
+      const body = {
+        name: name.trim(), cuit: normalizedCuit, taxCondition, salesPoint: Number(salesPoint), environment,
+        tradeName: tradeName.trim() || null, address: address.trim() || null, grossIncome: grossIncome.trim() || null,
+        activitiesStartDate: activitiesStartDate || null,
+      }
       if (!isNew) body.active = active
       if (certificate.trim()) body.certificate = certificate.trim()
       if (privateKey.trim()) body.privateKey = privateKey.trim()
@@ -88,6 +96,30 @@ export default function IssuerModal({ issuer, onClose, onSaved, onDelete }) {
               <Toggle on={active} onToggle={() => setActive(v => !v)} />
             </div>
           )}
+
+          <div className="bg-gray-50 dark:bg-gray-900/40 rounded-xl p-3 space-y-3">
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              Datos fiscales que van impresos en el PDF oficial de cada factura (Etapa 3).
+            </p>
+            <div>
+              <label className={label}>Nombre de fantasía (opcional)</label>
+              <input className={input} value={tradeName} onChange={e => setTradeName(e.target.value)} />
+            </div>
+            <div>
+              <label className={label}>Dirección</label>
+              <input className={input} value={address} onChange={e => setAddress(e.target.value)} placeholder="Domicilio fiscal" />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className={label}>Ingresos brutos</label>
+                <input className={input} value={grossIncome} onChange={e => setGrossIncome(e.target.value)} placeholder="N° de inscripción o condición" />
+              </div>
+              <div>
+                <label className={label}>Inicio de actividades</label>
+                <input type="date" className={input} value={activitiesStartDate} onChange={e => setActivitiesStartDate(e.target.value)} />
+              </div>
+            </div>
+          </div>
 
           <div className="bg-gray-50 dark:bg-gray-900/40 rounded-xl p-3 space-y-3">
             <p className="text-xs text-gray-500 dark:text-gray-400">

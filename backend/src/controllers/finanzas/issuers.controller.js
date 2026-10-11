@@ -2,14 +2,18 @@ const prisma = require('../../lib/prisma')
 const { encrypt } = require('../../lib/encryption')
 const { logFinanceAudit } = require('../../lib/financeAudit')
 const { isValidIssuerTaxCondition, isValidIssuerEnvironment } = require('../../lib/financeCatalog')
-const { businessError, trimmedOrNull, normalizeCuit } = require('./_shared')
+const { businessError, trimmedOrNull, normalizeCuit, parseDate } = require('./_shared')
 
 const ISSUER_FIELD_LABELS = {
   name:         { label: 'Nombre' },
+  tradeName:    { label: 'Nombre de fantasía' },
   cuit:         { label: 'CUIT' },
   taxCondition: { label: 'Condición fiscal' },
   salesPoint:   { label: 'Punto de venta' },
   environment:  { label: 'Ambiente' },
+  address:      { label: 'Dirección' },
+  grossIncome:  { label: 'Ingresos brutos' },
+  activitiesStartDate: { label: 'Inicio de actividades', format: 'date' },
   active:       { label: 'Activo', format: 'boolean' },
 }
 
@@ -68,7 +72,7 @@ async function getIssuer(req, res, next) {
 async function createIssuer(req, res, next) {
   try {
     const workspaceId = req.workspace.id
-    const { name, cuit, taxCondition, salesPoint, environment, certificate, privateKey } = req.body
+    const { name, tradeName, cuit, taxCondition, salesPoint, environment, certificate, privateKey, address, grossIncome, activitiesStartDate } = req.body
 
     if (!name?.trim()) return res.status(400).json({ error: 'Nombre requerido' })
     const normalizedCuit = validateCuit(cuit)
@@ -76,11 +80,17 @@ async function createIssuer(req, res, next) {
     if (!Number.isInteger(salesPoint) || salesPoint <= 0) return res.status(400).json({ error: 'Punto de venta inválido' })
     const env = environment || 'test'
     if (!isValidIssuerEnvironment(env)) return res.status(400).json({ error: 'Ambiente inválido' })
+    let parsedActivitiesStartDate = null
+    if (activitiesStartDate) {
+      parsedActivitiesStartDate = parseDate(activitiesStartDate)
+      if (!parsedActivitiesStartDate) return res.status(400).json({ error: 'Fecha de inicio de actividades inválida' })
+    }
 
     const issuer = await prisma.financeIssuer.create({
       data: {
-        workspaceId, name: name.trim(), cuit: normalizedCuit, taxCondition, salesPoint, environment: env,
+        workspaceId, name: name.trim(), tradeName: trimmedOrNull(tradeName), cuit: normalizedCuit, taxCondition, salesPoint, environment: env,
         certificate: encrypt(trimmedOrNull(certificate)), privateKey: encrypt(trimmedOrNull(privateKey)),
+        address: trimmedOrNull(address), grossIncome: trimmedOrNull(grossIncome), activitiesStartDate: parsedActivitiesStartDate,
         createdById: req.user.userId,
       },
     })
@@ -102,12 +112,13 @@ async function updateIssuer(req, res, next) {
     const existing = await prisma.financeIssuer.findFirst({ where: { id, workspaceId } })
     if (!existing) return res.status(404).json({ error: 'Emisor no encontrado' })
 
-    const { name, cuit, taxCondition, salesPoint, environment, active, certificate, privateKey } = req.body
+    const { name, tradeName, cuit, taxCondition, salesPoint, environment, active, certificate, privateKey, address, grossIncome, activitiesStartDate } = req.body
     const data = {}
     if (name !== undefined) {
       if (!name.trim()) return res.status(400).json({ error: 'Nombre requerido' })
       data.name = name.trim()
     }
+    if (tradeName !== undefined) data.tradeName = trimmedOrNull(tradeName)
     if (cuit !== undefined) { data.cuit = validateCuit(cuit) }
     if (taxCondition !== undefined) {
       if (!isValidIssuerTaxCondition(taxCondition)) return res.status(400).json({ error: 'Condición fiscal inválida' })
@@ -124,6 +135,17 @@ async function updateIssuer(req, res, next) {
     if (active !== undefined) data.active = !!active
     if (certificate !== undefined) data.certificate = encrypt(trimmedOrNull(certificate))
     if (privateKey !== undefined) data.privateKey = encrypt(trimmedOrNull(privateKey))
+    if (address !== undefined) data.address = trimmedOrNull(address)
+    if (grossIncome !== undefined) data.grossIncome = trimmedOrNull(grossIncome)
+    if (activitiesStartDate !== undefined) {
+      if (activitiesStartDate === null || activitiesStartDate === '') {
+        data.activitiesStartDate = null
+      } else {
+        const d = parseDate(activitiesStartDate)
+        if (!d) return res.status(400).json({ error: 'Fecha de inicio de actividades inválida' })
+        data.activitiesStartDate = d
+      }
+    }
 
     const issuer = await prisma.financeIssuer.update({ where: { id }, data })
     await logFinanceAudit({

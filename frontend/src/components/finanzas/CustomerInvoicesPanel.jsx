@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
-import { Download } from 'lucide-react'
+import { Download, FileText } from 'lucide-react'
 import { Icon } from '../ui/Icon'
 import api from '../../api/client'
 import { fmtMoney } from '../../utils/format'
@@ -120,11 +120,18 @@ export default function CustomerInvoicesPanel({ itemId, currency, refreshKey, on
                     )}
                   </td>
                   <td className="py-2 pl-2 text-right">
-                    {inv.attachments[0] && (
-                      <button onClick={() => downloadBlob(`/finanzas/invoices/${inv.id}/attachments/${inv.attachments[0].id}/download`, inv.attachments[0].name)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
-                        <Icon as={Download} size={14} />
-                      </button>
-                    )}
+                    <div className="flex items-center justify-end gap-2">
+                      {inv.cae && (
+                        <button title="Descargar PDF oficial" onClick={() => downloadBlob(`/finanzas/invoices/${inv.id}/pdf`, `Factura ${inv.number}.pdf`)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
+                          <Icon as={FileText} size={14} />
+                        </button>
+                      )}
+                      {inv.attachments[0] && (
+                        <button title="Descargar adjunto" onClick={() => downloadBlob(`/finanzas/invoices/${inv.id}/attachments/${inv.attachments[0].id}/download`, inv.attachments[0].name)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
+                          <Icon as={Download} size={14} />
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               )

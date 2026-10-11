@@ -18,6 +18,7 @@ export default function NewCustomerModal({ categories, issuers, onClose, onCreat
   const [phone, setPhone] = useState('')
   const [email, setEmail] = useState('')
   const [taxId, setTaxId] = useState('')
+  const [address, setAddress] = useState('')
   const [contractedService, setContractedService] = useState('')
   const [ivaCondition, setIvaCondition] = useState('')
   const [defaultIssuerId, setDefaultIssuerId] = useState('')
@@ -35,7 +36,7 @@ export default function NewCustomerModal({ categories, issuers, onClose, onCreat
       const res = await api.post('/finanzas/items', {
         name: name.trim(), categoryId: Number(categoryId), tracksAccount: true,
         contactName: contactName.trim() || undefined, phone: phone.trim() || undefined, email: email.trim() || undefined,
-        taxId: normalizedTaxId || undefined, contractedService: contractedService.trim() || undefined,
+        taxId: normalizedTaxId || undefined, address: address.trim() || undefined, contractedService: contractedService.trim() || undefined,
         ivaCondition: ivaCondition || null, defaultIssuerId: defaultIssuerId ? Number(defaultIssuerId) : null,
       })
       onCreated(res.data)
@@ -85,6 +86,10 @@ export default function NewCustomerModal({ categories, issuers, onClose, onCreat
               <label className={label}>Servicio contratado</label>
               <input className={input} value={contractedService} onChange={e => setContractedService(e.target.value)} />
             </div>
+          </div>
+          <div>
+            <label className={label}>Dirección</label>
+            <input className={input} value={address} onChange={e => setAddress(e.target.value)} placeholder="Para facturar electrónicamente" />
           </div>
           <div>
             <label className={label}>Condición de IVA</label>

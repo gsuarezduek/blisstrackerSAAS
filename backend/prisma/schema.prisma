@@ -4524,21 +4524,28 @@ model FinanceCategory {
 // cifrados (lib/encryption.js, mismo formato "iv:tag:ciphertext" que
 // ProjectAccess.password/twofa) y nunca se devuelven al frontend.
 model FinanceIssuer {
-  id           Int       @id @default(autoincrement())
-  workspaceId  Int
-  workspace    Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  name         String // etiqueta interna, ej. "Bliss SA", "Fulano Monotributo"
-  cuit         String
-  taxCondition String // 'responsable_inscripto' | 'monotributo' | 'exento'
-  salesPoint   Int // punto de venta habilitado en ARCA
-  environment  String    @default("test") // 'test' | 'production'
-  certificate  String? // PEM cifrado
-  privateKey   String? // PEM cifrado
-  active       Boolean   @default(true)
-  createdById  Int?
-  createdBy    User?     @relation("FinanceIssuerCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  id                  Int       @id @default(autoincrement())
+  workspaceId         Int
+  workspace           Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  name                String // etiqueta interna, ej. "Bliss SA", "Fulano Monotributo" — también la razón social legal impresa en la factura
+  tradeName           String? // nombre de fantasía (opcional, va impreso además de la razón social)
+  cuit                String
+  taxCondition        String // 'responsable_inscripto' | 'monotributo' | 'exento'
+  salesPoint          Int // punto de venta habilitado en ARCA
+  environment         String    @default("test") // 'test' | 'production'
+  certificate         String? // PEM cifrado
+  privateKey          String? // PEM cifrado
+  // Datos fiscales impresos en el PDF oficial (Etapa 3) — opcionales a nivel DB para
+  // no romper emisores ya cargados en Etapa 1, pero requeridos para poder generar el
+  // PDF de una factura (arcaVoucherDocument.js valida y tira error claro si faltan).
+  address             String? // domicilio fiscal (C2)
+  grossIncome         String? // ingresos brutos: número de inscripción o condición de no-contribuyente (C4)
+  activitiesStartDate DateTime? // inicio de actividades (C7), solo fecha
+  active              Boolean   @default(true)
+  createdById         Int?
+  createdBy           User?     @relation("FinanceIssuerCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
   items    FinanceItem[]
   invoices FinanceInvoice[]
@@ -4584,6 +4591,7 @@ model FinanceItem {
   phone             String?
   email             String?
   taxId             String? // CUIT
+  address           String? // domicilio — requerido para el PDF oficial (Etapa 3) salvo ivaCondition='consumidor_final'
   contractedService String?
   notes             String? // autoguardado (AutosaveNotes)
   ivaCondition      String? // condición de IVA del RECEPTOR: 'responsable_inscripto' | 'monotributo' | 'consumidor_final' | 'exento'

@@ -1,5 +1,6 @@
 const { resend, getEmailFrom, emailShell, logEmail, escHtml } = require('./_shared')
 const objectStorage = require('../objectStorage.service')
+const { renderInvoicePdf } = require('../../controllers/finanzas/invoicePrint.controller')
 
 const MAX_TOTAL_ATTACHMENT_BYTES = 20 * 1024 * 1024 // 20MB — límite típico de adjuntos por email
 
@@ -14,11 +15,14 @@ async function streamToBuffer(stream) {
  * mail"), con sus adjuntos. Trae cada adjunto de R2 a memoria para pasarlo a
  * Resend — acotado a MAX_TOTAL_ATTACHMENT_BYTES (los adjuntos de factura son
  * livianos, PDFs/imágenes de unas pocas páginas).
+ * Si una factura tiene CAE (comprobante legal autorizado por ARCA), además
+ * de sus adjuntos manuales se genera y adjunta el PDF oficial con el formato
+ * exigido (Etapa 3) — mismo render que usa la descarga del panel.
  * @param {string} to
- * @param {Array<{number:string, concept:string, amount:string, currency:string, attachments:Array<{name:string, objectKey:string, sizeBytes:number}>}>} invoices
- * @param {{ workspaceId:number, workspaceName:string }} ctx
+ * @param {Array<{id:number, number:string, concept:string, amount:string, currency:string, cae?:string, attachments:Array<{name:string, objectKey:string, sizeBytes:number}>}>} invoices
+ * @param {{ workspaceId:number, workspaceName:string, slug:string }} ctx
  */
-async function sendInvoicesEmail(to, invoices, { workspaceId, workspaceName }) {
+async function sendInvoicesEmail(to, invoices, { workspaceId, workspaceName, slug }) {
   const from = await getEmailFrom(workspaceId)
   const subject = invoices.length === 1
     ? `Factura ${invoices[0].number} — ${workspaceName}`
@@ -42,10 +46,21 @@ async function sendInvoicesEmail(to, invoices, { workspaceId, workspaceName }) {
       <tbody>${rowsHtml}</tbody>
     </table>`
 
-  // Trae los adjuntos a memoria, respetando el tope total.
+  // Trae los adjuntos a memoria, respetando el tope total. El PDF oficial
+  // (si hay CAE) va primero — es el comprobante en sí, los adjuntos manuales
+  // son material de respaldo.
   const attachments = []
   let totalBytes = 0
   for (const inv of invoices) {
+    if (inv.cae) {
+      try {
+        const pdf = await renderInvoicePdf(inv.id, slug)
+        if (totalBytes + pdf.length <= MAX_TOTAL_ATTACHMENT_BYTES) {
+          attachments.push({ filename: `Factura ${inv.number}.pdf`, content: pdf })
+          totalBytes += pdf.length
+        }
+      } catch { /* no se pudo generar el PDF oficial — el mail sigue sin él, el adjunto manual (si hay) todavía sirve */ }
+    }
     for (const att of inv.attachments || []) {
       if (totalBytes + (att.sizeBytes || 0) > MAX_TOTAL_ATTACHMENT_BYTES) continue
       try {
