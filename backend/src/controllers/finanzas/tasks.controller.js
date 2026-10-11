@@ -3,6 +3,7 @@ const { logFinanceAudit } = require('../../lib/financeAudit')
 const { toDecimal } = require('../../lib/financeMoney')
 const { parseDate } = require('./_shared')
 const { isValidTaskStatus } = require('../../lib/financeCatalog')
+const { syncDashboardOnResponsibleChange } = require('../../lib/financeTaskDashboard')
 
 function todayUTCNoon() {
   const d = new Date()
@@ -142,7 +143,7 @@ async function getOpenTasks(workspaceId) {
       OR: [{ status: { in: ['open'] } }, { status: 'postponed', postponedUntil: { lte: today } }],
     },
     orderBy: [{ date: 'asc' }, { createdAt: 'asc' }],
-    include: { doneBy: { select: { id: true, name: true } } },
+    include: { doneBy: { select: { id: true, name: true } }, responsible: { select: { id: true, name: true } } },
   })
 }
 
@@ -173,7 +174,10 @@ async function createTask(req, res, next) {
   } catch (err) { next(err) }
 }
 
-// PATCH /api/finanzas/tasks/:id — { status: 'done'|'open', postponedUntil? }
+// PATCH /api/finanzas/tasks/:id — { status: 'done'|'open', postponedUntil?, responsibleId? }
+// `responsibleId` (asignar/reasignar/sacar responsable) sincroniza la Task del
+// dashboard de esa persona — mismo mecanismo que el to-do de Reuniones, ver
+// lib/financeTaskDashboard.js.
 async function updateTask(req, res, next) {
   try {
     const workspaceId = req.workspace.id
@@ -181,7 +185,7 @@ async function updateTask(req, res, next) {
     const existing = await prisma.financeTask.findFirst({ where: { id, workspaceId, deletedAt: null } })
     if (!existing) return res.status(404).json({ error: 'Tarea no encontrada' })
 
-    const { status, postponedUntil } = req.body
+    const { status, postponedUntil, responsibleId } = req.body
     const data = {}
     if (status !== undefined) {
       if (!isValidTaskStatus(status)) return res.status(400).json({ error: 'Estado inválido' })
@@ -195,10 +199,33 @@ async function updateTask(req, res, next) {
       if (status === 'open') { data.doneAt = null; data.doneById = null; data.postponedUntil = null }
     }
 
-    const task = await prisma.financeTask.update({ where: { id }, data })
+    if (responsibleId !== undefined) {
+      if (responsibleId !== null) {
+        if (!Number.isInteger(responsibleId)) return res.status(400).json({ error: 'Responsable inválido' })
+        const member = await prisma.workspaceMember.findFirst({ where: { workspaceId, userId: responsibleId, active: true } })
+        if (!member) return res.status(400).json({ error: 'Responsable no encontrado' })
+      }
+      const needsProject = !existing.taskId && responsibleId
+      if (needsProject && !req.workspace.financeTaskProjectId) {
+        return res.status(400).json({ error: 'Configurá primero el proyecto para tareas de Finanzas en Configuración.' })
+      }
+      data.responsibleId = responsibleId
+    }
+
+    let task = await prisma.financeTask.update({ where: { id }, data, include: { responsible: { select: { id: true, name: true } } } })
+
+    if (responsibleId !== undefined) {
+      await syncDashboardOnResponsibleChange(task, {
+        projectId: req.workspace.financeTaskProjectId, workspaceId, tz: req.workspace.timezone, requesterId: req.user.userId,
+      })
+      task = await prisma.financeTask.findUnique({ where: { id }, include: { responsible: { select: { id: true, name: true } } } })
+    }
+
     await logFinanceAudit({
       workspaceId, entityType: 'task', entityId: id, action: 'update', userId: req.user.userId,
-      summary: status === 'done' ? `Completó "${existing.title}"` : status === 'postponed' ? `Pospuso "${existing.title}"` : `Reabrió "${existing.title}"`,
+      summary: responsibleId !== undefined
+        ? (responsibleId ? `Asignó "${existing.title}" a alguien` : `Quitó el responsable de "${existing.title}"`)
+        : status === 'done' ? `Completó "${existing.title}"` : status === 'postponed' ? `Pospuso "${existing.title}"` : `Reabrió "${existing.title}"`,
     })
     res.json(task)
   } catch (err) { next(err) }

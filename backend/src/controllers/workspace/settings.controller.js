@@ -29,7 +29,7 @@ async function getCurrent(req, res, next) {
  */
 async function updateCurrent(req, res, next) {
   try {
-    const { name, timezone, companyName, companyDescription, industry, companyWebsite, brandColors, brandFonts, salesProposalGuidelines, salesSignatures, salesTasksProjectId } = req.body
+    const { name, timezone, companyName, companyDescription, industry, companyWebsite, brandColors, brandFonts, salesProposalGuidelines, salesSignatures, salesTasksProjectId, financeTaskProjectId } = req.body
     const data = {}
     if (name) data.name = name
     if (timezone) data.timezone = timezone
@@ -65,6 +65,17 @@ async function updateCurrent(req, res, next) {
         const p = await prisma.project.findFirst({ where: { id: Number(salesTasksProjectId), workspaceId: req.workspace.id, active: true }, select: { id: true } })
         if (!p) return res.status(400).json({ error: 'Proyecto inválido' })
         data.salesTasksProjectId = p.id
+      }
+    }
+    // Proyecto donde se crean las tareas del dashboard al asignarle responsable a un
+    // FinanceTask (sección Pendientes de Finanzas, ver tasks.controller.js de ese módulo).
+    if (financeTaskProjectId !== undefined) {
+      if (financeTaskProjectId == null) {
+        data.financeTaskProjectId = null
+      } else {
+        const p = await prisma.project.findFirst({ where: { id: Number(financeTaskProjectId), workspaceId: req.workspace.id, active: true }, select: { id: true } })
+        if (!p) return res.status(400).json({ error: 'Proyecto inválido' })
+        data.financeTaskProjectId = p.id
       }
     }
 

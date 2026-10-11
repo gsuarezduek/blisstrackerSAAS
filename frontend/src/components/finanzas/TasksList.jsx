@@ -63,10 +63,14 @@ function PostponeInline({ onConfirm, onCancel }) {
 }
 
 // Tareas (sección 4.6): contador + "+ Agregar tarea" + filas con etiqueta de
-// tipo, título, detalle, monto, acción ("Hecho"/"Acreditado"...), Posponer, Ver›.
-export default function TasksList({ tasks, onChanged, onNavigate }) {
+// tipo, título, detalle, monto, responsable (manda la tarea al dashboard de
+// esa persona — mismo mecanismo que el to-do de Reuniones), acción
+// ("Hecho"/"Acreditado"...), Posponer, Ver›. `members` = workspace members
+// (useMembers()), para el selector de responsable.
+export default function TasksList({ tasks, members, onChanged, onNavigate }) {
   const [showNew, setShowNew] = useState(false)
   const [postponing, setPostponing] = useState(null)
+  const [assignError, setAssignError] = useState(null) // { taskId, message }
 
   async function markDone(task) {
     await api.patch(`/finanzas/tasks/${task.id}`, { status: 'done' })
@@ -76,6 +80,15 @@ export default function TasksList({ tasks, onChanged, onNavigate }) {
     await api.patch(`/finanzas/tasks/${task.id}`, { status: 'postponed', postponedUntil: date })
     setPostponing(null)
     onChanged()
+  }
+  async function assign(task, responsibleId) {
+    setAssignError(null)
+    try {
+      await api.patch(`/finanzas/tasks/${task.id}`, { responsibleId })
+      onChanged()
+    } catch (err) {
+      setAssignError({ taskId: task.id, message: err.response?.data?.error || 'No se pudo asignar' })
+    }
   }
 
   const actionLabel = (task) => task.origin === 'check' ? 'Acreditado' : 'Hecho'
@@ -92,24 +105,38 @@ export default function TasksList({ tasks, onChanged, onNavigate }) {
       <div className="space-y-1.5">
         {tasks.length === 0 && <p className="text-sm text-gray-400 text-center py-4">Sin pendientes — todo al día.</p>}
         {tasks.map(t => (
-          <div key={t.id} className="flex items-center gap-3 border border-gray-100 dark:border-gray-700 rounded-xl px-3 py-2">
-            {t.origin && <span className="text-[11px] bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300 rounded-full px-2 py-0.5 shrink-0">{taskOriginLabel(t.origin)}</span>}
-            <div className="flex-1 min-w-0">
-              <p className="text-sm text-gray-900 dark:text-white truncate">{t.title}</p>
-              {(t.detail || t.date) && <p className="text-xs text-gray-400 truncate">{t.detail}{t.detail && t.date ? ' · ' : ''}{fmtDate(t.date)}</p>}
+          <div key={t.id} className="border border-gray-100 dark:border-gray-700 rounded-xl px-3 py-2">
+            <div className="flex items-center gap-3">
+              {t.origin && <span className="text-[11px] bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300 rounded-full px-2 py-0.5 shrink-0">{taskOriginLabel(t.origin)}</span>}
+              <div className="flex-1 min-w-0">
+                <p className="text-sm text-gray-900 dark:text-white truncate">{t.title}</p>
+                {(t.detail || t.date) && <p className="text-xs text-gray-400 truncate">{t.detail}{t.detail && t.date ? ' · ' : ''}{fmtDate(t.date)}</p>}
+              </div>
+              {t.amount != null && <span className="text-sm font-medium text-gray-700 dark:text-gray-300 shrink-0">{fmtMoney(t.amount, 'ARS')}</span>}
+              <div className="flex items-center gap-1.5 shrink-0">
+                {members && (
+                  <select
+                    value={t.responsibleId ?? ''}
+                    onChange={e => assign(t, e.target.value ? Number(e.target.value) : null)}
+                    className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 dark:text-gray-100 rounded-lg px-1.5 py-1 text-xs max-w-[9rem]"
+                  >
+                    <option value="">Sin responsable</option>
+                    {members.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                  </select>
+                )}
+                <button onClick={() => markDone(t)} className="bg-primary-600 hover:bg-primary-700 text-white rounded-lg px-2.5 py-1 text-xs font-medium">{actionLabel(t)}</button>
+                {postponing === t.id ? (
+                  <PostponeInline onConfirm={(date) => postpone(t, date)} onCancel={() => setPostponing(null)} />
+                ) : (
+                  <button onClick={() => setPostponing(t.id)} className="text-xs text-gray-500 dark:text-gray-400 hover:underline">Posponer</button>
+                )}
+                {t.origin && onNavigate && (
+                  <button onClick={() => onNavigate(t)} className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">Ver ›</button>
+                )}
+              </div>
             </div>
-            {t.amount != null && <span className="text-sm font-medium text-gray-700 dark:text-gray-300 shrink-0">{fmtMoney(t.amount, 'ARS')}</span>}
-            <div className="flex items-center gap-1.5 shrink-0">
-              <button onClick={() => markDone(t)} className="bg-primary-600 hover:bg-primary-700 text-white rounded-lg px-2.5 py-1 text-xs font-medium">{actionLabel(t)}</button>
-              {postponing === t.id ? (
-                <PostponeInline onConfirm={(date) => postpone(t, date)} onCancel={() => setPostponing(null)} />
-              ) : (
-                <button onClick={() => setPostponing(t.id)} className="text-xs text-gray-500 dark:text-gray-400 hover:underline">Posponer</button>
-              )}
-              {t.origin && onNavigate && (
-                <button onClick={() => onNavigate(t)} className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">Ver ›</button>
-              )}
-            </div>
+            {t.taskId && <p className="text-[11px] text-primary-600 dark:text-primary-400 mt-1">En el dashboard de {t.responsible?.name}</p>}
+            {assignError?.taskId === t.id && <p className="text-[11px] text-red-500 mt-1">{assignError.message}</p>}
           </div>
         ))}
       </div>

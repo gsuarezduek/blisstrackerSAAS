@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
 import api from '../../api/client'
+import useMembers from '../../hooks/useMembers'
 import AiSummaryCard from './AiSummaryCard'
 import WorkspaceNoteCard from './WorkspaceNoteCard'
 import TasksList from './TasksList'
@@ -10,6 +11,7 @@ import ExtrasList from './ExtrasList'
 // Finanzas.jsx para saltar a la pestaña relacionada con el origen de la tarea.
 export default function PendingTab({ items, onNavigate }) {
   const [tasks, setTasks] = useState(null)
+  const { members } = useMembers()
 
   const loadTasks = useCallback(async () => {
     const res = await api.get('/finanzas/tasks')
@@ -28,7 +30,7 @@ export default function PendingTab({ items, onNavigate }) {
       {tasks === null ? (
         <p className="text-sm text-gray-400 text-center py-6">Cargando…</p>
       ) : (
-        <TasksList tasks={tasks} onChanged={loadTasks} onNavigate={onNavigate} />
+        <TasksList tasks={tasks} members={members.filter(m => m.active)} onChanged={loadTasks} onNavigate={onNavigate} />
       )}
 
       <ExtrasList items={items} onChanged={loadTasks} />

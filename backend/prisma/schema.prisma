@@ -20,82 +20,86 @@ model CronLock {
 // ─── WORKSPACE ───────────────────────────────────────────────────────────────
 
 model Workspace {
-  id                            Int       @id @default(autoincrement())
-  name                          String
-  slug                          String    @unique // subdominio, ej: "bliss"
-  timezone                      String    @default("America/Argentina/Buenos_Aires")
-  status                        String    @default("trialing") // trialing | active | past_due | suspended | cancelled
-  trialEndsAt                   DateTime?
-  stripeCustomerId              String?
+  id                              Int             @id @default(autoincrement())
+  name                            String
+  slug                            String          @unique // subdominio, ej: "bliss"
+  timezone                        String          @default("America/Argentina/Buenos_Aires")
+  status                          String          @default("trialing") // trialing | active | past_due | suspended | cancelled
+  trialEndsAt                     DateTime?
+  stripeCustomerId                String?
   // Branding / perfil de empresa
-  companyName                   String?
-  companyDescription            String?
-  industry                      String?
-  companyWebsite                String?
-  logoData                      Bytes?
-  logoMimeType                  String?
-  bannerData                    Bytes?
-  bannerMimeType                String?
+  companyName                     String?
+  companyDescription              String?
+  industry                        String?
+  companyWebsite                  String?
+  logoData                        Bytes?
+  logoMimeType                    String?
+  bannerData                      Bytes?
+  bannerMimeType                  String?
   // Feature flags: keys que este workspace optó por desactivar (aunque estén habilitados globalmente o en su lista)
-  disabledFeatureKeys           String    @default("[]")
-  monthlyTokenLimit             Int       @default(1000000) // Límite mensual de tokens de IA (configurable desde SuperAdmin)
-  storageLimitMb                Int       @default(20480) // Límite de almacenamiento (MB) del workspace (configurable desde SuperAdmin). 0 = ilimitado. INFORMATIVO/de alerta — no bloquea subidas, ver *MaxMbOverride abajo
+  disabledFeatureKeys             String          @default("[]")
+  monthlyTokenLimit               Int             @default(1000000) // Límite mensual de tokens de IA (configurable desde SuperAdmin)
+  storageLimitMb                  Int             @default(20480) // Límite de almacenamiento (MB) del workspace (configurable desde SuperAdmin). 0 = ilimitado. INFORMATIVO/de alerta — no bloquea subidas, ver *MaxMbOverride abajo
   // Override puntual por workspace de las cuotas que SÍ bloquean subidas (ver assertWithinQuota
   // en projectFiles/contentAssets/chat controllers). null = usa el default global de PlatformSetting
   // (projectFilesMaxMbPerWorkspace/contentStorageMaxMbPerWorkspace/chatAttachmentMaxMbPerWorkspace).
   // 0 = ilimitado para ESTE workspace. Configurable desde SuperAdmin → Workspaces.
-  projectFilesMaxMbOverride      Int?
-  contentStorageMaxMbOverride    Int?
-  chatAttachmentMaxMbOverride    Int?
+  projectFilesMaxMbOverride       Int?
+  contentStorageMaxMbOverride     Int?
+  chatAttachmentMaxMbOverride     Int?
   financeAttachmentsMaxMbOverride Int? // ídem para FinanceAttachment (comprobantes/facturas de Finanzas)
-  attendanceTrackingEnabled     Boolean   @default(true) // Seguimiento de horarios y puntualidad en RRHH. OFF = oculta puntualidad/tardanzas (ej: equipos full freelance sin horarios)
-  productivityEnabled           Boolean   @default(true) // Muestra la sección de Productividad (nav + página) para los admins
-  productivityDigestEnabled     Boolean   @default(true) // Aviso semanal por mail a admins/owners con las personas en alerta de Productividad
-  adsAdvisorAutoEnabled         Boolean   @default(true) // Corre el Ads Advisor (IA) automáticamente cada lunes para proyectos con Meta/Google Ads conectado
-  rrssAdvisorAutoEnabled        Boolean   @default(true) // Corre el RRSS Advisor (IA) automáticamente cada lunes para proyectos con alguna red social conectada
-  marketingDisabledSections     String    @default("[]") // Secciones de Marketing ocultas para este workspace (ids de NAV: hoy/geo-seo/web/rrss/anuncios/informes). Mismo patrón que disabledFeatureKeys
-  marketingDigestEnabled        Boolean   @default(true) // Aviso semanal por mail a admins/owners con los pendientes de alta prioridad de Prioridades (Marketing)
-  seoAlertsEnabled              Boolean   @default(true) // Alertas SEO mensuales automáticas (caídas de tráfico/posición/DR/keywords). OFF = no se envían
-  lateToleranceMins             Int       @default(0) // Tolerancia (min) para tardanza: la llegada cuenta tarde solo si supera workStartTime + tolerancia
-  lateNotifyEnabled             Boolean   @default(false) // Enviar email a quien acumula tardanzas en los últimos 30 días
-  lateNotifyThreshold           Int       @default(3) // Cantidad de tardanzas (1-10) en 30 días que dispara el email
-  lateNotifyTemplate            String? // Cuerpo del email de tardanza (placeholders [Nombre] y [workspace]); null = texto por defecto
-  legajoEnabled                 Boolean   @default(true) // Muestra la tarjeta/hint de legajos en RRHH. OFF = no se nudge-ea completar el legajo
-  legajoFields                  Json      @default("[]") // Config del formulario de legajo (campos default + custom). [] = usa el catálogo default
+  attendanceTrackingEnabled       Boolean         @default(true) // Seguimiento de horarios y puntualidad en RRHH. OFF = oculta puntualidad/tardanzas (ej: equipos full freelance sin horarios)
+  productivityEnabled             Boolean         @default(true) // Muestra la sección de Productividad (nav + página) para los admins
+  productivityDigestEnabled       Boolean         @default(true) // Aviso semanal por mail a admins/owners con las personas en alerta de Productividad
+  adsAdvisorAutoEnabled           Boolean         @default(true) // Corre el Ads Advisor (IA) automáticamente cada lunes para proyectos con Meta/Google Ads conectado
+  rrssAdvisorAutoEnabled          Boolean         @default(true) // Corre el RRSS Advisor (IA) automáticamente cada lunes para proyectos con alguna red social conectada
+  marketingDisabledSections       String          @default("[]") // Secciones de Marketing ocultas para este workspace (ids de NAV: hoy/geo-seo/web/rrss/anuncios/informes). Mismo patrón que disabledFeatureKeys
+  marketingDigestEnabled          Boolean         @default(true) // Aviso semanal por mail a admins/owners con los pendientes de alta prioridad de Prioridades (Marketing)
+  seoAlertsEnabled                Boolean         @default(true) // Alertas SEO mensuales automáticas (caídas de tráfico/posición/DR/keywords). OFF = no se envían
+  lateToleranceMins               Int             @default(0) // Tolerancia (min) para tardanza: la llegada cuenta tarde solo si supera workStartTime + tolerancia
+  lateNotifyEnabled               Boolean         @default(false) // Enviar email a quien acumula tardanzas en los últimos 30 días
+  lateNotifyThreshold             Int             @default(3) // Cantidad de tardanzas (1-10) en 30 días que dispara el email
+  lateNotifyTemplate              String? // Cuerpo del email de tardanza (placeholders [Nombre] y [workspace]); null = texto por defecto
+  legajoEnabled                   Boolean         @default(true) // Muestra la tarjeta/hint de legajos en RRHH. OFF = no se nudge-ea completar el legajo
+  legajoFields                    Json            @default("[]") // Config del formulario de legajo (campos default + custom). [] = usa el catálogo default
   // Acumulación automática de vacaciones: regla única global del workspace ("+N días cada M meses"),
   // anclada al aniversario de ingreso de cada persona (WorkspaceMember.joinedAt). No retroactiva:
   // vacationAccrualActivatedAt marca desde cuándo empieza a contar (ver vacationAccrual.service.js).
-  vacationAccrualEnabled        Boolean   @default(false)
-  vacationAccrualDays           Float     @default(1)
-  vacationAccrualIntervalMonths Int       @default(1)
-  vacationAccrualActivatedAt    DateTime?
-  billingExempt                 Boolean   @default(false) // Exento de billing (ej: workspace bliss). Nunca pasa a past_due por superar el free tier.
-  invitationCodeId              Int?      // Código de invitación usado al registrarse (opcional, uno solo por workspace)
-  invitationCode                InvitationCode? @relation(fields: [invitationCodeId], references: [id], onDelete: SetNull)
-  invitationCodeRedeemedAt      DateTime?
-  demoSeeded                    Boolean   @default(false) // True si tiene proyecto "Demo — Aprendé BlissTracker"
-  onboardingCompletedAt         DateTime? // null = todavía no completó/saltó el wizard de onboarding (selector de módulos + tour)
-  voiceChannelSeededAt          DateTime? // null = todavía no se sembró el canal de voz default (kind:'custom', medium:'voice').
+  vacationAccrualEnabled          Boolean         @default(false)
+  vacationAccrualDays             Float           @default(1)
+  vacationAccrualIntervalMonths   Int             @default(1)
+  vacationAccrualActivatedAt      DateTime?
+  billingExempt                   Boolean         @default(false) // Exento de billing (ej: workspace bliss). Nunca pasa a past_due por superar el free tier.
+  invitationCodeId                Int? // Código de invitación usado al registrarse (opcional, uno solo por workspace)
+  invitationCode                  InvitationCode? @relation(fields: [invitationCodeId], references: [id], onDelete: SetNull)
+  invitationCodeRedeemedAt        DateTime?
+  demoSeeded                      Boolean         @default(false) // True si tiene proyecto "Demo — Aprendé BlissTracker"
+  onboardingCompletedAt           DateTime? // null = todavía no completó/saltó el wizard de onboarding (selector de módulos + tour)
+  voiceChannelSeededAt            DateTime? // null = todavía no se sembró el canal de voz default (kind:'custom', medium:'voice').
   // No se re-crea si el admin lo borra después — mismo criterio que demoSeeded.
   // Identidad de marca
-  brandColors                   String    @default("[]") // JSON: [{ hex, name? }]
-  brandFonts                    String    @default("[]") // JSON: [{ name, role }] role: heading|body|accent
+  brandColors                     String          @default("[]") // JSON: [{ hex, name? }]
+  brandFonts                      String          @default("[]") // JSON: [{ name, role }] role: heading|body|accent
   // Acceso por rol a los módulos del dropdown "Módulos" (rrhh/gamification/ventas/marketing/
   // contenido/eos): JSON { [moduleKey]: { allMembers: bool, roles: string[] } }. Una clave
   // ausente cae al default del catálogo (backend/src/lib/moduleAccess.js). Los admins/owners
   // siempre acceden sin importar esta config. Configurable desde Preferencias.
-  moduleAccess                  Json      @default("{}")
+  moduleAccess                    Json            @default("{}")
   // Indicaciones persistentes que la IA tiene en cuenta al generar propuestas (tono, estructura, qué incluir/evitar).
-  salesProposalGuidelines       String?
+  salesProposalGuidelines         String?
   // Firmas / datos de contacto que pueden cerrar la propuesta en el PDF. JSON: [{ id, label, closing, name, role, email, phone, note, showLogo }]
   // Al generar/editar una propuesta se elige una (Proposal.signatureId).
-  salesSignatures               Json      @default("[]")
+  salesSignatures                 Json            @default("[]")
   // Proyecto donde se crean las tareas futuras auto-generadas por las próximas acciones
   // de leads (que todavía no tienen proyecto propio). null = no se auto-crean tareas.
-  salesTasksProjectId           Int?
-  salesTasksProject             Project?  @relation("WorkspaceSalesTasksProject", fields: [salesTasksProjectId], references: [id], onDelete: SetNull)
-  createdAt                     DateTime  @default(now())
-  updatedAt                     DateTime  @updatedAt
+  salesTasksProjectId             Int?
+  salesTasksProject               Project?        @relation("WorkspaceSalesTasksProject", fields: [salesTasksProjectId], references: [id], onDelete: SetNull)
+  // Proyecto donde se crean las tareas del dashboard al asignarle responsable a un
+  // FinanceTask (pestaña Pendientes de Finanzas) — mismo criterio que salesTasksProjectId.
+  financeTaskProjectId            Int?
+  financeTaskProject              Project?        @relation("WorkspaceFinanceTaskProject", fields: [financeTaskProjectId], references: [id], onDelete: SetNull)
+  createdAt                       DateTime        @default(now())
+  updatedAt                       DateTime        @updatedAt
 
   members                    WorkspaceMember[]
   projects                   Project[]
@@ -246,19 +250,19 @@ model Workspace {
 // un usuario puede ingresar al registrarse. Gestionado desde SuperAdmin → Negocio → Códigos
 // de invitación. Un workspace lo redime como máximo una vez (Workspace.invitationCodeId).
 model InvitationCode {
-  id             Int       @id @default(autoincrement())
-  code           String    @unique // normalizado UPPERCASE
+  id             Int         @id @default(autoincrement())
+  code           String      @unique // normalizado UPPERCASE
   description    String? // nota interna, no se le muestra al usuario
   benefitType    String // 'discount_percent' | 'discount_fixed' | 'free_months' | 'extra_trial_days' | 'custom'
-  benefitValue   Int       @default(0) // % (1-100) | monto en centavos | meses | días | 0 para 'custom'
+  benefitValue   Int         @default(0) // % (1-100) | monto en centavos | meses | días | 0 para 'custom'
   currency       String? // solo discount_fixed, default 'usd'
   benefitLabel   String? // texto a mostrar al usuario; requerido para 'custom', autogenerado para el resto
   stripeCouponId String? // cupón de Stripe creado al dar de alta el código (discount_percent/discount_fixed/free_months); null si no aplica o Stripe no está configurado
   maxUses        Int? // null = ilimitado
-  usesCount      Int       @default(0)
-  active         Boolean   @default(true)
+  usesCount      Int         @default(0)
+  active         Boolean     @default(true)
   expiresAt      DateTime?
-  createdAt      DateTime  @default(now())
+  createdAt      DateTime    @default(now())
   createdById    Int?
   createdBy      User?       @relation(fields: [createdById], references: [id], onDelete: SetNull)
   workspaces     Workspace[]
@@ -270,13 +274,13 @@ model WorkspaceMember {
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   user        User      @relation(fields: [userId], references: [id])
 
-  role         String  @default("member") // "owner" | "admin" | "member"
-  teamRole     String  @default("") // rol principal, ej: "DESIGNER", "CM" (referencia a UserRole.name)
+  role           String  @default("member") // "owner" | "admin" | "member"
+  teamRole       String  @default("") // rol principal, ej: "DESIGNER", "CM" (referencia a UserRole.name)
   // Roles de equipo adicionales (string[] de UserRole.name). El principal sigue siendo teamRole
   // (lo que muestran reportes/insights); estos suman a los permisos de módulo y al contexto de IA.
-  extraTeamRoles Json  @default("[]")
-  active       Boolean @default(true)
-  vacationDays Int     @default(0)
+  extraTeamRoles Json    @default("[]")
+  active         Boolean @default(true)
+  vacationDays   Int     @default(0)
 
   // Acumulación automática de vacaciones (ver Workspace.vacationAccrual*): próxima fecha
   // (aniversario de joinedAt) en que a esta persona le toca sumar días. null = todavía no
@@ -369,119 +373,120 @@ model User {
   customAvatar      Avatar? // foto propia subida por el usuario (Avatar.ownerId), si tiene
 
   // Relaciones
-  workspaceMembers               WorkspaceMember[]
-  workDays                       WorkDay[]
-  tasks                          Task[]
-  tasksCreated                   Task[]                      @relation("TaskCreatedBy")
-  taskRecurrences                TaskRecurrence[]            @relation("RecurrenceAssignee")
-  taskRecurrencesCreated         TaskRecurrence[]            @relation("RecurrenceCreatedBy")
-  taskComments                   TaskComment[]
-  taskFollows                    TaskFollow[]                @relation("TaskFollower")
-  deletedNoticesAssigned         DeletedTaskNotice[]         @relation("DeletedNoticeAssignee")
-  deletedNoticesDelegated        DeletedTaskNotice[]         @relation("DeletedNoticeCreatedBy")
-  deletedNoticesDeletedByMe      DeletedTaskNotice[]         @relation("DeletedNoticeDeletedBy")
-  dailyInsights                  DailyInsight[]
-  insightMemories                UserInsightMemory[]
-  notesBoardNotes                NotesBoardNote[]
-  feedbacks                      Feedback[]
-  projects                       ProjectMember[]
-  starredProjects                ProjectStar[]
-  notifications                  Notification[]              @relation("NotificationRecipient")
-  notificationsAsActor           Notification[]              @relation("NotificationActor")
-  passwordResetTokens            PasswordResetToken[]
-  emailChangeTokens              EmailChangeToken[]
-  emailVerificationTokens        EmailVerificationToken[]
-  loginEvents                    UserLogin[]
-  sentInvitations                WorkspaceInvitation[]       @relation("InvitedByUser")
-  deletionRequestsMade           WorkspaceDeletionRequest[]  @relation("DeletionRequestedBy")
-  deletionRequestsCancelled      WorkspaceDeletionRequest[]  @relation("DeletionCancelledBy")
-  vacationAdjustments            VacationAdjustment[]        @relation("VacationAdjustmentUser")
-  vacationAdjustmentsAdmin       VacationAdjustment[]        @relation("VacationAdjustmentAdmin")
-  vacationRequests               VacationRequest[]           @relation("VacationRequestUser")
-  vacationRequestsReviewed       VacationRequest[]           @relation("VacationRequestReviewer")
-  benefitBankAdjustments         BenefitBankAdjustment[]     @relation("BenefitBankAdjustmentUser")
-  benefitBankAdjustmentsAdmin    BenefitBankAdjustment[]     @relation("BenefitBankAdjustmentAdmin")
-  benefitBankRequests            BenefitBankRequest[]        @relation("BenefitBankRequestUser")
-  benefitBankRequestsReviewed    BenefitBankRequest[]        @relation("BenefitBankRequestReviewer")
-  announcements                  Announcement[]              @relation("AnnouncementCreatedBy")
-  analyzerRatings                PeopleAnalyzerRating[]      @relation("AnalyzedPerson")
-  eosStrikesReceived             EOSStrike[]                 @relation("StrikedPerson")
-  eosStrikesGiven                EOSStrike[]                 @relation("StrikeCreator")
-  accountabilitySeats            AccountabilityNode[]        @relation("SeatHolder")
-  ownedMetrics                   ScorecardMetric[]           @relation("MetricOwner")
-  ownedIssues                    EOSIssue[]                  @relation("IssueOwner")
-  createdIssues                  EOSIssue[]                  @relation("IssueCreatedBy")
-  ownedRocks                     EOSRock[]                   @relation("RockOwner")
-  ownedTodos                     EOSTodo[]                   @relation("TodoOwner")
-  ownedMeetingTodos              ProjectMeetingTodo[]        @relation("MeetingTodoOwner")
-  meetingParticipations          ProjectMeetingParticipant[] @relation("MeetingParticipant")
-  eosMeetingParticipations       EOSMeetingParticipant[]     @relation("EOSMeetingParticipant")
-  orgAssessmentResponses         OrgAssessmentResponse[]
-  generatedReports               MonthlyReport[]             @relation("ReportGeneratedBy")
-  reportGenerationLogs           ReportGenerationLog[]
-  platformSettingChanges         PlatformSettingLog[]        @relation("SettingChangedBy")
-  accessRevealLogs               ProjectAccessLog[]
-  ownedLeads                     Lead[]                      @relation("LeadOwner")
-  createdLeads                   Lead[]                      @relation("LeadCreatedBy")
-  leadActivities                 LeadActivity[]              @relation("LeadActivityUser")
-  proposalsCreated               Proposal[]                  @relation("ProposalCreatedBy")
-  researchesCreated              LeadResearch[]              @relation("ResearchCreatedBy")
-  ownedLeadActions               LeadAction[]                @relation("LeadActionOwner")
-  resolvedLeadActions            LeadAction[]                @relation("LeadActionDoneBy")
-  createdLeadActions             LeadAction[]                @relation("LeadActionCreatedBy")
-  chatMessages                   ChatMessage[]
-  chatChannelsCreated            ChatChannel[]
-  chatChannelReads               ChatChannelRead[]
-  chatMessagesPinned             ChatMessage[]               @relation("ChatMessagePinnedBy")
-  chatMessageReactions           ChatMessageReaction[]
-  taskCommentReactions           TaskCommentReaction[]
-  contentPiecesOwned             ContentPiece[]              @relation("ContentPieceOwner")
-  contentPiecesCreated           ContentPiece[]              @relation("ContentPieceCreator")
-  contentPiecesDeleted           ContentPiece[]              @relation("ContentPieceDeletedBy")
-  contentAssetsUploaded          ContentAsset[]              @relation("ContentAssetUploader")
-  projectFilesUploaded           ProjectFile[]               @relation("ProjectFileUploader")
-  projectFilesDeleted            ProjectFile[]               @relation("ProjectFileDeletedBy")
-  contentComments                ContentComment[]            @relation("ContentCommentAuthor")
-  contentStatusEvents            ContentStatusEvent[]        @relation("ContentEventActor")
-  contentPieceFilesLinked        ContentPieceFile[]          @relation("ContentPieceFileLinkedBy")
-  taskFilesLinked                TaskFile[]                  @relation("TaskFileLinkedBy")
-  whatsappAccountsConnected      WhatsappAccount[]
-  whatsappMessagesSent           WhatsappMessage[]
-  whatsappConversationReads      WhatsappConversationRead[]
-  whatsappConversationsAssigned  WhatsappConversation[]      @relation("WhatsappConversationAssignee")
-  whatsappConversationsPinned    WhatsappConversation[]      @relation("WhatsappConversationPinnedBy")
-  whatsappConversationsBlocked   WhatsappConversation[]      @relation("WhatsappConversationBlockedBy")
-  whatsappAutomationRulesCreated WhatsappAutomationRule[]
-  whatsappBotDocumentsUploaded   WhatsappBotDocument[]       @relation("WhatsappBotDocumentUploadedBy")
-  dismissedFindings              DismissedFinding[]
-  deviceTokens                   DeviceToken[]
-  calendarEventsOrganized        CalendarEvent[]             @relation("CalendarEventOrganizer")
-  calendarEventParticipations    CalendarEventParticipant[]  @relation("CalendarEventParticipant")
-  calendarEventRecurrencesOrganized CalendarEventRecurrence[] @relation("CalendarEventRecurrenceOrganizer")
-  googleCalendarConnections      GoogleCalendarConnection[]
-  invitationCodesCreated         InvitationCode[]
-  financeAccountsCreated         FinanceAccount[]            @relation("FinanceAccountCreatedBy")
-  financeIssuersCreated          FinanceIssuer[]              @relation("FinanceIssuerCreatedBy")
-  financeMovementsCreated        FinanceMovement[]           @relation("FinanceMovementCreatedBy")
-  financeMovementsDeleted        FinanceMovement[]           @relation("FinanceMovementDeletedBy")
-  financeChecksDeleted           FinanceCheck[]              @relation("FinanceCheckDeletedBy")
-  financeTransfersCreated        FinanceTransfer[]           @relation("FinanceTransferCreatedBy")
-  financeTransfersDeleted        FinanceTransfer[]           @relation("FinanceTransferDeletedBy")
-  financeFundValuationsCreated   FinanceFundValuation[]      @relation("FinanceFundValuationCreatedBy")
-  financeFundValuationsDeleted   FinanceFundValuation[]      @relation("FinanceFundValuationDeletedBy")
-  financeInvoicesCreated         FinanceInvoice[]            @relation("FinanceInvoiceCreatedBy")
-  financeInvoicesDeleted         FinanceInvoice[]            @relation("FinanceInvoiceDeletedBy")
-  financeAttachmentsUploaded     FinanceAttachment[]         @relation("FinanceAttachmentUploadedBy")
-  financeAttachmentsDeleted      FinanceAttachment[]         @relation("FinanceAttachmentDeletedBy")
-  financeExtrasCreated           FinanceExtra[]              @relation("FinanceExtraCreatedBy")
-  financeExtrasDeleted           FinanceExtra[]              @relation("FinanceExtraDeletedBy")
-  financeNextActionsCreated      FinanceNextAction[]         @relation("FinanceNextActionCreatedBy")
-  financeNextActionsDeleted      FinanceNextAction[]         @relation("FinanceNextActionDeletedBy")
-  financeTasksDone               FinanceTask[]               @relation("FinanceTaskDoneBy")
-  financeTasksCreated            FinanceTask[]               @relation("FinanceTaskCreatedBy")
-  financeTasksDeleted            FinanceTask[]               @relation("FinanceTaskDeletedBy")
-  financeWorkspaceNotesUpdated   FinanceWorkspaceNote[]
-  financeAuditLogs               FinanceAuditLog[]
+  workspaceMembers                  WorkspaceMember[]
+  workDays                          WorkDay[]
+  tasks                             Task[]
+  tasksCreated                      Task[]                      @relation("TaskCreatedBy")
+  taskRecurrences                   TaskRecurrence[]            @relation("RecurrenceAssignee")
+  taskRecurrencesCreated            TaskRecurrence[]            @relation("RecurrenceCreatedBy")
+  taskComments                      TaskComment[]
+  taskFollows                       TaskFollow[]                @relation("TaskFollower")
+  deletedNoticesAssigned            DeletedTaskNotice[]         @relation("DeletedNoticeAssignee")
+  deletedNoticesDelegated           DeletedTaskNotice[]         @relation("DeletedNoticeCreatedBy")
+  deletedNoticesDeletedByMe         DeletedTaskNotice[]         @relation("DeletedNoticeDeletedBy")
+  dailyInsights                     DailyInsight[]
+  insightMemories                   UserInsightMemory[]
+  notesBoardNotes                   NotesBoardNote[]
+  feedbacks                         Feedback[]
+  projects                          ProjectMember[]
+  starredProjects                   ProjectStar[]
+  notifications                     Notification[]              @relation("NotificationRecipient")
+  notificationsAsActor              Notification[]              @relation("NotificationActor")
+  passwordResetTokens               PasswordResetToken[]
+  emailChangeTokens                 EmailChangeToken[]
+  emailVerificationTokens           EmailVerificationToken[]
+  loginEvents                       UserLogin[]
+  sentInvitations                   WorkspaceInvitation[]       @relation("InvitedByUser")
+  deletionRequestsMade              WorkspaceDeletionRequest[]  @relation("DeletionRequestedBy")
+  deletionRequestsCancelled         WorkspaceDeletionRequest[]  @relation("DeletionCancelledBy")
+  vacationAdjustments               VacationAdjustment[]        @relation("VacationAdjustmentUser")
+  vacationAdjustmentsAdmin          VacationAdjustment[]        @relation("VacationAdjustmentAdmin")
+  vacationRequests                  VacationRequest[]           @relation("VacationRequestUser")
+  vacationRequestsReviewed          VacationRequest[]           @relation("VacationRequestReviewer")
+  benefitBankAdjustments            BenefitBankAdjustment[]     @relation("BenefitBankAdjustmentUser")
+  benefitBankAdjustmentsAdmin       BenefitBankAdjustment[]     @relation("BenefitBankAdjustmentAdmin")
+  benefitBankRequests               BenefitBankRequest[]        @relation("BenefitBankRequestUser")
+  benefitBankRequestsReviewed       BenefitBankRequest[]        @relation("BenefitBankRequestReviewer")
+  announcements                     Announcement[]              @relation("AnnouncementCreatedBy")
+  analyzerRatings                   PeopleAnalyzerRating[]      @relation("AnalyzedPerson")
+  eosStrikesReceived                EOSStrike[]                 @relation("StrikedPerson")
+  eosStrikesGiven                   EOSStrike[]                 @relation("StrikeCreator")
+  accountabilitySeats               AccountabilityNode[]        @relation("SeatHolder")
+  ownedMetrics                      ScorecardMetric[]           @relation("MetricOwner")
+  ownedIssues                       EOSIssue[]                  @relation("IssueOwner")
+  createdIssues                     EOSIssue[]                  @relation("IssueCreatedBy")
+  ownedRocks                        EOSRock[]                   @relation("RockOwner")
+  ownedTodos                        EOSTodo[]                   @relation("TodoOwner")
+  ownedMeetingTodos                 ProjectMeetingTodo[]        @relation("MeetingTodoOwner")
+  meetingParticipations             ProjectMeetingParticipant[] @relation("MeetingParticipant")
+  eosMeetingParticipations          EOSMeetingParticipant[]     @relation("EOSMeetingParticipant")
+  orgAssessmentResponses            OrgAssessmentResponse[]
+  generatedReports                  MonthlyReport[]             @relation("ReportGeneratedBy")
+  reportGenerationLogs              ReportGenerationLog[]
+  platformSettingChanges            PlatformSettingLog[]        @relation("SettingChangedBy")
+  accessRevealLogs                  ProjectAccessLog[]
+  ownedLeads                        Lead[]                      @relation("LeadOwner")
+  createdLeads                      Lead[]                      @relation("LeadCreatedBy")
+  leadActivities                    LeadActivity[]              @relation("LeadActivityUser")
+  proposalsCreated                  Proposal[]                  @relation("ProposalCreatedBy")
+  researchesCreated                 LeadResearch[]              @relation("ResearchCreatedBy")
+  ownedLeadActions                  LeadAction[]                @relation("LeadActionOwner")
+  resolvedLeadActions               LeadAction[]                @relation("LeadActionDoneBy")
+  createdLeadActions                LeadAction[]                @relation("LeadActionCreatedBy")
+  chatMessages                      ChatMessage[]
+  chatChannelsCreated               ChatChannel[]
+  chatChannelReads                  ChatChannelRead[]
+  chatMessagesPinned                ChatMessage[]               @relation("ChatMessagePinnedBy")
+  chatMessageReactions              ChatMessageReaction[]
+  taskCommentReactions              TaskCommentReaction[]
+  contentPiecesOwned                ContentPiece[]              @relation("ContentPieceOwner")
+  contentPiecesCreated              ContentPiece[]              @relation("ContentPieceCreator")
+  contentPiecesDeleted              ContentPiece[]              @relation("ContentPieceDeletedBy")
+  contentAssetsUploaded             ContentAsset[]              @relation("ContentAssetUploader")
+  projectFilesUploaded              ProjectFile[]               @relation("ProjectFileUploader")
+  projectFilesDeleted               ProjectFile[]               @relation("ProjectFileDeletedBy")
+  contentComments                   ContentComment[]            @relation("ContentCommentAuthor")
+  contentStatusEvents               ContentStatusEvent[]        @relation("ContentEventActor")
+  contentPieceFilesLinked           ContentPieceFile[]          @relation("ContentPieceFileLinkedBy")
+  taskFilesLinked                   TaskFile[]                  @relation("TaskFileLinkedBy")
+  whatsappAccountsConnected         WhatsappAccount[]
+  whatsappMessagesSent              WhatsappMessage[]
+  whatsappConversationReads         WhatsappConversationRead[]
+  whatsappConversationsAssigned     WhatsappConversation[]      @relation("WhatsappConversationAssignee")
+  whatsappConversationsPinned       WhatsappConversation[]      @relation("WhatsappConversationPinnedBy")
+  whatsappConversationsBlocked      WhatsappConversation[]      @relation("WhatsappConversationBlockedBy")
+  whatsappAutomationRulesCreated    WhatsappAutomationRule[]
+  whatsappBotDocumentsUploaded      WhatsappBotDocument[]       @relation("WhatsappBotDocumentUploadedBy")
+  dismissedFindings                 DismissedFinding[]
+  deviceTokens                      DeviceToken[]
+  calendarEventsOrganized           CalendarEvent[]             @relation("CalendarEventOrganizer")
+  calendarEventParticipations       CalendarEventParticipant[]  @relation("CalendarEventParticipant")
+  calendarEventRecurrencesOrganized CalendarEventRecurrence[]   @relation("CalendarEventRecurrenceOrganizer")
+  googleCalendarConnections         GoogleCalendarConnection[]
+  invitationCodesCreated            InvitationCode[]
+  financeAccountsCreated            FinanceAccount[]            @relation("FinanceAccountCreatedBy")
+  financeIssuersCreated             FinanceIssuer[]             @relation("FinanceIssuerCreatedBy")
+  financeMovementsCreated           FinanceMovement[]           @relation("FinanceMovementCreatedBy")
+  financeMovementsDeleted           FinanceMovement[]           @relation("FinanceMovementDeletedBy")
+  financeChecksDeleted              FinanceCheck[]              @relation("FinanceCheckDeletedBy")
+  financeTransfersCreated           FinanceTransfer[]           @relation("FinanceTransferCreatedBy")
+  financeTransfersDeleted           FinanceTransfer[]           @relation("FinanceTransferDeletedBy")
+  financeFundValuationsCreated      FinanceFundValuation[]      @relation("FinanceFundValuationCreatedBy")
+  financeFundValuationsDeleted      FinanceFundValuation[]      @relation("FinanceFundValuationDeletedBy")
+  financeInvoicesCreated            FinanceInvoice[]            @relation("FinanceInvoiceCreatedBy")
+  financeInvoicesDeleted            FinanceInvoice[]            @relation("FinanceInvoiceDeletedBy")
+  financeAttachmentsUploaded        FinanceAttachment[]         @relation("FinanceAttachmentUploadedBy")
+  financeAttachmentsDeleted         FinanceAttachment[]         @relation("FinanceAttachmentDeletedBy")
+  financeExtrasCreated              FinanceExtra[]              @relation("FinanceExtraCreatedBy")
+  financeExtrasDeleted              FinanceExtra[]              @relation("FinanceExtraDeletedBy")
+  financeNextActionsCreated         FinanceNextAction[]         @relation("FinanceNextActionCreatedBy")
+  financeNextActionsDeleted         FinanceNextAction[]         @relation("FinanceNextActionDeletedBy")
+  financeTasksDone                  FinanceTask[]               @relation("FinanceTaskDoneBy")
+  financeTasksCreated               FinanceTask[]               @relation("FinanceTaskCreatedBy")
+  financeTasksDeleted               FinanceTask[]               @relation("FinanceTaskDeletedBy")
+  financeTasksResponsible           FinanceTask[]               @relation("FinanceTaskResponsible")
+  financeWorkspaceNotesUpdated      FinanceWorkspaceNote[]
+  financeAuditLogs                  FinanceAuditLog[]
 }
 
 model UserLogin {
@@ -612,62 +617,63 @@ model Project {
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
 
-  tasks                  Task[]
-  taskRecurrences        TaskRecurrence[]
-  services               ProjectService[]
-  members                ProjectMember[]
-  stars                  ProjectStar[]
-  notifications          Notification[]
-  links                  ProjectLink[]
-  geoAudits              GeoAudit[]
-  integrations           ProjectIntegration[]
-  apifyUsageLogs         ApifyUsageLog[]
-  analyticsSnapshots     AnalyticsSnapshot[]
-  analyticsInsights      AnalyticsInsight[]
-  pageSpeedResults       PageSpeedResult[]
-  trackedKeywords        TrackedKeyword[]         @relation("ProjectTrackedKeywords")
-  keywordRankings        KeywordRanking[]         @relation("ProjectKeywordRankings")
-  instagramSnapshots     InstagramSnapshot[]
-  instagramFollowerLogs  InstagramFollowerLog[]
-  instagramStories       InstagramStory[]
-  tiktokSnapshots        TikTokSnapshot[]
-  tiktokFollowerLogs     TikTokFollowerLog[]
-  youtubeSnapshots       YouTubeSnapshot[]
-  youtubeFollowerLogs    YouTubeFollowerLog[]
-  linkedinSnapshots      LinkedinSnapshot[]
-  linkedinFollowerLogs   LinkedinFollowerLog[]
-  facebookSnapshots      FacebookSnapshot[]
-  facebookFollowerLogs   FacebookFollowerLog[]
-  monthlyReports         MonthlyReport[]
-  reportGenerationLogs   ReportGenerationLog[]
-  searchConsoleSnapshots SearchConsoleSnapshot[]
-  seoAiInsights          SeoAiInsight[]
-  cannibalReports        CannibalReport[]
-  adsSnapshots           AdsSnapshot[]
-  adsAdvisorResults      AdsAdvisorResult[]
-  rrssAdvisorResults     RrssAdvisorResult[]
-  dismissedFindings      DismissedFinding[]
-  competitors            CompetitorAccount[]
-  marketingObjectives    MarketingObjective[]
-  briefs                 ProjectBrief[]
-  contentBriefs          ContentBrief[]
-  onPageAudits           OnPageAudit[]
-  contentGaps            ContentGap[]
-  accesses               ProjectAccess[]
-  accessLogs             ProjectAccessLog[]
-  meetings               ProjectMeeting[]
-  eosMeetingConfigs      EOSData[]                @relation("EOSMeetingProject")
-  sourceLead             Lead?                    @relation("LeadConvertedProject")
-  clientPortal           ProjectClientPortal?
-  salesTasksWorkspaces   Workspace[]              @relation("WorkspaceSalesTasksProject")
-  chatChannel            ChatChannel?
-  contentPieces          ContentPiece[]
-  monthlyHoursLogs       ProjectMonthlyHoursLog[]
-  files                  ProjectFile[]
-  deletedTaskNotices     DeletedTaskNotice[]
-  calendarEvents         CalendarEvent[]
+  tasks                    Task[]
+  taskRecurrences          TaskRecurrence[]
+  services                 ProjectService[]
+  members                  ProjectMember[]
+  stars                    ProjectStar[]
+  notifications            Notification[]
+  links                    ProjectLink[]
+  geoAudits                GeoAudit[]
+  integrations             ProjectIntegration[]
+  apifyUsageLogs           ApifyUsageLog[]
+  analyticsSnapshots       AnalyticsSnapshot[]
+  analyticsInsights        AnalyticsInsight[]
+  pageSpeedResults         PageSpeedResult[]
+  trackedKeywords          TrackedKeyword[]          @relation("ProjectTrackedKeywords")
+  keywordRankings          KeywordRanking[]          @relation("ProjectKeywordRankings")
+  instagramSnapshots       InstagramSnapshot[]
+  instagramFollowerLogs    InstagramFollowerLog[]
+  instagramStories         InstagramStory[]
+  tiktokSnapshots          TikTokSnapshot[]
+  tiktokFollowerLogs       TikTokFollowerLog[]
+  youtubeSnapshots         YouTubeSnapshot[]
+  youtubeFollowerLogs      YouTubeFollowerLog[]
+  linkedinSnapshots        LinkedinSnapshot[]
+  linkedinFollowerLogs     LinkedinFollowerLog[]
+  facebookSnapshots        FacebookSnapshot[]
+  facebookFollowerLogs     FacebookFollowerLog[]
+  monthlyReports           MonthlyReport[]
+  reportGenerationLogs     ReportGenerationLog[]
+  searchConsoleSnapshots   SearchConsoleSnapshot[]
+  seoAiInsights            SeoAiInsight[]
+  cannibalReports          CannibalReport[]
+  adsSnapshots             AdsSnapshot[]
+  adsAdvisorResults        AdsAdvisorResult[]
+  rrssAdvisorResults       RrssAdvisorResult[]
+  dismissedFindings        DismissedFinding[]
+  competitors              CompetitorAccount[]
+  marketingObjectives      MarketingObjective[]
+  briefs                   ProjectBrief[]
+  contentBriefs            ContentBrief[]
+  onPageAudits             OnPageAudit[]
+  contentGaps              ContentGap[]
+  accesses                 ProjectAccess[]
+  accessLogs               ProjectAccessLog[]
+  meetings                 ProjectMeeting[]
+  eosMeetingConfigs        EOSData[]                 @relation("EOSMeetingProject")
+  sourceLead               Lead?                     @relation("LeadConvertedProject")
+  clientPortal             ProjectClientPortal?
+  salesTasksWorkspaces     Workspace[]               @relation("WorkspaceSalesTasksProject")
+  financeTaskWorkspaces    Workspace[]               @relation("WorkspaceFinanceTaskProject")
+  chatChannel              ChatChannel?
+  contentPieces            ContentPiece[]
+  monthlyHoursLogs         ProjectMonthlyHoursLog[]
+  files                    ProjectFile[]
+  deletedTaskNotices       DeletedTaskNotice[]
+  calendarEvents           CalendarEvent[]
   calendarEventRecurrences CalendarEventRecurrence[]
-  financeItems           FinanceItem[]
+  financeItems             FinanceItem[]
 
   @@unique([workspaceId, name])
   @@index([workspaceId])
@@ -923,23 +929,24 @@ model Task {
   createdAt             DateTime        @default(now())
   updatedAt             DateTime        @updatedAt
 
-  notifications         Notification[]
-  comments              TaskComment[]
-  sessions              TaskSession[]
-  followers             TaskFollow[]
-  eosTodo               EOSTodo? // To-Do de L10 vinculado (uno a uno); completar la tarea lo tilda
-  eosMeetingParticipant EOSMeetingParticipant? // Tarea auto-creada por una reunión L10 (uno a uno); su tiempo es la participación en la reunión
-  meetingTodo           ProjectMeetingTodo? // To-Do de reunión de proyecto vinculado (uno a uno); completar la tarea lo tilda
-  meetingParticipant    ProjectMeetingParticipant? // Tarea auto-creada por una reunión de proyecto (uno a uno); su tiempo es la participación en la reunión
+  notifications            Notification[]
+  comments                 TaskComment[]
+  sessions                 TaskSession[]
+  followers                TaskFollow[]
+  eosTodo                  EOSTodo? // To-Do de L10 vinculado (uno a uno); completar la tarea lo tilda
+  eosMeetingParticipant    EOSMeetingParticipant? // Tarea auto-creada por una reunión L10 (uno a uno); su tiempo es la participación en la reunión
+  meetingTodo              ProjectMeetingTodo? // To-Do de reunión de proyecto vinculado (uno a uno); completar la tarea lo tilda
+  financeTask              FinanceTask? // Tarea de Finanzas (pestaña Pendientes) vinculada (uno a uno); completar la tarea lo tilda
+  meetingParticipant       ProjectMeetingParticipant? // Tarea auto-creada por una reunión de proyecto (uno a uno); su tiempo es la participación en la reunión
   calendarEventParticipant CalendarEventParticipant? // Tarea "reserva" creada al aceptar una invitación de Calendario (uno a uno)
-  leadAction            LeadAction? // Próxima acción de Ventas vinculada (uno a uno); completar la tarea la resuelve y viceversa
-  files                 TaskFile[] // Adjuntos — archivos de la Nube del proyecto (ProjectFile) linkeados a esta tarea
+  leadAction               LeadAction? // Próxima acción de Ventas vinculada (uno a uno); completar la tarea la resuelve y viceversa
+  files                    TaskFile[] // Adjuntos — archivos de la Nube del proyecto (ProjectFile) linkeados a esta tarea
   // Pieza de Contenido de la que esta tarea es UN TRAMO (no @unique del lado de
   // ContentPiece: una pieza puede tener muchas Task a lo largo de su vida, una
   // por handoff de responsable — ver ContentPiece.tasks). Completar la tarea
   // activa (la más reciente) hace avanzar la pieza según ADVANCE_ON_TASK_DONE.
-  contentPieceId        Int?
-  contentPiece          ContentPiece?   @relation(fields: [contentPieceId], references: [id], onDelete: SetNull)
+  contentPieceId           Int?
+  contentPiece             ContentPiece?              @relation(fields: [contentPieceId], references: [id], onDelete: SetNull)
 
   @@unique([recurrenceId, scheduledFor])
   @@index([userId, status])
@@ -2662,7 +2669,7 @@ model CalendarEvent {
   // identidad estable de la ocurrencia dentro de la serie (@@unique abajo): mover
   // una ocurrencia a otro día no está soportado desde "editar solo esta" — cambiar
   // el día real se hace vía "esta y las siguientes" (edita la serie completa).
-  recurrenceId Int?
+  recurrenceId  Int?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -2691,35 +2698,35 @@ model CalendarEvent {
 // no soporta cambiar el patrón (frequency/weekdays) de una serie ya creada — para
 // eso hay que terminarla y crear una nueva.
 model CalendarEventRecurrence {
-  id             Int      @id @default(autoincrement())
-  workspaceId    Int
-  organizerId    Int
-  title          String
-  projectId      Int
-  meetLink       String?
-  notes          String?
-  startTime      String // "HH:MM"
-  durationMins   Int      @default(30)
-  participantIds String   @default("[]") // JSON array de userId (sin el organizador)
+  id                Int      @id @default(autoincrement())
+  workspaceId       Int
+  organizerId       Int
+  title             String
+  projectId         Int
+  meetLink          String?
+  notes             String?
+  startTime         String // "HH:MM"
+  durationMins      Int      @default(30)
+  participantIds    String   @default("[]") // JSON array de userId (sin el organizador)
   // Participantes que aceptaron "toda la serie" (ver respondEventAcceptSeries en
   // calendar.controller.js): aceptar UNA ocurrencia de una serie recurrente
   // acepta automáticamente todas las demás en vez de tener que confirmar semana
   // por semana. materializeOccurrence crea las futuras ya "accepted" para estos
   // userId — rechazar (con scope=series) los saca de acá.
-  autoAcceptUserIds String @default("[]") // JSON array de userId
-  frequency      String // daily | weekly | monthly | annual
-  weekdays       String   @default("[]") // JSON [0-6] (0=domingo) — solo weekly
-  dayOfMonth     Int? // 1-31 — monthly/annual
-  month          Int? // 1-12 — annual
-  startDate      String // "YYYY-MM-DD" — primera ocurrencia posible
-  endDate        String? // "YYYY-MM-DD" — null = nunca termina; "borrar esta y las siguientes" la setea al día anterior a la ocurrencia borrada
-  active         Boolean  @default(true)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  autoAcceptUserIds String   @default("[]") // JSON array de userId
+  frequency         String // daily | weekly | monthly | annual
+  weekdays          String   @default("[]") // JSON [0-6] (0=domingo) — solo weekly
+  dayOfMonth        Int? // 1-31 — monthly/annual
+  month             Int? // 1-12 — annual
+  startDate         String // "YYYY-MM-DD" — primera ocurrencia posible
+  endDate           String? // "YYYY-MM-DD" — null = nunca termina; "borrar esta y las siguientes" la setea al día anterior a la ocurrencia borrada
+  active            Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
-  workspace  Workspace                 @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  organizer  User                      @relation("CalendarEventRecurrenceOrganizer", fields: [organizerId], references: [id], onDelete: Cascade)
-  project    Project                   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  workspace  Workspace                @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  organizer  User                     @relation("CalendarEventRecurrenceOrganizer", fields: [organizerId], references: [id], onDelete: Cascade)
+  project    Project                  @relation(fields: [projectId], references: [id], onDelete: Cascade)
   events     CalendarEvent[]
   exceptions CalendarEventException[]
 
@@ -4429,7 +4436,7 @@ model FinanceAccount {
   name           String
   type           String // 'bank' | 'wallet' | 'cash' | 'crypto_wallet'
   currency       String // 'ARS' | 'USD' | 'BTC' — abierto a futuro, no enum
-  initialBalance Decimal   @db.Decimal(20, 8) @default(0) // se carga una sola vez (regla de negocio en el controller, no constraint de DB)
+  initialBalance Decimal   @default(0) @db.Decimal(20, 8) // se carga una sola vez (regla de negocio en el controller, no constraint de DB)
   hasInvestments Boolean   @default(false)
   active         Boolean   @default(true) // no se borra si tiene movimientos: se desactiva
   createdById    Int?
@@ -4453,19 +4460,19 @@ model FinanceAccount {
 // valida ausencia de ciclos (y un tope de 5 niveles) en el controller al
 // crear/editar. Nunca se aplica solo: ver FinanceAccountTax.
 model FinanceTax {
-  id          Int       @id @default(autoincrement())
+  id          Int          @id @default(autoincrement())
   workspaceId Int
-  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspace   Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   name        String
-  percentage  Decimal   @db.Decimal(6, 3)
+  percentage  Decimal      @db.Decimal(6, 3)
   appliesTo   String // 'income' | 'expense' | 'both'
   baseType    String // 'movement' | 'other_tax'
   baseTaxId   Int?
   baseTax     FinanceTax?  @relation("TaxBase", fields: [baseTaxId], references: [id], onDelete: SetNull)
   dependents  FinanceTax[] @relation("TaxBase")
-  active      Boolean   @default(true)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  active      Boolean      @default(true)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
 
   accounts      FinanceAccountTax[]
   movementLines FinanceMovementTax[]
@@ -4563,14 +4570,14 @@ model ArcaIdempotencyStore {
 // tracksAccount=true — habilitan la emisión de factura electrónica real desde
 // este cliente (ver FinanceIssuer e invoices.controller.js).
 model FinanceItem {
-  id                Int       @id @default(autoincrement())
-  workspaceId       Int
-  workspace         Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  name              String
-  categoryId        Int
-  category          FinanceCategory @relation(fields: [categoryId], references: [id])
-  tracksAccount     Boolean   @default(false) // = "es cliente" (cuenta corriente)
-  active            Boolean   @default(true)
+  id            Int             @id @default(autoincrement())
+  workspaceId   Int
+  workspace     Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  name          String
+  categoryId    Int
+  category      FinanceCategory @relation(fields: [categoryId], references: [id])
+  tracksAccount Boolean         @default(false) // = "es cliente" (cuenta corriente)
+  active        Boolean         @default(true)
 
   // Solo relevantes si tracksAccount = true
   contactName       String?
@@ -4604,9 +4611,9 @@ model FinanceItem {
 }
 
 model FinanceMovement {
-  id          Int       @id @default(autoincrement())
+  id          Int             @id @default(autoincrement())
   workspaceId Int
-  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspace   Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   type        String // 'income' | 'expense'
   date        DateTime
   // Nullable: los egresos de "Impuestos bancarios" generados por una
@@ -4622,7 +4629,7 @@ model FinanceMovement {
   category    FinanceCategory @relation(fields: [categoryId], references: [id])
   accountId   Int
   account     FinanceAccount  @relation(fields: [accountId], references: [id])
-  amount      Decimal   @db.Decimal(20, 8)
+  amount      Decimal         @db.Decimal(20, 8)
   note        String?
 
   // Egreso hijo generado por un impuesto tildado en otro movimiento (categoría
@@ -4663,17 +4670,17 @@ model FinanceMovement {
 // validado en código). Snapshot de nombre/%/baseType al momento de tildarlo —
 // cambios posteriores al catálogo FinanceTax no afectan líneas ya cargadas.
 model FinanceMovementTax {
-  id          Int       @id @default(autoincrement())
+  id          Int              @id @default(autoincrement())
   workspaceId Int
-  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspace   Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   movementId  Int?
   movement    FinanceMovement? @relation("MovementTaxLines", fields: [movementId], references: [id], onDelete: Cascade)
   transferId  Int?
   transfer    FinanceTransfer? @relation(fields: [transferId], references: [id], onDelete: Cascade)
   taxId       Int
-  tax         FinanceTax @relation(fields: [taxId], references: [id])
+  tax         FinanceTax       @relation(fields: [taxId], references: [id])
   name        String // snapshot
-  percentage  Decimal   @db.Decimal(6, 3) // snapshot
+  percentage  Decimal          @db.Decimal(6, 3) // snapshot
   baseType    String // snapshot: 'movement' | 'other_tax'
 
   // Self-FK: la OTRA fila de este mismo movimiento/transferencia de la que se
@@ -4698,24 +4705,24 @@ model FinanceMovementTax {
 // Un ingreso cobrado con cheque: no suma al disponible ni genera impuestos
 // hasta acreditarse (ver movements.controller.js / checks.controller.js).
 model FinanceCheck {
-  id                      Int       @id @default(autoincrement())
+  id                      Int             @id @default(autoincrement())
   workspaceId             Int
-  workspace               Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  movementId              Int       @unique
+  workspace               Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  movementId              Int             @unique
   movement                FinanceMovement @relation(fields: [movementId], references: [id], onDelete: Cascade)
   number                  String
   issuingBank             String
   estimatedCollectionDate DateTime
-  status                  String    @default("pending") // pending | credited | rejected
+  status                  String          @default("pending") // pending | credited | rejected
   creditedAt              DateTime?
   creditedAccountId       Int?
   creditedAccount         FinanceAccount? @relation("CheckCreditedAccount", fields: [creditedAccountId], references: [id], onDelete: SetNull)
   rejectedAt              DateTime?
-  createdAt               DateTime  @default(now())
-  updatedAt               DateTime  @updatedAt
+  createdAt               DateTime        @default(now())
+  updatedAt               DateTime        @updatedAt
   deletedAt               DateTime?
   deletedById             Int?
-  deletedBy               User?     @relation("FinanceCheckDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
+  deletedBy               User?           @relation("FinanceCheckDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
 
   @@index([workspaceId])
   @@index([workspaceId, status])
@@ -4726,28 +4733,28 @@ model FinanceCheck {
 // permiten expresar tanto un aporte (disponible→fondos) como un rescate
 // (fondos→disponible) en cualquiera de los dos lados.
 model FinanceTransfer {
-  id            Int       @id @default(autoincrement())
+  id            Int            @id @default(autoincrement())
   workspaceId   Int
-  workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspace     Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   date          DateTime
   reason        String // 'buy_usd' | 'sell_usd' | 'fund_contribution' | 'fund_redemption' | 'account_transfer'
   fromAccountId Int
   fromAccount   FinanceAccount @relation("TransferFromAccount", fields: [fromAccountId], references: [id])
-  fromAmount    Decimal   @db.Decimal(20, 8)
-  fromIsFund    Boolean   @default(false)
+  fromAmount    Decimal        @db.Decimal(20, 8)
+  fromIsFund    Boolean        @default(false)
   toAccountId   Int
   toAccount     FinanceAccount @relation("TransferToAccount", fields: [toAccountId], references: [id])
-  toAmount      Decimal   @db.Decimal(20, 8)
-  toIsFund      Boolean   @default(false)
-  exchangeRate  Decimal?  @db.Decimal(20, 8) // fromAmount / toAmount cuando difieren las monedas
+  toAmount      Decimal        @db.Decimal(20, 8)
+  toIsFund      Boolean        @default(false)
+  exchangeRate  Decimal?       @db.Decimal(20, 8) // fromAmount / toAmount cuando difieren las monedas
   note          String?
   createdById   Int?
-  createdBy     User?     @relation("FinanceTransferCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  createdBy     User?          @relation("FinanceTransferCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
   deletedAt     DateTime?
   deletedById   Int?
-  deletedBy     User?     @relation("FinanceTransferDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
+  deletedBy     User?          @relation("FinanceTransferDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
 
   taxes FinanceMovementTax[]
 
@@ -4758,30 +4765,30 @@ model FinanceTransfer {
 }
 
 model FinanceFundValuation {
-  id           Int       @id @default(autoincrement())
+  id           Int            @id @default(autoincrement())
   workspaceId  Int
-  workspace    Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspace    Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   accountId    Int
   account      FinanceAccount @relation(fields: [accountId], references: [id])
   date         DateTime
-  value        Decimal   @db.Decimal(20, 8)
-  periodResult Decimal?  @db.Decimal(20, 8) // snapshot: value - valorAnterior - aportes + rescates del período
+  value        Decimal        @db.Decimal(20, 8)
+  periodResult Decimal?       @db.Decimal(20, 8) // snapshot: value - valorAnterior - aportes + rescates del período
   createdById  Int?
-  createdBy    User?     @relation("FinanceFundValuationCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  createdBy    User?          @relation("FinanceFundValuationCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
   deletedAt    DateTime?
   deletedById  Int?
-  deletedBy    User?     @relation("FinanceFundValuationDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
+  deletedBy    User?          @relation("FinanceFundValuationDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
 
   @@index([workspaceId])
   @@index([accountId, date])
 }
 
 model FinanceInvoice {
-  id          Int       @id @default(autoincrement())
+  id          Int         @id @default(autoincrement())
   workspaceId Int
-  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspace   Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   itemId      Int // debe tener tracksAccount = true
   item        FinanceItem @relation(fields: [itemId], references: [id])
   // Sin issuerId: número tipeado a mano (factura informativa, comportamiento
@@ -4792,8 +4799,8 @@ model FinanceInvoice {
   issueDate   DateTime
   dueDate     DateTime
   concept     String
-  amount      Decimal   @db.Decimal(20, 8)
-  currency    String    @default("ARS")
+  amount      Decimal     @db.Decimal(20, 8)
+  currency    String      @default("ARS")
   // Estado de cobro (pagada/parcial/vencida/pendiente) NO se persiste — se
   // calcula a partir de los FinanceMovement.invoiceId vivos + dueDate.
 
@@ -4802,9 +4809,9 @@ model FinanceInvoice {
   issuerId           Int?
   issuer             FinanceIssuer? @relation(fields: [issuerId], references: [id], onDelete: SetNull)
   voucherType        String? // 'A' | 'B' | 'C', lo resuelve el SDK (IssuedVoucher.voucherClass)
-  ivaRate            Decimal? @db.Decimal(6, 3) // % único por comprobante (v1: sin desglose multi-alícuota). Solo aplica a emisor responsable_inscripto
+  ivaRate            Decimal?       @db.Decimal(6, 3) // % único por comprobante (v1: sin desglose multi-alícuota). Solo aplica a emisor responsable_inscripto
   arcaStatus         String? // 'authorized' | 'rejected' | 'indeterminate' | 'conflict'
-  arcaIdempotencyKey String? @unique // clave mandada al store de idempotencia del SDK — permite recover() más adelante (Etapa 5)
+  arcaIdempotencyKey String?        @unique // clave mandada al store de idempotencia del SDK — permite recover() más adelante (Etapa 5)
   cae                String?
   caeExpiresAt       DateTime?
   arcaResponseRaw    Json? // recorte relevante del IssueOutcome del SDK (issues de rechazo, totales, etc.) — diagnóstico/soporte, nunca credenciales
@@ -4830,49 +4837,49 @@ model FinanceInvoice {
 // ProjectFile (que exige un Project y está profundamente asumido así en el
 // resto del repo). Mismo patrón pending/ready que ProjectFile.
 model FinanceAttachment {
-  id           Int       @id @default(autoincrement())
+  id           Int            @id @default(autoincrement())
   workspaceId  Int
-  workspace    Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspace    Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   invoiceId    Int
   invoice      FinanceInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
   name         String
   mimeType     String?
   objectKey    String? // key en R2: finance/<workspaceId>/<uuid>.<ext>
   sizeBytes    Int?
-  status       String    @default("pending") // pending | ready
+  status       String         @default("pending") // pending | ready
   uploadedById Int?
-  uploadedBy   User?     @relation("FinanceAttachmentUploadedBy", fields: [uploadedById], references: [id], onDelete: SetNull)
-  createdAt    DateTime  @default(now())
+  uploadedBy   User?          @relation("FinanceAttachmentUploadedBy", fields: [uploadedById], references: [id], onDelete: SetNull)
+  createdAt    DateTime       @default(now())
   confirmedAt  DateTime?
   deletedAt    DateTime?
   deletedById  Int?
-  deletedBy    User?     @relation("FinanceAttachmentDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
+  deletedBy    User?          @relation("FinanceAttachmentDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
 
   @@index([workspaceId])
   @@index([invoiceId])
 }
 
 model FinanceExtra {
-  id            Int       @id @default(autoincrement())
+  id            Int         @id @default(autoincrement())
   workspaceId   Int
-  workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspace     Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   date          DateTime
   itemId        Int
   item          FinanceItem @relation(fields: [itemId], references: [id])
   action        String
-  total         Decimal   @db.Decimal(20, 8)
-  companyAmount Decimal   @db.Decimal(20, 8)
-  teamAmount    Decimal   @db.Decimal(20, 8) // = total - companyAmount al guardar
-  status        String    @default("in_progress") // in_progress | finished | collected
-  teamPaid      Boolean   @default(false)
+  total         Decimal     @db.Decimal(20, 8)
+  companyAmount Decimal     @db.Decimal(20, 8)
+  teamAmount    Decimal     @db.Decimal(20, 8) // = total - companyAmount al guardar
+  status        String      @default("in_progress") // in_progress | finished | collected
+  teamPaid      Boolean     @default(false)
   notes         String?
   createdById   Int?
-  createdBy     User?     @relation("FinanceExtraCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  createdBy     User?       @relation("FinanceExtraCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
   deletedAt     DateTime?
   deletedById   Int?
-  deletedBy     User?     @relation("FinanceExtraDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
+  deletedBy     User?       @relation("FinanceExtraDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
 
   payments FinanceExtraPayment[]
 
@@ -4886,17 +4893,17 @@ model FinanceExtra {
 // del cambio contra el FinanceExtra padre). Las cuotas ya cobradas (con
 // movementId) quedan fijas.
 model FinanceExtraPayment {
-  id          Int       @id @default(autoincrement())
+  id          Int              @id @default(autoincrement())
   workspaceId Int
-  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspace   Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   extraId     Int
-  extra       FinanceExtra @relation(fields: [extraId], references: [id], onDelete: Cascade)
+  extra       FinanceExtra     @relation(fields: [extraId], references: [id], onDelete: Cascade)
   number      Int
-  percentage  Decimal   @db.Decimal(6, 3)
-  amount      Decimal   @db.Decimal(20, 8)
-  movementId  Int?      @unique
+  percentage  Decimal          @db.Decimal(6, 3)
+  amount      Decimal          @db.Decimal(20, 8)
+  movementId  Int?             @unique
   movement    FinanceMovement? @relation(fields: [movementId], references: [id], onDelete: SetNull)
-  createdAt   DateTime  @default(now())
+  createdAt   DateTime         @default(now())
 
   @@unique([extraId, number])
   @@index([workspaceId])
@@ -4904,26 +4911,26 @@ model FinanceExtraPayment {
 }
 
 model FinanceNextAction {
-  id               Int       @id @default(autoincrement())
+  id               Int                 @id @default(autoincrement())
   workspaceId      Int
-  workspace        Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspace        Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   itemId           Int
-  item             FinanceItem @relation(fields: [itemId], references: [id])
+  item             FinanceItem         @relation(fields: [itemId], references: [id])
   text             String
   date             DateTime
-  recurrence       String    @default("once") // once | monthly | yearly
-  completed        Boolean   @default(false)
+  recurrence       String              @default("once") // once | monthly | yearly
+  completed        Boolean             @default(false)
   completedAt      DateTime?
   previousActionId Int? // trazabilidad: la ocurrencia anterior que generó esta
   previousAction   FinanceNextAction?  @relation("NextActionChain", fields: [previousActionId], references: [id], onDelete: SetNull)
   nextOccurrences  FinanceNextAction[] @relation("NextActionChain")
   createdById      Int?
-  createdBy        User?     @relation("FinanceNextActionCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  createdBy        User?               @relation("FinanceNextActionCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
   deletedAt        DateTime?
   deletedById      Int?
-  deletedBy        User?     @relation("FinanceNextActionDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
+  deletedBy        User?               @relation("FinanceNextActionDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
 
   @@index([workspaceId])
   @@index([itemId])
@@ -4952,6 +4959,16 @@ model FinanceTask {
   doneAt         DateTime?
   doneById       Int?
   doneBy         User?     @relation("FinanceTaskDoneBy", fields: [doneById], references: [id], onDelete: SetNull)
+  // Responsable asignado (selector en la pestaña Pendientes, igual que el to-do de
+  // Reuniones) + la Task real que se le creó en su dashboard. Sin responsable = no
+  // se mandó a nadie. `taskId` único (uno a uno); se crea/mueve/borra según el
+  // mismo criterio que ProjectMeetingTodo (ver financeTaskDashboard.js) y se completa
+  // solo cuando se completa la Task real (tasks/lifecycle.controller.js) — tildar
+  // manualmente el FinanceTask (botón "Hecho") NO toca la Task vinculada.
+  responsibleId  Int?
+  responsible    User?     @relation("FinanceTaskResponsible", fields: [responsibleId], references: [id], onDelete: SetNull)
+  taskId         Int?      @unique
+  task           Task?     @relation(fields: [taskId], references: [id], onDelete: SetNull)
   createdById    Int? // solo kind='manual'
   createdBy      User?     @relation("FinanceTaskCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   createdAt      DateTime  @default(now())

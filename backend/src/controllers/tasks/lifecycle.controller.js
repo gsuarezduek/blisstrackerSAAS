@@ -338,6 +338,7 @@ async function startTask(req, res, next) {
     // interna" solo porque alguien reabrió su tarea del dashboard).
     await prisma.eOSTodo.updateMany({ where: { taskId }, data: { done: false, completedAt: null } })
     await prisma.projectMeetingTodo.updateMany({ where: { taskId }, data: { done: false, completedAt: null } })
+    await prisma.financeTask.updateMany({ where: { taskId }, data: { status: 'open', doneAt: null, doneById: null } })
     await prisma.leadAction.updateMany({ where: { taskId }, data: { status: 'pending', doneAt: null, doneById: null } })
     await notifyContentPieceTaskChange(task, req.workspace.id)
     res.json(task)
@@ -402,6 +403,7 @@ async function resumeTask(req, res, next) {
     // que en startTask: una pieza de Contenido NO retrocede de estado acá.
     await prisma.eOSTodo.updateMany({ where: { taskId }, data: { done: false, completedAt: null } })
     await prisma.projectMeetingTodo.updateMany({ where: { taskId }, data: { done: false, completedAt: null } })
+    await prisma.financeTask.updateMany({ where: { taskId }, data: { status: 'open', doneAt: null, doneById: null } })
     await prisma.leadAction.updateMany({ where: { taskId }, data: { status: 'pending', doneAt: null, doneById: null } })
     await notifyContentPieceTaskChange(task, req.workspace.id)
     res.json(task)
@@ -453,6 +455,7 @@ async function completeTask(req, res, next) {
     // Si la tarea está vinculada a un To-Do (L10 o reunión de proyecto), tildarlo (sync un sentido: tarea → To-Do).
     await prisma.eOSTodo.updateMany({ where: { taskId: task.id }, data: { done: true, completedAt: now } })
     await prisma.projectMeetingTodo.updateMany({ where: { taskId: task.id }, data: { done: true, completedAt: now } })
+    await prisma.financeTask.updateMany({ where: { taskId: task.id }, data: { status: 'done', doneAt: now, doneById: userId } })
 
     // Si la tarea es la de un participante de una reunión de proyecto, la reunión se
     // cierra sola en cuanto TODOS los participantes hayan completado la suya —
