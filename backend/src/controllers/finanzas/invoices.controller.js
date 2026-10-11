@@ -121,7 +121,7 @@ async function emitArcaInvoice({ workspaceId, userId, item, issuer, issueDate, d
       {
         issuer: issuer.taxCondition,
         salesPoint: issuer.salesPoint,
-        to: { condition: item.ivaCondition, cuit: item.taxId || undefined },
+        to: { condition: item.ivaCondition, cuit: item.taxId ? item.taxId.replace(/-/g, '') : undefined },
         items: buildArcaItems(issuer, amountCents, ivaRate),
         date: issueDate.toISOString().slice(0, 10),
       },
