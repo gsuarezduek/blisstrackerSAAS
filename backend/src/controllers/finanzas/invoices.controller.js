@@ -10,6 +10,7 @@ const { safeContentDisposition } = require('../../lib/contentDisposition')
 const { logFinanceAudit } = require('../../lib/financeAudit')
 const { toDecimal } = require('../../lib/financeMoney')
 const { getArcaClient, toMinorUnits, formatVoucherNumber, buildArcaItems } = require('../../lib/arcaClient')
+const { getIssuedVoucher } = require('../../lib/arcaVoucherDocument')
 const { isValidArcaVatRate } = require('../../lib/financeCatalog')
 const { parseDate, computeInvoiceStatus, businessError } = require('./_shared')
 
@@ -27,6 +28,8 @@ const INVOICE_INCLUDE = {
   issuer: { select: { id: true, name: true, taxCondition: true } },
   attachments: { where: { deletedAt: null, status: 'ready' }, orderBy: { createdAt: 'asc' } },
   collections: { where: { deletedAt: null }, select: { amount: true } },
+  relatedInvoice: { select: { id: true, number: true } },
+  corrections: { where: { deletedAt: null }, select: { id: true, kind: true, number: true, arcaStatus: true } },
 }
 
 function invoiceLabel(inv) {
@@ -70,6 +73,46 @@ async function listInvoices(req, res, next) {
     if (status) shaped = shaped.filter(i => i.status === status)
     res.json(shaped)
   } catch (err) { next(err) }
+}
+
+// Traduce un IssueOutcome (de `issue()`, `issueCreditNote()`, `issueDebitNote()`
+// o `recover()` — misma forma en los 4) al patch de columnas a guardar.
+// Compartido por emitArcaInvoice, emitArcaNote y reconcileInvoice para no
+// triplicar esta lógica.
+function applyIssueOutcomeData(outcome) {
+  const data = {}
+  if (outcome.kind === 'authorized') {
+    const v = outcome.voucher
+    data.number = formatVoucherNumber(v.salesPoint, v.number)
+    data.cae = v.cae
+    data.caeExpiresAt = parseDate(v.caeExpiry)
+    data.voucherType = v.voucherClass
+    data.arcaStatus = 'authorized'
+    data.arcaResponseRaw = { totals: v.totals, qr: v.qr, voucher: v }
+  } else if (outcome.kind === 'rejected') {
+    data.arcaStatus = 'rejected'
+    data.arcaResponseRaw = { issues: (outcome.issues || []).map(i => ({ code: i.code, message: i.message })) }
+  } else if (outcome.kind === 'conflict') {
+    data.arcaStatus = 'conflict'
+    data.arcaResponseRaw = { reason: outcome.reason }
+  } else {
+    // 'indeterminate'
+    data.arcaStatus = 'indeterminate'
+    data.arcaResponseRaw = { lookup: outcome.lookup?.kind || null }
+  }
+  return data
+}
+
+// Error de transporte/infraestructura al llamar a ARCA (no es un `rejected`
+// de negocio, que viene como outcome, no como excepción). Si el error trae
+// `issues` (ArcaFiscalIssue[], lo tiran algunos errores del SDK) se guardan
+// también — mismo detalle que un `rejected`, para no perder información útil.
+function arcaErrorData(err) {
+  const raw = { error: err.message || String(err) }
+  if (Array.isArray(err.issues) && err.issues.length) {
+    raw.issues = err.issues.map(i => ({ code: i.code, message: i.message }))
+  }
+  return { arcaResponseRaw: raw }
 }
 
 /**
@@ -116,44 +159,94 @@ async function emitArcaInvoice({ workspaceId, userId, item, issuer, issueDate, d
       { idempotencyKey },
     )
   } catch (err) {
-    // Error de transporte/infraestructura (no es un `rejected` de negocio, que
-    // viene como outcome, no como excepción) — la reserva ya quedó grabada
-    // como 'indeterminate', se puede reconciliar más adelante.
-    invoice = await prisma.financeInvoice.update({
-      where: { id: invoice.id },
-      data: { arcaResponseRaw: { error: err.message || String(err) } },
-      include: INVOICE_INCLUDE,
-    })
+    invoice = await prisma.financeInvoice.update({ where: { id: invoice.id }, data: arcaErrorData(err), include: INVOICE_INCLUDE })
     await logFinanceAudit({ workspaceId, entityType: 'invoice', entityId: invoice.id, action: 'update', userId, summary: `Emisión ARCA quedó indeterminada (error de conexión) para ${item.name}` })
     return invoice
   }
 
-  const data = {}
-  if (outcome.kind === 'authorized') {
-    const v = outcome.voucher
-    data.number = formatVoucherNumber(v.salesPoint, v.number)
-    data.cae = v.cae
-    data.caeExpiresAt = parseDate(v.caeExpiry)
-    data.voucherType = v.voucherClass
-    data.arcaStatus = 'authorized'
-    data.arcaResponseRaw = { totals: v.totals, qr: v.qr }
-  } else if (outcome.kind === 'rejected') {
-    data.arcaStatus = 'rejected'
-    data.arcaResponseRaw = { issues: (outcome.issues || []).map(i => ({ code: i.code, message: i.message })) }
-  } else if (outcome.kind === 'conflict') {
-    data.arcaStatus = 'conflict'
-    data.arcaResponseRaw = { reason: outcome.reason }
-  } else {
-    // 'indeterminate': ya está seteado desde la fase 1, no hay más info nueva que guardar.
-    data.arcaResponseRaw = { lookup: outcome.lookup?.kind || null }
-  }
-
+  const data = applyIssueOutcomeData(outcome)
   invoice = await prisma.financeInvoice.update({ where: { id: invoice.id }, data, include: INVOICE_INCLUDE })
   await logFinanceAudit({
     workspaceId, entityType: 'invoice', entityId: invoice.id, action: 'create', userId,
     summary: `Emitió ${invoiceLabel(invoice)} de ${item.name} vía ARCA (${issuer.name}) — ${data.arcaStatus}`,
   })
   return invoice
+}
+
+/**
+ * Emite una nota de crédito (`all: true`, anula la factura original entera —
+ * única modalidad soportada en v1, ver nota de alcance) o débito (monto
+ * nuevo) contra ARCA, asociada a una factura original con CAE. Mismo patrón
+ * de reserva-antes-de-llamar que emitArcaInvoice. `original` es la factura
+ * que se corrige; `amountDecimal`/`ivaRate` ya vienen resueltos por el
+ * caller (= los de `original` para una nota de crédito total).
+ */
+async function emitArcaNote({ workspaceId, userId, original, issuer, item, kind, concept, amountDecimal, ivaRate }) {
+  if (!issuer.active) throw businessError(400, 'Este emisor está desactivado')
+  if (!original.cae) throw businessError(400, 'Esta factura todavía no tiene CAE — no se puede corregir.')
+  if (original.kind !== 'invoice') throw businessError(400, 'Solo se puede emitir una nota sobre una factura, no sobre otra nota.')
+
+  if (kind === 'credit_note') {
+    const existing = await prisma.financeInvoice.findFirst({
+      where: { workspaceId, relatedInvoiceId: original.id, kind: 'credit_note', arcaStatus: 'authorized', deletedAt: null },
+    })
+    if (existing) throw businessError(409, 'Esta factura ya tiene una nota de crédito emitida.')
+  }
+
+  const voucher = await getIssuedVoucher(original, issuer)
+  const forCoords = { salesPoint: voucher.salesPoint, voucherType: voucher.voucherType, number: voucher.number }
+  const idempotencyKey = crypto.randomUUID()
+
+  let note = await prisma.financeInvoice.create({
+    data: {
+      workspaceId, itemId: item.id, issuerId: issuer.id, kind, relatedInvoiceId: original.id,
+      issueDate: new Date(), dueDate: new Date(), concept,
+      amount: amountDecimal.toString(), currency: 'ARS', ivaRate: ivaRate ?? null,
+      arcaStatus: 'indeterminate', arcaIdempotencyKey: idempotencyKey, createdById: userId,
+    },
+  })
+
+  let outcome
+  try {
+    const arca = await getArcaClient(issuer)
+    if (kind === 'credit_note') {
+      outcome = await arca.issueCreditNote({ for: forCoords, all: true }, { idempotencyKey })
+    } else {
+      const amountCents = toMinorUnits(amountDecimal)
+      const items = buildArcaItems(issuer, amountCents, ivaRate).map(i => ({ ...i, description: concept }))
+      outcome = await arca.issueDebitNote({ for: forCoords, items }, { idempotencyKey })
+    }
+  } catch (err) {
+    note = await prisma.financeInvoice.update({ where: { id: note.id }, data: arcaErrorData(err), include: INVOICE_INCLUDE })
+    await logFinanceAudit({ workspaceId, entityType: 'invoice', entityId: note.id, action: 'update', userId, summary: `Emisión de nota quedó indeterminada (error de conexión) para ${item.name}` })
+    return note
+  }
+
+  const data = applyIssueOutcomeData(outcome)
+  note = await prisma.financeInvoice.update({ where: { id: note.id }, data, include: INVOICE_INCLUDE })
+  await logFinanceAudit({
+    workspaceId, entityType: 'invoice', entityId: note.id, action: 'create', userId,
+    summary: `Emitió ${kind === 'credit_note' ? 'nota de crédito' : 'nota de débito'} de ${item.name} sobre ${invoiceLabel(original)} — ${data.arcaStatus}`,
+  })
+  return note
+}
+
+/**
+ * Reconcilia una factura/nota que quedó 'indeterminate'/'conflict' (Etapa 5):
+ * consulta `recover()` con la idempotencyKey ya guardada (nunca reintenta
+ * `issue()` — ARCA ya tiene la reserva) y actualiza con el mismo patch que
+ * una emisión fresca.
+ */
+async function reconcileInvoice(invoice, issuer) {
+  let outcome
+  try {
+    const arca = await getArcaClient(issuer)
+    outcome = await arca.recover(invoice.arcaIdempotencyKey)
+  } catch (err) {
+    return prisma.financeInvoice.update({ where: { id: invoice.id }, data: arcaErrorData(err), include: INVOICE_INCLUDE })
+  }
+  const data = applyIssueOutcomeData(outcome)
+  return prisma.financeInvoice.update({ where: { id: invoice.id }, data, include: INVOICE_INCLUDE })
 }
 
 // POST /api/finanzas/invoices — sección 4.8 "Nueva factura". Con `issuerId`:
@@ -268,6 +361,80 @@ async function restoreInvoice(req, res, next) {
     await logFinanceAudit({ workspaceId, entityType: 'invoice', entityId: id, action: 'restore', userId: req.user.userId, entityLabel: `factura ${existing.number} de ${existing.item.name}` })
     const full = await prisma.financeInvoice.findUnique({ where: { id }, include: INVOICE_INCLUDE })
     res.json(shapeInvoice(full))
+  } catch (err) { next(err) }
+}
+
+// POST /api/finanzas/invoices/:id/credit-note — anula POR COMPLETO una
+// factura con CAE (única modalidad soportada en v1: `all: true`, ver nota de
+// alcance en emitArcaNote — ARCA acredita exactamente lo que autorizó la
+// original, sin desglose de items propio).
+async function createCreditNote(req, res, next) {
+  try {
+    const workspaceId = req.workspace.id
+    const id = Number(req.params.id)
+    const original = await prisma.financeInvoice.findFirst({ where: { id, workspaceId, deletedAt: null }, include: { issuer: true, item: true } })
+    if (!original) return res.status(404).json({ error: 'Factura no encontrada' })
+    if (!original.issuerId) return res.status(400).json({ error: 'Esta factura no se emitió por ARCA.' })
+
+    const concept = (req.body?.concept || '').trim() || `Anula ${invoiceLabel(original)}`
+    const note = await emitArcaNote({
+      workspaceId, userId: req.user.userId, original, issuer: original.issuer, item: original.item,
+      kind: 'credit_note', concept, amountDecimal: toDecimal(original.amount), ivaRate: original.ivaRate,
+    })
+    res.status(201).json(shapeInvoice(note))
+  } catch (err) { next(err) }
+}
+
+// POST /api/finanzas/invoices/:id/debit-note — agrega un monto nuevo
+// asociado a una factura con CAE ya emitida (ej. un cargo adicional).
+async function createDebitNote(req, res, next) {
+  try {
+    const workspaceId = req.workspace.id
+    const id = Number(req.params.id)
+    const original = await prisma.financeInvoice.findFirst({ where: { id, workspaceId, deletedAt: null }, include: { issuer: true, item: true } })
+    if (!original) return res.status(404).json({ error: 'Factura no encontrada' })
+    if (!original.issuerId) return res.status(400).json({ error: 'Esta factura no se emitió por ARCA.' })
+
+    const { concept, amount, ivaRate } = req.body
+    if (!concept?.trim()) return res.status(400).json({ error: 'Concepto requerido' })
+    let amountDecimal
+    try { amountDecimal = toDecimal(amount) } catch { return res.status(400).json({ error: 'Monto inválido' }) }
+    if (!amountDecimal.isFinite() || amountDecimal.lessThanOrEqualTo(0)) return res.status(400).json({ error: 'Monto inválido' })
+    const isResponsableInscripto = original.issuer.taxCondition === 'responsable_inscripto'
+    if (isResponsableInscripto && !isValidArcaVatRate(ivaRate)) {
+      return res.status(400).json({ error: 'Elegí una alícuota de IVA válida (0, 2.5, 5, 10.5, 21 o 27%)' })
+    }
+
+    const note = await emitArcaNote({
+      workspaceId, userId: req.user.userId, original, issuer: original.issuer, item: original.item,
+      kind: 'debit_note', concept: concept.trim(), amountDecimal, ivaRate: isResponsableInscripto ? ivaRate : null,
+    })
+    res.status(201).json(shapeInvoice(note))
+  } catch (err) { next(err) }
+}
+
+// POST /api/finanzas/invoices/:id/reconcile — Etapa 5: para una factura/nota
+// que quedó 'indeterminate'/'conflict', consulta recover() y actualiza.
+async function reconcile(req, res, next) {
+  try {
+    const workspaceId = req.workspace.id
+    const id = Number(req.params.id)
+    const existing = await prisma.financeInvoice.findFirst({
+      where: { id, workspaceId, deletedAt: null },
+      include: { issuer: true, item: { select: { name: true } } },
+    })
+    if (!existing) return res.status(404).json({ error: 'Factura no encontrada' })
+    if (!existing.issuerId || !existing.arcaIdempotencyKey) return res.status(400).json({ error: 'Esta factura no pasó por ARCA.' })
+    if (!['indeterminate', 'conflict'].includes(existing.arcaStatus)) {
+      return res.status(409).json({ error: 'Esta factura ya tiene un resultado definitivo de ARCA.' })
+    }
+
+    const updated = await reconcileInvoice(existing, existing.issuer)
+    await logFinanceAudit({
+      workspaceId, entityType: 'invoice', entityId: id, action: 'update', userId: req.user.userId,
+      summary: `Reconcilió ${invoiceLabel(updated)} de ${existing.item.name} — ${updated.arcaStatus}`,
+    })
+    res.json(shapeInvoice(updated))
   } catch (err) { next(err) }
 }
 
@@ -449,6 +616,7 @@ async function sendEmail(req, res, next) {
 
 module.exports = {
   listInvoices, createInvoice, updateInvoice, deleteInvoice, restoreInvoice,
+  createCreditNote, createDebitNote, reconcile,
   presignAttachment, confirmAttachment, deleteAttachment, downloadAttachment, downloadZip, sendEmail,
   INVOICE_INCLUDE, shapeInvoice,
 }

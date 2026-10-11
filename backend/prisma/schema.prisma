@@ -4807,10 +4807,19 @@ model FinanceInvoice {
   issueDate   DateTime
   dueDate     DateTime
   concept     String
-  amount      Decimal     @db.Decimal(20, 8)
+  amount      Decimal     @db.Decimal(20, 8) // siempre positivo — el signo lo aplica el agregado (facturado/saldo) según `kind`
   currency    String      @default("ARS")
   // Estado de cobro (pagada/parcial/vencida/pendiente) NO se persiste — se
   // calcula a partir de los FinanceMovement.invoiceId vivos + dueDate.
+
+  // Nota de crédito/débito (Etapa 4) — 'invoice' (default) es el comprobante
+  // normal; 'credit_note'/'debit_note' corrigen uno ya emitido con CAE
+  // (relatedInvoiceId). Mismo FinanceInvoice: una nota es, en los hechos, un
+  // comprobante más con su propio número/CAE/PDF.
+  kind             String           @default("invoice") // 'invoice' | 'credit_note' | 'debit_note'
+  relatedInvoiceId Int?
+  relatedInvoice   FinanceInvoice?  @relation("InvoiceCorrections", fields: [relatedInvoiceId], references: [id], onDelete: SetNull)
+  corrections      FinanceInvoice[] @relation("InvoiceCorrections")
 
   // Facturación electrónica AFIP/ARCA (Etapa 2) — todo opcional: null =
   // factura informativa, nunca pasó por ARCA. Ver lib/arcaClient.js.

@@ -20,6 +20,9 @@ function todayUTCNoon() {
  * por customers.controller.js e invoices.controller.js.
  */
 function computeInvoiceStatus(invoice, collected) {
+  // Una nota de crédito/débito no se "cobra" — es una corrección, no un
+  // comprobante con cuenta corriente propia (ver concept.kind, Etapa 4).
+  if (invoice.kind && invoice.kind !== 'invoice') return invoice.kind
   const amount = toDecimal(invoice.amount)
   if (collected.greaterThanOrEqualTo(amount)) return 'paid'
   if (collected.greaterThan(0)) return 'partial'

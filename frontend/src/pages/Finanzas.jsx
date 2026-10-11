@@ -73,7 +73,7 @@ export default function Finanzas() {
 
   // "Ver ›" de una tarea de Pendientes salta a la pestaña relacionada con su
   // origen (no hace deep-link al registro puntual — alcanza para orientarse).
-  const TASK_ORIGIN_TAB = { check: 'saldos', check_rejected: 'saldos', invoice: 'clientes', next_action: 'clientes' }
+  const TASK_ORIGIN_TAB = { check: 'saldos', check_rejected: 'saldos', invoice: 'clientes', next_action: 'clientes', invoice_reconcile: 'clientes' }
   function handleTaskNavigate(task) {
     const dest = TASK_ORIGIN_TAB[task.origin]
     if (dest) setTab(dest)

@@ -53,6 +53,14 @@ const ARCA_STATUSES = [
   { key: 'conflict',      label: 'Conflicto',        color: 'amber' },
 ]
 
+// FinanceInvoice.kind (Etapa 4) — 'invoice' es el comprobante normal;
+// 'credit_note'/'debit_note' corrigen uno ya emitido con CAE.
+const INVOICE_KINDS = [
+  { key: 'invoice',     label: 'Factura' },
+  { key: 'credit_note', label: 'Nota de crédito' },
+  { key: 'debit_note',  label: 'Nota de débito' },
+]
+
 // Abierto a futuro (no es un enum cerrado): cualquier string de 3 letras sirve
 // como moneda, pero estas son las que el frontend sabe formatear con su propio
 // prefijo/decimales (ver utils/format.js fmtMoney).
@@ -144,12 +152,13 @@ const TASK_KINDS = [
 ]
 
 const TASK_ORIGINS = [
-  { key: 'check',          label: 'Cheque',       entityType: 'check' },
-  { key: 'invoice',        label: 'Factura',      entityType: 'invoice' },
-  { key: 'extra',          label: 'Extra',        entityType: 'extra' },
-  { key: 'next_action',    label: 'Recordatorio', entityType: 'nextAction' },
-  { key: 'check_rejected', label: 'Cheque',       entityType: 'check' },
-  { key: 'manual',         label: 'Manual',       entityType: null },
+  { key: 'check',             label: 'Cheque',           entityType: 'check' },
+  { key: 'invoice',           label: 'Factura',          entityType: 'invoice' },
+  { key: 'extra',             label: 'Extra',            entityType: 'extra' },
+  { key: 'next_action',       label: 'Recordatorio',     entityType: 'nextAction' },
+  { key: 'check_rejected',    label: 'Cheque',           entityType: 'check' },
+  { key: 'invoice_reconcile', label: 'ARCA',             entityType: 'invoice' },
+  { key: 'manual',            label: 'Manual',           entityType: null },
 ]
 
 const TASK_STATUSES = [
@@ -203,6 +212,8 @@ function isValidTaskKind(key)           { return TASK_KIND_KEYS.includes(key) }
 function isValidTaskOrigin(key)         { return key == null || TASK_ORIGIN_KEYS.includes(key) }
 function isValidTaskStatus(key)         { return TASK_STATUS_KEYS.includes(key) }
 function isValidAuditEntityType(key)    { return AUDIT_ENTITY_TYPES.includes(key) }
+const INVOICE_KIND_KEYS = keysOf(INVOICE_KINDS)
+function isValidInvoiceKind(key)        { return INVOICE_KIND_KEYS.includes(key) }
 
 module.exports = {
   ACCOUNT_TYPES, ACCOUNT_TYPE_KEYS, isValidAccountType,
@@ -211,6 +222,7 @@ module.exports = {
   ITEM_IVA_CONDITIONS, ITEM_IVA_CONDITION_KEYS, isValidItemIvaCondition,
   ARCA_VAT_RATES, isValidArcaVatRate,
   ARCA_STATUSES,
+  INVOICE_KINDS, INVOICE_KIND_KEYS, isValidInvoiceKind,
   CURRENCIES,
   MOVEMENT_TYPES, MOVEMENT_TYPE_KEYS, isValidMovementType,
   TAX_APPLIES_TO, TAX_APPLIES_TO_KEYS, isValidTaxAppliesTo,

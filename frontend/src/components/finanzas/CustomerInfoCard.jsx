@@ -28,6 +28,25 @@ export default function CustomerInfoCard({ customer, issuers, onChanged }) {
   const [form, setForm] = useState(null)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
+  const [looking, setLooking] = useState(false)
+
+  async function handleLookup() {
+    const normalized = normalizeCuit(form.taxId)
+    if (!CUIT_RE.test(normalized)) { setError('CUIT inválido (debe tener 11 dígitos)'); return }
+    setForm(f => ({ ...f, taxId: normalized }))
+    setLooking(true); setError('')
+    try {
+      const res = await api.get(`/finanzas/padron/${normalized}`)
+      setForm(f => ({
+        ...f,
+        address: res.data.address || f.address,
+        ivaCondition: res.data.ivaCondition || f.ivaCondition,
+        contactName: f.contactName || res.data.name || '',
+      }))
+    } catch (err) {
+      setError(err.response?.data?.error || 'No se pudo consultar el padrón')
+    } finally { setLooking(false) }
+  }
 
   function startEdit() {
     setForm({
@@ -66,7 +85,10 @@ export default function CustomerInfoCard({ customer, issuers, onChanged }) {
             <input className={input} placeholder="Contacto" value={form.contactName} onChange={e => setForm({ ...form, contactName: e.target.value })} />
             <input className={input} placeholder="Teléfono" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} />
             <input className={input} placeholder="Mail" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} />
-            <input className={input} placeholder="CUIT (o los 11 dígitos seguidos)" value={form.taxId} onChange={e => setForm({ ...form, taxId: e.target.value })} onBlur={e => setForm(f => ({ ...f, taxId: normalizeCuit(e.target.value) }))} />
+            <div className="flex gap-1.5">
+              <input className={input} placeholder="CUIT (o los 11 dígitos seguidos)" value={form.taxId} onChange={e => setForm({ ...form, taxId: e.target.value })} onBlur={e => setForm(f => ({ ...f, taxId: normalizeCuit(e.target.value) }))} />
+              <button type="button" onClick={handleLookup} disabled={looking || !form.taxId} title="Buscar en el padrón de ARCA" className="shrink-0 border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg px-2.5 text-xs font-medium disabled:opacity-50">{looking ? '…' : 'Buscar'}</button>
+            </div>
             <input className={input} placeholder="Dirección (para facturar electrónicamente)" value={form.address} onChange={e => setForm({ ...form, address: e.target.value })} />
             <input className={input} placeholder="Servicio contratado" value={form.contractedService} onChange={e => setForm({ ...form, contractedService: e.target.value })} />
             <select className={input} value={form.ivaCondition} onChange={e => setForm({ ...form, ivaCondition: e.target.value })}>

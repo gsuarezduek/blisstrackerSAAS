@@ -74,4 +74,4 @@ async function buildInvoiceVoucherDocument(invoice, issuer, item) {
   }
 }
 
-module.exports = { buildInvoiceVoucherDocument }
+module.exports = { buildInvoiceVoucherDocument, getIssuedVoucher }

@@ -24,6 +24,7 @@ const extras         = require('../controllers/finanzas/extras.controller')
 const tasks          = require('../controllers/finanzas/tasks.controller')
 const workspaceNote  = require('../controllers/finanzas/workspaceNote.controller')
 const aiSummary      = require('../controllers/finanzas/aiSummary.controller')
+const padron         = require('../controllers/finanzas/padron.controller')
 
 // Todo el módulo Finanzas requiere: autenticación + workspace + acceso al
 // módulo (admin/owner o rol configurable, ver moduleAccess.js) + que el
@@ -74,6 +75,8 @@ router.post('/items',            items.createItem)
 router.patch('/items/:id',       items.updateItem)
 router.delete('/items/:id',      workspaceAdminOnly, items.deleteItem)
 
+router.get('/padron/:cuit',      padron.lookupCuit) // Etapa 5: precarga condición de IVA/dirección al dar de alta un cliente
+
 // Carga de movimientos y transferencias (modal "+ Cargar", sección 4.7) +
 // Ingresos/Egresos con filtros + Editar movimiento (4.1/4.9): abierto a
 // cualquiera con acceso al módulo — es la operación del día a día, no
@@ -120,6 +123,9 @@ router.patch('/invoices/:id',         invoices.updateInvoice)
 router.delete('/invoices/:id',        invoices.deleteInvoice)
 router.post('/invoices/:id/restore',  invoices.restoreInvoice)
 router.get('/invoices/:id/pdf',       invoicePrint.downloadInvoicePdf) // PDF oficial AFIP (con CAE + QR), Etapa 3
+router.post('/invoices/:id/credit-note', invoices.createCreditNote) // Etapa 4
+router.post('/invoices/:id/debit-note',  invoices.createDebitNote)  // Etapa 4
+router.post('/invoices/:id/reconcile',   invoices.reconcile)        // Etapa 5
 router.post('/invoices/:id/attachments/presign',         invoices.presignAttachment)
 router.post('/invoices/:id/attachments/:attId/confirm',  invoices.confirmAttachment)
 router.get('/invoices/:id/attachments/:attId/download',  invoices.downloadAttachment)

@@ -44,6 +44,13 @@ export const ARCA_STATUSES = [
   { key: 'conflict',      label: 'Conflicto',     color: 'amber' },
 ]
 
+// FinanceInvoice.kind (Etapa 4) — 'invoice' es el comprobante normal.
+export const INVOICE_KINDS = [
+  { key: 'invoice',     label: 'Factura',          short: null },
+  { key: 'credit_note', label: 'Nota de crédito',  short: 'NC' },
+  { key: 'debit_note',  label: 'Nota de débito',   short: 'ND' },
+]
+
 export const CURRENCIES = [
   { key: 'ARS', label: 'Pesos' },
   { key: 'USD', label: 'Dólares' },
@@ -118,12 +125,13 @@ export const NEXT_ACTION_RECURRENCES = [
 ]
 
 export const TASK_ORIGIN_LABELS = {
-  check:          'Cheque',
-  invoice:        'Factura',
-  extra:          'Extra',
-  next_action:    'Recordatorio',
-  check_rejected: 'Cheque',
-  manual:         'Manual',
+  check:             'Cheque',
+  invoice:           'Factura',
+  extra:             'Extra',
+  next_action:       'Recordatorio',
+  check_rejected:    'Cheque',
+  invoice_reconcile: 'ARCA',
+  manual:            'Manual',
 }
 
 export const TASK_STATUSES = [
@@ -159,6 +167,7 @@ export function checkStatusMeta(key)         { return metaOf(CHECK_STATUSES, key
 export function transferReasonLabel(key)     { return metaOf(TRANSFER_REASONS, key).label }
 export function invoiceStatusMeta(key)       { return metaOf(INVOICE_STATUSES, key) }
 export function arcaStatusMeta(key)          { return metaOf(ARCA_STATUSES, key) }
+export function invoiceKindMeta(key)         { return metaOf(INVOICE_KINDS, key) }
 export function customerStatusMeta(key)      { return metaOf(CUSTOMER_STATUSES, key) }
 export function extraStatusMeta(key)         { return metaOf(EXTRA_STATUSES, key) }
 export function taskOriginLabel(key)         { return TASK_ORIGIN_LABELS[key] || key || '—' }

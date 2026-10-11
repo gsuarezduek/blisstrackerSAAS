@@ -102,6 +102,17 @@ async function syncGeneratedTasks(workspaceId) {
     live.push({ origin: 'next_action', originId: a.id, title: a.text, detail: a.item ? `Cliente: ${a.item.name}` : null, date: a.date })
   }
 
+  // Regla 7: facturas/notas de ARCA que quedaron sin confirmar (Etapa 5) —
+  // "Reconciliar" vive en la factura misma (CustomerInvoicesPanel), esto es
+  // solo el aviso para que no se pierdan de vista.
+  const stuckArca = await prisma.financeInvoice.findMany({
+    where: { workspaceId, deletedAt: null, arcaStatus: { in: ['indeterminate', 'conflict'] } },
+    include: { item: true },
+  })
+  for (const inv of stuckArca) {
+    live.push({ origin: 'invoice_reconcile', originId: inv.id, title: `Reconciliar ${inv.kind === 'invoice' ? 'factura' : 'nota'} de ${inv.item.name}`, detail: inv.concept, date: inv.issueDate })
+  }
+
   const liveKeySet = new Set(live.map(l => `${l.origin}:${l.originId}`))
 
   const existingTasks = await prisma.financeTask.findMany({ where: { workspaceId, kind: 'generated' } })

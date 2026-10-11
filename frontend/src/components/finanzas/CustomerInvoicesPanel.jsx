@@ -1,9 +1,10 @@
 import { useEffect, useState, useCallback } from 'react'
-import { Download, FileText } from 'lucide-react'
+import { Download, FileText, FileMinus, RefreshCw } from 'lucide-react'
 import { Icon } from '../ui/Icon'
 import api from '../../api/client'
 import { fmtMoney } from '../../utils/format'
-import { invoiceStatusMeta, arcaStatusMeta, STATUS_BADGE } from './financeCatalog'
+import { invoiceStatusMeta, arcaStatusMeta, invoiceKindMeta, STATUS_BADGE } from './financeCatalog'
+import NewNoteModal from './NewNoteModal'
 
 const input = 'border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 dark:text-gray-100 rounded-lg px-2.5 py-1.5 text-sm'
 
@@ -30,6 +31,8 @@ export default function CustomerInvoicesPanel({ itemId, currency, refreshKey, on
   const [invoices, setInvoices] = useState(null)
   const [selected, setSelected] = useState(new Set())
   const [sending, setSending] = useState(false)
+  const [noteInvoice, setNoteInvoice] = useState(null)
+  const [reconcilingId, setReconcilingId] = useState(null)
 
   const load = useCallback(async () => {
     const params = { itemId }
@@ -58,6 +61,16 @@ export default function CustomerInvoicesPanel({ itemId, currency, refreshKey, on
     a.href = blobUrl; a.download = 'facturas.zip'
     document.body.appendChild(a); a.click(); a.remove()
     URL.revokeObjectURL(blobUrl)
+  }
+
+  async function handleReconcile(inv) {
+    setReconcilingId(inv.id)
+    try {
+      await api.post(`/finanzas/invoices/${inv.id}/reconcile`)
+      await load()
+    } catch (err) {
+      alert(err.response?.data?.error || 'No se pudo reconciliar')
+    } finally { setReconcilingId(null) }
   }
 
   async function handleSendEmail() {
@@ -106,21 +119,40 @@ export default function CustomerInvoicesPanel({ itemId, currency, refreshKey, on
           <tbody>
             {invoices.map(inv => {
               const meta = invoiceStatusMeta(inv.status)
+              const kindMeta = invoiceKindMeta(inv.kind)
+              const canReconcile = inv.arcaStatus === 'indeterminate' || inv.arcaStatus === 'conflict'
               return (
                 <tr key={inv.id} className="border-b border-gray-50 dark:border-gray-700/50 hover:bg-gray-50 dark:hover:bg-gray-900/30">
                   <td className="py-2 pr-2"><input type="checkbox" checked={selected.has(inv.id)} onChange={() => toggle(inv.id)} /></td>
-                  <td className="py-2 pr-2 text-gray-900 dark:text-white cursor-pointer" onClick={() => onInvoiceClick?.(inv)}>{inv.number || <span className="text-gray-400 italic">pendiente de ARCA</span>}</td>
+                  <td className="py-2 pr-2 text-gray-900 dark:text-white cursor-pointer" onClick={() => onInvoiceClick?.(inv)}>
+                    {kindMeta.short && <span className="mr-1 text-[10px] font-semibold text-gray-400 border border-gray-300 dark:border-gray-600 rounded px-1 align-middle">{kindMeta.short}</span>}
+                    {inv.number || <span className="text-gray-400 italic">pendiente de ARCA</span>}
+                  </td>
                   <td className="py-2 pr-2 text-gray-500 dark:text-gray-400 whitespace-nowrap">{fmtDate(inv.issueDate)}</td>
                   <td className="py-2 pr-2 text-gray-700 dark:text-gray-300">{inv.concept}</td>
                   <td className="py-2 pr-2 text-right font-medium text-gray-900 dark:text-white whitespace-nowrap">{fmtMoney(inv.amount, currency)}</td>
                   <td className="py-2 pr-2">
-                    <span className={`text-[11px] rounded-full px-2 py-0.5 ${STATUS_BADGE[meta.color]}`}>{meta.label}</span>
+                    {inv.kind === 'invoice' ? (
+                      <span className={`text-[11px] rounded-full px-2 py-0.5 ${STATUS_BADGE[meta.color]}`}>{meta.label}</span>
+                    ) : (
+                      <span className="text-[11px] rounded-full px-2 py-0.5 bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300">{kindMeta.label}</span>
+                    )}
                     {inv.arcaStatus && inv.arcaStatus !== 'authorized' && (
                       <span className={`ml-1 text-[11px] rounded-full px-2 py-0.5 ${STATUS_BADGE[arcaStatusMeta(inv.arcaStatus).color]}`}>{arcaStatusMeta(inv.arcaStatus).label}</span>
                     )}
                   </td>
                   <td className="py-2 pl-2 text-right">
                     <div className="flex items-center justify-end gap-2">
+                      {canReconcile && (
+                        <button title="Reconciliar con ARCA" disabled={reconcilingId === inv.id} onClick={() => handleReconcile(inv)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 disabled:opacity-40">
+                          <Icon as={RefreshCw} size={14} className={reconcilingId === inv.id ? 'animate-spin' : ''} />
+                        </button>
+                      )}
+                      {inv.cae && inv.kind === 'invoice' && (
+                        <button title="Nota de crédito/débito" onClick={() => setNoteInvoice(inv)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
+                          <Icon as={FileMinus} size={14} />
+                        </button>
+                      )}
                       {inv.cae && (
                         <button title="Descargar PDF oficial" onClick={() => downloadBlob(`/finanzas/invoices/${inv.id}/pdf`, `Factura ${inv.number}.pdf`)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
                           <Icon as={FileText} size={14} />
@@ -148,6 +180,13 @@ export default function CustomerInvoicesPanel({ itemId, currency, refreshKey, on
           <button onClick={handleDownloadZip} className="border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-white dark:hover:bg-gray-800 rounded-lg px-3 py-1.5 text-xs font-medium">Descargar</button>
           <button onClick={handleSendEmail} disabled={sending} className="bg-primary-600 hover:bg-primary-700 text-white rounded-lg px-3 py-1.5 text-xs font-medium disabled:opacity-50">Enviar por mail</button>
         </div>
+      )}
+
+      {noteInvoice && (
+        <NewNoteModal invoice={noteInvoice}
+          onClose={() => setNoteInvoice(null)}
+          onSaved={() => { setNoteInvoice(null); load() }}
+        />
       )}
     </div>
   )

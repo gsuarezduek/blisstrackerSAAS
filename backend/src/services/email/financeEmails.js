@@ -55,8 +55,9 @@ async function sendInvoicesEmail(to, invoices, { workspaceId, workspaceName, slu
     if (inv.cae) {
       try {
         const pdf = await renderInvoicePdf(inv.id, slug)
+        const kindLabel = inv.kind === 'credit_note' ? 'Nota de crédito' : inv.kind === 'debit_note' ? 'Nota de débito' : 'Factura'
         if (totalBytes + pdf.length <= MAX_TOTAL_ATTACHMENT_BYTES) {
-          attachments.push({ filename: `Factura ${inv.number}.pdf`, content: pdf })
+          attachments.push({ filename: `${kindLabel} ${inv.number}.pdf`, content: pdf })
           totalBytes += pdf.length
         }
       } catch { /* no se pudo generar el PDF oficial — el mail sigue sin él, el adjunto manual (si hay) todavía sirve */ }

@@ -17,11 +17,20 @@ function shapeInvoice(inv) {
   return { ...rest, collected: collected.toString(), status: computeInvoiceStatus(inv, collected) }
 }
 
+// El monto de un comprobante siempre se guarda positivo (ver schema) — acá se
+// le aplica el signo según kind: una nota de crédito resta de "facturado"
+// (es plata que se le devuelve al cliente), una de débito suma igual que una
+// factura normal.
+function signedAmount(inv) {
+  const amount = toDecimal(inv.amount)
+  return inv.kind === 'credit_note' ? amount.negated() : amount
+}
+
 // Resume facturado/cobrado/saldo/estado de un item con sus facturas +
 // cobranzas ya cargadas (invoices: INVOICE_WITH_COLLECTIONS, onAccountMovements).
 function summarizeCustomer(item) {
   const invoices = item.invoices.map(shapeInvoice)
-  const facturado = invoices.reduce((s, i) => s.plus(toDecimal(i.amount)), toDecimal(0))
+  const facturado = invoices.reduce((s, i) => s.plus(signedAmount(i)), toDecimal(0))
   const onAccount = (item.onAccountMovements || []).reduce((s, m) => s.plus(toDecimal(m.amount)), toDecimal(0))
   const fromInvoices = invoices.reduce((s, i) => s.plus(toDecimal(i.collected)), toDecimal(0))
   const cobrado = fromInvoices.plus(onAccount)
@@ -146,18 +155,23 @@ async function getLedger(req, res, next) {
     if (fromDate === undefined || toDate === undefined) return res.status(400).json({ error: 'Fecha inválida' })
 
     const [invoices, movements] = await Promise.all([
-      prisma.financeInvoice.findMany({ where: { workspaceId, itemId, deletedAt: null }, select: { id: true, number: true, concept: true, amount: true, issueDate: true, attachments: { where: { deletedAt: null, status: 'ready' }, select: { id: true, name: true } } } }),
+      prisma.financeInvoice.findMany({ where: { workspaceId, itemId, deletedAt: null }, select: { id: true, number: true, concept: true, amount: true, kind: true, issueDate: true, attachments: { where: { deletedAt: null, status: 'ready' }, select: { id: true, name: true } } } }),
       prisma.financeMovement.findMany({
         where: { workspaceId, itemId, type: 'income', accountApplication: { in: ['invoice', 'on_account'] }, deletedAt: null },
         include: { account: { select: { name: true } }, check: true, invoice: { select: { number: true } } },
       }),
     ])
 
+    // `kind` acá es el tipo de FILA del ledger ('invoice'|'payment', para que el
+    // frontend elija ícono/comportamiento) — no confundir con FinanceInvoice.kind
+    // ('invoice'|'credit_note'|'debit_note', el documento fiscal real), que se
+    // expone aparte como `docKind` y es lo que define el signo de `facturado`.
+    const DOC_KIND_LABEL = { credit_note: 'NC', debit_note: 'ND' }
     const rows = [
       ...invoices.map(inv => ({
-        date: inv.issueDate, kind: 'invoice', id: `inv${inv.id}`,
-        concept: `${inv.number || '(pendiente de ARCA)'} · ${inv.concept}`, attachments: inv.attachments,
-        facturado: inv.amount.toString(), cobrado: '0',
+        date: inv.issueDate, kind: 'invoice', docKind: inv.kind, id: `inv${inv.id}`,
+        concept: `${DOC_KIND_LABEL[inv.kind] ? `[${DOC_KIND_LABEL[inv.kind]}] ` : ''}${inv.number || '(pendiente de ARCA)'} · ${inv.concept}`, attachments: inv.attachments,
+        facturado: (inv.kind === 'credit_note' ? toDecimal(inv.amount).negated() : toDecimal(inv.amount)).toString(), cobrado: '0',
       })),
       ...movements.map(mv => ({
         date: mv.date, kind: 'payment', id: `mov${mv.id}`,

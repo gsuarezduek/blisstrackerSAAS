@@ -24,6 +24,24 @@ export default function NewCustomerModal({ categories, issuers, onClose, onCreat
   const [defaultIssuerId, setDefaultIssuerId] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [looking, setLooking] = useState(false)
+  const [lookupMsg, setLookupMsg] = useState('')
+
+  async function handleLookup() {
+    const normalized = normalizeCuit(taxId)
+    if (!CUIT_RE.test(normalized)) { setError('CUIT inválido (debe tener 11 dígitos)'); return }
+    setTaxId(normalized)
+    setLooking(true); setError(''); setLookupMsg('')
+    try {
+      const res = await api.get(`/finanzas/padron/${normalized}`)
+      if (res.data.address) setAddress(res.data.address)
+      if (res.data.ivaCondition) setIvaCondition(res.data.ivaCondition)
+      if (res.data.name && !contactName) setContactName(res.data.name)
+      setLookupMsg('Datos encontrados en el padrón de ARCA.')
+    } catch (err) {
+      setError(err.response?.data?.error || 'No se pudo consultar el padrón')
+    } finally { setLooking(false) }
+  }
 
   async function handleSave() {
     if (!name.trim()) { setError('Nombre requerido'); return }
@@ -80,13 +98,17 @@ export default function NewCustomerModal({ categories, issuers, onClose, onCreat
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={label}>CUIT</label>
-              <input className={input} value={taxId} onChange={e => setTaxId(e.target.value)} onBlur={e => setTaxId(normalizeCuit(e.target.value))} placeholder="XX-XXXXXXXX-X" />
+              <div className="flex gap-1.5">
+                <input className={input} value={taxId} onChange={e => setTaxId(e.target.value)} onBlur={e => setTaxId(normalizeCuit(e.target.value))} placeholder="XX-XXXXXXXX-X" />
+                <button type="button" onClick={handleLookup} disabled={looking || !taxId} title="Buscar en el padrón de ARCA" className="shrink-0 border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg px-2.5 text-xs font-medium disabled:opacity-50">{looking ? '…' : 'Buscar'}</button>
+              </div>
             </div>
             <div>
               <label className={label}>Servicio contratado</label>
               <input className={input} value={contractedService} onChange={e => setContractedService(e.target.value)} />
             </div>
           </div>
+          {lookupMsg && <p className="text-xs text-green-600 dark:text-green-400 -mt-2">{lookupMsg}</p>}
           <div>
             <label className={label}>Dirección</label>
             <input className={input} value={address} onChange={e => setAddress(e.target.value)} placeholder="Para facturar electrónicamente" />

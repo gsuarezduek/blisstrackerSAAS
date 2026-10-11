@@ -51,8 +51,9 @@ async function downloadInvoicePdf(req, res, next) {
     if (!invoice) return res.status(404).json({ error: 'Factura no encontrada' })
     if (!invoice.cae) return res.status(400).json({ error: 'Esta factura todavía no tiene CAE — no se puede generar el PDF.' })
 
+    const kindLabel = invoice.kind === 'credit_note' ? 'Nota de crédito' : invoice.kind === 'debit_note' ? 'Nota de débito' : 'Factura'
     const pdf = await renderInvoicePdf(invoice.id, req.workspace.slug)
-    sendPdf(res, pdf, `Factura ${invoice.number}.pdf`)
+    sendPdf(res, pdf, `${kindLabel} ${invoice.number}.pdf`)
   } catch (err) { next(err) }
 }
 
