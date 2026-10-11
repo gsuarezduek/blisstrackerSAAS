@@ -4533,10 +4533,8 @@ model FinanceIssuer {
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
-  items FinanceItem[]
-  // `invoices FinanceInvoice[]` se agrega en la Etapa 2, junto con
-  // FinanceInvoice.issuerId (emisión real) — no declarado todavía para no
-  // dejar un lado de la relación colgando sin su contraparte.
+  items    FinanceItem[]
+  invoices FinanceInvoice[]
 
   @@index([workspaceId])
   @@index([workspaceId, active])
@@ -4786,14 +4784,31 @@ model FinanceInvoice {
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   itemId      Int // debe tener tracksAccount = true
   item        FinanceItem @relation(fields: [itemId], references: [id])
-  number      String
+  // Sin issuerId: número tipeado a mano (factura informativa, comportamiento
+  // original). Con issuerId: lo completa el backend con el N° oficial que
+  // devuelve ARCA tras `authorized` — por eso es nullable (una emisión
+  // `indeterminate`/`conflict`/`rejected` puede no tener número todavía).
+  number      String?
   issueDate   DateTime
   dueDate     DateTime
   concept     String
   amount      Decimal   @db.Decimal(20, 8)
   currency    String    @default("ARS")
-  // Estado (pagada/parcial/vencida/pendiente) NO se persiste — se calcula a
-  // partir de los FinanceMovement.invoiceId vivos + dueDate.
+  // Estado de cobro (pagada/parcial/vencida/pendiente) NO se persiste — se
+  // calcula a partir de los FinanceMovement.invoiceId vivos + dueDate.
+
+  // Facturación electrónica AFIP/ARCA (Etapa 2) — todo opcional: null =
+  // factura informativa, nunca pasó por ARCA. Ver lib/arcaClient.js.
+  issuerId           Int?
+  issuer             FinanceIssuer? @relation(fields: [issuerId], references: [id], onDelete: SetNull)
+  voucherType        String? // 'A' | 'B' | 'C', lo resuelve el SDK (IssuedVoucher.voucherClass)
+  ivaRate            Decimal? @db.Decimal(6, 3) // % único por comprobante (v1: sin desglose multi-alícuota). Solo aplica a emisor responsable_inscripto
+  arcaStatus         String? // 'authorized' | 'rejected' | 'indeterminate' | 'conflict'
+  arcaIdempotencyKey String? @unique // clave mandada al store de idempotencia del SDK — permite recover() más adelante (Etapa 5)
+  cae                String?
+  caeExpiresAt       DateTime?
+  arcaResponseRaw    Json? // recorte relevante del IssueOutcome del SDK (issues de rechazo, totales, etc.) — diagnóstico/soporte, nunca credenciales
+
   createdById Int?
   createdBy   User?     @relation("FinanceInvoiceCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   createdAt   DateTime  @default(now())
@@ -4808,6 +4823,7 @@ model FinanceInvoice {
   @@index([workspaceId])
   @@index([itemId])
   @@index([workspaceId, dueDate])
+  @@index([issuerId])
 }
 
 // Adjunto de factura — habla directo con objectStorage.service.js (R2), no con

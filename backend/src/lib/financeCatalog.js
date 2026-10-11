@@ -39,6 +39,20 @@ const ITEM_IVA_CONDITIONS = [
   { key: 'exento',                label: 'Exento' },
 ]
 
+// Alícuotas de IVA que acepta `arca.issue()` para un emisor responsable_inscripto
+// (confirmado leyendo SUPPORTED_VAT_RATES del SDK `facturas`) — v1 solo pide
+// UNA alícuota por comprobante (sin desglose multi-alícuota por ítem).
+const ARCA_VAT_RATES = [0, 2.5, 5, 10.5, 21, 27]
+
+// Resultado de una emisión vía ARCA (FinanceInvoice.arcaStatus) — los 4
+// estados normalizados que devuelve `arca.issue()`.
+const ARCA_STATUSES = [
+  { key: 'authorized',    label: 'Autorizada',       color: 'green' },
+  { key: 'rejected',      label: 'Rechazada',        color: 'red' },
+  { key: 'indeterminate', label: 'A reconciliar',    color: 'amber' },
+  { key: 'conflict',      label: 'Conflicto',        color: 'amber' },
+]
+
 // Abierto a futuro (no es un enum cerrado): cualquier string de 3 letras sirve
 // como moneda, pero estas son las que el frontend sabe formatear con su propio
 // prefijo/decimales (ver utils/format.js fmtMoney).
@@ -175,6 +189,7 @@ function isValidAccountType(key)        { return ACCOUNT_TYPE_KEYS.includes(key)
 function isValidIssuerTaxCondition(key) { return ISSUER_TAX_CONDITION_KEYS.includes(key) }
 function isValidIssuerEnvironment(key)  { return ISSUER_ENVIRONMENT_KEYS.includes(key) }
 function isValidItemIvaCondition(key)   { return key == null || ITEM_IVA_CONDITION_KEYS.includes(key) }
+function isValidArcaVatRate(n)          { return ARCA_VAT_RATES.includes(Number(n)) }
 function isValidMovementType(key)       { return MOVEMENT_TYPE_KEYS.includes(key) }
 function isValidTaxAppliesTo(key)       { return TAX_APPLIES_TO_KEYS.includes(key) }
 function isValidTaxBaseType(key)        { return TAX_BASE_TYPE_KEYS.includes(key) }
@@ -194,6 +209,8 @@ module.exports = {
   ISSUER_TAX_CONDITIONS, ISSUER_TAX_CONDITION_KEYS, isValidIssuerTaxCondition,
   ISSUER_ENVIRONMENTS, ISSUER_ENVIRONMENT_KEYS, isValidIssuerEnvironment,
   ITEM_IVA_CONDITIONS, ITEM_IVA_CONDITION_KEYS, isValidItemIvaCondition,
+  ARCA_VAT_RATES, isValidArcaVatRate,
+  ARCA_STATUSES,
   CURRENCIES,
   MOVEMENT_TYPES, MOVEMENT_TYPE_KEYS, isValidMovementType,
   TAX_APPLIES_TO, TAX_APPLIES_TO_KEYS, isValidTaxAppliesTo,

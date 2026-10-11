@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Card, CardHeader, TextButton } from '../../pages/project-detail/ui.jsx'
 import AutosaveNotes from '../AutosaveNotes'
 import api from '../../api/client'
-import { ITEM_IVA_CONDITIONS, itemIvaConditionLabel } from './financeCatalog'
+import { ITEM_IVA_CONDITIONS, itemIvaConditionLabel, normalizeCuit } from './financeCatalog'
 
 const input = 'w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 dark:text-gray-100 rounded-lg px-2.5 py-1.5 text-sm'
 
@@ -40,11 +40,13 @@ export default function CustomerInfoCard({ customer, issuers, onChanged }) {
 
   async function handleSave() {
     if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) { setError('Mail inválido'); return }
-    if (form.taxId && !CUIT_RE.test(form.taxId)) { setError('CUIT inválido (formato XX-XXXXXXXX-X)'); return }
+    const normalizedTaxId = form.taxId ? normalizeCuit(form.taxId) : form.taxId
+    if (normalizedTaxId && !CUIT_RE.test(normalizedTaxId)) { setError('CUIT inválido (debe tener 11 dígitos)'); return }
     setSaving(true); setError('')
     try {
       await api.patch(`/finanzas/items/${customer.id}`, {
         ...form,
+        taxId: normalizedTaxId,
         ivaCondition: form.ivaCondition || null,
         defaultIssuerId: form.defaultIssuerId ? Number(form.defaultIssuerId) : null,
       })
@@ -64,7 +66,7 @@ export default function CustomerInfoCard({ customer, issuers, onChanged }) {
             <input className={input} placeholder="Contacto" value={form.contactName} onChange={e => setForm({ ...form, contactName: e.target.value })} />
             <input className={input} placeholder="Teléfono" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} />
             <input className={input} placeholder="Mail" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} />
-            <input className={input} placeholder="CUIT (XX-XXXXXXXX-X)" value={form.taxId} onChange={e => setForm({ ...form, taxId: e.target.value })} />
+            <input className={input} placeholder="CUIT (o los 11 dígitos seguidos)" value={form.taxId} onChange={e => setForm({ ...form, taxId: e.target.value })} onBlur={e => setForm(f => ({ ...f, taxId: normalizeCuit(e.target.value) }))} />
             <input className={input} placeholder="Servicio contratado" value={form.contractedService} onChange={e => setForm({ ...form, contractedService: e.target.value })} />
             <select className={input} value={form.ivaCondition} onChange={e => setForm({ ...form, ivaCondition: e.target.value })}>
               <option value="">Condición de IVA (para facturar)</option>

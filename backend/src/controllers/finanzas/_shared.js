@@ -60,6 +60,23 @@ function trimmedOrNull(value) {
   return t || null
 }
 
+const CUIT_RE = /^\d{2}-\d{8}-\d$/
+
+/**
+ * Acepta un CUIT con o sin guiones ("20323156426" o "20-32315642-6") y lo
+ * devuelve siempre formateado "XX-XXXXXXXX-X" cuando tiene 11 dígitos — así
+ * no hace falta que el usuario tipee los guiones a mano. Si no llega a 11
+ * dígitos lo devuelve tal cual (recortado), para que la validación de format
+ * downstream (CUIT_RE) lo rechace con el mensaje de error de siempre.
+ */
+function normalizeCuit(raw) {
+  const trimmed = String(raw || '').trim()
+  if (CUIT_RE.test(trimmed)) return trimmed
+  const digits = trimmed.replace(/\D/g, '')
+  if (digits.length === 11) return `${digits.slice(0, 2)}-${digits.slice(2, 10)}-${digits.slice(10)}`
+  return trimmed
+}
+
 /**
  * Valida que `baseTaxId` (al crear o editar `taxId`) no genere un ciclo ni
  * encadene más de MAX_TAX_CHAIN_DEPTH niveles. Chequeo conservador: camina
@@ -166,4 +183,4 @@ async function resolveAndApplyTaxes(tx, { workspaceId, accountId, taxIds, baseAm
   return createdLines
 }
 
-module.exports = { businessError, toDecimalInput, trimmedOrNull, assertNoTaxCycle, resolveAndApplyTaxes, parseDate, computeInvoiceStatus }
+module.exports = { businessError, toDecimalInput, trimmedOrNull, normalizeCuit, assertNoTaxCycle, resolveAndApplyTaxes, parseDate, computeInvoiceStatus }

@@ -3,7 +3,7 @@ import { Download } from 'lucide-react'
 import { Icon } from '../ui/Icon'
 import api from '../../api/client'
 import { fmtMoney } from '../../utils/format'
-import { invoiceStatusMeta, STATUS_BADGE } from './financeCatalog'
+import { invoiceStatusMeta, arcaStatusMeta, STATUS_BADGE } from './financeCatalog'
 
 const input = 'border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 dark:text-gray-100 rounded-lg px-2.5 py-1.5 text-sm'
 
@@ -109,11 +109,16 @@ export default function CustomerInvoicesPanel({ itemId, currency, refreshKey, on
               return (
                 <tr key={inv.id} className="border-b border-gray-50 dark:border-gray-700/50 hover:bg-gray-50 dark:hover:bg-gray-900/30">
                   <td className="py-2 pr-2"><input type="checkbox" checked={selected.has(inv.id)} onChange={() => toggle(inv.id)} /></td>
-                  <td className="py-2 pr-2 text-gray-900 dark:text-white cursor-pointer" onClick={() => onInvoiceClick?.(inv)}>{inv.number}</td>
+                  <td className="py-2 pr-2 text-gray-900 dark:text-white cursor-pointer" onClick={() => onInvoiceClick?.(inv)}>{inv.number || <span className="text-gray-400 italic">pendiente de ARCA</span>}</td>
                   <td className="py-2 pr-2 text-gray-500 dark:text-gray-400 whitespace-nowrap">{fmtDate(inv.issueDate)}</td>
                   <td className="py-2 pr-2 text-gray-700 dark:text-gray-300">{inv.concept}</td>
                   <td className="py-2 pr-2 text-right font-medium text-gray-900 dark:text-white whitespace-nowrap">{fmtMoney(inv.amount, currency)}</td>
-                  <td className="py-2 pr-2"><span className={`text-[11px] rounded-full px-2 py-0.5 ${STATUS_BADGE[meta.color]}`}>{meta.label}</span></td>
+                  <td className="py-2 pr-2">
+                    <span className={`text-[11px] rounded-full px-2 py-0.5 ${STATUS_BADGE[meta.color]}`}>{meta.label}</span>
+                    {inv.arcaStatus && inv.arcaStatus !== 'authorized' && (
+                      <span className={`ml-1 text-[11px] rounded-full px-2 py-0.5 ${STATUS_BADGE[arcaStatusMeta(inv.arcaStatus).color]}`}>{arcaStatusMeta(inv.arcaStatus).label}</span>
+                    )}
+                  </td>
                   <td className="py-2 pl-2 text-right">
                     {inv.attachments[0] && (
                       <button onClick={() => downloadBlob(`/finanzas/invoices/${inv.id}/attachments/${inv.attachments[0].id}/download`, inv.attachments[0].name)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">

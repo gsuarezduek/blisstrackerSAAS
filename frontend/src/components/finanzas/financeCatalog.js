@@ -33,6 +33,17 @@ export const ITEM_IVA_CONDITIONS = [
   { key: 'exento',                label: 'Exento' },
 ]
 
+// Alícuotas que acepta ARCA para un emisor responsable_inscripto.
+export const ARCA_VAT_RATES = [0, 2.5, 5, 10.5, 21, 27]
+
+// Resultado de una emisión vía ARCA (FinanceInvoice.arcaStatus).
+export const ARCA_STATUSES = [
+  { key: 'authorized',    label: 'Autorizada',    color: 'green' },
+  { key: 'rejected',      label: 'Rechazada',     color: 'red' },
+  { key: 'indeterminate', label: 'A reconciliar', color: 'amber' },
+  { key: 'conflict',      label: 'Conflicto',     color: 'amber' },
+]
+
 export const CURRENCIES = [
   { key: 'ARS', label: 'Pesos' },
   { key: 'USD', label: 'Dólares' },
@@ -129,6 +140,17 @@ export function accountTypeLabel(key)        { return metaOf(ACCOUNT_TYPES, key)
 export function issuerTaxConditionLabel(key) { return metaOf(ISSUER_TAX_CONDITIONS, key).label }
 export function issuerEnvironmentLabel(key)  { return metaOf(ISSUER_ENVIRONMENTS, key).label }
 export function itemIvaConditionLabel(key)   { return key ? metaOf(ITEM_IVA_CONDITIONS, key).label : '—' }
+
+// Acepta un CUIT con o sin guiones ("20323156426" o "20-32315642-6") y lo
+// formatea solo — mismo helper que `normalizeCuit` del backend
+// (controllers/finanzas/_shared.js), no hace falta tipear los guiones.
+export function normalizeCuit(raw) {
+  const trimmed = String(raw || '').trim()
+  if (/^\d{2}-\d{8}-\d$/.test(trimmed)) return trimmed
+  const digits = trimmed.replace(/\D/g, '')
+  if (digits.length === 11) return `${digits.slice(0, 2)}-${digits.slice(2, 10)}-${digits.slice(10)}`
+  return trimmed
+}
 export function currencyLabel(key)           { return metaOf(CURRENCIES, key).label }
 export function taxBaseTypeLabel(key)        { return metaOf(TAX_BASE_TYPES, key).label }
 export function paymentMethodLabel(key)      { return metaOf(PAYMENT_METHODS, key).label }
@@ -136,6 +158,7 @@ export function accountApplicationLabel(key) { return metaOf(ACCOUNT_APPLICATION
 export function checkStatusMeta(key)         { return metaOf(CHECK_STATUSES, key) }
 export function transferReasonLabel(key)     { return metaOf(TRANSFER_REASONS, key).label }
 export function invoiceStatusMeta(key)       { return metaOf(INVOICE_STATUSES, key) }
+export function arcaStatusMeta(key)          { return metaOf(ARCA_STATUSES, key) }
 export function customerStatusMeta(key)      { return metaOf(CUSTOMER_STATUSES, key) }
 export function extraStatusMeta(key)         { return metaOf(EXTRA_STATUSES, key) }
 export function taskOriginLabel(key)         { return TASK_ORIGIN_LABELS[key] || key || '—' }

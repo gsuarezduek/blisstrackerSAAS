@@ -156,7 +156,7 @@ async function getLedger(req, res, next) {
     const rows = [
       ...invoices.map(inv => ({
         date: inv.issueDate, kind: 'invoice', id: `inv${inv.id}`,
-        concept: `${inv.number} · ${inv.concept}`, attachments: inv.attachments,
+        concept: `${inv.number || '(pendiente de ARCA)'} · ${inv.concept}`, attachments: inv.attachments,
         facturado: inv.amount.toString(), cobrado: '0',
       })),
       ...movements.map(mv => ({

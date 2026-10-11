@@ -2,7 +2,7 @@ const prisma = require('../../lib/prisma')
 const { encrypt } = require('../../lib/encryption')
 const { logFinanceAudit } = require('../../lib/financeAudit')
 const { isValidIssuerTaxCondition, isValidIssuerEnvironment } = require('../../lib/financeCatalog')
-const { businessError, trimmedOrNull } = require('./_shared')
+const { businessError, trimmedOrNull, normalizeCuit } = require('./_shared')
 
 const ISSUER_FIELD_LABELS = {
   name:         { label: 'Nombre' },
@@ -24,10 +24,14 @@ function shapeIssuer(issuer) {
   return { ...rest, hasCertificate: !!certificate, hasPrivateKey: !!privateKey }
 }
 
+// Devuelve el CUIT normalizado ("20-32315642-6") — acepta 11 dígitos seguidos
+// y les pone los guiones solo, no hace falta que el usuario los tipee.
 function validateCuit(cuit) {
-  if (!cuit || !CUIT_RE.test(String(cuit).trim())) {
-    throw businessError(400, 'CUIT inválido (formato XX-XXXXXXXX-X)')
+  const normalized = normalizeCuit(cuit)
+  if (!normalized || !CUIT_RE.test(normalized)) {
+    throw businessError(400, 'CUIT inválido (debe tener 11 dígitos)')
   }
+  return normalized
 }
 
 // GET /api/finanzas/issuers?active=true — lectura abierta a cualquiera con
@@ -67,7 +71,7 @@ async function createIssuer(req, res, next) {
     const { name, cuit, taxCondition, salesPoint, environment, certificate, privateKey } = req.body
 
     if (!name?.trim()) return res.status(400).json({ error: 'Nombre requerido' })
-    validateCuit(cuit)
+    const normalizedCuit = validateCuit(cuit)
     if (!isValidIssuerTaxCondition(taxCondition)) return res.status(400).json({ error: 'Condición fiscal inválida' })
     if (!Number.isInteger(salesPoint) || salesPoint <= 0) return res.status(400).json({ error: 'Punto de venta inválido' })
     const env = environment || 'test'
@@ -75,7 +79,7 @@ async function createIssuer(req, res, next) {
 
     const issuer = await prisma.financeIssuer.create({
       data: {
-        workspaceId, name: name.trim(), cuit: cuit.trim(), taxCondition, salesPoint, environment: env,
+        workspaceId, name: name.trim(), cuit: normalizedCuit, taxCondition, salesPoint, environment: env,
         certificate: encrypt(trimmedOrNull(certificate)), privateKey: encrypt(trimmedOrNull(privateKey)),
         createdById: req.user.userId,
       },
@@ -104,7 +108,7 @@ async function updateIssuer(req, res, next) {
       if (!name.trim()) return res.status(400).json({ error: 'Nombre requerido' })
       data.name = name.trim()
     }
-    if (cuit !== undefined) { validateCuit(cuit); data.cuit = cuit.trim() }
+    if (cuit !== undefined) { data.cuit = validateCuit(cuit) }
     if (taxCondition !== undefined) {
       if (!isValidIssuerTaxCondition(taxCondition)) return res.status(400).json({ error: 'Condición fiscal inválida' })
       data.taxCondition = taxCondition
@@ -139,11 +143,14 @@ async function deleteIssuer(req, res, next) {
     const id = Number(req.params.id)
     const existing = await prisma.financeIssuer.findFirst({
       where: { id, workspaceId },
-      include: { _count: { select: { items: true } } },
+      include: { _count: { select: { items: true, invoices: true } } },
     })
     if (!existing) return res.status(404).json({ error: 'Emisor no encontrado' })
     if (existing._count.items > 0) {
       return res.status(409).json({ error: 'Hay clientes que facturan con este emisor por defecto — no se puede eliminar, solo desactivar.' })
+    }
+    if (existing._count.invoices > 0) {
+      return res.status(409).json({ error: 'Hay facturas emitidas con este emisor — no se puede eliminar, solo desactivar.' })
     }
 
     await prisma.financeIssuer.delete({ where: { id } })

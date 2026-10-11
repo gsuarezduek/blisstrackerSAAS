@@ -90,7 +90,7 @@ export default function CustomerDetail({ itemId, accounts, categoriesList, items
       </div>
 
       {showNewInvoice && (
-        <NewInvoiceModal items={items} defaultItemId={itemId}
+        <NewInvoiceModal items={items} issuers={issuers} defaultItemId={itemId}
           onClose={() => setShowNewInvoice(false)}
           onSaved={() => { setShowNewInvoice(false); handleChanged() }} />
       )}

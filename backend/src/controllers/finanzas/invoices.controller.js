@@ -1,3 +1,4 @@
+const crypto = require('crypto')
 const archiver = require('archiver')
 const prisma = require('../../lib/prisma')
 const objectStorage = require('../../services/objectStorage.service')
@@ -8,7 +9,9 @@ const { detectDocumentType } = require('../../lib/documentType')
 const { safeContentDisposition } = require('../../lib/contentDisposition')
 const { logFinanceAudit } = require('../../lib/financeAudit')
 const { toDecimal } = require('../../lib/financeMoney')
-const { parseDate, computeInvoiceStatus } = require('./_shared')
+const { getArcaClient, toMinorUnits, formatVoucherNumber } = require('../../lib/arcaClient')
+const { isValidArcaVatRate } = require('../../lib/financeCatalog')
+const { parseDate, computeInvoiceStatus, businessError } = require('./_shared')
 
 const MAX_FILE_BYTES = 20 * 1024 * 1024 // 20MB — comprobantes/facturas, no media pesado
 const DENIED_MIME = ['text/html', 'application/xhtml+xml', 'image/svg+xml']
@@ -21,8 +24,13 @@ const INVOICE_FIELD_LABELS = {
 
 const INVOICE_INCLUDE = {
   item: { select: { id: true, name: true, email: true } },
+  issuer: { select: { id: true, name: true, taxCondition: true } },
   attachments: { where: { deletedAt: null, status: 'ready' }, orderBy: { createdAt: 'asc' } },
   collections: { where: { deletedAt: null }, select: { amount: true } },
+}
+
+function invoiceLabel(inv) {
+  return `factura ${inv.number || '(pendiente de ARCA)'}`
 }
 
 function shapeInvoice(inv) {
@@ -64,16 +72,113 @@ async function listInvoices(req, res, next) {
   } catch (err) { next(err) }
 }
 
-// POST /api/finanzas/invoices — sección 4.8 "Nueva factura"
+// Arma el bloque `items` de `arca.issue()` según la condición fiscal del
+// emisor (confirmado en el spike leyendo los tipos del SDK): monotributo/
+// exento mandan el monto total sin discriminar IVA (AmountItem, el mismo
+// shape que probó el usuario en terminal); responsable_inscripto manda el
+// total CON IVA incluido + la alícuota (VatItem, `gross`+`vat`).
+function buildArcaItems(issuer, amountCents, ivaRate) {
+  if (issuer.taxCondition === 'responsable_inscripto') {
+    return [{ gross: amountCents, vat: Number(ivaRate) }]
+  }
+  return [{ amount: amountCents }]
+}
+
+/**
+ * Emite una factura real contra ARCA para el emisor/cliente dados y persiste
+ * el resultado. Crea la fila ANTES de llamar a `issue()` (con arcaStatus
+ * 'indeterminate' + la idempotencyKey) para que, si el proceso se cae a mitad
+ * de la llamada SOAP, el registro ya exista y pueda reconciliarse más
+ * adelante con `recover()` (Etapa 5) — nunca se pierde la clave de
+ * idempotencia. Devuelve la fila final (con include completo).
+ */
+async function emitArcaInvoice({ workspaceId, userId, item, issuer, issueDate, dueDate, concept, amountDecimal, ivaRate }) {
+  if (!issuer.active) throw businessError(400, 'Este emisor está desactivado')
+  if (!item.ivaCondition) throw businessError(400, 'Este cliente no tiene condición de IVA cargada — configurala en su ficha antes de facturar electrónicamente.')
+  if (item.ivaCondition !== 'consumidor_final' && !item.taxId) {
+    throw businessError(400, 'Este cliente no tiene CUIT cargado — hace falta para facturar electrónicamente (salvo consumidor final).')
+  }
+  if (issuer.taxCondition === 'responsable_inscripto') {
+    if (!isValidArcaVatRate(ivaRate)) throw businessError(400, 'Elegí una alícuota de IVA válida (0, 2.5, 5, 10.5, 21 o 27%)')
+  }
+
+  const amountCents = toMinorUnits(amountDecimal)
+  const idempotencyKey = crypto.randomUUID()
+
+  // Fase 1: reserva — ya queda trazable aunque la llamada a ARCA falle a mitad de camino.
+  let invoice = await prisma.financeInvoice.create({
+    data: {
+      workspaceId, itemId: item.id, issuerId: issuer.id, issueDate, dueDate, concept,
+      amount: amountDecimal.toString(), currency: 'ARS', ivaRate: issuer.taxCondition === 'responsable_inscripto' ? ivaRate : null,
+      arcaStatus: 'indeterminate', arcaIdempotencyKey: idempotencyKey, createdById: userId,
+    },
+  })
+
+  let outcome
+  try {
+    const arca = await getArcaClient(issuer)
+    outcome = await arca.issue(
+      {
+        issuer: issuer.taxCondition,
+        salesPoint: issuer.salesPoint,
+        to: { condition: item.ivaCondition, cuit: item.taxId || undefined },
+        items: buildArcaItems(issuer, amountCents, ivaRate),
+        date: issueDate.toISOString().slice(0, 10),
+      },
+      { idempotencyKey },
+    )
+  } catch (err) {
+    // Error de transporte/infraestructura (no es un `rejected` de negocio, que
+    // viene como outcome, no como excepción) — la reserva ya quedó grabada
+    // como 'indeterminate', se puede reconciliar más adelante.
+    invoice = await prisma.financeInvoice.update({
+      where: { id: invoice.id },
+      data: { arcaResponseRaw: { error: err.message || String(err) } },
+      include: INVOICE_INCLUDE,
+    })
+    await logFinanceAudit({ workspaceId, entityType: 'invoice', entityId: invoice.id, action: 'update', userId, summary: `Emisión ARCA quedó indeterminada (error de conexión) para ${item.name}` })
+    return invoice
+  }
+
+  const data = {}
+  if (outcome.kind === 'authorized') {
+    const v = outcome.voucher
+    data.number = formatVoucherNumber(v.salesPoint, v.number)
+    data.cae = v.cae
+    data.caeExpiresAt = parseDate(v.caeExpiry)
+    data.voucherType = v.voucherClass
+    data.arcaStatus = 'authorized'
+    data.arcaResponseRaw = { totals: v.totals, qr: v.qr }
+  } else if (outcome.kind === 'rejected') {
+    data.arcaStatus = 'rejected'
+    data.arcaResponseRaw = { issues: (outcome.issues || []).map(i => ({ code: i.code, message: i.message })) }
+  } else if (outcome.kind === 'conflict') {
+    data.arcaStatus = 'conflict'
+    data.arcaResponseRaw = { reason: outcome.reason }
+  } else {
+    // 'indeterminate': ya está seteado desde la fase 1, no hay más info nueva que guardar.
+    data.arcaResponseRaw = { lookup: outcome.lookup?.kind || null }
+  }
+
+  invoice = await prisma.financeInvoice.update({ where: { id: invoice.id }, data, include: INVOICE_INCLUDE })
+  await logFinanceAudit({
+    workspaceId, entityType: 'invoice', entityId: invoice.id, action: 'create', userId,
+    summary: `Emitió ${invoiceLabel(invoice)} de ${item.name} vía ARCA (${issuer.name}) — ${data.arcaStatus}`,
+  })
+  return invoice
+}
+
+// POST /api/finanzas/invoices — sección 4.8 "Nueva factura". Con `issuerId`:
+// emisión electrónica real contra ARCA (Etapa 2, ver emitArcaInvoice). Sin
+// `issuerId`: factura informativa de siempre, número tipeado a mano.
 async function createInvoice(req, res, next) {
   try {
     const workspaceId = req.workspace.id
-    const { itemId, number, issueDate, dueDate, concept, amount, currency } = req.body
+    const { itemId, issuerId, number, issueDate, dueDate, concept, amount, ivaRate, currency } = req.body
 
     if (!Number.isInteger(itemId)) return res.status(400).json({ error: 'Cliente requerido' })
     const item = await prisma.financeItem.findFirst({ where: { id: itemId, workspaceId, tracksAccount: true } })
     if (!item) return res.status(400).json({ error: 'Cliente no encontrado (debe tener seguimiento de cuenta)' })
-    if (!number?.trim()) return res.status(400).json({ error: 'Número requerido' })
     if (!concept?.trim()) return res.status(400).json({ error: 'Concepto requerido' })
 
     const parsedIssue = parseDate(issueDate)
@@ -85,6 +190,19 @@ async function createInvoice(req, res, next) {
     try { amountDecimal = toDecimal(amount) } catch { return res.status(400).json({ error: 'Monto inválido' }) }
     if (!amountDecimal.isFinite() || amountDecimal.lessThanOrEqualTo(0)) return res.status(400).json({ error: 'Monto inválido' })
 
+    if (issuerId !== undefined && issuerId !== null) {
+      if (!Number.isInteger(issuerId)) return res.status(400).json({ error: 'Emisor inválido' })
+      const issuer = await prisma.financeIssuer.findFirst({ where: { id: issuerId, workspaceId } })
+      if (!issuer) return res.status(400).json({ error: 'Emisor no encontrado' })
+
+      const invoice = await emitArcaInvoice({
+        workspaceId, userId: req.user.userId, item, issuer,
+        issueDate: parsedIssue, dueDate: parsedDue, concept: concept.trim(), amountDecimal, ivaRate,
+      })
+      return res.status(201).json(shapeInvoice(invoice))
+    }
+
+    if (!number?.trim()) return res.status(400).json({ error: 'Número requerido' })
     const invoice = await prisma.financeInvoice.create({
       data: {
         workspaceId, itemId, number: number.trim(), issueDate: parsedIssue, dueDate: parsedDue,
@@ -93,7 +211,7 @@ async function createInvoice(req, res, next) {
       },
       include: INVOICE_INCLUDE,
     })
-    await logFinanceAudit({ workspaceId, entityType: 'invoice', entityId: invoice.id, action: 'create', userId: req.user.userId, entityLabel: `factura ${invoice.number} de ${item.name}` })
+    await logFinanceAudit({ workspaceId, entityType: 'invoice', entityId: invoice.id, action: 'create', userId: req.user.userId, entityLabel: `${invoiceLabel(invoice)} de ${item.name}` })
     res.status(201).json(shapeInvoice(invoice))
   } catch (err) { next(err) }
 }
@@ -107,6 +225,13 @@ async function updateInvoice(req, res, next) {
     if (!existing) return res.status(404).json({ error: 'Factura no encontrada' })
 
     const { number, issueDate, dueDate, concept, amount } = req.body
+    // Comprobante legal ya autorizado por ARCA (tiene CAE) — amount/concept/
+    // fechas/número quedan fijos. La única forma de "corregir" es una nota de
+    // crédito (Etapa 4). Nota/adjuntos siguen editables libremente.
+    if (existing.cae && (number !== undefined || issueDate !== undefined || dueDate !== undefined || concept !== undefined || amount !== undefined)) {
+      return res.status(409).json({ error: 'Esta factura ya tiene CAE — es un comprobante legal autorizado, no se puede editar. Emití una nota de crédito para corregirla.' })
+    }
+
     const data = {}
     if (number !== undefined) { if (!number.trim()) return res.status(400).json({ error: 'Número requerido' }); data.number = number.trim() }
     if (concept !== undefined) { if (!concept.trim()) return res.status(400).json({ error: 'Concepto requerido' }); data.concept = concept.trim() }
@@ -122,21 +247,24 @@ async function updateInvoice(req, res, next) {
     const invoice = await prisma.financeInvoice.update({ where: { id }, data, include: INVOICE_INCLUDE })
     await logFinanceAudit({
       workspaceId, entityType: 'invoice', entityId: id, action: 'update', userId: req.user.userId,
-      entityLabel: `factura ${existing.number} de ${existing.item.name}`, before: existing, after: invoice, fieldLabels: INVOICE_FIELD_LABELS,
+      entityLabel: `${invoiceLabel(existing)} de ${existing.item.name}`, before: existing, after: invoice, fieldLabels: INVOICE_FIELD_LABELS,
     })
     res.json(shapeInvoice(invoice))
   } catch (err) { next(err) }
 }
 
-// DELETE /api/finanzas/invoices/:id — soft delete (reversible, ver 3.9)
+// DELETE /api/finanzas/invoices/:id — soft delete (reversible, ver 3.9).
+// Bloqueado si ya tiene CAE: un comprobante legal autorizado no se "borra",
+// ARCA no anula comprobantes (ver nota de crédito, Etapa 4).
 async function deleteInvoice(req, res, next) {
   try {
     const workspaceId = req.workspace.id
     const id = Number(req.params.id)
     const existing = await prisma.financeInvoice.findFirst({ where: { id, workspaceId }, include: { item: { select: { name: true } } } })
     if (!existing) return res.status(404).json({ error: 'Factura no encontrada' })
+    if (existing.cae) return res.status(409).json({ error: 'Esta factura ya tiene CAE — no se puede eliminar. Emití una nota de crédito para corregirla.' })
     await prisma.financeInvoice.update({ where: { id }, data: { deletedAt: new Date(), deletedById: req.user.userId } })
-    await logFinanceAudit({ workspaceId, entityType: 'invoice', entityId: id, action: 'delete', userId: req.user.userId, entityLabel: `factura ${existing.number} de ${existing.item.name}` })
+    await logFinanceAudit({ workspaceId, entityType: 'invoice', entityId: id, action: 'delete', userId: req.user.userId, entityLabel: `${invoiceLabel(existing)} de ${existing.item.name}` })
     res.json({ ok: true })
   } catch (err) { next(err) }
 }

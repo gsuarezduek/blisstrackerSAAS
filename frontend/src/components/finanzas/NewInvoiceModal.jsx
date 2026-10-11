@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import api from '../../api/client'
 import InvoiceAttachmentsList from './InvoiceAttachmentsList'
+import { ARCA_VAT_RATES } from './financeCatalog'
 
 const input = 'w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500'
 const label = 'block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1'
@@ -11,19 +12,29 @@ function plusDays(dateStr, days) {
   return d.toISOString().slice(0, 10)
 }
 
-// Nueva factura (sección 4.8): cliente (solo con seguimiento), número,
-// emisión, vencimiento (default emisión + 10 días, editable), concepto,
-// monto, adjuntos. Los adjuntos se habilitan recién después de crear la
-// factura (el presign necesita un invoiceId real) — mismo criterio que
-// AccountModal (crea, después gestiona sub-recursos con el id ya asignado).
-export default function NewInvoiceModal({ items, defaultItemId, onClose, onSaved }) {
+function fmtDate(iso) {
+  return new Date(iso).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+}
+
+// Nueva factura (sección 4.8): cliente (solo con seguimiento), emisor
+// opcional (facturación electrónica real vía ARCA, Etapa 2 — si no se elige
+// ninguno, sigue siendo la factura informativa de siempre con número tipeado
+// a mano), emisión, vencimiento (default emisión + 10 días, editable),
+// concepto, monto, adjuntos. Los adjuntos se habilitan recién después de
+// crear la factura (el presign necesita un invoiceId real) — mismo criterio
+// que AccountModal (crea, después gestiona sub-recursos con el id ya asignado).
+export default function NewInvoiceModal({ items, issuers, defaultItemId, onClose, onSaved }) {
   const customers = items.filter(i => i.tracksAccount && i.active)
   const [itemId, setItemId] = useState(defaultItemId ? String(defaultItemId) : (customers[0]?.id ? String(customers[0].id) : ''))
+  const customer = customers.find(c => c.id === Number(itemId))
+  const [issuerId, setIssuerId] = useState(customer?.defaultIssuer?.id ? String(customer.defaultIssuer.id) : '')
+  const issuer = (issuers || []).find(i => i.id === Number(issuerId))
   const [number, setNumber] = useState('')
   const [issueDate, setIssueDate] = useState(today())
   const [dueDate, setDueDate] = useState(plusDays(today(), 10))
   const [concept, setConcept] = useState('')
   const [amount, setAmount] = useState('')
+  const [ivaRate, setIvaRate] = useState(String(ARCA_VAT_RATES[ARCA_VAT_RATES.length - 2])) // 21% default
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [created, setCreated] = useState(null)
@@ -33,11 +44,26 @@ export default function NewInvoiceModal({ items, defaultItemId, onClose, onSaved
     setDueDate(plusDays(v, 10))
   }
 
+  function handleItemChange(v) {
+    setItemId(v)
+    const c = customers.find(x => x.id === Number(v))
+    setIssuerId(c?.defaultIssuer?.id ? String(c.defaultIssuer.id) : '')
+  }
+
   async function handleSave() {
-    if (!itemId || !number.trim() || !concept.trim() || !amount || Number(amount) <= 0) { setError('Revisá los campos requeridos'); return }
+    if (!itemId || !concept.trim() || !amount || Number(amount) <= 0) { setError('Revisá los campos requeridos'); return }
+    if (!issuerId && !number.trim()) { setError('Número requerido'); return }
+    if (issuer?.taxCondition === 'responsable_inscripto' && !ivaRate) { setError('Elegí una alícuota de IVA'); return }
     setSaving(true); setError('')
     try {
-      const res = await api.post('/finanzas/invoices', { itemId: Number(itemId), number: number.trim(), issueDate, dueDate, concept: concept.trim(), amount: Number(amount) })
+      const body = { itemId: Number(itemId), issueDate, dueDate, concept: concept.trim(), amount: Number(amount) }
+      if (issuerId) {
+        body.issuerId = Number(issuerId)
+        if (issuer?.taxCondition === 'responsable_inscripto') body.ivaRate = Number(ivaRate)
+      } else {
+        body.number = number.trim()
+      }
+      const res = await api.post('/finanzas/invoices', body)
       setCreated(res.data)
     } catch (err) {
       setError(err.response?.data?.error || 'No se pudo guardar')
@@ -56,7 +82,24 @@ export default function NewInvoiceModal({ items, defaultItemId, onClose, onSaved
 
         {created ? (
           <div className="space-y-4">
-            <p className="text-sm text-green-600 dark:text-green-400">Factura {created.number} creada.</p>
+            {created.arcaStatus === 'authorized' ? (
+              <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-900/40 rounded-xl p-3">
+                <p className="text-sm text-green-700 dark:text-green-400 font-medium">Factura {created.number} autorizada por ARCA</p>
+                <p className="text-xs text-green-600 dark:text-green-500 mt-1">CAE {created.cae} · vence {fmtDate(created.caeExpiresAt)}</p>
+              </div>
+            ) : created.arcaStatus === 'rejected' ? (
+              <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-900/40 rounded-xl p-3">
+                <p className="text-sm text-red-700 dark:text-red-400 font-medium">ARCA rechazó la factura</p>
+                <p className="text-xs text-red-600 dark:text-red-500 mt-1">{(created.arcaResponseRaw?.issues || []).map(i => i.message).join(' · ') || 'Sin detalle del motivo.'}</p>
+              </div>
+            ) : created.arcaStatus ? (
+              <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-900/40 rounded-xl p-3">
+                <p className="text-sm text-amber-700 dark:text-amber-400 font-medium">Quedó pendiente de confirmar con ARCA</p>
+                <p className="text-xs text-amber-600 dark:text-amber-500 mt-1">No se perdió la emisión — se puede reconciliar más adelante.</p>
+              </div>
+            ) : (
+              <p className="text-sm text-green-600 dark:text-green-400">Factura {created.number} creada.</p>
+            )}
             <InvoiceAttachmentsList invoiceId={created.id} attachments={created.attachments} onChanged={async () => {
               const res = await api.get('/finanzas/invoices', { params: { itemId } })
               const fresh = res.data.find(i => i.id === created.id)
@@ -68,16 +111,37 @@ export default function NewInvoiceModal({ items, defaultItemId, onClose, onSaved
           <div className="space-y-4">
             <div>
               <label className={label}>Cliente</label>
-              <select className={input} value={itemId} onChange={e => setItemId(e.target.value)}>
+              <select className={input} value={itemId} onChange={e => handleItemChange(e.target.value)}>
                 <option value="">Elegir…</option>
                 {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
               {customers.length === 0 && <p className="text-xs text-gray-400 mt-1">Solo aparecen los items con seguimiento de cuenta.</p>}
             </div>
-            <div>
-              <label className={label}>Número</label>
-              <input className={input} value={number} onChange={e => setNumber(e.target.value)} placeholder="FC A 0001-00000161" />
-            </div>
+
+            {issuers?.length > 0 && (
+              <div>
+                <label className={label}>Emisor</label>
+                <select className={input} value={issuerId} onChange={e => setIssuerId(e.target.value)}>
+                  <option value="">Factura informativa (sin ARCA)</option>
+                  {issuers.map(is => <option key={is.id} value={is.id}>{is.name}{is.environment === 'test' ? ' (homologación)' : ''}</option>)}
+                </select>
+              </div>
+            )}
+
+            {!issuerId ? (
+              <div>
+                <label className={label}>Número</label>
+                <input className={input} value={number} onChange={e => setNumber(e.target.value)} placeholder="FC A 0001-00000161" />
+              </div>
+            ) : issuer?.taxCondition === 'responsable_inscripto' ? (
+              <div>
+                <label className={label}>Alícuota de IVA</label>
+                <select className={input} value={ivaRate} onChange={e => setIvaRate(e.target.value)}>
+                  {ARCA_VAT_RATES.map(r => <option key={r} value={r}>{r}%</option>)}
+                </select>
+              </div>
+            ) : null}
+
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className={label}>Emisión</label>
@@ -101,7 +165,7 @@ export default function NewInvoiceModal({ items, defaultItemId, onClose, onSaved
 
             <div className="flex gap-3 pt-2">
               <button onClick={onClose} className="flex-1 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg px-4 py-2 text-sm font-medium">Cancelar</button>
-              <button onClick={handleSave} disabled={saving} className="flex-1 bg-primary-600 hover:bg-primary-700 text-white rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50">Guardar factura</button>
+              <button onClick={handleSave} disabled={saving} className="flex-1 bg-primary-600 hover:bg-primary-700 text-white rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50">{saving ? 'Guardando…' : 'Guardar factura'}</button>
             </div>
           </div>
         )}

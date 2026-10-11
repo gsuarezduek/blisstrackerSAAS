@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import api from '../../api/client'
 import { Toggle } from '../../pages/preferences/shared.jsx'
-import { ISSUER_TAX_CONDITIONS, ISSUER_ENVIRONMENTS } from './financeCatalog'
+import { ISSUER_TAX_CONDITIONS, ISSUER_ENVIRONMENTS, normalizeCuit } from './financeCatalog'
 
 const input = 'w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500'
 const textarea = `${input} font-mono text-xs`
@@ -27,11 +27,12 @@ export default function IssuerModal({ issuer, onClose, onSaved, onDelete }) {
 
   async function handleSave() {
     if (!name.trim()) { setError('Nombre requerido'); return }
-    if (!/^\d{2}-\d{8}-\d$/.test(cuit.trim())) { setError('CUIT inválido (formato XX-XXXXXXXX-X)'); return }
+    const normalizedCuit = normalizeCuit(cuit)
+    if (!/^\d{2}-\d{8}-\d$/.test(normalizedCuit)) { setError('CUIT inválido (debe tener 11 dígitos)'); return }
     if (!Number.isInteger(Number(salesPoint)) || Number(salesPoint) <= 0) { setError('Punto de venta inválido'); return }
     setSaving(true); setError('')
     try {
-      const body = { name: name.trim(), cuit: cuit.trim(), taxCondition, salesPoint: Number(salesPoint), environment }
+      const body = { name: name.trim(), cuit: normalizedCuit, taxCondition, salesPoint: Number(salesPoint), environment }
       if (!isNew) body.active = active
       if (certificate.trim()) body.certificate = certificate.trim()
       if (privateKey.trim()) body.privateKey = privateKey.trim()
@@ -58,7 +59,7 @@ export default function IssuerModal({ issuer, onClose, onSaved, onDelete }) {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={label}>CUIT</label>
-              <input className={input} value={cuit} onChange={e => setCuit(e.target.value)} placeholder="XX-XXXXXXXX-X" />
+              <input className={input} value={cuit} onChange={e => setCuit(e.target.value)} onBlur={e => setCuit(normalizeCuit(e.target.value))} placeholder="XX-XXXXXXXX-X (o los 11 dígitos seguidos)" />
             </div>
             <div>
               <label className={label}>Punto de venta</label>
