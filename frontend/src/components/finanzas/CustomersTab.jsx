@@ -3,6 +3,7 @@ import api from '../../api/client'
 import { fmtMoney } from '../../utils/format'
 import { customerStatusMeta, STATUS_BADGE } from './financeCatalog'
 import CustomerDetail from './CustomerDetail'
+import NewCustomerModal from './NewCustomerModal'
 
 const input = 'border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500'
 
@@ -18,6 +19,7 @@ export default function CustomersTab({ accounts, categories, items, taxes, issue
   const [onlyWithBalance, setOnlyWithBalance] = useState(false)
   const [customers, setCustomers] = useState(null)
   const [openId, setOpenId] = useState(null)
+  const [showNew, setShowNew] = useState(false)
 
   const load = useCallback(async () => {
     const params = {}
@@ -57,6 +59,8 @@ export default function CustomersTab({ accounts, categories, items, taxes, issue
         <label className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
           <input type="checkbox" checked={onlyWithBalance} onChange={e => setOnlyWithBalance(e.target.checked)} /> Solo con saldo
         </label>
+        <div className="flex-1" />
+        <button onClick={() => setShowNew(true)} className="bg-primary-600 hover:bg-primary-700 text-white font-medium rounded-xl px-4 py-2 text-sm">+ Nuevo cliente</button>
       </div>
 
       <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl overflow-x-auto">
@@ -86,11 +90,18 @@ export default function CustomersTab({ accounts, categories, items, taxes, issue
               )
             })}
             {customers !== null && customers.length === 0 && (
-              <tr><td colSpan={6} className="text-center text-sm text-gray-400 py-8">Sin clientes todavía — marcá "Seguimiento de cuenta" en un item de Configuración.</td></tr>
+              <tr><td colSpan={6} className="text-center text-sm text-gray-400 py-8">Sin clientes todavía — creá el primero con "+ Nuevo cliente".</td></tr>
             )}
           </tbody>
         </table>
       </div>
+
+      {showNew && (
+        <NewCustomerModal categories={categories} issuers={issuers}
+          onClose={() => setShowNew(false)}
+          onCreated={(created) => { setShowNew(false); load(); onDataChange?.(); setOpenId(created.id) }}
+        />
+      )}
     </div>
   )
 }
