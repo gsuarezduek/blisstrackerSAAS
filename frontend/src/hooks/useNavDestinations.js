@@ -31,6 +31,7 @@ export default function useNavDestinations() {
   const { enabled: rrhhEnabled }         = useFeatureFlag('rrhh')
   const { enabled: calendarioEnabled }   = useFeatureFlag('calendario')
   const { enabled: whatsappEnabled }     = useFeatureFlag('whatsapp')
+  const { enabled: finanzasEnabled }     = useFeatureFlag('finanzas')
 
   if (!user) return []
 
@@ -39,6 +40,7 @@ export default function useNavDestinations() {
   const contenidoAllowed = contenidoEnabled && !!user?.moduleAccess?.contenido
   const rrhhAllowed      = rrhhEnabled && !!user?.moduleAccess?.rrhh
   const calendarioAllowed = calendarioEnabled && !!user?.moduleAccess?.calendario
+  const finanzasAllowed  = finanzasEnabled && (isAdmin || !!user?.moduleAccess?.finanzas)
   const productivityEnabled = workspace?.productivityEnabled !== false
   const ventasBase = isAdmin ? '/admin/ventas' : '/ventas'
 
@@ -53,6 +55,7 @@ export default function useNavDestinations() {
     ...(contenidoAllowed ? [{ to: '/contenido', label: 'Contenido' }] : []),
     ...(rrhhAllowed ? [{ to: '/admin/rrhh', label: 'RRHH' }] : []),
     ...(calendarioAllowed ? [{ to: '/calendario', label: 'Calendario' }] : []),
+    ...(finanzasAllowed ? [{ to: '/finanzas', label: 'Finanzas' }] : []),
 
     // Administración — mismo gate isAdmin que el dropdown en Navbar.jsx (líneas 398/571).
     ...(isAdmin ? [
@@ -129,6 +132,18 @@ export default function useNavDestinations() {
       ...(productivityEnabled ? [{ to: '/admin/rrhh?tab=productividad', label: 'Productividad' }] : []),
     ]
     for (const t of tabs) destinations.push({ to: t.to, label: `RRHH · ${t.label}` })
+  }
+
+  if (finanzasAllowed) {
+    const tabs = [
+      { id: 'ingresos',   label: 'Ingresos' },
+      { id: 'egresos',    label: 'Egresos' },
+      { id: 'saldos',     label: 'Saldos' },
+      { id: 'resumen',    label: 'Resumen' },
+      { id: 'clientes',   label: 'Clientes' },
+      { id: 'pendientes', label: 'Pendientes' },
+    ]
+    for (const t of tabs) destinations.push({ to: `/finanzas?tab=${t.id}`, label: `Finanzas · ${t.label}` })
   }
 
   if (isAdmin && eosEnabled) {
