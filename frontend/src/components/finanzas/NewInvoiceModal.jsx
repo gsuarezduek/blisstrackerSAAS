@@ -96,6 +96,9 @@ export default function NewInvoiceModal({ items, issuers, defaultItemId, onClose
               <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-900/40 rounded-xl p-3">
                 <p className="text-sm text-amber-700 dark:text-amber-400 font-medium">Quedó pendiente de confirmar con ARCA</p>
                 <p className="text-xs text-amber-600 dark:text-amber-500 mt-1">No se perdió la emisión — se puede reconciliar más adelante.</p>
+                {created.arcaResponseRaw?.error && (
+                  <p className="text-xs text-amber-600 dark:text-amber-500 mt-2 font-mono break-all">{created.arcaResponseRaw.error}</p>
+                )}
               </div>
             ) : (
               <p className="text-sm text-green-600 dark:text-green-400">Factura {created.number} creada.</p>
