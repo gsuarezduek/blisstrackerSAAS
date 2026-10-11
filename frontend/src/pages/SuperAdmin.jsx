@@ -17,6 +17,7 @@ import { SectionBlog } from './superadmin/blog'
 import { SectionBilling } from './superadmin/billing'
 import { SectionInvitationCodes } from './superadmin/invitationCodes'
 import { SectionFeatureFlags } from './superadmin/featureFlags'
+import { SectionModules } from './superadmin/modules'
 import { SectionAiTokens } from './superadmin/aiTokens'
 import { SectionWhatsappUsage } from './superadmin/whatsappUsage'
 import { SectionScraping } from './superadmin/scraping'
@@ -177,10 +178,21 @@ const NAV_GROUPS = [
     label: 'Plataforma',
     items: [
       {
+        id: 'modules',
+        label: 'Módulos',
+        implemented: true,
+        description: 'Funcionalidades estables, habilitadas por defecto para todos los workspaces (solo lectura — se gestionan en código).',
+        icon: (
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+            <path d="M10.75 2.75a.75.75 0 00-1.5 0V4.5h-1a.75.75 0 000 1.5h1v1.75a.75.75 0 001.5 0V6h1a.75.75 0 000-1.5h-1V2.75zM3 9.5a1.5 1.5 0 013 0V15a1.5 1.5 0 01-3 0V9.5zM8.5 11a1.5 1.5 0 00-1.5 1.5V15a1.5 1.5 0 003 0v-2.5A1.5 1.5 0 008.5 11zM14 8.5a1.5 1.5 0 00-1.5 1.5v5a1.5 1.5 0 003 0v-5A1.5 1.5 0 0014 8.5z" />
+          </svg>
+        ),
+      },
+      {
         id: 'feature-flags',
         label: 'Feature Flags',
         implemented: true,
-        description: 'Activar o desactivar funcionalidades de la app por workspace, plan o globalmente. Útil para rollouts graduales y acceso anticipado a nuevas features.',
+        description: 'Funcionalidades en testing: activar por workspace o globalmente mientras se valida el módulo. Útil para rollouts graduales y acceso anticipado a nuevas features.',
         icon: (
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
             <path d="M3.5 2.75a.75.75 0 00-1.5 0v14.5a.75.75 0 001.5 0v-4.392l1.657-.348a6.449 6.449 0 014.271.572 7.948 7.948 0 005.965.524l2.078-.64A.75.75 0 0018 12.25v-8.5a.75.75 0 00-.904-.734l-2.38.501a7.25 7.25 0 01-4.186-.363l-.502-.2a8.75 8.75 0 00-5.053-.439l-1.475.31V2.75z" />
@@ -331,6 +343,7 @@ export default function SuperAdmin() {
     if (section === 'storage')       return <SectionStorage />
     if (section === 'announcements') return <SectionAnnouncements workspaces={workspaces} />
     if (section === 'avatars')       return <SectionAvatars />
+    if (section === 'modules') return <SectionModules />
     if (section === 'feature-flags') return <SectionFeatureFlags />
     if (section === 'billing')       return <SectionBilling />
     if (section === 'invitation-codes') return <SectionInvitationCodes />

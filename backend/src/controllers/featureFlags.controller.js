@@ -45,6 +45,12 @@ async function update(req, res, next) {
     const id = Number(req.params.id)
     const { name, description, enabledGlobally, enabledWorkspaceIds } = req.body
 
+    const existing = await prisma.featureFlag.findUnique({ where: { id } })
+    if (!existing) return res.status(404).json({ error: 'Flag no encontrado' })
+    if (existing.stage === 'module' && (enabledGlobally !== undefined || enabledWorkspaceIds !== undefined)) {
+      return res.status(400).json({ error: 'Este flag es un módulo estable — viene habilitado para todos los workspaces y no se gestiona desde Feature Flags' })
+    }
+
     const data = {}
     if (name !== undefined)               data.name = name.trim()
     if (description !== undefined)        data.description = description.trim()

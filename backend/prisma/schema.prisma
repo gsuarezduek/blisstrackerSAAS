@@ -1432,6 +1432,7 @@ model FeatureFlag {
   key                 String   @unique // ej: "vacation_requests"
   name                String // nombre legible, ej: "Solicitud de vacaciones"
   description         String   @default("")
+  stage               String   @default("module") // "module" (estable, enabledGlobally forzado true) | "testing" (opt-in manual, panel Feature Flags)
   enabledGlobally     Boolean  @default(false)
   enabledWorkspaceIds String   @default("[]") // JSON: [1, 2] — workspaces con acceso cuando !enabledGlobally
   createdAt           DateTime @default(now())

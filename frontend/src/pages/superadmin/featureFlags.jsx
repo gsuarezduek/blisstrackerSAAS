@@ -11,7 +11,9 @@ export function SectionFeatureFlags() {
       api.get('/superadmin/feature-flags'),
       api.get('/superadmin/workspaces'),
     ]).then(([ff, ws]) => {
-      setFlags(ff.data)
+      // Los flags "module" (estables) viven en SuperAdmin → Módulos, de solo
+      // lectura — acá solo se gestionan los que siguen en testing/opt-in.
+      setFlags(ff.data.filter(f => f.stage === 'testing'))
       setWorkspaces(ws.data)
     }).finally(() => setLoading(false))
   }, [])
@@ -39,16 +41,16 @@ export function SectionFeatureFlags() {
     <div>
       <div className="mb-6">
         <h2 className="text-lg font-bold text-gray-900 dark:text-white">Feature Flags</h2>
-        <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">Activá o desactivá funcionalidades por workspace o globalmente.</p>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">Funcionalidades en testing: activá por workspace o globalmente mientras se valida el módulo.</p>
         <p className="text-xs text-gray-400 dark:text-gray-500 mt-1.5 bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 inline-block">
-          Los flags se definen en el código del servidor — aparecen aquí automáticamente al deployar.
+          Los flags se definen en el código del servidor — aparecen aquí automáticamente al deployar. Los módulos ya estables viven en Módulos, habilitados por defecto para todos.
         </p>
       </div>
 
       {/* Lista de flags */}
       {flags.length === 0 ? (
         <div className="bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-xl p-8 text-center">
-          <p className="text-gray-400 dark:text-gray-500 text-sm">No hay feature flags definidos todavía.</p>
+          <p className="text-gray-400 dark:text-gray-500 text-sm">No hay feature flags en testing en este momento.</p>
         </div>
       ) : (
         <div className="space-y-3">

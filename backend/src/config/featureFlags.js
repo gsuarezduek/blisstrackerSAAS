@@ -9,52 +9,67 @@
  *   key         — identificador único (snake_case), usado en useFeatureFlag('key')
  *   name        — nombre legible para el panel SuperAdmin
  *   description — qué hace esta funcionalidad
+ *   stage       — "module" (estable, viene habilitado para todos los workspaces
+ *                 por defecto — panel SuperAdmin → Módulos, solo lectura) o
+ *                 "testing" (opt-in manual por workspace — panel SuperAdmin →
+ *                 Feature Flags). El sync de arranque (`index.js`) fuerza
+ *                 `enabledGlobally=true` para todo flag "module", así que no
+ *                 hace falta (ni se puede, desde la UI) prenderlo a mano.
  */
 const FEATURE_FLAGS = [
   {
     key: 'marketing',
     name: 'Sección Marketing',
     description: 'Módulos de marketing asociados a proyectos: GEO (optimización para motores IA), SEO, anuncios y más.',
+    stage: 'module',
   },
   {
     key: 'eos',
     name: 'Sección EOS',
     description: 'Sistema Entrepreneurial Operating System basado en el libro Traction de Gino Wickman. Incluye Visión, Personas, Datos, Asuntos, Procesos y Tracción.',
+    stage: 'module',
   },
   {
     key: 'gamification',
     name: 'Gamification',
-    description: 'Juegos y desafíos para el equipo: competencias entre proyectos, personas o equipos, votaciones (ej. compañero del mes) y rankings por premios. Configurable desde Administración → Gamification.',
+    description: 'Juegos y desafíos para el equipo: competencias entre proyectos, personas o equipos, votaciones (ej. compañero del mes) y rankings por premios. Configurable desde Administración → Gamification. Submódulo de RRHH.',
+    stage: 'module',
   },
   {
     key: 'ventas',
     name: 'Sección Ventas (CRM)',
     description: 'CRM comercial: pipeline de leads/oportunidades, empresas y contactos, timeline automático, próximas acciones, propuestas con IA e investigación de empresas. Acceden admins y el equipo comercial configurable (Admin → Equipo).',
+    stage: 'testing',
   },
   {
     key: 'contenido',
     name: 'Sección Contenido',
     description: 'Calendario de contenido por proyecto: piezas de RRSS con vistas Calendario, Tabla y Kanban, assets (imagen y video), comentarios internos y aprobación del cliente desde el portal.',
+    stage: 'module',
   },
   {
     key: 'whatsapp',
     name: 'WhatsApp (Ventas)',
-    description: 'Conectá el WhatsApp del workspace vía un BSP (hoy: Chakra) para ver y responder conversaciones con leads desde Ventas. Flag independiente de "ventas" por su costo operativo real (BSP + tokens de IA).',
+    description: 'Conectá el WhatsApp del workspace vía un BSP (hoy: Chakra) para ver y responder conversaciones con leads desde Ventas. Flag independiente de "ventas" por su costo operativo real (BSP + tokens de IA). Submódulo de Ventas.',
+    stage: 'testing',
   },
   {
     key: 'rrhh',
     name: 'Sección RRHH',
-    description: 'Panel de RRHH: legajos, ingresos, licencias, vacaciones, beneficios (horas libres / días home) y productividad. Sembrado con enabledGlobally=true al agregarse (ya lo usaban todos los workspaces sin flag).',
+    description: 'Panel de RRHH: legajos, ingresos, licencias, vacaciones, beneficios (horas libres / días home) y productividad.',
+    stage: 'module',
   },
   {
     key: 'calendario',
     name: 'Calendario',
     description: 'Disponibilidad del equipo: horario laboral por persona, tareas con hora que bloquean franjas, reuniones agendadas que requieren aceptación de los invitados y filtro de huecos comunes entre varias personas.',
+    stage: 'module',
   },
   {
     key: 'finanzas',
     name: 'Sección Finanzas',
     description: 'Finanzas internas de la agencia: ingresos, egresos, saldos por cuenta/moneda, cuenta corriente de clientes (facturas y cobros), extras puntuales y un tablero de pendientes asistido por IA. Acceden admins y los roles configurables (Admin → Equipo); la Configuración del módulo (cuentas/categorías/items/impuestos) es admin/owner siempre.',
+    stage: 'testing',
   },
 ]
 

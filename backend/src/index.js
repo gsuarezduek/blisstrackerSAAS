@@ -30,12 +30,16 @@ const server = app.listen(PORT, async () => {
   console.log('[Socket.IO] Inicializado — chat en tiempo real activo.')
   initCollabServer(server)
   console.log('[Collab] Hocuspocus inicializado — edición colaborativa en /collab.')
-  // Sincronizar catálogo de feature flags — upsert para que siempre existan en DB
-  for (const { key, name, description } of FEATURE_FLAGS) {
+  // Sincronizar catálogo de feature flags — upsert para que siempre existan en DB.
+  // Los flags "module" (estables) quedan forzados enabledGlobally=true en cada
+  // arranque — no se gestionan a mano desde SuperAdmin → Feature Flags (esa
+  // pantalla filtra solo stage='testing'; ver SuperAdmin → Módulos para los otros).
+  for (const { key, name, description, stage } of FEATURE_FLAGS) {
+    const moduleData = stage === 'module' ? { enabledGlobally: true } : {}
     await prisma.featureFlag.upsert({
       where:  { key },
-      update: { name, description },
-      create: { key, name, description },
+      update: { name, description, stage, ...moduleData },
+      create: { key, name, description, stage, ...moduleData },
     }).catch(err => console.error(`[FeatureFlags] Error sync '${key}':`, err.message))
   }
   console.log(`[FeatureFlags] ${FEATURE_FLAGS.length} flag(s) sincronizado(s).`)
