@@ -12,6 +12,20 @@ const projectIdParam = { projectId: z.number().int().describe('ID del proyecto (
 // evita repetir 5 objetos casi idénticos a mano.
 const NETWORKS = ['instagram', 'tiktok', 'youtube', 'linkedin', 'facebook']
 
+const LEAD_STATUS_ENUM = z.enum(['prospecto', 'contactado', 'reunion', 'propuesta', 'ganado', 'perdido'])
+const LEAD_ORIGIN_ENUM = z.enum(['sitio_web', 'google_ads', 'meta_ads', 'linkedin', 'referido', 'cliente', 'whatsapp', 'evento', 'llamada', 'otro'])
+
+// Un plan de precio de una propuesta (ver docs/claude/ventas.md "Generador de
+// propuestas") — reusado en crear y editar propuesta.
+const planSchema = z.object({
+  label: z.string().optional().describe('Nombre del plan, ej. "Básico"'),
+  price: z.number().optional().describe('Precio mensual (exacto, no lo infiere la IA)'),
+  currency: z.string().optional().describe('Default: la moneda del lead'),
+  plusIva: z.boolean().optional().describe('Si el precio es + IVA'),
+  serviceIds: z.array(z.number().int()).optional().describe('IDs del catálogo de Servicios'),
+  serviceNames: z.array(z.string()).optional().describe('Servicios libres (no del catálogo)'),
+})
+
 const tools = [
   // ── Proyectos ────────────────────────────────────────────────────────────
   {
@@ -455,6 +469,298 @@ const tools = [
       path: `/contenido/projects/${projectId}/pieces/${pieceId}/comments`,
       body: { body, visibility },
     }),
+  },
+
+  // ── Ventas (CRM) ─────────────────────────────────────────────────────────
+  // Catálogo fijo de backend/src/lib/salesCatalog.js. Sin projectIdParam: Ventas
+  // no cuelga de un proyecto (cuelga de empresa/contacto/lead a nivel workspace).
+  {
+    name: 'ventas_dashboard',
+    description: 'Tarjetas del dashboard de Ventas: total de leads, propuestas del mes, por cerrar, ganados/perdidos del mes, acciones de hoy/vencidas.',
+    inputSchema: {},
+    request: () => ({ method: 'GET', path: '/ventas/dashboard' }),
+  },
+  {
+    name: 'ventas_metrics',
+    description: 'Métricas/forecast de Ventas: forecast ponderado, win rate, ticket y ciclo promedio, embudo por etapa, ranking por responsable, leads por origen.',
+    inputSchema: {},
+    request: () => ({ method: 'GET', path: '/ventas/metrics' }),
+  },
+  {
+    name: 'ventas_team',
+    description: 'Lista los responsables comerciales asignables (admins + miembros con acceso al módulo Ventas).',
+    inputSchema: {},
+    request: () => ({ method: 'GET', path: '/ventas/team' }),
+  },
+  {
+    name: 'ventas_companies_list',
+    description: 'Lista empresas del CRM, opcionalmente filtradas por texto.',
+    inputSchema: { search: z.string().optional() },
+    request: ({ search }) => ({ method: 'GET', path: '/ventas/companies', query: { search } }),
+  },
+  {
+    name: 'ventas_company_get',
+    description: 'Detalle de una empresa del CRM.',
+    inputSchema: { companyId: z.number().int() },
+    request: ({ companyId }) => ({ method: 'GET', path: `/ventas/companies/${companyId}` }),
+  },
+  {
+    name: 'ventas_company_create',
+    description: 'Crea una empresa en el CRM.',
+    inputSchema: {
+      name: z.string().describe('Nombre de la empresa'),
+      website: z.string().optional(),
+      industry: z.string().optional(),
+      notes: z.string().optional(),
+    },
+    request: (body) => ({ method: 'POST', path: '/ventas/companies', body }),
+  },
+  {
+    name: 'ventas_company_update',
+    description: 'Edita una empresa del CRM.',
+    inputSchema: {
+      companyId: z.number().int(),
+      name: z.string().optional(),
+      website: z.string().optional(),
+      industry: z.string().optional(),
+      notes: z.string().optional(),
+    },
+    request: ({ companyId, ...body }) => ({ method: 'PATCH', path: `/ventas/companies/${companyId}`, body }),
+  },
+  {
+    name: 'ventas_company_delete',
+    description: 'Elimina una empresa del CRM (cascada: borra sus contactos y leads).',
+    inputSchema: { companyId: z.number().int() },
+    request: ({ companyId }) => ({ method: 'DELETE', path: `/ventas/companies/${companyId}` }),
+  },
+  {
+    name: 'ventas_contacts_list',
+    description: 'Lista contactos del CRM, opcionalmente de una empresa puntual.',
+    inputSchema: { companyId: z.number().int().optional() },
+    request: ({ companyId }) => ({ method: 'GET', path: '/ventas/contacts', query: { companyId } }),
+  },
+  {
+    name: 'ventas_contact_create',
+    description: 'Crea un contacto dentro de una empresa del CRM.',
+    inputSchema: {
+      companyId: z.number().int(),
+      name: z.string(),
+      title: z.string().optional().describe('Cargo'),
+      email: z.string().optional(),
+      phone: z.string().optional(),
+    },
+    request: (body) => ({ method: 'POST', path: '/ventas/contacts', body }),
+  },
+  {
+    name: 'ventas_contact_update',
+    description: 'Edita un contacto del CRM.',
+    inputSchema: {
+      contactId: z.number().int(),
+      name: z.string().optional(),
+      title: z.string().optional(),
+      email: z.string().optional(),
+      phone: z.string().optional(),
+    },
+    request: ({ contactId, ...body }) => ({ method: 'PATCH', path: `/ventas/contacts/${contactId}`, body }),
+  },
+  {
+    name: 'ventas_contact_delete',
+    description: 'Elimina un contacto del CRM.',
+    inputSchema: { contactId: z.number().int() },
+    request: ({ contactId }) => ({ method: 'DELETE', path: `/ventas/contacts/${contactId}` }),
+  },
+  {
+    name: 'ventas_leads_list',
+    description: 'Lista leads del CRM con filtros. Sin archived, devuelve solo los activos (no archivados).',
+    inputSchema: {
+      status: LEAD_STATUS_ENUM.optional(),
+      ownerId: z.number().int().optional(),
+      origin: LEAD_ORIGIN_ENUM.optional(),
+      from: z.string().optional().describe('YYYY-MM-DD, por fecha de alta'),
+      to: z.string().optional().describe('YYYY-MM-DD, por fecha de alta'),
+      search: z.string().optional(),
+      archived: z.boolean().optional().describe('true = solo archivados'),
+    },
+    request: (query) => ({ method: 'GET', path: '/ventas/leads', query }),
+  },
+  {
+    name: 'ventas_lead_get',
+    description: 'Detalle completo de un lead: empresa, contactos, timeline, próximas acciones, propuestas e investigaciones.',
+    inputSchema: { leadId: z.number().int() },
+    request: ({ leadId }) => ({ method: 'GET', path: `/ventas/leads/${leadId}` }),
+  },
+  {
+    name: 'ventas_lead_create',
+    description: 'Crea un lead nuevo. Para la empresa/contacto se puede mandar un id existente o datos para crearlos inline (companyId O newCompany, primaryContactId O newContact).',
+    inputSchema: {
+      companyId: z.number().int().optional(),
+      newCompany: z.object({ name: z.string(), website: z.string().optional(), industry: z.string().optional(), notes: z.string().optional() }).optional(),
+      primaryContactId: z.number().int().optional(),
+      newContact: z.object({ name: z.string(), title: z.string().optional(), email: z.string().optional(), phone: z.string().optional() }).optional(),
+      ownerId: z.number().int().optional(),
+      status: LEAD_STATUS_ENUM.optional().describe('Default: prospecto'),
+      origin: LEAD_ORIGIN_ENUM.optional(),
+      estimatedValue: z.number().optional(),
+      currency: z.string().optional().describe('Default: ARS'),
+      title: z.string().optional().describe('Título/nombre del lead'),
+      nextContactAt: z.string().optional().describe('YYYY-MM-DD'),
+    },
+    request: (body) => ({ method: 'POST', path: '/ventas/leads', body }),
+  },
+  {
+    name: 'ventas_lead_update',
+    description: 'Edita los campos generales de un lead (no el estado/responsable, que tienen tools propias).',
+    inputSchema: {
+      leadId: z.number().int(),
+      title: z.string().optional(),
+      origin: LEAD_ORIGIN_ENUM.optional(),
+      estimatedValue: z.number().optional(),
+      currency: z.string().optional(),
+      nextContactAt: z.string().optional().describe('YYYY-MM-DD'),
+      notes: z.string().optional().describe('Notas de reunión (HTML o texto)'),
+      primaryContactId: z.number().int().optional(),
+      companyId: z.number().int().optional(),
+    },
+    request: ({ leadId, ...body }) => ({ method: 'PATCH', path: `/ventas/leads/${leadId}`, body }),
+  },
+  {
+    name: 'ventas_lead_delete',
+    description: 'Elimina un lead. Falla si tiene propuestas confirmadas.',
+    inputSchema: { leadId: z.number().int() },
+    request: ({ leadId }) => ({ method: 'DELETE', path: `/ventas/leads/${leadId}` }),
+  },
+  {
+    name: 'ventas_lead_set_status',
+    description: 'Cambia el estado de un lead (mueve la columna del pipeline). lostReason es obligatorio si el estado nuevo es "perdido".',
+    inputSchema: { leadId: z.number().int(), status: LEAD_STATUS_ENUM, lostReason: z.string().optional() },
+    request: ({ leadId, status, lostReason }) => ({ method: 'PATCH', path: `/ventas/leads/${leadId}/status`, body: { status, lostReason } }),
+  },
+  {
+    name: 'ventas_lead_set_owner',
+    description: 'Cambia el responsable comercial de un lead (notifica al nuevo responsable).',
+    inputSchema: { leadId: z.number().int(), ownerId: z.number().int().nullable().describe('null para quitar responsable') },
+    request: ({ leadId, ownerId }) => ({ method: 'PATCH', path: `/ventas/leads/${leadId}/owner`, body: { ownerId } }),
+  },
+  {
+    name: 'ventas_lead_archive',
+    description: 'Archiva o desarchiva un lead (lo saca del Pipeline sin borrarlo).',
+    inputSchema: { leadId: z.number().int(), archived: z.boolean(), reason: z.string().optional() },
+    request: ({ leadId, archived, reason }) => ({ method: 'PATCH', path: `/ventas/leads/${leadId}/archive`, body: { archived, reason } }),
+  },
+  {
+    name: 'ventas_lead_convert',
+    description: 'Convierte un lead (en estado "propuesta" o "ganado") en un Proyecto real. Lo marca ganado y vincula el proyecto.',
+    inputSchema: {
+      leadId: z.number().int(),
+      name: z.string().optional().describe('Default: nombre de la empresa'),
+      serviceIds: z.array(z.number().int()).optional(),
+      memberIds: z.array(z.number().int()).optional().describe('Equipo del proyecto nuevo'),
+    },
+    request: ({ leadId, ...body }) => ({ method: 'POST', path: `/ventas/leads/${leadId}/convert`, body }),
+  },
+  {
+    name: 'ventas_lead_action_add',
+    description: 'Agrega una próxima acción a un lead. Si tiene dueAt y un responsable configurado en Ventas, crea también una tarea futura vinculada.',
+    inputSchema: {
+      leadId: z.number().int(),
+      title: z.string(),
+      dueAt: z.string().optional().describe('YYYY-MM-DD'),
+      ownerId: z.number().int().optional().describe('Default: el usuario conectado'),
+    },
+    request: ({ leadId, ...body }) => ({ method: 'POST', path: `/ventas/leads/${leadId}/actions`, body }),
+  },
+  {
+    name: 'ventas_lead_action_resolve',
+    description: 'Marca una próxima acción como resuelta (y completa su tarea vinculada si seguía abierta).',
+    inputSchema: { leadId: z.number().int(), actionId: z.number().int() },
+    request: ({ leadId, actionId }) => ({ method: 'PATCH', path: `/ventas/leads/${leadId}/actions/${actionId}/resolve` }),
+  },
+  {
+    name: 'ventas_lead_action_delete',
+    description: 'Elimina una próxima acción de un lead.',
+    inputSchema: { leadId: z.number().int(), actionId: z.number().int() },
+    request: ({ leadId, actionId }) => ({ method: 'DELETE', path: `/ventas/leads/${leadId}/actions/${actionId}` }),
+  },
+  {
+    name: 'ventas_lead_note_add',
+    description: 'Agrega una nota manual al timeline de un lead.',
+    inputSchema: { leadId: z.number().int(), content: z.string() },
+    request: ({ leadId, content }) => ({ method: 'POST', path: `/ventas/leads/${leadId}/notes`, body: { content } }),
+  },
+  {
+    name: 'ventas_lead_note_delete',
+    description: 'Elimina una nota del timeline de un lead (solo el autor o un admin).',
+    inputSchema: { leadId: z.number().int(), noteId: z.number().int() },
+    request: ({ leadId, noteId }) => ({ method: 'DELETE', path: `/ventas/leads/${leadId}/notes/${noteId}` }),
+  },
+  {
+    name: 'ventas_lead_research_run',
+    description: 'Dispara una investigación IA de la empresa del lead (sitio web + Claude). Async: consultar con ventas_lead_research_get.',
+    inputSchema: { leadId: z.number().int() },
+    request: ({ leadId }) => ({ method: 'POST', path: `/ventas/leads/${leadId}/research` }),
+  },
+  {
+    name: 'ventas_lead_research_get',
+    description: 'Obtiene la investigación IA más reciente de un lead (o su progreso si sigue corriendo).',
+    inputSchema: { leadId: z.number().int() },
+    request: ({ leadId }) => ({ method: 'GET', path: `/ventas/leads/${leadId}/research` }),
+  },
+  {
+    name: 'ventas_lead_research_report_generate',
+    description: 'Genera (o regenera) el informe de diagnóstico para el cliente, en HTML persuasivo, a partir de la investigación ya hecha.',
+    inputSchema: { leadId: z.number().int(), researchId: z.number().int(), instructions: z.string().optional() },
+    request: ({ leadId, researchId, instructions }) => ({
+      method: 'POST',
+      path: `/ventas/leads/${leadId}/research/${researchId}/report`,
+      body: { instructions },
+    }),
+  },
+  {
+    name: 'ventas_lead_research_report_update',
+    description: 'Edita a mano el título/HTML del informe de diagnóstico ya generado (sin volver a llamar a la IA).',
+    inputSchema: { leadId: z.number().int(), researchId: z.number().int(), title: z.string().optional(), html: z.string().optional() },
+    request: ({ leadId, researchId, title, html }) => ({
+      method: 'PATCH',
+      path: `/ventas/leads/${leadId}/research/${researchId}/report`,
+      body: { title, html },
+    }),
+  },
+  {
+    name: 'ventas_lead_proposals_list',
+    description: 'Lista las versiones de propuesta de un lead.',
+    inputSchema: { leadId: z.number().int() },
+    request: ({ leadId }) => ({ method: 'GET', path: `/ventas/leads/${leadId}/proposals` }),
+  },
+  {
+    name: 'ventas_lead_proposal_create',
+    description: 'Genera una propuesta nueva con IA a partir de 1 o más planes de precio. El precio de cada plan es exacto (lo define quien llama, nunca lo inventa la IA).',
+    inputSchema: {
+      leadId: z.number().int(),
+      plans: z.array(planSchema).describe('Al menos 1 plan'),
+      objectives: z.string().optional().describe('Objetivos del cliente para encuadrar la propuesta'),
+      instructions: z.string().optional().describe('Indicaciones puntuales para esta generación'),
+      title: z.string().optional(),
+      quality: z.enum(['standard', 'max']).optional().describe('standard=Sonnet 5 (default, ~35s), max=Opus 5 (~90s, más caro)'),
+    },
+    request: ({ leadId, ...body }) => ({ method: 'POST', path: `/ventas/leads/${leadId}/proposals`, body }),
+  },
+  {
+    name: 'ventas_lead_proposal_update',
+    description: 'Edita una propuesta: título, status (draft/confirmed — confirmed habilita el link público), o los planes (precio/moneda/+IVA/servicios).',
+    inputSchema: {
+      leadId: z.number().int(),
+      proposalId: z.number().int(),
+      title: z.string().optional(),
+      status: z.enum(['draft', 'confirmed']).optional(),
+      plans: z.array(planSchema).optional(),
+    },
+    request: ({ leadId, proposalId, ...body }) => ({ method: 'PATCH', path: `/ventas/leads/${leadId}/proposals/${proposalId}`, body }),
+  },
+  {
+    name: 'ventas_lead_proposal_delete',
+    description: 'Elimina una versión de propuesta.',
+    inputSchema: { leadId: z.number().int(), proposalId: z.number().int() },
+    request: ({ leadId, proposalId }) => ({ method: 'DELETE', path: `/ventas/leads/${leadId}/proposals/${proposalId}` }),
   },
 ]
 
