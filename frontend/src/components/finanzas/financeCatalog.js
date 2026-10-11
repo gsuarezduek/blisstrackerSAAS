@@ -12,6 +12,27 @@ export const ACCOUNT_TYPES = [
   { key: 'crypto_wallet', label: 'Wallet cripto' },
 ]
 
+// Condición fiscal del EMISOR (FinanceIssuer.taxCondition) — mismo vocabulario
+// que usa `arca.issue({ issuer: ... })` del SDK `facturas`.
+export const ISSUER_TAX_CONDITIONS = [
+  { key: 'responsable_inscripto', label: 'Responsable Inscripto' },
+  { key: 'monotributo',           label: 'Monotributo' },
+  { key: 'exento',                label: 'Exento' },
+]
+
+export const ISSUER_ENVIRONMENTS = [
+  { key: 'test',       label: 'Homologación (test)' },
+  { key: 'production', label: 'Producción' },
+]
+
+// Condición de IVA del RECEPTOR (FinanceItem.ivaCondition).
+export const ITEM_IVA_CONDITIONS = [
+  { key: 'responsable_inscripto', label: 'Responsable Inscripto' },
+  { key: 'monotributo',           label: 'Monotributo' },
+  { key: 'consumidor_final',      label: 'Consumidor Final' },
+  { key: 'exento',                label: 'Exento' },
+]
+
 export const CURRENCIES = [
   { key: 'ARS', label: 'Pesos' },
   { key: 'USD', label: 'Dólares' },
@@ -105,6 +126,9 @@ function metaOf(list, key, fallbackLabel) {
 }
 
 export function accountTypeLabel(key)        { return metaOf(ACCOUNT_TYPES, key).label }
+export function issuerTaxConditionLabel(key) { return metaOf(ISSUER_TAX_CONDITIONS, key).label }
+export function issuerEnvironmentLabel(key)  { return metaOf(ISSUER_ENVIRONMENTS, key).label }
+export function itemIvaConditionLabel(key)   { return key ? metaOf(ITEM_IVA_CONDITIONS, key).label : '—' }
 export function currencyLabel(key)           { return metaOf(CURRENCIES, key).label }
 export function taxBaseTypeLabel(key)        { return metaOf(TAX_BASE_TYPES, key).label }
 export function paymentMethodLabel(key)      { return metaOf(PAYMENT_METHODS, key).label }

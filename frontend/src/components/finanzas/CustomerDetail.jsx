@@ -14,7 +14,7 @@ const SUBTABS = [{ id: 'movimientos', label: 'Movimientos' }, { id: 'facturas', 
 
 // Detalle del cliente (sección 4.5): header + saldo + pestañas Movimientos/
 // Facturas + columna lateral (Próximas acciones, Facturas pendientes, Datos).
-export default function CustomerDetail({ itemId, accounts, categoriesList, items, taxes, onBack }) {
+export default function CustomerDetail({ itemId, accounts, categoriesList, items, taxes, issuers, onBack }) {
   const [customer, setCustomer] = useState(null)
   const [actions, setActions] = useState([])
   const [subtab, setSubtab] = useState('movimientos')
@@ -85,7 +85,7 @@ export default function CustomerDetail({ itemId, accounts, categoriesList, items
         <div className="space-y-5">
           <NextActionsList itemId={itemId} actions={actions} onChanged={handleChanged} />
           <PendingInvoicesList invoices={customer.invoices} currency={currency} onRegisterPayment={(inv) => setPaymentContext({ invoiceId: inv.id })} />
-          <CustomerInfoCard customer={customer} onChanged={handleChanged} />
+          <CustomerInfoCard customer={customer} issuers={issuers} onChanged={handleChanged} />
         </div>
       </div>
 

@@ -1,5 +1,6 @@
 const prisma = require('../../lib/prisma')
 const { logFinanceAudit } = require('../../lib/financeAudit')
+const { isValidItemIvaCondition } = require('../../lib/financeCatalog')
 const { trimmedOrNull } = require('./_shared')
 
 const ITEM_FIELD_LABELS = {
@@ -12,17 +13,20 @@ const ITEM_FIELD_LABELS = {
   email:             { label: 'Mail' },
   taxId:             { label: 'CUIT' },
   contractedService: { label: 'Servicio contratado' },
+  ivaCondition:      { label: 'Condición de IVA' },
+  defaultIssuerId:   { label: 'Emisor habitual' },
   projectId:         { label: 'Proyecto vinculado' },
 }
 
 const LIST_INCLUDE = {
-  category: { select: { id: true, name: true, type: true } },
-  project:  { select: { id: true, name: true } },
+  category:      { select: { id: true, name: true, type: true } },
+  project:       { select: { id: true, name: true } },
+  defaultIssuer: { select: { id: true, name: true, taxCondition: true } },
 }
 
 const CUIT_RE = /^\d{2}-\d{8}-\d$/
 
-function validateContactFields({ email, taxId }) {
+function validateContactFields({ email, taxId, ivaCondition }) {
   if (email !== undefined && email !== null && email !== '') {
     const ok = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email).trim())
     if (!ok) throw Object.assign(new Error('Mail inválido'), { status: 400, isOperational: true })
@@ -32,6 +36,15 @@ function validateContactFields({ email, taxId }) {
       throw Object.assign(new Error('CUIT inválido (formato XX-XXXXXXXX-X)'), { status: 400, isOperational: true })
     }
   }
+  if (ivaCondition !== undefined && !isValidItemIvaCondition(ivaCondition)) {
+    throw Object.assign(new Error('Condición de IVA inválida'), { status: 400, isOperational: true })
+  }
+}
+
+async function validateDefaultIssuer(workspaceId, defaultIssuerId) {
+  if (defaultIssuerId === undefined || defaultIssuerId === null) return
+  const issuer = await prisma.financeIssuer.findFirst({ where: { id: defaultIssuerId, workspaceId }, select: { id: true } })
+  if (!issuer) throw Object.assign(new Error('Emisor no encontrado'), { status: 400, isOperational: true })
 }
 
 // GET /api/finanzas/items?search=&tracksAccount=true&active=true
@@ -65,7 +78,7 @@ async function getItem(req, res, next) {
 async function createItem(req, res, next) {
   try {
     const workspaceId = req.workspace.id
-    const { name, categoryId, tracksAccount, contactName, phone, email, taxId, contractedService, notes, projectId } = req.body
+    const { name, categoryId, tracksAccount, contactName, phone, email, taxId, contractedService, notes, ivaCondition, defaultIssuerId, projectId } = req.body
     if (!name || !name.trim()) return res.status(400).json({ error: 'Nombre requerido' })
     if (!Number.isInteger(categoryId)) return res.status(400).json({ error: 'Categoría habitual requerida' })
 
@@ -80,13 +93,15 @@ async function createItem(req, res, next) {
       if (!project) return res.status(400).json({ error: 'Proyecto no encontrado' })
     }
 
-    validateContactFields({ email, taxId })
+    validateContactFields({ email, taxId, ivaCondition })
+    await validateDefaultIssuer(workspaceId, defaultIssuerId)
 
     const item = await prisma.financeItem.create({
       data: {
         workspaceId, name: name.trim(), categoryId, tracksAccount: !!tracksAccount,
         contactName: trimmedOrNull(contactName), phone: trimmedOrNull(phone), email: trimmedOrNull(email),
         taxId: trimmedOrNull(taxId), contractedService: trimmedOrNull(contractedService), notes: trimmedOrNull(notes),
+        ivaCondition: ivaCondition || null, defaultIssuerId: defaultIssuerId ?? null,
         projectId: projectId ?? null,
       },
       include: LIST_INCLUDE,
@@ -107,8 +122,9 @@ async function updateItem(req, res, next) {
     })
     if (!existing) return res.status(404).json({ error: 'Item no encontrado' })
 
-    const { name, categoryId, tracksAccount, active, contactName, phone, email, taxId, contractedService, notes, projectId } = req.body
-    validateContactFields({ email, taxId })
+    const { name, categoryId, tracksAccount, active, contactName, phone, email, taxId, contractedService, notes, ivaCondition, defaultIssuerId, projectId } = req.body
+    validateContactFields({ email, taxId, ivaCondition })
+    await validateDefaultIssuer(workspaceId, defaultIssuerId)
 
     const data = {}
     if (name !== undefined) {
@@ -134,6 +150,8 @@ async function updateItem(req, res, next) {
     if (taxId                !== undefined) data.taxId                = trimmedOrNull(taxId)
     if (contractedService !== undefined) data.contractedService = trimmedOrNull(contractedService)
     if (notes               !== undefined) data.notes               = trimmedOrNull(notes)
+    if (ivaCondition        !== undefined) data.ivaCondition        = ivaCondition || null
+    if (defaultIssuerId     !== undefined) data.defaultIssuerId     = defaultIssuerId
     if (projectId           !== undefined) {
       if (projectId !== null) {
         const project = await prisma.project.findFirst({ where: { id: projectId, workspaceId }, select: { id: true } })

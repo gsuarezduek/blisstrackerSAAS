@@ -39,18 +39,21 @@ export default function Finanzas() {
   const [categories, setCategories] = useState([])
   const [items, setItems] = useState([])
   const [taxes, setTaxes] = useState([])
+  const [issuers, setIssuers] = useState([])
 
   const loadShared = useCallback(async () => {
-    const [a, c, i, t] = await Promise.all([
+    const [a, c, i, t, is] = await Promise.all([
       api.get('/finanzas/accounts'),
       api.get('/finanzas/categories'),
       api.get('/finanzas/items'),
       api.get('/finanzas/taxes'),
+      api.get('/finanzas/issuers', { params: { active: true } }),
     ])
     setAccounts(a.data)
     setCategories(c.data)
     setItems(i.data)
     setTaxes(t.data)
+    setIssuers(is.data)
   }, [])
 
   useEffect(() => { if (enabled) loadShared() }, [enabled, loadShared])
@@ -143,7 +146,7 @@ export default function Finanzas() {
             ) : tab === 'resumen' ? (
               <SummaryTab key={refreshKey} accounts={accounts} />
             ) : tab === 'clientes' ? (
-              <CustomersTab accounts={accounts} categories={categories} items={items} taxes={taxes} onDataChange={loadShared} />
+              <CustomersTab accounts={accounts} categories={categories} items={items} taxes={taxes} issuers={issuers} onDataChange={loadShared} />
             ) : (
               <PendingTab items={items} onNavigate={handleTaskNavigate} />
             )}

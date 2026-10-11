@@ -83,6 +83,7 @@ async function getCustomer(req, res, next) {
       include: {
         category: { select: { id: true, name: true } },
         project: { select: { id: true, name: true } },
+        defaultIssuer: { select: { id: true, name: true, taxCondition: true } },
         invoices: INVOICE_WITH_COLLECTIONS,
       },
     })
@@ -123,6 +124,7 @@ async function getCustomer(req, res, next) {
       id: item.id, name: item.name, category: item.category, project: item.project,
       contactName: item.contactName, phone: item.phone, email: item.email, taxId: item.taxId,
       contractedService: item.contractedService, notes: item.notes,
+      ivaCondition: item.ivaCondition, defaultIssuer: item.defaultIssuer,
       invoices: summary.invoices, facturado: summary.facturado, cobrado: summary.cobrado, saldo: summary.saldo, status: summary.status,
       metrics: { invoiceCount, avgDaysToCollect, lastPaymentAt: lastPayment?.date || null },
     })

@@ -5,6 +5,7 @@ const { requireFeatureFlag } = require('../lib/featureFlags')
 const { moduleAccessGuard } = require('../lib/moduleAccess')
 
 const accounts   = require('../controllers/finanzas/accounts.controller')
+const issuers    = require('../controllers/finanzas/issuers.controller')
 const categories = require('../controllers/finanzas/categories.controller')
 const items      = require('../controllers/finanzas/items.controller')
 const taxes      = require('../controllers/finanzas/taxes.controller')
@@ -40,6 +41,15 @@ router.post('/accounts',         workspaceAdminOnly, accounts.createAccount)
 router.patch('/accounts/:id',    workspaceAdminOnly, accounts.updateAccount)
 router.delete('/accounts/:id',   workspaceAdminOnly, accounts.deleteAccount)
 router.put('/accounts/:id/taxes', workspaceAdminOnly, accounts.syncAccountTaxes)
+
+// Emisores (facturación electrónica AFIP/ARCA, ver FinanceIssuer): mismo
+// criterio que Cuentas — lectura abierta (la necesita el picker de cliente y
+// el modal de factura), escritura solo admin/owner (maneja certificado/clave).
+router.get('/issuers',           issuers.listIssuers)
+router.get('/issuers/:id',       issuers.getIssuer)
+router.post('/issuers',          workspaceAdminOnly, issuers.createIssuer)
+router.patch('/issuers/:id',     workspaceAdminOnly, issuers.updateIssuer)
+router.delete('/issuers/:id',    workspaceAdminOnly, issuers.deleteIssuer)
 
 router.get('/categories',        categories.listCategories)
 router.post('/categories',       workspaceAdminOnly, categories.createCategory)

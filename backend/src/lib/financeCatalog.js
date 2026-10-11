@@ -16,6 +16,29 @@ const ACCOUNT_TYPES = [
   { key: 'crypto_wallet', label: 'Wallet cripto' },
 ]
 
+// Condición fiscal del EMISOR (FinanceIssuer.taxCondition) — mismo vocabulario
+// que el parámetro `issuer` de `arca.issue()` del SDK `facturas` (confirmado
+// leyendo sus tipos), así no hace falta traducir nada al llamarlo.
+const ISSUER_TAX_CONDITIONS = [
+  { key: 'responsable_inscripto', label: 'Responsable Inscripto' },
+  { key: 'monotributo',           label: 'Monotributo' },
+  { key: 'exento',                label: 'Exento' },
+]
+
+const ISSUER_ENVIRONMENTS = [
+  { key: 'test',       label: 'Homologación (test)' },
+  { key: 'production',  label: 'Producción' },
+]
+
+// Condición de IVA del RECEPTOR (FinanceItem.ivaCondition) — mismo vocabulario
+// que `to.condition` de `arca.issue()`.
+const ITEM_IVA_CONDITIONS = [
+  { key: 'responsable_inscripto', label: 'Responsable Inscripto' },
+  { key: 'monotributo',           label: 'Monotributo' },
+  { key: 'consumidor_final',      label: 'Consumidor Final' },
+  { key: 'exento',                label: 'Exento' },
+]
+
 // Abierto a futuro (no es un enum cerrado): cualquier string de 3 letras sirve
 // como moneda, pero estas son las que el frontend sabe formatear con su propio
 // prefijo/decimales (ver utils/format.js fmtMoney).
@@ -123,13 +146,16 @@ const TASK_STATUSES = [
 
 // Tipos de entidad para FinanceAuditLog.entityType — ver lib/financeAudit.js.
 const AUDIT_ENTITY_TYPES = [
-  'account', 'tax', 'category', 'item', 'movement', 'transfer', 'check',
+  'account', 'issuer', 'tax', 'category', 'item', 'movement', 'transfer', 'check',
   'fundValuation', 'invoice', 'extra', 'nextAction', 'task',
 ]
 
 function keysOf(list) { return list.map(x => x.key) }
 
 const ACCOUNT_TYPE_KEYS          = keysOf(ACCOUNT_TYPES)
+const ISSUER_TAX_CONDITION_KEYS  = keysOf(ISSUER_TAX_CONDITIONS)
+const ISSUER_ENVIRONMENT_KEYS    = keysOf(ISSUER_ENVIRONMENTS)
+const ITEM_IVA_CONDITION_KEYS    = keysOf(ITEM_IVA_CONDITIONS)
 const MOVEMENT_TYPE_KEYS         = keysOf(MOVEMENT_TYPES)
 const TAX_APPLIES_TO_KEYS        = keysOf(TAX_APPLIES_TO)
 const TAX_BASE_TYPE_KEYS         = keysOf(TAX_BASE_TYPES)
@@ -146,6 +172,9 @@ const TASK_STATUS_KEYS           = keysOf(TASK_STATUSES)
 const TASK_ORIGIN_KEYS = [...new Set(keysOf(TASK_ORIGINS))]
 
 function isValidAccountType(key)        { return ACCOUNT_TYPE_KEYS.includes(key) }
+function isValidIssuerTaxCondition(key) { return ISSUER_TAX_CONDITION_KEYS.includes(key) }
+function isValidIssuerEnvironment(key)  { return ISSUER_ENVIRONMENT_KEYS.includes(key) }
+function isValidItemIvaCondition(key)   { return key == null || ITEM_IVA_CONDITION_KEYS.includes(key) }
 function isValidMovementType(key)       { return MOVEMENT_TYPE_KEYS.includes(key) }
 function isValidTaxAppliesTo(key)       { return TAX_APPLIES_TO_KEYS.includes(key) }
 function isValidTaxBaseType(key)        { return TAX_BASE_TYPE_KEYS.includes(key) }
@@ -162,6 +191,9 @@ function isValidAuditEntityType(key)    { return AUDIT_ENTITY_TYPES.includes(key
 
 module.exports = {
   ACCOUNT_TYPES, ACCOUNT_TYPE_KEYS, isValidAccountType,
+  ISSUER_TAX_CONDITIONS, ISSUER_TAX_CONDITION_KEYS, isValidIssuerTaxCondition,
+  ISSUER_ENVIRONMENTS, ISSUER_ENVIRONMENT_KEYS, isValidIssuerEnvironment,
+  ITEM_IVA_CONDITIONS, ITEM_IVA_CONDITION_KEYS, isValidItemIvaCondition,
   CURRENCIES,
   MOVEMENT_TYPES, MOVEMENT_TYPE_KEYS, isValidMovementType,
   TAX_APPLIES_TO, TAX_APPLIES_TO_KEYS, isValidTaxAppliesTo,

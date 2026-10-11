@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Card, CardHeader, TextButton } from '../../pages/project-detail/ui.jsx'
 import AutosaveNotes from '../AutosaveNotes'
 import api from '../../api/client'
+import { ITEM_IVA_CONDITIONS, itemIvaConditionLabel } from './financeCatalog'
 
 const input = 'w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 dark:text-gray-100 rounded-lg px-2.5 py-1.5 text-sm'
 
@@ -22,14 +23,18 @@ const CUIT_RE = /^\d{2}-\d{8}-\d$/
 
 // "Datos" (sección 4.5, columna lateral): botón Editar; contacto, teléfono,
 // mail, CUIT, servicio contratado; métricas; notas con autoguardado.
-export default function CustomerInfoCard({ customer, onChanged }) {
+export default function CustomerInfoCard({ customer, issuers, onChanged }) {
   const [editing, setEditing] = useState(false)
   const [form, setForm] = useState(null)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
 
   function startEdit() {
-    setForm({ contactName: customer.contactName || '', phone: customer.phone || '', email: customer.email || '', taxId: customer.taxId || '', contractedService: customer.contractedService || '' })
+    setForm({
+      contactName: customer.contactName || '', phone: customer.phone || '', email: customer.email || '',
+      taxId: customer.taxId || '', contractedService: customer.contractedService || '',
+      ivaCondition: customer.ivaCondition || '', defaultIssuerId: customer.defaultIssuer?.id ? String(customer.defaultIssuer.id) : '',
+    })
     setEditing(true); setError('')
   }
 
@@ -38,7 +43,11 @@ export default function CustomerInfoCard({ customer, onChanged }) {
     if (form.taxId && !CUIT_RE.test(form.taxId)) { setError('CUIT inválido (formato XX-XXXXXXXX-X)'); return }
     setSaving(true); setError('')
     try {
-      await api.patch(`/finanzas/items/${customer.id}`, form)
+      await api.patch(`/finanzas/items/${customer.id}`, {
+        ...form,
+        ivaCondition: form.ivaCondition || null,
+        defaultIssuerId: form.defaultIssuerId ? Number(form.defaultIssuerId) : null,
+      })
       setEditing(false)
       onChanged()
     } catch (err) {
@@ -57,6 +66,14 @@ export default function CustomerInfoCard({ customer, onChanged }) {
             <input className={input} placeholder="Mail" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} />
             <input className={input} placeholder="CUIT (XX-XXXXXXXX-X)" value={form.taxId} onChange={e => setForm({ ...form, taxId: e.target.value })} />
             <input className={input} placeholder="Servicio contratado" value={form.contractedService} onChange={e => setForm({ ...form, contractedService: e.target.value })} />
+            <select className={input} value={form.ivaCondition} onChange={e => setForm({ ...form, ivaCondition: e.target.value })}>
+              <option value="">Condición de IVA (para facturar)</option>
+              {ITEM_IVA_CONDITIONS.map(o => <option key={o.key} value={o.key}>{o.label}</option>)}
+            </select>
+            <select className={input} value={form.defaultIssuerId} onChange={e => setForm({ ...form, defaultIssuerId: e.target.value })}>
+              <option value="">Emisor habitual (ninguno)</option>
+              {issuers?.map(is => <option key={is.id} value={is.id}>{is.name}</option>)}
+            </select>
             {error && <p className="text-xs text-red-500">{error}</p>}
             <div className="flex gap-2 pt-1">
               <button onClick={() => setEditing(false)} className="flex-1 border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 rounded-lg py-1.5 text-xs font-medium">Cancelar</button>
@@ -70,6 +87,8 @@ export default function CustomerInfoCard({ customer, onChanged }) {
             <Row label="Mail">{customer.email}</Row>
             <Row label="CUIT">{customer.taxId}</Row>
             <Row label="Servicio contratado">{customer.contractedService}</Row>
+            <Row label="Condición de IVA">{customer.ivaCondition ? itemIvaConditionLabel(customer.ivaCondition) : null}</Row>
+            <Row label="Emisor habitual">{customer.defaultIssuer?.name}</Row>
             {customer.project && <Row label="Proyecto">{customer.project.name}</Row>}
           </dl>
         )}

@@ -219,6 +219,7 @@ model Workspace {
   calendarEventRecurrences   CalendarEventRecurrence[]
   googleCalendarConnections  GoogleCalendarConnection[]
   financeAccounts            FinanceAccount[]
+  financeIssuers             FinanceIssuer[]
   financeTaxes               FinanceTax[]
   financeAccountTaxes        FinanceAccountTax[]
   financeCategories          FinanceCategory[]
@@ -460,6 +461,7 @@ model User {
   googleCalendarConnections      GoogleCalendarConnection[]
   invitationCodesCreated         InvitationCode[]
   financeAccountsCreated         FinanceAccount[]            @relation("FinanceAccountCreatedBy")
+  financeIssuersCreated          FinanceIssuer[]              @relation("FinanceIssuerCreatedBy")
   financeMovementsCreated        FinanceMovement[]           @relation("FinanceMovementCreatedBy")
   financeMovementsDeleted        FinanceMovement[]           @relation("FinanceMovementDeletedBy")
   financeChecksDeleted           FinanceCheck[]              @relation("FinanceCheckDeletedBy")
@@ -4506,10 +4508,62 @@ model FinanceCategory {
   @@index([workspaceId, type, active])
 }
 
+// Emisor = una razón social/CUIT propia desde la que el workspace puede
+// facturar electrónicamente (RG AFIP/ARCA). Un workspace puede tener varios
+// (ej. una SA + monotributos distintos) — cada FinanceItem con seguimiento de
+// cuenta elige un emisor habitual (defaultIssuerId). Catálogo de
+// configuración (active Boolean, sin soft-delete — no se puede desactivar si
+// ya tiene facturas, ver issuers.controller.js). certificate/privateKey viajan
+// cifrados (lib/encryption.js, mismo formato "iv:tag:ciphertext" que
+// ProjectAccess.password/twofa) y nunca se devuelven al frontend.
+model FinanceIssuer {
+  id           Int       @id @default(autoincrement())
+  workspaceId  Int
+  workspace    Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  name         String // etiqueta interna, ej. "Bliss SA", "Fulano Monotributo"
+  cuit         String
+  taxCondition String // 'responsable_inscripto' | 'monotributo' | 'exento'
+  salesPoint   Int // punto de venta habilitado en ARCA
+  environment  String    @default("test") // 'test' | 'production'
+  certificate  String? // PEM cifrado
+  privateKey   String? // PEM cifrado
+  active       Boolean   @default(true)
+  createdById  Int?
+  createdBy    User?     @relation("FinanceIssuerCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  items FinanceItem[]
+  // `invoices FinanceInvoice[]` se agrega en la Etapa 2, junto con
+  // FinanceInvoice.issuerId (emisión real) — no declarado todavía para no
+  // dejar un lado de la relación colgando sin su contraparte.
+
+  @@index([workspaceId])
+  @@index([workspaceId, active])
+}
+
+// Store de idempotencia que pide el SDK `facturas` (createPostgresStore) para
+// no duplicar comprobantes ante reintentos — tabla genérica key/value, sin
+// workspaceId (las keys que arma arcaClient.js ya incluyen el workspace/issuer).
+// Schema exacto confirmado leyendo el código del adapter del SDK (0.25.0):
+// SELECT/INSERT...ON CONFLICT sobre (key, value, updated_at). No tiene
+// ninguna FK ni se consulta desde Prisma Client directo — solo via
+// `prisma.$queryRawUnsafe`/`$executeRawUnsafe` que usa el store adapter.
+model ArcaIdempotencyStore {
+  key       String   @id
+  value     String?
+  updatedAt DateTime @default(now()) @map("updated_at")
+
+  @@map("arca_store")
+}
+
 // Item = contraparte de un movimiento (proveedor, concepto genérico, O cliente
 // si tracksAccount=true). Los campos de contacto/CUIT/servicio solo aplican a
 // clientes. `projectId` es un link opcional de navegación hacia el Project que
 // representa a ese cliente en el resto del sistema — no hay sync en vivo.
+// `defaultIssuerId`/`ivaCondition` (receptor) solo tienen sentido con
+// tracksAccount=true — habilitan la emisión de factura electrónica real desde
+// este cliente (ver FinanceIssuer e invoices.controller.js).
 model FinanceItem {
   id                Int       @id @default(autoincrement())
   workspaceId       Int
@@ -4527,6 +4581,10 @@ model FinanceItem {
   taxId             String? // CUIT
   contractedService String?
   notes             String? // autoguardado (AutosaveNotes)
+  ivaCondition      String? // condición de IVA del RECEPTOR: 'responsable_inscripto' | 'monotributo' | 'consumidor_final' | 'exento'
+
+  defaultIssuerId Int?
+  defaultIssuer   FinanceIssuer? @relation(fields: [defaultIssuerId], references: [id], onDelete: SetNull)
 
   projectId Int?
   project   Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
@@ -4544,6 +4602,7 @@ model FinanceItem {
   @@index([workspaceId, tracksAccount])
   @@index([categoryId])
   @@index([projectId])
+  @@index([defaultIssuerId])
 }
 
 model FinanceMovement {

@@ -5,27 +5,31 @@ import { Card, CardHeader, TextButton } from '../../pages/project-detail/ui.jsx'
 import ConfirmModal from '../ConfirmModal'
 import api from '../../api/client'
 import { fmtMoney } from '../../utils/format'
-import { ACCOUNT_TYPES, accountTypeLabel, TAX_APPLIES_TO, taxBaseTypeLabel } from './financeCatalog'
+import { ACCOUNT_TYPES, accountTypeLabel, TAX_APPLIES_TO, taxBaseTypeLabel, issuerTaxConditionLabel, issuerEnvironmentLabel } from './financeCatalog'
 import AccountModal from './AccountModal'
 import TaxModal from './TaxModal'
+import IssuerModal from './IssuerModal'
 
 const input = 'border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500'
 
 export default function FinanzasConfiguracion({ onBack }) {
   const [accounts, setAccounts]     = useState([])
+  const [issuers, setIssuers]       = useState([])
   const [categories, setCategories] = useState([])
   const [items, setItems]           = useState([])
   const [taxes, setTaxes]           = useState([])
   const [loading, setLoading]       = useState(true)
 
   const loadAll = useCallback(async () => {
-    const [a, c, i, t] = await Promise.all([
+    const [a, is, c, i, t] = await Promise.all([
       api.get('/finanzas/accounts'),
+      api.get('/finanzas/issuers'),
       api.get('/finanzas/categories'),
       api.get('/finanzas/items'),
       api.get('/finanzas/taxes'),
     ])
     setAccounts(a.data)
+    setIssuers(is.data)
     setCategories(c.data)
     setItems(i.data)
     setTaxes(t.data)
@@ -50,6 +54,7 @@ export default function FinanzasConfiguracion({ onBack }) {
             <ItemsPanel items={items} categories={categories} onChanged={loadAll} />
           </div>
           <TaxesPanel taxes={taxes} onChanged={loadAll} />
+          <IssuersPanel issuers={issuers} onChanged={loadAll} />
         </div>
       )}
     </div>
@@ -308,6 +313,78 @@ function TaxesPanel({ taxes, onChanged }) {
         />
       )}
       <ConfirmModal open={!!toDelete} title="Eliminar impuesto" message={`¿Eliminar "${toDelete?.name}"? Esta acción no se puede deshacer.`}
+        loading={deleting} onConfirm={handleDelete} onCancel={() => setToDelete(null)} />
+    </Card>
+  )
+}
+
+// ─── Emisores (facturación electrónica AFIP/ARCA) ──────────────────────────
+function IssuersPanel({ issuers, onChanged }) {
+  const [modalIssuer, setModalIssuer] = useState(undefined)
+  const [toDelete, setToDelete] = useState(null)
+  const [deleting, setDeleting] = useState(false)
+
+  async function handleDelete() {
+    setDeleting(true)
+    try {
+      await api.delete(`/finanzas/issuers/${toDelete.id}`)
+      setToDelete(null)
+      onChanged()
+    } catch (err) {
+      alert(err.response?.data?.error || 'No se pudo eliminar')
+    } finally { setDeleting(false) }
+  }
+
+  return (
+    <Card>
+      <CardHeader title={<span><Icon as={Landmark} size={14} className="inline -mt-0.5 mr-1" />Emisores (facturación electrónica)</span>} action={
+        <TextButton onClick={() => setModalIssuer(null)}><Icon as={Plus} size={14} className="inline -mt-0.5 mr-0.5" />Agregar</TextButton>
+      } />
+      <p className="px-4 text-xs text-gray-400 -mt-1 mb-2">Las razones sociales/CUIT propios desde los que se puede facturar — cada cliente elige uno como habitual</p>
+      <div className="px-4 pb-4 overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="text-left text-[11px] uppercase tracking-wide text-gray-400">
+              <th className="pb-2 font-medium">Nombre</th>
+              <th className="pb-2 font-medium">CUIT</th>
+              <th className="pb-2 font-medium">Condición</th>
+              <th className="pb-2 font-medium">Pto. venta</th>
+              <th className="pb-2 font-medium">Ambiente</th>
+              <th className="pb-2 font-medium">Estado</th>
+              <th className="pb-2 font-medium text-right">Editar</th>
+            </tr>
+          </thead>
+          <tbody>
+            {issuers.map(is => (
+              <tr key={is.id} className={`border-t border-gray-100 dark:border-gray-700 ${!is.active ? 'opacity-40' : ''}`}>
+                <td className="py-2 text-gray-900 dark:text-white">{is.name}</td>
+                <td className="py-2 text-gray-500 dark:text-gray-400">{is.cuit}</td>
+                <td className="py-2 text-gray-500 dark:text-gray-400">{issuerTaxConditionLabel(is.taxCondition)}</td>
+                <td className="py-2 text-gray-500 dark:text-gray-400">{is.salesPoint}</td>
+                <td className="py-2 text-gray-500 dark:text-gray-400">
+                  <span className={`text-[11px] rounded-full px-2 py-0.5 ${is.environment === 'production' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'}`}>
+                    {issuerEnvironmentLabel(is.environment)}
+                  </span>
+                </td>
+                <td className="py-2 text-gray-500 dark:text-gray-400">{is.active ? 'Activo' : 'Inactivo'}</td>
+                <td className="py-2 text-right">
+                  <TextButton onClick={() => setModalIssuer(is)}>Editar</TextButton>
+                </td>
+              </tr>
+            ))}
+            {issuers.length === 0 && <tr><td colSpan={7} className="text-center text-xs text-gray-400 py-4">Sin emisores cargados.</td></tr>}
+          </tbody>
+        </table>
+      </div>
+
+      {modalIssuer !== undefined && (
+        <IssuerModal issuer={modalIssuer}
+          onClose={() => setModalIssuer(undefined)}
+          onSaved={() => { setModalIssuer(undefined); onChanged() }}
+          onDelete={modalIssuer ? () => { setToDelete(modalIssuer); setModalIssuer(undefined) } : undefined}
+        />
+      )}
+      <ConfirmModal open={!!toDelete} title="Eliminar emisor" message={`¿Eliminar "${toDelete?.name}"? Esta acción no se puede deshacer.`}
         loading={deleting} onConfirm={handleDelete} onCancel={() => setToDelete(null)} />
     </Card>
   )
