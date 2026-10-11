@@ -9,6 +9,7 @@ import { ACCOUNT_TYPES, accountTypeLabel, TAX_APPLIES_TO, taxBaseTypeLabel, issu
 import AccountModal from './AccountModal'
 import TaxModal from './TaxModal'
 import IssuerModal from './IssuerModal'
+import ItemModal from './ItemModal'
 
 const input = 'border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500'
 
@@ -190,8 +191,22 @@ function ItemsPanel({ items, categories, onChanged }) {
   const [tracksAccount, setTracksAccount] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [modalItem, setModalItem] = useState(undefined) // undefined = cerrado, obj = editar
+  const [toDelete, setToDelete] = useState(null)
+  const [deleting, setDeleting] = useState(false)
 
   const filtered = items.filter(i => i.name.toLowerCase().includes(search.toLowerCase()))
+
+  async function handleDelete() {
+    setDeleting(true)
+    try {
+      await api.delete(`/finanzas/items/${toDelete.id}`)
+      setToDelete(null)
+      onChanged()
+    } catch (err) {
+      alert(err.response?.data?.error || 'No se pudo eliminar')
+    } finally { setDeleting(false) }
+  }
 
   async function submit() {
     if (!name.trim() || !categoryId) { setError('Nombre y categoría habitual son obligatorios'); return }
@@ -234,6 +249,7 @@ function ItemsPanel({ items, categories, onChanged }) {
               <th className="pb-1.5 font-medium">Item</th>
               <th className="pb-1.5 font-medium">Categoría habitual</th>
               <th className="pb-1.5 font-medium text-right">Seguimiento</th>
+              <th className="pb-1.5 font-medium text-right">Editar</th>
             </tr>
           </thead>
           <tbody>
@@ -244,12 +260,25 @@ function ItemsPanel({ items, categories, onChanged }) {
                 <td className="py-1.5 text-right">
                   {i.tracksAccount && <span className="text-[11px] bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 rounded-full px-2 py-0.5">Activo</span>}
                 </td>
+                <td className="py-1.5 text-right">
+                  <TextButton onClick={() => setModalItem(i)}>Editar</TextButton>
+                </td>
               </tr>
             ))}
-            {filtered.length === 0 && <tr><td colSpan={3} className="text-center text-xs text-gray-400 py-4">Sin items.</td></tr>}
+            {filtered.length === 0 && <tr><td colSpan={4} className="text-center text-xs text-gray-400 py-4">Sin items.</td></tr>}
           </tbody>
         </table>
       </div>
+
+      {modalItem !== undefined && (
+        <ItemModal item={modalItem} categories={categories}
+          onClose={() => setModalItem(undefined)}
+          onSaved={() => { setModalItem(undefined); onChanged() }}
+          onDelete={() => { setToDelete(modalItem); setModalItem(undefined) }}
+        />
+      )}
+      <ConfirmModal open={!!toDelete} title="Eliminar item" message={`¿Eliminar "${toDelete?.name}"? Esta acción no se puede deshacer.`}
+        loading={deleting} onConfirm={handleDelete} onCancel={() => setToDelete(null)} />
     </Card>
   )
 }
