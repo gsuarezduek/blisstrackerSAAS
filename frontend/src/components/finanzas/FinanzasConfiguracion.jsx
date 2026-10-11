@@ -56,52 +56,9 @@ export default function FinanzasConfiguracion({ onBack }) {
           </div>
           <TaxesPanel taxes={taxes} onChanged={loadAll} />
           <IssuersPanel issuers={issuers} onChanged={loadAll} />
-          <TaskDashboardPanel />
         </div>
       )}
     </div>
-  )
-}
-
-// ─── Proyecto para tareas (pestaña Pendientes → dashboard) ─────────────────
-// Workspace.financeTaskProjectId: elegís un responsable en una tarea de
-// Pendientes y esa tarea aparece en su dashboard — necesita un proyecto
-// anfitrión (mismo criterio que "Proyecto para tareas futuras" de Ventas,
-// Workspace.salesTasksProjectId, ver SalesTeamModal.jsx).
-function TaskDashboardPanel() {
-  const [projectId, setProjectId] = useState('')
-  const [projects, setProjects] = useState([])
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState('')
-  const [saved, setSaved] = useState(false)
-
-  useEffect(() => {
-    api.get('/workspaces/current').then(({ data }) => setProjectId(data.financeTaskProjectId || '')).catch(() => {})
-    api.get('/projects').then(({ data }) => setProjects(data || [])).catch(() => {})
-  }, [])
-
-  async function handleSave(value) {
-    setProjectId(value)
-    setSaving(true); setError(''); setSaved(false)
-    try {
-      await api.patch('/workspaces/current', { financeTaskProjectId: value ? Number(value) : null })
-      setSaved(true)
-    } catch (err) {
-      setError(err.response?.data?.error || 'No se pudo guardar')
-    } finally { setSaving(false) }
-  }
-
-  return (
-    <Card className="p-4">
-      <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Proyecto para tareas</h3>
-      <p className="text-xs text-gray-400 mb-3">Cuando le asignás un responsable a una tarea en Pendientes, se crea en el dashboard de esa persona dentro de este proyecto.</p>
-      <select className={`${input} w-full max-w-sm`} value={projectId} onChange={e => handleSave(e.target.value)} disabled={saving}>
-        <option value="">Sin configurar (no se pueden asignar responsables)</option>
-        {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-      </select>
-      {error && <p className="text-xs text-red-500 mt-2">{error}</p>}
-      {saved && !error && <p className="text-xs text-green-600 dark:text-green-400 mt-2">Guardado.</p>}
-    </Card>
   )
 }
 

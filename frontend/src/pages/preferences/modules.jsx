@@ -28,6 +28,10 @@ export default function ModulesTab({ loaded }) {
   const [eosMeetingProjectId, setEosMeetingProjectId] = useState('')
   const [savingEosProject,    setSavingEosProject]    = useState(false)
 
+  // Finanzas: proyecto asociado a las tareas que se mandan al dashboard desde Pendientes
+  const [financeTaskProjectId, setFinanceTaskProjectId] = useState('')
+  const [savingFinanceProject, setSavingFinanceProject] = useState(false)
+
   // Marketing: configuración propia del módulo
   const [globalSettings,      setGlobalSettings]      = useState(null)
   const [sectionsErr,         setSectionsErr]         = useState('')
@@ -42,11 +46,22 @@ export default function ModulesTab({ loaded }) {
 
   // EOS habilitado → cargar proyectos + el proyecto asociado a tareas/reuniones
   const eosEnabled = !!wsFeatures?.some(f => f.key === 'eos' && !f.disabled)
+  // Finanzas habilitado → cargar proyectos + el proyecto asociado a las tareas de Pendientes
+  const financeEnabled = !!wsFeatures?.some(f => f.key === 'finanzas' && !f.disabled)
+  useEffect(() => {
+    if (!user?.isAdmin || (!eosEnabled && !financeEnabled)) return
+    api.get('/projects').then(({ data }) => setProjects(data || [])).catch(() => {})
+  }, [user?.isAdmin, eosEnabled, financeEnabled])
+
   useEffect(() => {
     if (!user?.isAdmin || !eosEnabled) return
-    api.get('/projects').then(({ data }) => setProjects(data || [])).catch(() => {})
     api.get('/eos').then(({ data }) => setEosMeetingProjectId(data?.meetingProjectId ?? '')).catch(() => {})
   }, [user?.isAdmin, eosEnabled])
+
+  useEffect(() => {
+    if (!user?.isAdmin || !financeEnabled) return
+    api.get('/workspaces/current').then(({ data }) => setFinanceTaskProjectId(data?.financeTaskProjectId ?? '')).catch(() => {})
+  }, [user?.isAdmin, financeEnabled])
 
   async function handleSaveEosProject(value) {
     const pid = value ? Number(value) : null
@@ -59,6 +74,20 @@ export default function ModulesTab({ loaded }) {
       setEosMeetingProjectId(prev)
     } finally {
       setSavingEosProject(false)
+    }
+  }
+
+  async function handleSaveFinanceProject(value) {
+    const pid = value ? Number(value) : null
+    const prev = financeTaskProjectId
+    setFinanceTaskProjectId(value ? Number(value) : '')
+    setSavingFinanceProject(true)
+    try {
+      await api.patch('/workspaces/current', { financeTaskProjectId: pid })
+    } catch {
+      setFinanceTaskProjectId(prev)
+    } finally {
+      setSavingFinanceProject(false)
     }
   }
 
@@ -193,6 +222,32 @@ export default function ModulesTab({ loaded }) {
                   {!eosMeetingProjectId && (
                     <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-1.5">
                       Asociá un proyecto para poder iniciar reuniones y enviar To-Dos al dashboard.
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* Finanzas habilitado → proyecto asociado a las tareas de Pendientes */}
+              {feat.key === 'finanzas' && !feat.disabled && (
+                <div className="mt-3 ml-12 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/30 p-3">
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Proyecto para tareas de Finanzas
+                  </label>
+                  <p className="text-[11px] text-gray-500 dark:text-gray-400 mb-2 leading-snug">
+                    Al asignarle un responsable a una tarea en Finanzas → Pendientes, se crea en el dashboard de esa persona dentro de este proyecto.
+                  </p>
+                  <select
+                    value={financeTaskProjectId || ''}
+                    onChange={e => handleSaveFinanceProject(e.target.value)}
+                    disabled={savingFinanceProject}
+                    className="w-full sm:w-80 text-sm border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-primary-400 disabled:opacity-60"
+                  >
+                    <option value="">— Elegir proyecto —</option>
+                    {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  </select>
+                  {!financeTaskProjectId && (
+                    <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-1.5">
+                      Asociá un proyecto para poder asignar responsables a las tareas de Pendientes.
                     </p>
                   )}
                 </div>

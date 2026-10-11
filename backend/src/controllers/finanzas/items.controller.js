@@ -147,8 +147,14 @@ async function updateItem(req, res, next) {
     }
     if (active !== undefined) data.active = !!active
     if (tracksAccount !== undefined && !!tracksAccount !== existing.tracksAccount) {
-      const used = existing._count.movements + existing._count.invoices
-      if (used > 0) return res.status(409).json({ error: 'Este item ya tiene movimientos o facturas — no se puede cambiar si es cliente.' })
+      // Prender "Seguimiento de cuenta" siempre es seguro (recién a partir de ahora
+      // empieza a verse como cliente, no reescribe nada de lo ya cargado). Apagarlo
+      // con historial ya cargado sí se bloquea — dejaría facturas/cobros existentes
+      // sin la vista de cuenta corriente que los muestra.
+      if (!tracksAccount) {
+        const used = existing._count.movements + existing._count.invoices
+        if (used > 0) return res.status(409).json({ error: 'Este item ya tiene movimientos o facturas — no se puede desactivar el seguimiento de cuenta.' })
+      }
       data.tracksAccount = !!tracksAccount
     }
     if (contactName       !== undefined) data.contactName       = trimmedOrNull(contactName)
