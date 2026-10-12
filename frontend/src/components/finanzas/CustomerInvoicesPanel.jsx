@@ -116,8 +116,20 @@ export default function CustomerInvoicesPanel({ itemId, currency, refreshKey, on
   async function handleReconcile(inv) {
     setReconcilingId(inv.id)
     try {
-      await api.post(`/finanzas/invoices/${inv.id}/reconcile`)
+      const res = await api.post(`/finanzas/invoices/${inv.id}/reconcile`)
       await load()
+      // Sin esto, si ARCA todavía no resolvió la factura (sigue
+      // indeterminate/conflict) el estado visual no cambia y parece que
+      // "no pasó nada" al tocar el botón — avisamos siempre el resultado.
+      const updated = res.data
+      if (updated.arcaStatus === 'authorized') {
+        alert(`${invoiceKindMeta(updated.kind).label} ${updated.number} autorizada por ARCA.\nCAE ${updated.cae}`)
+      } else if (updated.arcaStatus === 'rejected') {
+        const reason = (updated.arcaResponseRaw?.issues || []).map(i => i.message).join(' · ') || 'Sin detalle del motivo.'
+        alert(`ARCA rechazó el comprobante.\n${reason}`)
+      } else {
+        alert('ARCA todavía no tiene un resultado definitivo para este comprobante — seguí probando más tarde.')
+      }
     } catch (err) {
       alert(err.response?.data?.error || 'No se pudo reconciliar')
     } finally { setReconcilingId(null) }
