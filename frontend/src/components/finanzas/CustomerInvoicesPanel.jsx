@@ -162,6 +162,7 @@ export default function CustomerInvoicesPanel({ itemId, currency, refreshKey, on
               <th className="py-2 pr-2 font-medium">Número</th>
               <th className="py-2 pr-2 font-medium">Emisión</th>
               <th className="py-2 pr-2 font-medium">Concepto</th>
+              <th className="py-2 pr-2 font-medium">Emisor</th>
               <th className="py-2 pr-2 font-medium text-right">Monto</th>
               <th className="py-2 pr-2 font-medium">Estado</th>
               <th className="py-2 pl-2 font-medium text-right"></th>
@@ -181,6 +182,7 @@ export default function CustomerInvoicesPanel({ itemId, currency, refreshKey, on
                   </td>
                   <td className="py-2 pr-2 text-gray-500 dark:text-gray-400 whitespace-nowrap">{fmtDate(inv.issueDate)}</td>
                   <td className="py-2 pr-2 text-gray-700 dark:text-gray-300">{inv.concept}</td>
+                  <td className="py-2 pr-2 text-gray-500 dark:text-gray-400 whitespace-nowrap">{inv.issuer?.name || '—'}</td>
                   <td className="py-2 pr-2 text-right font-medium text-gray-900 dark:text-white whitespace-nowrap">{fmtMoney(inv.amount, currency)}</td>
                   <td className="py-2 pr-2">
                     {inv.kind === 'invoice' ? (
@@ -230,7 +232,7 @@ export default function CustomerInvoicesPanel({ itemId, currency, refreshKey, on
                 </tr>
               )
             })}
-            {invoices.length === 0 && <tr><td colSpan={7} className="text-center text-xs text-gray-400 py-6">Sin facturas.</td></tr>}
+            {invoices.length === 0 && <tr><td colSpan={8} className="text-center text-xs text-gray-400 py-6">Sin facturas.</td></tr>}
           </tbody>
         </table>
       </div>
