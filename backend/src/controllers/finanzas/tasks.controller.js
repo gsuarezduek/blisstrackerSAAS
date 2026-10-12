@@ -4,6 +4,7 @@ const { toDecimal } = require('../../lib/financeMoney')
 const { parseDate } = require('./_shared')
 const { isValidTaskStatus } = require('../../lib/financeCatalog')
 const { syncDashboardOnResponsibleChange } = require('../../lib/financeTaskDashboard')
+const { resolveModuleAccess, memberRoleNames } = require('../../lib/moduleAccess')
 
 function todayUTCNoon() {
   const d = new Date()
@@ -261,4 +262,30 @@ async function deleteTask(req, res, next) {
   } catch (err) { next(err) }
 }
 
-module.exports = { listTasks, createTask, updateTask, deleteTask, getOpenTasks }
+// GET /api/finanzas/team — responsables asignables en Pendientes: miembros
+// activos admin/owner o con acceso al módulo finanzas (por rol o agregados
+// por persona, ver lib/moduleAccess) — mismo patrón que GET /ventas/team.
+// Antes el selector de responsable mostraba a TODO el workspace.
+async function getTeam(req, res, next) {
+  try {
+    const workspaceId = req.workspace.id
+    const { roles: financeRoles, userIds: financeUserIds } = resolveModuleAccess(req.workspace, 'finanzas')
+
+    const members = await prisma.workspaceMember.findMany({
+      where: { workspaceId, active: true },
+      select: {
+        role: true, teamRole: true, extraTeamRoles: true,
+        user: { select: { id: true, name: true, avatar: true } },
+      },
+      orderBy: { user: { name: 'asc' } },
+    })
+
+    const team = members
+      .filter(m => ['admin', 'owner'].includes(m.role) || memberRoleNames(m).some(r => financeRoles.includes(r)) || financeUserIds.includes(m.user.id))
+      .map(m => ({ id: m.user.id, name: m.user.name, avatar: m.user.avatar, teamRole: m.teamRole, role: m.role }))
+
+    res.json(team)
+  } catch (err) { next(err) }
+}
+
+module.exports = { listTasks, createTask, updateTask, deleteTask, getOpenTasks, getTeam }

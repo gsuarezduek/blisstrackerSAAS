@@ -148,6 +148,7 @@ router.get('/tasks',                 tasks.listTasks)
 router.post('/tasks',                tasks.createTask)
 router.patch('/tasks/:id',           tasks.updateTask)
 router.delete('/tasks/:id',          tasks.deleteTask)
+router.get('/team',                  tasks.getTeam) // responsables asignables (admin/owner + acceso al módulo), ver getTeam
 
 router.get('/workspace-note',        workspaceNote.getNote)
 router.patch('/workspace-note',      workspaceNote.updateNote)
