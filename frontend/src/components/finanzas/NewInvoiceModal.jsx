@@ -50,6 +50,17 @@ export default function NewInvoiceModal({ items, issuers, defaultItemId, onClose
     setIssuerId(c?.defaultIssuer?.id ? String(c.defaultIssuer.id) : '')
   }
 
+  // Estos datos no los pide ARCA para autorizar la factura (issue() sale bien
+  // sin ellos) pero sí son obligatorios para armar el PDF oficial después
+  // (ver arcaVoucherDocument.js) — avisamos ANTES de emitir, no recién cuando
+  // falla la descarga.
+  const missingForPdf = issuerId ? [
+    !issuer?.address && 'dirección',
+    !issuer?.grossIncome && 'ingresos brutos',
+    !issuer?.activitiesStartDate && 'inicio de actividades',
+  ].filter(Boolean) : []
+  const missingCustomerAddress = issuerId && customer && customer.ivaCondition !== 'consumidor_final' && !customer.address
+
   async function handleSave() {
     if (!itemId || !concept.trim() || !amount || Number(amount) <= 0) { setError('Revisá los campos requeridos'); return }
     if (!issuerId && !number.trim()) { setError('Número requerido'); return }
@@ -163,6 +174,15 @@ export default function NewInvoiceModal({ items, issuers, defaultItemId, onClose
               <label className={label}>Monto</label>
               <input type="number" step="any" className={input} value={amount} onChange={e => setAmount(e.target.value)} />
             </div>
+
+            {(missingForPdf.length > 0 || missingCustomerAddress) && (
+              <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-900/40 rounded-xl p-3 text-xs text-amber-700 dark:text-amber-400">
+                La factura se puede emitir igual, pero después no vas a poder generar el PDF oficial hasta completar
+                {missingForPdf.length > 0 && <> del emisor en Configuración: <strong>{missingForPdf.join(', ')}</strong>.</>}
+                {missingForPdf.length > 0 && missingCustomerAddress && ' Y'}
+                {missingCustomerAddress && <> la <strong>dirección</strong> de este cliente.</>}
+              </div>
+            )}
 
             {error && <p className="text-sm text-red-500">{error}</p>}
 
