@@ -1,4 +1,4 @@
-import { ChartColumn, Compass, Handshake, Trophy, CalendarDays, Users, Puzzle, Landmark } from 'lucide-react'
+import { ChartColumn, Compass, Handshake, Trophy, CalendarDays, Users, Puzzle, Landmark, MessageCircle, CalendarClock } from 'lucide-react'
 
 /**
  * Catálogo de módulos opcionales (feature flags que el workspace puede prender/apagar).
@@ -38,6 +38,18 @@ export const MODULE_CATALOG = {
     label: 'Contenido',
     detail: 'Calendario de contenido para redes sociales: piezas por proyecto, vistas Calendario/Tabla/Kanban, comentarios internos y aprobación del cliente desde el portal.',
     tourBody: 'En "Contenido" armás el calendario de piezas de RRSS por proyecto y pedís aprobación al cliente sin que tenga que loguearse.',
+  },
+  whatsapp: {
+    icon: MessageCircle,
+    label: 'WhatsApp (Ventas)',
+    detail: 'Conectá el WhatsApp del workspace para ver y responder conversaciones con leads directo desde Ventas. Submódulo de Ventas — necesita ese módulo activo.',
+    tourBody: 'Dentro de "Ventas" conectás el WhatsApp del workspace y respondés a tus leads sin salir de BlissTracker.',
+  },
+  calendario: {
+    icon: CalendarClock,
+    label: 'Calendario',
+    detail: 'Coordiná reuniones con tu equipo según la disponibilidad real de cada uno: horario laboral por persona, reuniones agendadas que requieren aceptación de los invitados y un filtro de huecos comunes entre varias personas.',
+    tourBody: 'En "Calendario" ves la disponibilidad del equipo y agendás reuniones buscando huecos comunes entre varias personas.',
   },
   rrhh: {
     icon: Users,

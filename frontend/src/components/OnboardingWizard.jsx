@@ -11,10 +11,13 @@
  *     admin puede borrarlo después desde Preferencias sin pasar por acá.
  *  B) Selector de módulos — lista los feature flags habilitados para el workspace
  *     (GET /workspaces/current/features, mismo endpoint que usa Preferencias → Módulos
- *     adicionales) con todos tildados por defecto. Al continuar, persiste el opt-out de
- *     los que quedaron destildados vía PATCH .../features/:key (mismo request que
- *     Preferencias). Si el workspace no tiene ningún módulo habilitado, se saltea directo
- *     a la fase C.
+ *     adicionales) con todos DEStildados por defecto (opt-in explícito). Al continuar,
+ *     persiste el opt-out de los que quedaron destildados vía PATCH .../features/:key
+ *     (mismo request que Preferencias). Si el workspace no tiene ningún módulo
+ *     habilitado, se saltea directo a la fase C. "Saltar" en la fase A o B (es decir,
+ *     antes de confirmar la selección) apaga TODOS los módulos opcionales — "decido
+ *     después" nunca debe dejarlos en su default habilitado; se reactivan más adelante
+ *     desde Preferencias → Módulos adicionales.
  *  C) Tour adaptativo — mismo estilo visual que el tour anterior, pero el array de pasos
  *     se arma en memoria: 3 pasos "spine" (siempre aplican) + 1 paso por cada módulo que
  *     quedó activo en la fase B + el paso final de invitar al equipo.
@@ -111,9 +114,24 @@ export default function OnboardingWizard() {
     }
   }
 
+  // "Saltar" antes de llegar a la fase 'tour' significa "decido después" — no "dejá
+  // los módulos como venían" (que arrancan habilitados por default). Se apagan todos
+  // los opcionales explícitamente, mismo criterio que el estado inicial del selector
+  // (todo destildado) y la frase que le mostramos al admin ("elegí qué activar").
+  // Si ya pasó por la fase 'modules' (confirmModules ya corrió), no hay nada que tocar.
   async function finish(reason) {
     setVisible(false)
     trackEvent(reason === 'skipped' ? 'tour_skipped' : 'tour_completed', { step, phase })
+    if (reason === 'skipped' && phase !== 'tour') {
+      let feats = features
+      if (feats === null) {
+        try { feats = (await api.get('/workspaces/current/features')).data } catch (_) { feats = [] }
+      }
+      await Promise.all(
+        (feats || []).map(f => api.patch(`/workspaces/current/features/${f.key}`, { disabled: true }).catch(() => {}))
+      )
+      invalidateFeatureFlag()
+    }
     try { await api.post('/workspaces/current/onboarding/complete') } catch (_) {}
     refreshWorkspace()
   }
