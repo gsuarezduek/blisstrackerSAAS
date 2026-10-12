@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
-import { Download, FileText, FileMinus, RefreshCw, Trash2 } from 'lucide-react'
+import { Download, Eye, FileText, FileMinus, RefreshCw, Trash2 } from 'lucide-react'
 import { Icon } from '../ui/Icon'
 import api from '../../api/client'
 import { fmtMoney } from '../../utils/format'
@@ -36,6 +36,23 @@ async function downloadBlobChecked(url, filename) {
   try {
     await downloadBlob(url, filename)
   } catch (err) {
+    alert(await blobErrorMessage(err))
+  }
+}
+
+// Abre el PDF en una pestaña nueva en vez de forzar la descarga — la pestaña
+// se abre ANTES del fetch (sincrónico, dentro del gesto del usuario) para que
+// el navegador no la bloquee como popup; una vez que llega el blob se le
+// asigna como ubicación.
+async function viewBlob(url, filename) {
+  const win = window.open('', '_blank')
+  try {
+    const res = await api.get(url, { responseType: 'blob' })
+    const blobUrl = URL.createObjectURL(res.data)
+    if (win) win.location.href = blobUrl
+    else await downloadBlobChecked(url, filename) // popup bloqueado — bajamos el archivo como respaldo
+  } catch (err) {
+    win?.close()
     alert(await blobErrorMessage(err))
   }
 }
@@ -186,6 +203,11 @@ export default function CustomerInvoicesPanel({ itemId, currency, refreshKey, on
                       {inv.cae && inv.kind === 'invoice' && (
                         <button title="Nota de crédito/débito" onClick={() => setNoteInvoice(inv)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
                           <Icon as={FileMinus} size={14} />
+                        </button>
+                      )}
+                      {inv.cae && (
+                        <button title="Ver PDF oficial" onClick={() => viewBlob(`/finanzas/invoices/${inv.id}/pdf`, `Factura ${inv.number}.pdf`)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
+                          <Icon as={Eye} size={14} />
                         </button>
                       )}
                       {inv.cae && (
