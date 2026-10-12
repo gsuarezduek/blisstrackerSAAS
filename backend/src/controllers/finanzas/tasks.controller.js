@@ -51,9 +51,12 @@ async function syncGeneratedTasks(workspaceId) {
     live.push({ origin: 'check_rejected', originId: c.id, title: `Resolver cheque rechazado de ${c.movement.item?.name || '—'}`, amount: c.movement.amount, date: c.rejectedAt })
   }
 
-  // Regla 3: facturas vencidas, agrupadas por cliente.
+  // Regla 3: facturas vencidas, agrupadas por cliente. `kind:'invoice'`
+  // excluye notas de crédito/débito (no se "cobran" individualmente — no
+  // tienen cuenta corriente propia, ver computeInvoiceStatus) y una
+  // rechazada por ARCA (nunca existió legalmente, no hay nada que cobrar).
   const overdueInvoices = await prisma.financeInvoice.findMany({
-    where: { workspaceId, deletedAt: null, dueDate: { lt: today } },
+    where: { workspaceId, deletedAt: null, kind: 'invoice', arcaStatus: { not: 'rejected' }, dueDate: { lt: today } },
     include: { item: true, collections: { where: { deletedAt: null }, select: { amount: true } } },
   })
   const overdueByItem = new Map()

@@ -11,7 +11,11 @@ function fmtDate(iso) {
 // "Facturas pendientes" (sección 4.5, columna lateral): número, estado,
 // concepto, vencimiento, monto pendiente, adjunto, "Registrar cobro de esta factura".
 export default function PendingInvoicesList({ invoices, currency, onRegisterPayment }) {
-  const pending = invoices.filter(i => i.status !== 'paid')
+  // Una nota de crédito/débito no se "cobra" individualmente (no tiene cuenta
+  // corriente propia, ver computeInvoiceStatus en el backend) — su status
+  // nunca es 'paid', así que sin este filtro quedaban siempre acá como si
+  // faltara cobrarlas.
+  const pending = invoices.filter(i => i.kind === 'invoice' && i.status !== 'paid' && i.status !== 'rejected')
 
   return (
     <Card>
