@@ -556,8 +556,6 @@ async function downloadZip(req, res, next) {
       where: { id: { in: ids }, workspaceId, deletedAt: null },
       include: { attachments: { where: { deletedAt: null, status: 'ready' } } },
     })
-    const hasAnythingToZip = invoices.some(inv => inv.cae || inv.attachments.length > 0)
-    if (!hasAnythingToZip) return res.status(400).json({ error: 'Ninguna de las facturas seleccionadas tiene PDF oficial ni adjuntos para descargar.' })
 
     const usedNames = new Set()
     function dedupe(name) {
@@ -571,28 +569,46 @@ async function downloadZip(req, res, next) {
       return candidate
     }
 
+    // Los PDFs se generan ANTES de abrir el stream del zip (no adentro del
+    // loop de archiver) para poder devolver un error real si ninguno se pudo
+    // armar, en vez de mandar los headers del zip y terminar bajando un .zip
+    // de 0 bytes sin ninguna pista de qué pasó.
+    const pdfEntries = []
+    for (const inv of invoices) {
+      if (!inv.cae) continue
+      try {
+        const kindLabel = inv.kind === 'credit_note' ? 'Nota de crédito' : inv.kind === 'debit_note' ? 'Nota de débito' : 'Factura'
+        const pdf = await renderInvoicePdf(inv.id, req.workspace.slug)
+        pdfEntries.push({ name: dedupe(`${kindLabel} ${inv.number}.pdf`), buffer: pdf })
+      } catch (err) {
+        console.error(`[Finanzas] No se pudo generar el PDF de la factura ${inv.id} para el zip:`, err.message)
+      }
+    }
+    const attachmentCount = invoices.reduce((s, inv) => s + inv.attachments.length, 0)
+    if (pdfEntries.length === 0 && attachmentCount === 0) {
+      const anyWithCae = invoices.some(inv => inv.cae)
+      return res.status(502).json({
+        error: anyWithCae
+          ? 'No se pudo generar el PDF oficial de ninguna factura seleccionada. Revisá en Configuración → Emisores que tenga cargada la dirección, los ingresos brutos y el inicio de actividades (hace falta para el PDF).'
+          : 'Ninguna de las facturas seleccionadas tiene PDF oficial ni adjuntos para descargar.',
+      })
+    }
+
     res.setHeader('Content-Type', 'application/zip')
     res.setHeader('Content-Disposition', safeContentDisposition('facturas.zip', { type: 'attachment' }))
     const archive = archiver('zip', { zlib: { level: 6 } })
     archive.on('warning', () => {})
     archive.on('error', err => { if (!res.headersSent) next(err); else res.destroy(err) })
     archive.pipe(res)
+    for (const entry of pdfEntries) archive.append(entry.buffer, { name: entry.name })
     for (const inv of invoices) {
-      // PDF oficial de ARCA además de los adjuntos manuales — antes el zip
-      // solo incluía adjuntos, así que una factura recién emitida (sin ningún
-      // archivo subido a mano) bajaba un zip vacío pese a tener CAE.
-      if (inv.cae) {
-        try {
-          const kindLabel = inv.kind === 'credit_note' ? 'Nota de crédito' : inv.kind === 'debit_note' ? 'Nota de débito' : 'Factura'
-          const pdf = await renderInvoicePdf(inv.id, req.workspace.slug)
-          archive.append(pdf, { name: dedupe(`${kindLabel} ${inv.number}.pdf`) })
-        } catch { /* no se pudo generar el PDF oficial — se omite, el resto del zip sigue */ }
-      }
       for (const att of inv.attachments) {
         try {
           const { body } = await objectStorage.getObjectStream(att.objectKey)
           archive.append(body, { name: dedupe(att.name) })
-        } catch { /* objeto faltante en R2 — se omite, el resto del zip sigue */ }
+        } catch (err) {
+          console.error(`[Finanzas] No se pudo leer el adjunto ${att.id} (factura ${inv.id}) de R2:`, err.message)
+        }
       }
     }
     await archive.finalize()

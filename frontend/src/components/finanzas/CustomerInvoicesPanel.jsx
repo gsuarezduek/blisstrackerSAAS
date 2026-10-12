@@ -12,6 +12,17 @@ function fmtDate(iso) {
   return new Date(iso).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })
 }
 
+// Con `responseType: 'blob'`, un error HTTP también llega como Blob (no como
+// JSON ya parseado) — sin esto, un 400/502 se tragaba en silencio y parecía
+// que "no pasó nada".
+async function blobErrorMessage(err) {
+  const blob = err?.response?.data
+  if (blob instanceof Blob && blob.type.includes('json')) {
+    try { return JSON.parse(await blob.text()).error } catch { /* no era JSON */ }
+  }
+  return err?.response?.data?.error || err.message || 'No se pudo descargar'
+}
+
 async function downloadBlob(url, filename) {
   const res = await api.get(url, { responseType: 'blob' })
   const blobUrl = URL.createObjectURL(res.data)
@@ -19,6 +30,14 @@ async function downloadBlob(url, filename) {
   a.href = blobUrl; a.download = filename
   document.body.appendChild(a); a.click(); a.remove()
   URL.revokeObjectURL(blobUrl)
+}
+
+async function downloadBlobChecked(url, filename) {
+  try {
+    await downloadBlob(url, filename)
+  } catch (err) {
+    alert(await blobErrorMessage(err))
+  }
 }
 
 // "Facturas" (sección 4.5b): TODAS las facturas del cliente, buscador,
@@ -55,12 +74,16 @@ export default function CustomerInvoicesPanel({ itemId, currency, refreshKey, on
 
   // download-zip es POST (manda `ids` en el body) — downloadBlob asume GET, se maneja aparte.
   async function handleDownloadZip() {
-    const res = await api.post('/finanzas/invoices/download-zip', { ids: [...selected] }, { responseType: 'blob' })
-    const blobUrl = URL.createObjectURL(res.data)
-    const a = document.createElement('a')
-    a.href = blobUrl; a.download = 'facturas.zip'
-    document.body.appendChild(a); a.click(); a.remove()
-    URL.revokeObjectURL(blobUrl)
+    try {
+      const res = await api.post('/finanzas/invoices/download-zip', { ids: [...selected] }, { responseType: 'blob' })
+      const blobUrl = URL.createObjectURL(res.data)
+      const a = document.createElement('a')
+      a.href = blobUrl; a.download = 'facturas.zip'
+      document.body.appendChild(a); a.click(); a.remove()
+      URL.revokeObjectURL(blobUrl)
+    } catch (err) {
+      alert(await blobErrorMessage(err))
+    }
   }
 
   async function handleDelete(inv) {
@@ -166,12 +189,12 @@ export default function CustomerInvoicesPanel({ itemId, currency, refreshKey, on
                         </button>
                       )}
                       {inv.cae && (
-                        <button title="Descargar PDF oficial" onClick={() => downloadBlob(`/finanzas/invoices/${inv.id}/pdf`, `Factura ${inv.number}.pdf`)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
+                        <button title="Descargar PDF oficial" onClick={() => downloadBlobChecked(`/finanzas/invoices/${inv.id}/pdf`, `Factura ${inv.number}.pdf`)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
                           <Icon as={FileText} size={14} />
                         </button>
                       )}
                       {inv.attachments[0] && (
-                        <button title="Descargar adjunto" onClick={() => downloadBlob(`/finanzas/invoices/${inv.id}/attachments/${inv.attachments[0].id}/download`, inv.attachments[0].name)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
+                        <button title="Descargar adjunto" onClick={() => downloadBlobChecked(`/finanzas/invoices/${inv.id}/attachments/${inv.attachments[0].id}/download`, inv.attachments[0].name)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
                           <Icon as={Download} size={14} />
                         </button>
                       )}

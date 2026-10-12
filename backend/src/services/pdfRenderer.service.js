@@ -63,7 +63,12 @@ async function renderOnce(url, { readyFlag, holder }) {
 
     // Un error de la página de impresión (token vencido, informe borrado) se propaga
     // como error de render en vez de terminar en un PDF con un cartel de "no disponible".
-    await page.goto(url, { waitUntil: 'networkidle0', timeout: READY_TIMEOUT_MS })
+    // `waitUntil:'load'` (no 'networkidle0'): en desarrollo el WebSocket de HMR de Vite
+    // deja la conexión siempre abierta, así que "red completamente inactiva" nunca llega
+    // a cumplirse y el render se cuelga hasta el timeout. El `waitForFunction` de abajo
+    // ya espera explícitamente a que la página termine de cargar sus datos — alcanza con
+    // que el documento base haya cargado.
+    await page.goto(url, { waitUntil: 'load', timeout: READY_TIMEOUT_MS })
     await page.waitForFunction(
       `window.${readyFlag} === true || !!window.${readyFlag}_ERROR`,
       { timeout: READY_TIMEOUT_MS },
