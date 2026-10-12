@@ -11,6 +11,7 @@ const { logFinanceAudit } = require('../../lib/financeAudit')
 const { toDecimal } = require('../../lib/financeMoney')
 const { getArcaClient, toMinorUnits, formatVoucherNumber, buildArcaItems } = require('../../lib/arcaClient')
 const { getIssuedVoucher } = require('../../lib/arcaVoucherDocument')
+const { renderInvoicePdf } = require('./invoicePrint.controller')
 const { isValidArcaVatRate } = require('../../lib/financeCatalog')
 const { parseDate, computeInvoiceStatus, businessError } = require('./_shared')
 
@@ -555,6 +556,9 @@ async function downloadZip(req, res, next) {
       where: { id: { in: ids }, workspaceId, deletedAt: null },
       include: { attachments: { where: { deletedAt: null, status: 'ready' } } },
     })
+    const hasAnythingToZip = invoices.some(inv => inv.cae || inv.attachments.length > 0)
+    if (!hasAnythingToZip) return res.status(400).json({ error: 'Ninguna de las facturas seleccionadas tiene PDF oficial ni adjuntos para descargar.' })
+
     const usedNames = new Set()
     function dedupe(name) {
       if (!usedNames.has(name)) { usedNames.add(name); return name }
@@ -574,6 +578,16 @@ async function downloadZip(req, res, next) {
     archive.on('error', err => { if (!res.headersSent) next(err); else res.destroy(err) })
     archive.pipe(res)
     for (const inv of invoices) {
+      // PDF oficial de ARCA además de los adjuntos manuales — antes el zip
+      // solo incluía adjuntos, así que una factura recién emitida (sin ningún
+      // archivo subido a mano) bajaba un zip vacío pese a tener CAE.
+      if (inv.cae) {
+        try {
+          const kindLabel = inv.kind === 'credit_note' ? 'Nota de crédito' : inv.kind === 'debit_note' ? 'Nota de débito' : 'Factura'
+          const pdf = await renderInvoicePdf(inv.id, req.workspace.slug)
+          archive.append(pdf, { name: dedupe(`${kindLabel} ${inv.number}.pdf`) })
+        } catch { /* no se pudo generar el PDF oficial — se omite, el resto del zip sigue */ }
+      }
       for (const att of inv.attachments) {
         try {
           const { body } = await objectStorage.getObjectStream(att.objectKey)

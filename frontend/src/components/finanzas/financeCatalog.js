@@ -100,10 +100,11 @@ export const TRANSFER_REASONS = [
 
 // Estado de factura: lo calcula el backend (nunca persistido), acá solo labels/colores.
 export const INVOICE_STATUSES = [
-  { key: 'paid',    label: 'Pagada',    color: 'green' },
-  { key: 'partial', label: 'Parcial',   color: 'amber' },
-  { key: 'overdue', label: 'Vencida',   color: 'red' },
-  { key: 'pending', label: 'Pendiente', color: 'gray' },
+  { key: 'paid',     label: 'Pagada',    color: 'green' },
+  { key: 'partial',  label: 'Parcial',   color: 'amber' },
+  { key: 'overdue',  label: 'Vencida',   color: 'red' },
+  { key: 'pending',  label: 'Pendiente', color: 'gray' },
+  { key: 'rejected', label: 'Rechazada', color: 'red' },
 ]
 
 export const CUSTOMER_STATUSES = [

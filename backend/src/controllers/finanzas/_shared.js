@@ -23,6 +23,10 @@ function computeInvoiceStatus(invoice, collected) {
   // Una nota de crédito/débito no se "cobra" — es una corrección, no un
   // comprobante con cuenta corriente propia (ver concept.kind, Etapa 4).
   if (invoice.kind && invoice.kind !== 'invoice') return invoice.kind
+  // ARCA rechazó el comprobante: nunca llegó a existir legalmente, no tiene
+  // sentido mostrarlo como "pendiente de cobro" (ver signedAmount en
+  // customers.controller.js, que por la misma razón lo saca del saldo).
+  if (invoice.arcaStatus === 'rejected') return 'rejected'
   const amount = toDecimal(invoice.amount)
   if (collected.greaterThanOrEqualTo(amount)) return 'paid'
   if (collected.greaterThan(0)) return 'partial'

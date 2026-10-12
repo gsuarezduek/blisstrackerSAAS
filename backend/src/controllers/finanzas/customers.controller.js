@@ -22,6 +22,10 @@ function shapeInvoice(inv) {
 // (es plata que se le devuelve al cliente), una de débito suma igual que una
 // factura normal.
 function signedAmount(inv) {
+  // Un comprobante que ARCA rechazó nunca llegó a existir legalmente — no
+  // suma al "facturado" del cliente (si no, infla el saldo con algo que
+  // nunca se le pudo cobrar). Ver mismo criterio en computeInvoiceStatus.
+  if (inv.arcaStatus === 'rejected') return toDecimal(0)
   const amount = toDecimal(inv.amount)
   return inv.kind === 'credit_note' ? amount.negated() : amount
 }
@@ -131,7 +135,7 @@ async function getCustomer(req, res, next) {
 
     res.json({
       id: item.id, name: item.name, category: item.category, project: item.project,
-      contactName: item.contactName, phone: item.phone, email: item.email, taxId: item.taxId,
+      contactName: item.contactName, phone: item.phone, email: item.email, taxId: item.taxId, address: item.address,
       contractedService: item.contractedService, notes: item.notes,
       ivaCondition: item.ivaCondition, defaultIssuer: item.defaultIssuer,
       invoices: summary.invoices, facturado: summary.facturado, cobrado: summary.cobrado, saldo: summary.saldo, status: summary.status,
@@ -155,7 +159,7 @@ async function getLedger(req, res, next) {
     if (fromDate === undefined || toDate === undefined) return res.status(400).json({ error: 'Fecha inválida' })
 
     const [invoices, movements] = await Promise.all([
-      prisma.financeInvoice.findMany({ where: { workspaceId, itemId, deletedAt: null }, select: { id: true, number: true, concept: true, amount: true, kind: true, issueDate: true, attachments: { where: { deletedAt: null, status: 'ready' }, select: { id: true, name: true } } } }),
+      prisma.financeInvoice.findMany({ where: { workspaceId, itemId, deletedAt: null }, select: { id: true, number: true, concept: true, amount: true, kind: true, arcaStatus: true, issueDate: true, attachments: { where: { deletedAt: null, status: 'ready' }, select: { id: true, name: true } } } }),
       prisma.financeMovement.findMany({
         where: { workspaceId, itemId, type: 'income', accountApplication: { in: ['invoice', 'on_account'] }, deletedAt: null },
         include: { account: { select: { name: true } }, check: true, invoice: { select: { number: true } } },
@@ -170,8 +174,9 @@ async function getLedger(req, res, next) {
     const rows = [
       ...invoices.map(inv => ({
         date: inv.issueDate, kind: 'invoice', docKind: inv.kind, id: `inv${inv.id}`,
-        concept: `${DOC_KIND_LABEL[inv.kind] ? `[${DOC_KIND_LABEL[inv.kind]}] ` : ''}${inv.number || '(pendiente de ARCA)'} · ${inv.concept}`, attachments: inv.attachments,
-        facturado: (inv.kind === 'credit_note' ? toDecimal(inv.amount).negated() : toDecimal(inv.amount)).toString(), cobrado: '0',
+        concept: `${inv.arcaStatus === 'rejected' ? '[Rechazada] ' : (DOC_KIND_LABEL[inv.kind] ? `[${DOC_KIND_LABEL[inv.kind]}] ` : '')}${inv.number || '(pendiente de ARCA)'} · ${inv.concept}`, attachments: inv.attachments,
+        // Rechazada por ARCA = nunca existió legalmente, no pesa en el saldo (ver signedAmount).
+        facturado: signedAmount(inv).toString(), cobrado: '0',
       })),
       ...movements.map(mv => ({
         date: mv.date, kind: 'payment', id: `mov${mv.id}`,

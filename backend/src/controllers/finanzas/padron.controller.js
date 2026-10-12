@@ -18,8 +18,16 @@ async function lookupCuit(req, res, next) {
     const issuer = await prisma.financeIssuer.findFirst({ where: { workspaceId, active: true } })
     if (!issuer) return res.status(400).json({ error: 'Necesitás al menos un emisor configurado para consultar el padrón.' })
 
-    const arca = await getArcaClient(issuer)
-    const result = await arca.padron.getTaxpayerDetails(normalized.replace(/-/g, ''))
+    let result
+    try {
+      const arca = await getArcaClient(issuer)
+      result = await arca.padron.getTaxpayerDetails(normalized.replace(/-/g, ''))
+    } catch (err) {
+      // Error de transporte/infra contra ARCA (ej. el certificado del emisor no
+      // tiene asociado el webservice de padrón en AFIP) — no lo dejamos caer
+      // como 500 genérico, mismo criterio que arcaErrorData en invoices.controller.js.
+      return res.status(502).json({ error: `ARCA rechazó la consulta al padrón: ${err.message || err}` })
+    }
     if (!result) return res.status(404).json({ error: 'No se encontró ese CUIT en el padrón de ARCA.' })
 
     const addressParts = [result.address?.street, result.address?.city, result.address?.province].filter(Boolean)

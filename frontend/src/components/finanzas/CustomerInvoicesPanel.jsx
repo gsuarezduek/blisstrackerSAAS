@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
-import { Download, FileText, FileMinus, RefreshCw } from 'lucide-react'
+import { Download, FileText, FileMinus, RefreshCw, Trash2 } from 'lucide-react'
 import { Icon } from '../ui/Icon'
 import api from '../../api/client'
 import { fmtMoney } from '../../utils/format'
@@ -63,6 +63,16 @@ export default function CustomerInvoicesPanel({ itemId, currency, refreshKey, on
     URL.revokeObjectURL(blobUrl)
   }
 
+  async function handleDelete(inv) {
+    if (!confirm(`¿Eliminar ${inv.number || 'esta factura'}? No se puede deshacer.`)) return
+    try {
+      await api.delete(`/finanzas/invoices/${inv.id}`)
+      await load()
+    } catch (err) {
+      alert(err.response?.data?.error || 'No se pudo eliminar')
+    }
+  }
+
   async function handleReconcile(inv) {
     setReconcilingId(inv.id)
     try {
@@ -100,6 +110,7 @@ export default function CustomerInvoicesPanel({ itemId, currency, refreshKey, on
           <option value="partial">Parcial</option>
           <option value="overdue">Vencida</option>
           <option value="paid">Pagada</option>
+          <option value="rejected">Rechazada</option>
         </select>
       </div>
 
@@ -137,7 +148,8 @@ export default function CustomerInvoicesPanel({ itemId, currency, refreshKey, on
                     ) : (
                       <span className="text-[11px] rounded-full px-2 py-0.5 bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300">{kindMeta.label}</span>
                     )}
-                    {inv.arcaStatus && inv.arcaStatus !== 'authorized' && (
+                    {/* Para una factura (kind='invoice') rechazada, el badge principal de arriba ya dice "Rechazada" (status la cubre) — evita duplicarlo. Para una nota, el status siempre es su kind (NC/ND), así que este es el único indicador de que ARCA la rechazó. */}
+                    {inv.arcaStatus && inv.arcaStatus !== 'authorized' && !(inv.kind === 'invoice' && inv.arcaStatus === 'rejected') && (
                       <span className={`ml-1 text-[11px] rounded-full px-2 py-0.5 ${STATUS_BADGE[arcaStatusMeta(inv.arcaStatus).color]}`}>{arcaStatusMeta(inv.arcaStatus).label}</span>
                     )}
                   </td>
@@ -161,6 +173,11 @@ export default function CustomerInvoicesPanel({ itemId, currency, refreshKey, on
                       {inv.attachments[0] && (
                         <button title="Descargar adjunto" onClick={() => downloadBlob(`/finanzas/invoices/${inv.id}/attachments/${inv.attachments[0].id}/download`, inv.attachments[0].name)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
                           <Icon as={Download} size={14} />
+                        </button>
+                      )}
+                      {!inv.cae && (
+                        <button title="Eliminar" onClick={() => handleDelete(inv)} className="text-gray-400 hover:text-red-600 dark:hover:text-red-400">
+                          <Icon as={Trash2} size={14} />
                         </button>
                       )}
                     </div>

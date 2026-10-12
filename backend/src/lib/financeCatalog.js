@@ -124,6 +124,7 @@ const INVOICE_STATUSES = [
   { key: 'partial',  label: 'Parcial',  color: 'amber' },
   { key: 'overdue',  label: 'Vencida',  color: 'red' },
   { key: 'pending',  label: 'Pendiente', color: 'gray' },
+  { key: 'rejected', label: 'Rechazada', color: 'red' },
 ]
 
 // Estado de cliente (cuenta corriente), derivado del set de facturas — ver
