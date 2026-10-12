@@ -8,7 +8,10 @@ const INVOICE_WITH_COLLECTIONS = {
     collections: { where: { deletedAt: null }, select: { amount: true } },
     attachments: { where: { deletedAt: null, status: 'ready' }, select: { id: true, name: true } },
   },
-  orderBy: { issueDate: 'desc' },
+  // `id` como segundo criterio: todas las facturas emitidas hoy comparten la
+  // misma `issueDate` (solo fecha, sin hora) — sin esto el orden entre ellas
+  // queda indefinido y una recién creada podía aparecer a la mitad.
+  orderBy: [{ issueDate: 'desc' }, { id: 'desc' }],
 }
 
 function shapeInvoice(inv) {

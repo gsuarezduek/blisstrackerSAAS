@@ -69,7 +69,10 @@ async function listInvoices(req, res, next) {
       where.OR = [{ number: { contains: search.trim(), mode: 'insensitive' } }, { concept: { contains: search.trim(), mode: 'insensitive' } }]
     }
 
-    const invoices = await prisma.financeInvoice.findMany({ where, orderBy: { issueDate: 'desc' }, include: INVOICE_INCLUDE })
+    // `id` como segundo criterio: todas las facturas emitidas hoy comparten
+    // la misma `issueDate` (solo fecha, sin hora) — sin esto, el orden entre
+    // ellas queda indefinido y una recién creada podía aparecer a la mitad.
+    const invoices = await prisma.financeInvoice.findMany({ where, orderBy: [{ issueDate: 'desc' }, { id: 'desc' }], include: INVOICE_INCLUDE })
     let shaped = invoices.map(shapeInvoice)
     if (status) shaped = shaped.filter(i => i.status === status)
     res.json(shaped)
