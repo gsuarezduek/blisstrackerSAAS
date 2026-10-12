@@ -137,7 +137,7 @@ export default function NewInvoiceModal({ items, issuers, defaultItemId, onClose
                 <label className={label}>Emisor</label>
                 <select className={input} value={issuerId} onChange={e => setIssuerId(e.target.value)}>
                   <option value="">Factura informativa (sin ARCA)</option>
-                  {issuers.map(is => <option key={is.id} value={is.id}>{is.name}{is.environment === 'test' ? ' (homologación)' : ''}</option>)}
+                  {issuers.map(is => <option key={is.id} value={is.id}>{is.name} ({is.environment === 'production' ? 'producción — factura real' : 'homologación'})</option>)}
                 </select>
               </div>
             )}
