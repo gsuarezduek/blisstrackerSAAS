@@ -60,7 +60,7 @@ async function viewBlob(url, filename) {
 // "Facturas" (sección 4.5b): TODAS las facturas del cliente, buscador,
 // filtro año/estado, selección múltiple + Descargar (zip si son varias) /
 // Enviar por mail.
-export default function CustomerInvoicesPanel({ itemId, currency, refreshKey, onInvoiceClick }) {
+export default function CustomerInvoicesPanel({ itemId, currency, refreshKey, onInvoiceClick, customer, issuers }) {
   const [search, setSearch] = useState('')
   const [year, setYear] = useState('')
   const [status, setStatus] = useState('')
@@ -259,7 +259,7 @@ export default function CustomerInvoicesPanel({ itemId, currency, refreshKey, on
       )}
 
       {noteInvoice && (
-        <NewNoteModal invoice={noteInvoice}
+        <NewNoteModal invoice={noteInvoice} customer={customer} issuers={issuers}
           onClose={() => setNoteInvoice(null)}
           onSaved={() => { setNoteInvoice(null); load() }}
         />

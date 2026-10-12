@@ -13,7 +13,7 @@ function fmtDate(iso) {
 // soportada en v1, ver nota de alcance en el backend) o débito (monto nuevo
 // asociado) sobre una factura con CAE. Mismo panel de resultado de 3 estados
 // que NewInvoiceModal (autorizada/rechazada/a reconciliar).
-export default function NewNoteModal({ invoice, onClose, onSaved }) {
+export default function NewNoteModal({ invoice, customer, issuers, onClose, onSaved }) {
   const [kind, setKind] = useState('credit_note')
   const [concept, setConcept] = useState('')
   const [amount, setAmount] = useState('')
@@ -23,6 +23,19 @@ export default function NewNoteModal({ invoice, onClose, onSaved }) {
   const [created, setCreated] = useState(null)
 
   const isResponsableInscripto = invoice.issuer?.taxCondition === 'responsable_inscripto'
+
+  // Mismo aviso no bloqueante que NewInvoiceModal: la nota también termina
+  // generando un PDF (buildInvoiceVoucherDocument), que exige estos datos del
+  // emisor/cliente aunque `issue()`/`issueCreditNote()`/`issueDebitNote()` no
+  // los pidan. `invoice.issuer` solo trae id/name/taxCondition — se busca el
+  // emisor completo en `issuers` para los campos extra.
+  const fullIssuer = issuers?.find(i => i.id === invoice.issuer?.id)
+  const missingForPdf = fullIssuer ? [
+    !fullIssuer.address && 'dirección',
+    !fullIssuer.grossIncome && 'ingresos brutos',
+    !fullIssuer.activitiesStartDate && 'inicio de actividades',
+  ].filter(Boolean) : []
+  const missingCustomerAddress = customer && customer.ivaCondition !== 'consumidor_final' && !customer.address
 
   async function handleSave() {
     if (kind === 'debit_note') {
@@ -105,6 +118,15 @@ export default function NewNoteModal({ invoice, onClose, onSaved }) {
                   </div>
                 )}
               </>
+            )}
+
+            {(missingForPdf.length > 0 || missingCustomerAddress) && (
+              <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-900/40 rounded-xl p-3 text-xs text-amber-700 dark:text-amber-400">
+                La nota se puede emitir igual, pero después no vas a poder generar el PDF oficial hasta completar
+                {missingForPdf.length > 0 && <> del emisor en Configuración: <strong>{missingForPdf.join(', ')}</strong>.</>}
+                {missingForPdf.length > 0 && missingCustomerAddress && ' Y'}
+                {missingCustomerAddress && <> la <strong>dirección</strong> de este cliente.</>}
+              </div>
             )}
 
             {error && <p className="text-sm text-red-500">{error}</p>}
