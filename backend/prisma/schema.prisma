@@ -218,6 +218,7 @@ model Workspace {
   whatsappBotDocuments       WhatsappBotDocument[]
   whatsappBotEscalations     WhatsappBotEscalation[]
   deviceTokens               DeviceToken[]
+  mcpTokens                  McpToken[]
   calendarEvents             CalendarEvent[]
   calendarEventParticipants  CalendarEventParticipant[]
   calendarEventRecurrences   CalendarEventRecurrence[]
@@ -459,6 +460,7 @@ model User {
   whatsappBotDocumentsUploaded      WhatsappBotDocument[]       @relation("WhatsappBotDocumentUploadedBy")
   dismissedFindings                 DismissedFinding[]
   deviceTokens                      DeviceToken[]
+  mcpTokens                         McpToken[]
   calendarEventsOrganized           CalendarEvent[]             @relation("CalendarEventOrganizer")
   calendarEventParticipations       CalendarEventParticipant[]  @relation("CalendarEventParticipant")
   calendarEventRecurrencesOrganized CalendarEventRecurrence[]   @relation("CalendarEventRecurrenceOrganizer")
@@ -4414,6 +4416,31 @@ model DeviceToken {
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@index([userId, workspaceId])
+}
+
+// Token de acceso al servidor MCP (/api/mcp) — ver "MCP (Grok) — integración"
+// en backend/CLAUDE.md. Un token = una identidad (userId+workspaceId): las
+// tools ejecutan con el rol/permisos reales de esa membresía, y las acciones
+// quedan atribuidas a ese usuario. `tokenHash` (sha256 del token plano, nunca
+// se guarda en claro) es lo que llega en el header Authorization. Pensado
+// desde el día 1 para N workspaces (cada fila ya carga su propio
+// workspaceId) aunque hoy se use para uno solo — agregar un workspace nuevo
+// no requiere cambiar el modelo, solo generar tokens con ese workspaceId.
+// Altas/bajas vía script de uso único (backend/scripts/), no hay UI todavía.
+model McpToken {
+  id         Int       @id @default(autoincrement())
+  workspaceId Int
+  userId     Int
+  tokenHash  String    @unique
+  label      String? // nombre legible, ej. "Grok - Gaston"
+  createdAt  DateTime  @default(now())
+  lastUsedAt DateTime?
+  revokedAt  DateTime? // soft-revoke: no se borra la fila, se conserva el historial
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
 }
 
 // ─── FINANZAS ────────────────────────────────────────────────────────────────

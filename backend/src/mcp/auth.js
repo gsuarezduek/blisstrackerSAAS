@@ -1,31 +1,60 @@
 const crypto = require('crypto')
+const prisma = require('../lib/prisma')
 
 // Autenticación de /api/mcp: NO es el JWT normal de sesión (ver middleware/auth.js).
-// Es un secreto estático único (MCP_TOKEN) que le damos al cliente MCP (Grok) para
-// pegarle a este workspace. Alcance v1: un solo token, un solo workspace — ver
+// Cada token (tabla McpToken, alta/baja vía backend/scripts/mcp-*-token.js) mapea
+// a UNA identidad fija (workspaceId+userId) — las tools ejecutan con el rol real
+// de esa membresía, nunca con privilegios ajenos. Soporta N tokens para N personas
+// y, de regalo, N workspaces (cada fila carga su propio workspaceId) sin que haga
+// falta un modelo de auth nuevo el día que se sume un segundo workspace. Ver
 // "MCP (Grok) — integración" en backend/CLAUDE.md.
-function timingSafeEqual(a, b) {
-  const bufA = Buffer.from(a)
-  const bufB = Buffer.from(b)
-  if (bufA.length !== bufB.length) return false
-  return crypto.timingSafeEqual(bufA, bufB)
+function hashToken(token) {
+  return crypto.createHash('sha256').update(token).digest('hex')
 }
 
-function mcpAuth(req, res, next) {
-  const expected = process.env.MCP_TOKEN
-  if (!expected) {
-    return res.status(503).json({ error: 'MCP no configurado (falta MCP_TOKEN)' })
-  }
+// Migración de compatibilidad, una sola vez: la v1 (anterior a McpToken) usaba
+// un único token fijo en env vars (MCP_TOKEN/MCP_WORKSPACE_SLUG/MCP_USER_EMAIL).
+// Si llega exactamente ese token y todavía no tiene fila en McpToken, se la
+// crea acá mismo — así el conector ya configurado en Grok sigue funcionando
+// sin que nadie tenga que volver a pegar un token. Noop en cuanto la fila ya
+// existe (vía la env var o ya migrada). Borrar las 3 env vars de Railway
+// cuando se confirme que todo quedó migrado es limpieza opcional, no urgente.
+async function migrateLegacyToken(token, tokenHash) {
+  const { MCP_TOKEN, MCP_WORKSPACE_SLUG, MCP_USER_EMAIL } = process.env
+  if (!MCP_TOKEN || !MCP_WORKSPACE_SLUG || !MCP_USER_EMAIL || token !== MCP_TOKEN) return null
 
+  const workspace = await prisma.workspace.findUnique({ where: { slug: MCP_WORKSPACE_SLUG }, select: { id: true } })
+  const user = await prisma.user.findUnique({ where: { email: MCP_USER_EMAIL }, select: { id: true } })
+  if (!workspace || !user) return null
+
+  return prisma.mcpToken.create({
+    data: { workspaceId: workspace.id, userId: user.id, tokenHash, label: 'legacy (migrado automáticamente)' },
+    include: { workspace: { select: { slug: true } } },
+  })
+}
+
+async function mcpAuth(req, res, next) {
   const header = req.headers.authorization
   if (!header || !header.startsWith('Bearer ')) {
     return res.status(401).json({ error: 'No token provided' })
   }
 
   const token = header.slice(7)
-  if (!timingSafeEqual(token, expected)) {
+  const tokenHash = hashToken(token)
+  let row = await prisma.mcpToken.findUnique({
+    where: { tokenHash },
+    include: { workspace: { select: { slug: true } } },
+  }).catch(() => null)
+
+  if (!row) row = await migrateLegacyToken(token, tokenHash).catch(() => null)
+
+  if (!row || row.revokedAt) {
     return res.status(401).json({ error: 'Invalid token' })
   }
+
+  req.mcpIdentity = { userId: row.userId, workspaceId: row.workspaceId, workspaceSlug: row.workspace.slug }
+  // Best-effort, no bloquea la request si falla.
+  prisma.mcpToken.update({ where: { id: row.id }, data: { lastUsedAt: new Date() } }).catch(() => {})
 
   next()
 }
