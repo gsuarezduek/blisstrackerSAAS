@@ -11,8 +11,8 @@
  */
 
 require('dotenv').config()
-const crypto = require('crypto')
 const prisma = require('../src/lib/prisma')
+const { generateToken } = require('../src/lib/mcpTokens')
 
 async function main() {
   const slug  = process.env.WORKSPACE_SLUG
@@ -36,8 +36,7 @@ async function main() {
   })
   if (!member?.active) { console.error(`${email} no es miembro activo de "${slug}"`); process.exit(1) }
 
-  const token     = crypto.randomBytes(32).toString('hex')
-  const tokenHash = crypto.createHash('sha256').update(token).digest('hex')
+  const { token, tokenHash } = generateToken()
 
   const row = await prisma.mcpToken.create({
     data: { workspaceId: workspace.id, userId: user.id, tokenHash, label },

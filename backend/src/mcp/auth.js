@@ -1,16 +1,13 @@
-const crypto = require('crypto')
 const prisma = require('../lib/prisma')
+const { hashToken } = require('../lib/mcpTokens')
 
 // Autenticación de /api/mcp: NO es el JWT normal de sesión (ver middleware/auth.js).
-// Cada token (tabla McpToken, alta/baja vía backend/scripts/mcp-*-token.js) mapea
-// a UNA identidad fija (workspaceId+userId) — las tools ejecutan con el rol real
-// de esa membresía, nunca con privilegios ajenos. Soporta N tokens para N personas
-// y, de regalo, N workspaces (cada fila carga su propio workspaceId) sin que haga
-// falta un modelo de auth nuevo el día que se sume un segundo workspace. Ver
-// "MCP (Grok) — integración" en backend/CLAUDE.md.
-function hashToken(token) {
-  return crypto.createHash('sha256').update(token).digest('hex')
-}
+// Cada token (tabla McpToken, alta/baja vía Preferencias → Agentes IA o los scripts
+// backend/scripts/mcp-*-token.js) mapea a UNA identidad fija (workspaceId+userId) —
+// las tools ejecutan con el rol real de esa membresía, nunca con privilegios ajenos.
+// Soporta N tokens para N personas y, de regalo, N workspaces (cada fila carga su
+// propio workspaceId) sin que haga falta un modelo de auth nuevo el día que se sume
+// un segundo workspace. Ver "MCP (Grok) — integración" en backend/CLAUDE.md.
 
 // Migración de compatibilidad, una sola vez: la v1 (anterior a McpToken) usaba
 // un único token fijo en env vars (MCP_TOKEN/MCP_WORKSPACE_SLUG/MCP_USER_EMAIL).

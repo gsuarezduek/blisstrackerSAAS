@@ -7,7 +7,9 @@ const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS'])
 // Base paths exentos del bloqueo de escritura en past_due:
 //  - /api/billing → el workspace tiene que poder pagar para salir de past_due
 //  - /api/profile → gestión de cuenta propia (password, preferencias), no es "trabajo del producto"
-const PAST_DUE_WRITE_EXEMPT = new Set(['/api/billing', '/api/profile'])
+//  - /api/mcp-tokens → gestión de los propios tokens de Agentes IA (ej. revocar uno
+//    comprometido no debería depender de estar al día con el pago)
+const PAST_DUE_WRITE_EXEMPT = new Set(['/api/billing', '/api/profile', '/api/mcp-tokens'])
 
 /**
  * Resuelve el workspace a partir del header X-Workspace (slug).

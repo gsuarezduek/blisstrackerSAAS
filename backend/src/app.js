@@ -70,6 +70,7 @@ const whatsappRoutes          = require('./routes/whatsapp.routes')
 const whatsappMediaPublicRoutes = require('./routes/whatsappMediaPublic.routes')
 const chatAttachmentPublicRoutes = require('./routes/chatAttachmentPublic.routes')
 const mcpRoutes                = require('./routes/mcp.routes')
+const mcpTokensRoutes          = require('./routes/mcpTokens.routes')
 const { handleWebhook }       = require('./webhooks/stripe.webhook')
 const { handleChakraWebhook } = require('./webhooks/whatsapp.webhook')
 
@@ -197,6 +198,8 @@ app.use('/api/whatsapp',         whatsappRoutes)
 
 // MCP (Grok u otro cliente compatible) — auth propia (token estático), ver mcp/auth.js
 app.use('/api/mcp',              mcpRoutes)
+// Autoadministración de esos tokens desde el perfil propio — auth normal (JWT de sesión)
+app.use('/api/mcp-tokens',       mcpTokensRoutes)
 
 app.get('/api/health', (_, res) => res.json({ ok: true }))
 

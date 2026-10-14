@@ -333,6 +333,14 @@ async function toggleMemberActive(req, res, next) {
             where: { userId, projectId: { in: projectIds } },
           })
         }
+
+        // Al desactivar se revocan también sus tokens de MCP (Agentes IA) en este
+        // workspace — un miembro desactivado no debe seguir operando vía un agente
+        // conectado con su identidad. Reactivarlo NO los revive: hay que generar uno nuevo.
+        await tx.mcpToken.updateMany({
+          where: { userId, workspaceId, revokedAt: null },
+          data: { revokedAt: new Date() },
+        })
       }
       await tx.workspaceMember.update({
         where: { workspaceId_userId: { workspaceId, userId } },

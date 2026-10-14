@@ -22,6 +22,7 @@ const land  = require('../controllers/landing.controller')
 const apt   = require('../controllers/apifyTokens.controller')
 const blog  = require('../controllers/blog.controller')
 const ic    = require('../controllers/superadmin/invitationCodes.controller')
+const mcpTok = require('../controllers/superadmin/mcpTokens.controller')
 
 const AVATAR_MAX_MB = 2
 const upload = multer({
@@ -81,6 +82,7 @@ router.get('/feedback',                 feedback.listFeedback)
 router.put('/feedback/:id/read',        feedback.markFeedbackRead)
 router.get('/email-logs',               feedback.listEmailLogs)
 router.get('/ai-tokens',                aiUsage.getAiTokenStats)
+router.get('/mcp-tokens',               mcpTok.listAll)
 router.get('/whatsapp-usage',           aiUsage.getWhatsappUsageStats)
 router.get('/conversion-funnel',        metrics.getConversionFunnel)
 router.get('/metrics',                  metrics.getMetrics)

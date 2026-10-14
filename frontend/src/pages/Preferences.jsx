@@ -5,10 +5,12 @@ import { useAuth } from '../context/AuthContext'
 import GlobalTab from './preferences/global'
 import PersonalTab from './preferences/personal'
 import ModulesTab from './preferences/modules'
+import AgentsTab from './preferences/agents'
 
 export default function Preferences() {
   const { user } = useAuth()
-  const [prefTab, setPrefTab] = useState('global')
+  // Admins arrancan en Globales (como siempre); el resto no tiene esa tab, arranca en Personales.
+  const [prefTab, setPrefTab] = useState(() => user?.isAdmin ? 'global' : 'personal')
   const [weeklyEmail,  setWeeklyEmail]  = useState(true)
   const [dailyInsight, setDailyInsight] = useState(true)
   const [notesBoard,   setNotesBoard]   = useState(true)
@@ -33,35 +35,38 @@ export default function Preferences() {
           <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">Configurá cómo querés usar BlissTracker.</p>
         </div>
 
-        {/* Tabs — solo admins */}
-        {user?.isAdmin && (
-          <div className="mb-2">
-            <select
-              className="sm:hidden w-full px-3 py-2 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary-500"
-              value={prefTab}
-              onChange={e => setPrefTab(e.target.value)}
-            >
-              <option value="global">Globales</option>
-              <option value="modules">Módulos</option>
-              <option value="personal">Personales</option>
-            </select>
-            <div className="hidden sm:flex gap-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-1 w-fit">
-              {[{ id: 'global', label: 'Globales' }, { id: 'modules', label: 'Módulos' }, { id: 'personal', label: 'Personales' }].map(t => (
-                <button
-                  key={t.id}
-                  onClick={() => setPrefTab(t.id)}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                    prefTab === t.id
-                      ? 'bg-primary-600 text-white'
-                      : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700'
-                  }`}
-                >
-                  {t.label}
-                </button>
-              ))}
-            </div>
+        {/* Tabs — Globales/Módulos solo admins; Personales/Agentes IA para todos */}
+        <div className="mb-2">
+          <select
+            className="sm:hidden w-full px-3 py-2 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary-500"
+            value={prefTab}
+            onChange={e => setPrefTab(e.target.value)}
+          >
+            {user?.isAdmin && <option value="global">Globales</option>}
+            {user?.isAdmin && <option value="modules">Módulos</option>}
+            <option value="personal">Personales</option>
+            <option value="agents">Agentes IA</option>
+          </select>
+          <div className="hidden sm:flex gap-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-1 w-fit">
+            {[
+              ...(user?.isAdmin ? [{ id: 'global', label: 'Globales' }, { id: 'modules', label: 'Módulos' }] : []),
+              { id: 'personal', label: 'Personales' },
+              { id: 'agents', label: 'Agentes IA' },
+            ].map(t => (
+              <button
+                key={t.id}
+                onClick={() => setPrefTab(t.id)}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  prefTab === t.id
+                    ? 'bg-primary-600 text-white'
+                    : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700'
+                }`}
+              >
+                {t.label}
+              </button>
+            ))}
           </div>
-        )}
+        </div>
 
         {/* ── Tab: Globales (solo admins) ─────────────────────── */}
         {user?.isAdmin && prefTab === 'global' && <GlobalTab loaded={loaded} />}
@@ -69,8 +74,8 @@ export default function Preferences() {
         {/* ── Tab: Módulos (solo admins) ───────────────────────── */}
         {user?.isAdmin && prefTab === 'modules' && <ModulesTab loaded={loaded} />}
 
-        {/* ── Tab: Personales (no-admins siempre, admins si prefTab=personal) ── */}
-        {(!user?.isAdmin || prefTab === 'personal') && (
+        {/* ── Tab: Personales ──────────────────────────────────── */}
+        {prefTab === 'personal' && (
           <PersonalTab
             loaded={loaded}
             weeklyEmail={weeklyEmail}
@@ -81,6 +86,9 @@ export default function Preferences() {
             setNotesBoard={setNotesBoard}
           />
         )}
+
+        {/* ── Tab: Agentes IA (MCP) — autoadministración, para todos ── */}
+        {prefTab === 'agents' && <AgentsTab />}
 
       </main>
     </div>

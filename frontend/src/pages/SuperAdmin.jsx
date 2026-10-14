@@ -22,6 +22,7 @@ import { SectionAiTokens } from './superadmin/aiTokens'
 import { SectionWhatsappUsage } from './superadmin/whatsappUsage'
 import { SectionScraping } from './superadmin/scraping'
 import { SectionMetrics } from './superadmin/metrics'
+import { SectionMcpTokens } from './superadmin/mcpTokens'
 
 // ─── Navegación + shell del panel. Las secciones viven en ./superadmin/*.jsx ───
 const NAV_GROUPS = [
@@ -132,6 +133,17 @@ const NAV_GROUPS = [
         icon: (
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
             <path fillRule="evenodd" d="M18 10c0 3.866-3.582 7-8 7a9.06 9.06 0 01-2.347-.306c-.584.297-1.925.955-4.181 1.234a.39.39 0 01-.415-.516c.257-.708.72-2.055.923-3.121C2.496 12.87 2 11.49 2 10c0-3.866 3.582-7 8-7s8 3.134 8 7z" clipRule="evenodd" />
+          </svg>
+        ),
+      },
+      {
+        id: 'mcp-tokens',
+        label: 'Agentes IA',
+        implemented: true,
+        description: 'Tokens de MCP activos y revocados en todos los workspaces: quién conectó qué asistente (Grok u otro) y cuándo lo usó por última vez.',
+        icon: (
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+            <path fillRule="evenodd" d="M10 2a6 6 0 00-6 6c0 1.887.454 3.665 1.257 5.234a.75.75 0 01-.515 1.077c-.443.102-.742.49-.742.94v.498a2.25 2.25 0 002.25 2.25h7.5a2.25 2.25 0 002.25-2.25v-.498c0-.45-.299-.838-.742-.94a.75.75 0 01-.515-1.077A11.204 11.204 0 0016 8a6 6 0 00-6-6zm-1.25 6a1.25 1.25 0 112.5 0 1.25 1.25 0 01-2.5 0z" clipRule="evenodd" />
           </svg>
         ),
       },
@@ -349,6 +361,7 @@ export default function SuperAdmin() {
     if (section === 'invitation-codes') return <SectionInvitationCodes />
     if (section === 'ai-tokens')     return <SectionAiTokens />
     if (section === 'whatsapp-usage') return <SectionWhatsappUsage />
+    if (section === 'mcp-tokens')    return <SectionMcpTokens />
     if (section === 'scraping')      return <SectionScraping />
     if (section === 'legal')         return <SectionLegales />
     if (section === 'blog')          return <SectionBlog />
