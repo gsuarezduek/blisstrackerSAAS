@@ -122,6 +122,10 @@ function CategoriesPanel({ categories, onChanged }) {
   const [name, setName] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [editing, setEditing] = useState(null) // categoría en edición de nombre
+  const [editName, setEditName] = useState('')
+  const [toDelete, setToDelete] = useState(null)
+  const [deleting, setDeleting] = useState(false)
 
   async function submit(type) {
     if (!name.trim()) return
@@ -142,6 +146,28 @@ function CategoriesPanel({ categories, onChanged }) {
     } catch (err) { alert(err.response?.data?.error || 'No se pudo actualizar') }
   }
 
+  function startEdit(cat) { setEditing(cat.id); setEditName(cat.name) }
+
+  async function saveEdit(cat) {
+    if (!editName.trim()) return
+    try {
+      await api.patch(`/finanzas/categories/${cat.id}`, { name: editName.trim() })
+      setEditing(null)
+      onChanged()
+    } catch (err) { alert(err.response?.data?.error || 'No se pudo renombrar') }
+  }
+
+  async function handleDelete() {
+    setDeleting(true)
+    try {
+      await api.delete(`/finanzas/categories/${toDelete.id}`)
+      setToDelete(null)
+      onChanged()
+    } catch (err) {
+      alert(err.response?.data?.error || 'No se pudo eliminar')
+    } finally { setDeleting(false) }
+  }
+
   function Section({ label, type, list }) {
     return (
       <div>
@@ -151,11 +177,26 @@ function CategoriesPanel({ categories, onChanged }) {
         </div>
         <ul className="space-y-1 mb-2">
           {list.map(c => (
-            <li key={c.id} className={`flex items-center justify-between text-sm ${!c.active ? 'opacity-40' : ''}`}>
-              <span className="text-gray-700 dark:text-gray-300 truncate">{c.name}</span>
-              <button onClick={() => toggleActive(c)} className="text-[11px] text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 shrink-0">
-                {c.active ? 'Desactivar' : 'Activar'}
-              </button>
+            <li key={c.id} className={`flex items-center justify-between gap-1.5 text-sm ${!c.active ? 'opacity-40' : ''}`}>
+              {editing === c.id ? (
+                <div className="flex items-center gap-1 flex-1">
+                  <input autoFocus className="flex-1 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 dark:text-gray-100 rounded-lg px-2 py-1 text-sm"
+                    value={editName} onChange={e => setEditName(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') saveEdit(c); if (e.key === 'Escape') setEditing(null) }} />
+                  <button onClick={() => saveEdit(c)} className="text-primary-600 dark:text-primary-400 text-xs font-medium shrink-0">✓</button>
+                  <button onClick={() => setEditing(null)} className="text-gray-400 text-xs shrink-0">×</button>
+                </div>
+              ) : (
+                <button onClick={() => startEdit(c)} className="text-gray-700 dark:text-gray-300 truncate text-left hover:underline">{c.name}</button>
+              )}
+              {editing !== c.id && (
+                <div className="flex items-center gap-2 shrink-0">
+                  <button onClick={() => toggleActive(c)} className="text-[11px] text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
+                    {c.active ? 'Desactivar' : 'Activar'}
+                  </button>
+                  <button onClick={() => setToDelete(c)} className="text-[11px] text-gray-400 hover:text-red-500">Eliminar</button>
+                </div>
+              )}
             </li>
           ))}
           {list.length === 0 && <li className="text-xs text-gray-400">Sin categorías.</li>}
@@ -179,6 +220,8 @@ function CategoriesPanel({ categories, onChanged }) {
         <Section label="Ingresos" type="income" list={income} />
         <Section label="Egresos" type="expense" list={expense} />
       </div>
+      <ConfirmModal open={!!toDelete} title="Eliminar categoría" message={`¿Eliminar "${toDelete?.name}"? Esta acción no se puede deshacer.`}
+        loading={deleting} onConfirm={handleDelete} onCancel={() => setToDelete(null)} />
     </Card>
   )
 }
@@ -252,21 +295,30 @@ function ItemsPanel({ items, categories, onChanged }) {
               <th className="pb-1.5 font-medium text-right">Editar</th>
             </tr>
           </thead>
-          <tbody>
-            {filtered.map(i => (
-              <tr key={i.id} className={`border-t border-gray-100 dark:border-gray-700 ${!i.active ? 'opacity-40' : ''}`}>
-                <td className="py-1.5 text-gray-900 dark:text-white truncate max-w-[9rem]">{i.name}</td>
-                <td className="py-1.5 text-gray-500 dark:text-gray-400 truncate max-w-[7rem]">{i.category?.name}</td>
-                <td className="py-1.5 text-right">
-                  {i.tracksAccount && <span className="text-[11px] bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 rounded-full px-2 py-0.5">Activo</span>}
-                </td>
-                <td className="py-1.5 text-right">
-                  <TextButton onClick={() => setModalItem(i)}>Editar</TextButton>
-                </td>
-              </tr>
-            ))}
-            {filtered.length === 0 && <tr><td colSpan={4} className="text-center text-xs text-gray-400 py-4">Sin items.</td></tr>}
-          </tbody>
+          {[{ type: 'income', label: 'Ingresos' }, { type: 'expense', label: 'Egresos' }].map(({ type, label: groupLabel }) => {
+            const group = filtered.filter(i => i.category?.type === type)
+            if (group.length === 0) return null
+            return (
+              <tbody key={type}>
+                <tr>
+                  <td colSpan={4} className={`pt-2.5 pb-1 text-[11px] font-semibold uppercase tracking-wide ${type === 'income' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>{groupLabel}</td>
+                </tr>
+                {group.map(i => (
+                  <tr key={i.id} className={`border-t border-gray-100 dark:border-gray-700 ${!i.active ? 'opacity-40' : ''}`}>
+                    <td className="py-1.5 text-gray-900 dark:text-white truncate max-w-[9rem]">{i.name}</td>
+                    <td className="py-1.5 text-gray-500 dark:text-gray-400 truncate max-w-[7rem]">{i.category?.name}</td>
+                    <td className="py-1.5 text-right">
+                      {i.tracksAccount && <span className="text-[11px] bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 rounded-full px-2 py-0.5">Activo</span>}
+                    </td>
+                    <td className="py-1.5 text-right">
+                      <TextButton onClick={() => setModalItem(i)}>Editar</TextButton>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            )
+          })}
+          {filtered.length === 0 && <tbody><tr><td colSpan={4} className="text-center text-xs text-gray-400 py-4">Sin items.</td></tr></tbody>}
         </table>
       </div>
 

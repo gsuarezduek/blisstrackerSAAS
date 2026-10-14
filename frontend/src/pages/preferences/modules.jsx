@@ -31,6 +31,9 @@ export default function ModulesTab({ loaded }) {
   // Finanzas: proyecto asociado a las tareas que se mandan al dashboard desde Pendientes
   const [financeTaskProjectId, setFinanceTaskProjectId] = useState('')
   const [savingFinanceProject, setSavingFinanceProject] = useState(false)
+  // Finanzas: cómo se interpreta el "Monto" al facturar con un emisor responsable_inscripto
+  const [financeIvaMode, setFinanceIvaMode] = useState('add')
+  const [savingIvaMode, setSavingIvaMode] = useState(false)
 
   // Marketing: configuración propia del módulo
   const [globalSettings,      setGlobalSettings]      = useState(null)
@@ -60,7 +63,10 @@ export default function ModulesTab({ loaded }) {
 
   useEffect(() => {
     if (!user?.isAdmin || !financeEnabled) return
-    api.get('/workspaces/current').then(({ data }) => setFinanceTaskProjectId(data?.financeTaskProjectId ?? '')).catch(() => {})
+    api.get('/workspaces/current').then(({ data }) => {
+      setFinanceTaskProjectId(data?.financeTaskProjectId ?? '')
+      setFinanceIvaMode(data?.financeIvaMode || 'add')
+    }).catch(() => {})
   }, [user?.isAdmin, financeEnabled])
 
   async function handleSaveEosProject(value) {
@@ -88,6 +94,19 @@ export default function ModulesTab({ loaded }) {
       setFinanceTaskProjectId(prev)
     } finally {
       setSavingFinanceProject(false)
+    }
+  }
+
+  async function handleSaveIvaMode(value) {
+    const prev = financeIvaMode
+    setFinanceIvaMode(value)
+    setSavingIvaMode(true)
+    try {
+      await api.patch('/workspaces/current', { financeIvaMode: value })
+    } catch {
+      setFinanceIvaMode(prev)
+    } finally {
+      setSavingIvaMode(false)
     }
   }
 
@@ -250,6 +269,21 @@ export default function ModulesTab({ loaded }) {
                       Asociá un proyecto para poder asignar responsables a las tareas de Pendientes.
                     </p>
                   )}
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mt-3 mb-1">
+                    IVA al facturar electrónicamente
+                  </label>
+                  <p className="text-[11px] text-gray-500 dark:text-gray-400 mb-2 leading-snug">
+                    Cómo se interpreta el "Monto" tipeado en Nueva factura/Nota de débito para un emisor Responsable Inscripto.
+                  </p>
+                  <select
+                    value={financeIvaMode}
+                    onChange={e => handleSaveIvaMode(e.target.value)}
+                    disabled={savingIvaMode}
+                    className="w-full sm:w-80 text-sm border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-primary-400 disabled:opacity-60"
+                  >
+                    <option value="add">Se suma arriba (el monto es neto, sin IVA)</option>
+                    <option value="included">Ya incluido (el monto es el total con IVA)</option>
+                  </select>
                 </div>
               )}
 

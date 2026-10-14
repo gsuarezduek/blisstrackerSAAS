@@ -59,8 +59,19 @@ export default function TaxesBlock({ account, allTaxes, baseAmount, selectedTaxI
 
   function addExtra() {
     if (!addingId) return
-    setExtraRows(r => [...r, Number(addingId)])
+    const id = Number(addingId)
+    setExtraRows(r => [...r, id])
+    // Se agrega ya tildado — antes quedaba sin tildar y había que hacer un
+    // segundo click en el checkbox, lo que se sentía como una doble alta.
+    onChange(new Set(selectedTaxIds).add(id))
     setAddingId('')
+  }
+
+  function removeExtra(id) {
+    setExtraRows(r => r.filter(x => x !== id))
+    const next = new Set(selectedTaxIds)
+    next.delete(id)
+    onChange(next)
   }
 
   if (!account) return null
@@ -80,6 +91,7 @@ export default function TaxesBlock({ account, allTaxes, baseAmount, selectedTaxI
           if (!t) return null
           const disabled = t.baseType === 'other_tax' && !selectedTaxIds.has(t.baseTaxId)
           const baseLabel = t.baseType === 'movement' ? 'el movimiento' : (taxById.get(t.baseTaxId)?.name || '—')
+          const isExtra = !offeredIds.has(id)
           return (
             <label key={id} className={`flex items-center gap-2 text-sm ${disabled ? 'opacity-40' : ''}`}>
               <input type="checkbox" disabled={disabled} checked={selectedTaxIds.has(id)} onChange={() => toggle(id)} />
@@ -87,6 +99,9 @@ export default function TaxesBlock({ account, allTaxes, baseAmount, selectedTaxI
                 {t.name} <span className="text-gray-400">· se calcula sobre {baseLabel} · {Number(t.percentage)}%</span>
               </span>
               <span className="text-gray-600 dark:text-gray-300 font-medium shrink-0">{fmtMoney(amounts[id] || 0, account.currency)}</span>
+              {isExtra && (
+                <button type="button" onClick={() => removeExtra(id)} title="Quitar" className="text-gray-400 hover:text-red-500 shrink-0">×</button>
+              )}
             </label>
           )
         })}

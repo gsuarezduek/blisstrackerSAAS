@@ -2,6 +2,7 @@ const prisma = require('../../lib/prisma')
 const { validateImageUpload } = require('../../lib/imageType')
 const { isFlagEnabledForWorkspace } = require('../../lib/featureFlags')
 const { getTokenBudget } = require('../../lib/tokenBudget')
+const { isValidInvoiceIvaMode } = require('../../lib/financeCatalog')
 
 /**
  * GET /api/workspaces/current
@@ -29,7 +30,7 @@ async function getCurrent(req, res, next) {
  */
 async function updateCurrent(req, res, next) {
   try {
-    const { name, timezone, companyName, companyDescription, industry, companyWebsite, brandColors, brandFonts, salesProposalGuidelines, salesSignatures, salesTasksProjectId, financeTaskProjectId } = req.body
+    const { name, timezone, companyName, companyDescription, industry, companyWebsite, brandColors, brandFonts, salesProposalGuidelines, salesSignatures, salesTasksProjectId, financeTaskProjectId, financeIvaMode } = req.body
     const data = {}
     if (name) data.name = name
     if (timezone) data.timezone = timezone
@@ -77,6 +78,12 @@ async function updateCurrent(req, res, next) {
         if (!p) return res.status(400).json({ error: 'Proyecto inválido' })
         data.financeTaskProjectId = p.id
       }
+    }
+    // Cómo se interpreta el "Monto" al facturar con un emisor responsable_inscripto
+    // (ver invoices.controller.js resolveIvaAmounts).
+    if (financeIvaMode !== undefined) {
+      if (!isValidInvoiceIvaMode(financeIvaMode)) return res.status(400).json({ error: 'Modo de IVA inválido' })
+      data.financeIvaMode = financeIvaMode
     }
 
     const workspace = await prisma.workspace.update({

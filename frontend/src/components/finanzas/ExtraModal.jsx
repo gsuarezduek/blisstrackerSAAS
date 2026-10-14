@@ -8,10 +8,12 @@ const label = 'block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1'
 const today = () => new Date().toISOString().slice(0, 10)
 
 // Nuevo/editar Extra (sección 4.6): fecha, cliente, acción, total, split
-// empresa/equipo, cantidad de pagos (default iguales, ver spec 3.6). Editar
-// cubre acción/estado/notas/equipo pagado — el split de cuotas no cobradas se
-// reajusta desde el backend (PATCH payments), no hay UI de edición fina de
-// montos por cuota en esta primera versión.
+// empresa/proveedores/equipo (equipo siempre es el resto, total - empresa -
+// proveedores — no se carga a mano), cantidad de pagos (default iguales, ver
+// spec 3.6). Empresa y proveedores son opcionales (default 0), solo el total
+// es obligatorio. Editar permite tocar también los montos (antes bloqueado
+// del todo) — el backend reparte sola la diferencia entre las cuotas sin
+// cobrar (lo ya cobrado queda fijo).
 export default function ExtraModal({ extra, items, onClose, onSaved }) {
   const isNew = !extra
   const customers = items.filter(i => i.tracksAccount && i.active)
@@ -20,6 +22,7 @@ export default function ExtraModal({ extra, items, onClose, onSaved }) {
   const [action, setAction] = useState(extra?.action || '')
   const [total, setTotal] = useState(extra ? String(extra.total) : '')
   const [companyAmount, setCompanyAmount] = useState(extra ? String(extra.companyAmount) : '')
+  const [providerAmount, setProviderAmount] = useState(extra ? String(extra.providerAmount || 0) : '')
   const [numberOfPayments, setNumberOfPayments] = useState(extra?.payments?.length || 1)
   const [status, setStatus] = useState(extra?.status || 'in_progress')
   const [teamPaid, setTeamPaid] = useState(extra?.teamPaid || false)
@@ -27,19 +30,24 @@ export default function ExtraModal({ extra, items, onClose, onSaved }) {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
-  const teamAmount = total && companyAmount ? Number(total) - Number(companyAmount) : 0
+  const teamAmount = total ? Number(total) - (Number(companyAmount) || 0) - (Number(providerAmount) || 0) : 0
+  const paidTotal = (extra?.payments || []).filter(p => p.movementId).reduce((s, p) => s + Number(p.amount), 0)
 
   async function handleSave() {
+    if (total !== '' && (Number(total) <= 0 || teamAmount < 0)) { setError('Revisá los montos — empresa + proveedores no puede superar el total'); return }
     setSaving(true); setError('')
     try {
       if (isNew) {
         if (!itemId || !action.trim() || !total || Number(total) <= 0) { setError('Revisá los campos requeridos'); setSaving(false); return }
         await api.post('/finanzas/extras', {
           itemId: Number(itemId), date, action: action.trim(), total: Number(total),
-          companyAmount: Number(companyAmount) || 0, numberOfPayments: Number(numberOfPayments),
+          companyAmount: Number(companyAmount) || 0, providerAmount: Number(providerAmount) || 0, numberOfPayments: Number(numberOfPayments),
         })
       } else {
-        await api.patch(`/finanzas/extras/${extra.id}`, { action: action.trim(), status, teamPaid, notes: notes.trim() })
+        await api.patch(`/finanzas/extras/${extra.id}`, {
+          action: action.trim(), status, teamPaid, notes: notes.trim(),
+          total: Number(total), companyAmount: Number(companyAmount) || 0, providerAmount: Number(providerAmount) || 0,
+        })
       }
       onSaved()
     } catch (err) {
@@ -79,17 +87,21 @@ export default function ExtraModal({ extra, items, onClose, onSaved }) {
                   </select>
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-3 gap-3">
                 <div>
                   <label className={label}>Total</label>
                   <input type="number" step="any" className={input} value={total} onChange={e => setTotal(e.target.value)} />
                 </div>
                 <div>
                   <label className={label}>Para la empresa</label>
-                  <input type="number" step="any" className={input} value={companyAmount} onChange={e => setCompanyAmount(e.target.value)} />
+                  <input type="number" step="any" className={input} value={companyAmount} onChange={e => setCompanyAmount(e.target.value)} placeholder="0" />
+                </div>
+                <div>
+                  <label className={label}>Para proveedores</label>
+                  <input type="number" step="any" className={input} value={providerAmount} onChange={e => setProviderAmount(e.target.value)} placeholder="0" />
                 </div>
               </div>
-              <p className="text-xs text-gray-400">Para el equipo: {fmtMoney(teamAmount, 'ARS')}</p>
+              <p className="text-xs text-gray-400">Para el equipo (resto): {fmtMoney(teamAmount, 'ARS')}</p>
             </>
           ) : (
             <>
@@ -109,6 +121,24 @@ export default function ExtraModal({ extra, items, onClose, onSaved }) {
                   {extra.status === 'collected' && <option value="collected">Cobrado</option>}
                 </select>
               </div>
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className={label}>Total</label>
+                  <input type="number" step="any" className={input} value={total} onChange={e => setTotal(e.target.value)} />
+                </div>
+                <div>
+                  <label className={label}>Para la empresa</label>
+                  <input type="number" step="any" className={input} value={companyAmount} onChange={e => setCompanyAmount(e.target.value)} placeholder="0" />
+                </div>
+                <div>
+                  <label className={label}>Para proveedores</label>
+                  <input type="number" step="any" className={input} value={providerAmount} onChange={e => setProviderAmount(e.target.value)} placeholder="0" />
+                </div>
+              </div>
+              <p className="text-xs text-gray-400">
+                Para el equipo (resto): {fmtMoney(teamAmount, 'ARS')}
+                {paidTotal > 0 && ` · Ya cobrado: ${fmtMoney(paidTotal, 'ARS')} (no se toca)`}
+              </p>
               <div className="bg-gray-50 dark:bg-gray-900/40 rounded-xl p-3 space-y-1.5">
                 <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Pagos</p>
                 {extra.payments.map(p => (
@@ -118,6 +148,7 @@ export default function ExtraModal({ extra, items, onClose, onSaved }) {
                     <span className={p.movementId ? 'text-green-600 dark:text-green-400 text-xs' : 'text-gray-400 text-xs'}>{p.movementId ? 'Cobrado' : 'Pendiente'}</span>
                   </div>
                 ))}
+                {total !== String(extra.total) && <p className="text-[11px] text-amber-600 dark:text-amber-400">Al guardar, las cuotas pendientes se recalculan solas para completar el nuevo total.</p>}
               </div>
               {Number(extra.teamAmount) > 0 && (
                 <label className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">

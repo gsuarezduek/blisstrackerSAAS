@@ -98,6 +98,11 @@ model Workspace {
   // FinanceTask (pestaña Pendientes de Finanzas) — mismo criterio que salesTasksProjectId.
   financeTaskProjectId            Int?
   financeTaskProject              Project?        @relation("WorkspaceFinanceTaskProject", fields: [financeTaskProjectId], references: [id], onDelete: SetNull)
+  // Cómo se interpreta el "Monto" tipeado al facturar con un emisor responsable_inscripto:
+  // 'add' (default) = neto, el IVA se suma arriba para armar el total facturado; 'included' =
+  // el monto tipeado ya incluye el IVA (comportamiento legacy, se extrae el neto para ARCA).
+  // Ver invoices.controller.js emitArcaInvoice/emitArcaNote.
+  financeIvaMode                  String          @default("add")
   createdAt                       DateTime        @default(now())
   updatedAt                       DateTime        @updatedAt
 
@@ -4636,6 +4641,7 @@ model FinanceItem {
   invoices    FinanceInvoice[]
   extras      FinanceExtra[]
   nextActions FinanceNextAction[]
+  tasks       FinanceTask[]
 
   @@index([workspaceId])
   @@index([workspaceId, active])
@@ -4913,7 +4919,8 @@ model FinanceExtra {
   action        String
   total         Decimal     @db.Decimal(20, 8)
   companyAmount Decimal     @db.Decimal(20, 8)
-  teamAmount    Decimal     @db.Decimal(20, 8) // = total - companyAmount al guardar
+  providerAmount Decimal    @default(0) @db.Decimal(20, 8) // para proveedores externos
+  teamAmount    Decimal     @db.Decimal(20, 8) // = total - companyAmount - providerAmount al guardar
   status        String      @default("in_progress") // in_progress | finished | collected
   teamPaid      Boolean     @default(false)
   notes         String?
@@ -4994,6 +5001,12 @@ model FinanceTask {
   kind           String // 'manual' | 'generated'
   origin         String? // 'check' | 'invoice' | 'extra' | 'next_action' | 'check_rejected' | 'manual'
   originId       Int?
+  // Cliente vinculado (opcional) — denormalizado tanto para tareas manuales (quien la crea
+  // puede elegir un cliente) como para las generadas por reglas que ya nacen atadas a un item
+  // (invoice/extra/next_action). Permite listar "las tareas de este cliente" sin depender de
+  // la semántica de origin/originId (que no siempre es un itemId). Ver tasks.controller.js.
+  itemId         Int?
+  item           FinanceItem? @relation(fields: [itemId], references: [id], onDelete: SetNull)
   title          String
   detail         String?
   amount         Decimal?  @db.Decimal(20, 8)
@@ -5024,6 +5037,7 @@ model FinanceTask {
   @@index([workspaceId, status])
   @@index([workspaceId, kind])
   @@index([origin, originId])
+  @@index([itemId])
 }
 
 // Nota libre de la pestaña Pendientes — 1 por workspace, autoguardado.

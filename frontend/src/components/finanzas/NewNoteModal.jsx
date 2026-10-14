@@ -13,7 +13,7 @@ function fmtDate(iso) {
 // soportada en v1, ver nota de alcance en el backend) o débito (monto nuevo
 // asociado) sobre una factura con CAE. Mismo panel de resultado de 3 estados
 // que NewInvoiceModal (autorizada/rechazada/a reconciliar).
-export default function NewNoteModal({ invoice, customer, issuers, onClose, onSaved }) {
+export default function NewNoteModal({ invoice, customer, issuers, financeIvaMode, onClose, onSaved }) {
   const [kind, setKind] = useState('credit_note')
   const [concept, setConcept] = useState('')
   const [amount, setAmount] = useState('')
@@ -23,6 +23,8 @@ export default function NewNoteModal({ invoice, customer, issuers, onClose, onSa
   const [created, setCreated] = useState(null)
 
   const isResponsableInscripto = invoice.issuer?.taxCondition === 'responsable_inscripto'
+  const addsIva = isResponsableInscripto && financeIvaMode !== 'included'
+  const totalWithIva = addsIva && amount ? Number(amount) * (1 + Number(ivaRate) / 100) : null
 
   // Mismo aviso no bloqueante que NewInvoiceModal: la nota también termina
   // generando un PDF (buildInvoiceVoucherDocument), que exige estos datos del
@@ -106,8 +108,11 @@ export default function NewNoteModal({ invoice, customer, issuers, onClose, onSa
             {kind === 'debit_note' && (
               <>
                 <div>
-                  <label className={label}>Monto</label>
+                  <label className={label}>{addsIva ? 'Monto (neto, sin IVA)' : 'Monto'}</label>
                   <input type="number" step="any" className={input} value={amount} onChange={e => setAmount(e.target.value)} />
+                  {totalWithIva != null && (
+                    <p className="text-xs text-gray-400 mt-1">Total con IVA ({ivaRate}%): <strong className="text-gray-600 dark:text-gray-300">{totalWithIva.toLocaleString('es-AR', { style: 'currency', currency: 'ARS' })}</strong></p>
+                  )}
                 </div>
                 {isResponsableInscripto && (
                   <div>

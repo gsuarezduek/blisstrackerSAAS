@@ -8,7 +8,7 @@ const { detectImageType } = require('../../lib/imageType')
 const { detectDocumentType } = require('../../lib/documentType')
 const { safeContentDisposition } = require('../../lib/contentDisposition')
 const { logFinanceAudit } = require('../../lib/financeAudit')
-const { toDecimal } = require('../../lib/financeMoney')
+const { toDecimal, roundForCurrency } = require('../../lib/financeMoney')
 const { getArcaClient, toMinorUnits, formatVoucherNumber, buildArcaItems } = require('../../lib/arcaClient')
 const { getIssuedVoucher } = require('../../lib/arcaVoucherDocument')
 const { renderInvoicePdf } = require('./invoicePrint.controller')
@@ -35,6 +35,26 @@ const INVOICE_INCLUDE = {
 
 function invoiceLabel(inv) {
   return `factura ${inv.number || '(pendiente de ARCA)'}`
+}
+
+/**
+ * Resuelve, según Workspace.financeIvaMode, qué representa el `amountDecimal`
+ * tipeado por el usuario y qué hay que guardar/mandarle a ARCA. Solo aplica
+ * cuando el emisor es responsable_inscripto (único caso con `ivaRate`):
+ * - 'add' (default): el monto tipeado es NETO — se guarda el total CON IVA
+ *   (lo que realmente se le cobra al cliente) y a ARCA se le manda `net`+`vat`.
+ * - 'included' (legacy): el monto tipeado YA incluye el IVA — se guarda tal
+ *   cual y a ARCA se le manda `gross`+`vat` (comportamiento histórico).
+ * Fuera de ese caso (monotributo/exento, o sin ivaRate) no hay nada que
+ * resolver: se guarda y se manda el monto tipeado sin tocar.
+ */
+function resolveIvaAmounts(amountDecimal, ivaRate, appliesVat, ivaMode) {
+  if (!appliesVat || ivaMode !== 'add') {
+    return { storedAmount: amountDecimal, arcaAmountCents: toMinorUnits(amountDecimal), arcaVatMode: 'gross' }
+  }
+  const rate = toDecimal(ivaRate)
+  const gross = roundForCurrency(amountDecimal.times(toDecimal(1).plus(rate.dividedBy(100))), 'ARS')
+  return { storedAmount: gross, arcaAmountCents: toMinorUnits(amountDecimal), arcaVatMode: 'net' }
 }
 
 function shapeInvoice(inv) {
@@ -127,24 +147,29 @@ function arcaErrorData(err) {
  * adelante con `recover()` (Etapa 5) — nunca se pierde la clave de
  * idempotencia. Devuelve la fila final (con include completo).
  */
-async function emitArcaInvoice({ workspaceId, userId, item, issuer, issueDate, dueDate, concept, amountDecimal, ivaRate }) {
+async function emitArcaInvoice({ workspaceId, userId, item, issuer, issueDate, dueDate, concept, amountDecimal, ivaRate, ivaMode }) {
   if (!issuer.active) throw businessError(400, 'Este emisor está desactivado')
   if (!item.ivaCondition) throw businessError(400, 'Este cliente no tiene condición de IVA cargada — configurala en su ficha antes de facturar electrónicamente.')
   if (item.ivaCondition !== 'consumidor_final' && !item.taxId) {
     throw businessError(400, 'Este cliente no tiene CUIT cargado — hace falta para facturar electrónicamente (salvo consumidor final).')
   }
-  if (issuer.taxCondition === 'responsable_inscripto') {
+  const appliesVat = issuer.taxCondition === 'responsable_inscripto'
+  if (appliesVat) {
     if (!isValidArcaVatRate(ivaRate)) throw businessError(400, 'Elegí una alícuota de IVA válida (0, 2.5, 5, 10.5, 21 o 27%)')
   }
 
-  const amountCents = toMinorUnits(amountDecimal)
+  // `amountDecimal` es el monto tipeado por el usuario — ver resolveIvaAmounts
+  // para qué representa según Workspace.financeIvaMode. `storedAmount` es lo
+  // que se guarda (y lo que la cuenta corriente del cliente usa como "lo
+  // facturado"); `arcaAmountCents`/`arcaVatMode` es lo que se le manda a ARCA.
+  const { storedAmount, arcaAmountCents, arcaVatMode } = resolveIvaAmounts(amountDecimal, ivaRate, appliesVat, ivaMode)
   const idempotencyKey = crypto.randomUUID()
 
   // Fase 1: reserva — ya queda trazable aunque la llamada a ARCA falle a mitad de camino.
   let invoice = await prisma.financeInvoice.create({
     data: {
       workspaceId, itemId: item.id, issuerId: issuer.id, issueDate, dueDate, concept,
-      amount: amountDecimal.toString(), currency: 'ARS', ivaRate: issuer.taxCondition === 'responsable_inscripto' ? ivaRate : null,
+      amount: storedAmount.toString(), currency: 'ARS', ivaRate: appliesVat ? ivaRate : null,
       arcaStatus: 'indeterminate', arcaIdempotencyKey: idempotencyKey, createdById: userId,
     },
   })
@@ -157,7 +182,7 @@ async function emitArcaInvoice({ workspaceId, userId, item, issuer, issueDate, d
         issuer: issuer.taxCondition,
         salesPoint: issuer.salesPoint,
         to: { condition: item.ivaCondition, cuit: item.taxId ? item.taxId.replace(/-/g, '') : undefined },
-        items: buildArcaItems(issuer, amountCents, ivaRate),
+        items: buildArcaItems(issuer, arcaAmountCents, ivaRate, arcaVatMode),
         date: issueDate.toISOString().slice(0, 10),
       },
       { idempotencyKey },
@@ -185,7 +210,7 @@ async function emitArcaInvoice({ workspaceId, userId, item, issuer, issueDate, d
  * que se corrige; `amountDecimal`/`ivaRate` ya vienen resueltos por el
  * caller (= los de `original` para una nota de crédito total).
  */
-async function emitArcaNote({ workspaceId, userId, original, issuer, item, kind, concept, amountDecimal, ivaRate }) {
+async function emitArcaNote({ workspaceId, userId, original, issuer, item, kind, concept, amountDecimal, ivaRate, ivaMode }) {
   if (!issuer.active) throw businessError(400, 'Este emisor está desactivado')
   if (!original.cae) throw businessError(400, 'Esta factura todavía no tiene CAE — no se puede corregir.')
   if (original.kind !== 'invoice') throw businessError(400, 'Solo se puede emitir una nota sobre una factura, no sobre otra nota.')
@@ -197,6 +222,16 @@ async function emitArcaNote({ workspaceId, userId, original, issuer, item, kind,
     if (existing) throw businessError(409, 'Esta factura ya tiene una nota de crédito emitida.')
   }
 
+  // La nota de crédito es `all:true` (ARCA anula exactamente lo que autorizó
+  // la original, sin desglose propio) — `amountDecimal` ahí ya es el monto
+  // GUARDADO de la original (siempre el total, nunca el neto), no hay nada
+  // que resolver. Solo la nota de débito manda items propios con un monto
+  // tipeado fresco, igual que una factura nueva.
+  const appliesVat = kind === 'debit_note' && issuer.taxCondition === 'responsable_inscripto'
+  const { storedAmount, arcaAmountCents, arcaVatMode } = kind === 'debit_note'
+    ? resolveIvaAmounts(amountDecimal, ivaRate, appliesVat, ivaMode)
+    : { storedAmount: amountDecimal, arcaAmountCents: null, arcaVatMode: 'gross' }
+
   const voucher = await getIssuedVoucher(original, issuer)
   const forCoords = { salesPoint: voucher.salesPoint, voucherType: voucher.voucherType, number: voucher.number }
   const idempotencyKey = crypto.randomUUID()
@@ -205,7 +240,7 @@ async function emitArcaNote({ workspaceId, userId, original, issuer, item, kind,
     data: {
       workspaceId, itemId: item.id, issuerId: issuer.id, kind, relatedInvoiceId: original.id,
       issueDate: new Date(), dueDate: new Date(), concept,
-      amount: amountDecimal.toString(), currency: 'ARS', ivaRate: ivaRate ?? null,
+      amount: storedAmount.toString(), currency: 'ARS', ivaRate: ivaRate ?? null,
       arcaStatus: 'indeterminate', arcaIdempotencyKey: idempotencyKey, createdById: userId,
     },
   })
@@ -216,8 +251,7 @@ async function emitArcaNote({ workspaceId, userId, original, issuer, item, kind,
     if (kind === 'credit_note') {
       outcome = await arca.issueCreditNote({ for: forCoords, all: true }, { idempotencyKey })
     } else {
-      const amountCents = toMinorUnits(amountDecimal)
-      const items = buildArcaItems(issuer, amountCents, ivaRate).map(i => ({ ...i, description: concept }))
+      const items = buildArcaItems(issuer, arcaAmountCents, ivaRate, arcaVatMode).map(i => ({ ...i, description: concept }))
       outcome = await arca.issueDebitNote({ for: forCoords, items }, { idempotencyKey })
     }
   } catch (err) {
@@ -283,6 +317,7 @@ async function createInvoice(req, res, next) {
       const invoice = await emitArcaInvoice({
         workspaceId, userId: req.user.userId, item, issuer,
         issueDate: parsedIssue, dueDate: parsedDue, concept: concept.trim(), amountDecimal, ivaRate,
+        ivaMode: req.workspace.financeIvaMode,
       })
       return res.status(201).json(shapeInvoice(invoice))
     }
@@ -412,6 +447,7 @@ async function createDebitNote(req, res, next) {
     const note = await emitArcaNote({
       workspaceId, userId: req.user.userId, original, issuer: original.issuer, item: original.item,
       kind: 'debit_note', concept: concept.trim(), amountDecimal, ivaRate: isResponsableInscripto ? ivaRate : null,
+      ivaMode: req.workspace.financeIvaMode,
     })
     res.status(201).json(shapeInvoice(note))
   } catch (err) { next(err) }

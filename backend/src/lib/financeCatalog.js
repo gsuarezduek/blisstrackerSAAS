@@ -44,6 +44,15 @@ const ITEM_IVA_CONDITIONS = [
 // UNA alícuota por comprobante (sin desglose multi-alícuota por ítem).
 const ARCA_VAT_RATES = [0, 2.5, 5, 10.5, 21, 27]
 
+// Workspace.financeIvaMode — cómo se interpreta el "Monto" tipeado al facturar
+// electrónicamente con un emisor responsable_inscripto. 'add' (default): el
+// monto es neto, el IVA se suma arriba. 'included': el monto ya incluye el
+// IVA (comportamiento legacy, se extrae el neto para ARCA).
+const INVOICE_IVA_MODES = [
+  { key: 'add',      label: 'Se suma arriba (el monto es neto, sin IVA)' },
+  { key: 'included', label: 'Ya incluido (el monto es el total con IVA)' },
+]
+
 // Resultado de una emisión vía ARCA (FinanceInvoice.arcaStatus) — los 4
 // estados normalizados que devuelve `arca.issue()`.
 const ARCA_STATUSES = [
@@ -215,6 +224,8 @@ function isValidTaskStatus(key)         { return TASK_STATUS_KEYS.includes(key) 
 function isValidAuditEntityType(key)    { return AUDIT_ENTITY_TYPES.includes(key) }
 const INVOICE_KIND_KEYS = keysOf(INVOICE_KINDS)
 function isValidInvoiceKind(key)        { return INVOICE_KIND_KEYS.includes(key) }
+const INVOICE_IVA_MODE_KEYS = keysOf(INVOICE_IVA_MODES)
+function isValidInvoiceIvaMode(key)     { return INVOICE_IVA_MODE_KEYS.includes(key) }
 
 module.exports = {
   ACCOUNT_TYPES, ACCOUNT_TYPE_KEYS, isValidAccountType,
@@ -222,6 +233,7 @@ module.exports = {
   ISSUER_ENVIRONMENTS, ISSUER_ENVIRONMENT_KEYS, isValidIssuerEnvironment,
   ITEM_IVA_CONDITIONS, ITEM_IVA_CONDITION_KEYS, isValidItemIvaCondition,
   ARCA_VAT_RATES, isValidArcaVatRate,
+  INVOICE_IVA_MODES, isValidInvoiceIvaMode,
   ARCA_STATUSES,
   INVOICE_KINDS, INVOICE_KIND_KEYS, isValidInvoiceKind,
   CURRENCIES,

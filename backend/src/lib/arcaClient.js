@@ -86,12 +86,14 @@ function formatVoucherNumber(salesPoint, number) {
 // emisor (confirmado en el spike leyendo los tipos del SDK): monotributo/
 // exento mandan el monto total sin discriminar IVA (AmountItem, el mismo
 // shape que probó el usuario en terminal); responsable_inscripto manda el
-// total CON IVA incluido + la alícuota (VatItem, `gross`+`vat`). Se reusa tal
-// cual al armar el `VoucherDocumentInput` para el PDF (Etapa 3) — son
-// exactamente los mismos items con los que se emitió el comprobante.
-function buildArcaItems(issuer, amountCents, ivaRate) {
+// VatItem del SDK, que acepta `gross`+`vat` (monto CON IVA incluido) O
+// `net`+`vat` (monto neto, el SDK suma el IVA) — `mode` elige cuál, según
+// Workspace.financeIvaMode (ver invoices.controller.js). Se reusa tal cual al
+// armar el `VoucherDocumentInput` para el PDF (Etapa 3) — son exactamente los
+// mismos items con los que se emitió el comprobante.
+function buildArcaItems(issuer, amountCents, ivaRate, mode = 'gross') {
   if (issuer.taxCondition === 'responsable_inscripto') {
-    return [{ gross: amountCents, vat: Number(ivaRate) }]
+    return mode === 'net' ? [{ net: amountCents, vat: Number(ivaRate) }] : [{ gross: amountCents, vat: Number(ivaRate) }]
   }
   return [{ amount: amountCents }]
 }

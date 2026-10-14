@@ -14,7 +14,7 @@ function fmtDate(iso) {
 // Pestaña Clientes (sección 4.4): tarjetas Total a cobrar/Vencido, buscador +
 // "Solo con saldo", tabla (ya ordenada por el backend: vencidos primero,
 // después por saldo). Clic en una fila → CustomerDetail.
-export default function CustomersTab({ accounts, categories, items, taxes, issuers, onDataChange }) {
+export default function CustomersTab({ accounts, categories, items, taxes, issuers, financeIvaMode, onDataChange }) {
   const [search, setSearch] = useState('')
   const [onlyWithBalance, setOnlyWithBalance] = useState(false)
   const [customers, setCustomers] = useState(null)
@@ -33,7 +33,7 @@ export default function CustomersTab({ accounts, categories, items, taxes, issue
 
   if (openId) {
     return (
-      <CustomerDetail itemId={openId} accounts={accounts} categoriesList={categories} items={items} taxes={taxes} issuers={issuers}
+      <CustomerDetail itemId={openId} accounts={accounts} categoriesList={categories} items={items} taxes={taxes} issuers={issuers} financeIvaMode={financeIvaMode}
         onBack={() => { setOpenId(null); load(); onDataChange?.() }} />
     )
   }

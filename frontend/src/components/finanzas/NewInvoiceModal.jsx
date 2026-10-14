@@ -23,7 +23,7 @@ function fmtDate(iso) {
 // concepto, monto, adjuntos. Los adjuntos se habilitan recién después de
 // crear la factura (el presign necesita un invoiceId real) — mismo criterio
 // que AccountModal (crea, después gestiona sub-recursos con el id ya asignado).
-export default function NewInvoiceModal({ items, issuers, defaultItemId, onClose, onSaved }) {
+export default function NewInvoiceModal({ items, issuers, defaultItemId, financeIvaMode, onClose, onSaved }) {
   const customers = items.filter(i => i.tracksAccount && i.active)
   const [itemId, setItemId] = useState(defaultItemId ? String(defaultItemId) : (customers[0]?.id ? String(customers[0].id) : ''))
   const customer = customers.find(c => c.id === Number(itemId))
@@ -60,6 +60,9 @@ export default function NewInvoiceModal({ items, issuers, defaultItemId, onClose
     !issuer?.activitiesStartDate && 'inicio de actividades',
   ].filter(Boolean) : []
   const missingCustomerAddress = issuerId && customer && customer.ivaCondition !== 'consumidor_final' && !customer.address
+  const isResponsableInscripto = issuer?.taxCondition === 'responsable_inscripto'
+  const addsIva = isResponsableInscripto && financeIvaMode !== 'included'
+  const totalWithIva = addsIva && amount ? Number(amount) * (1 + Number(ivaRate) / 100) : null
 
   async function handleSave() {
     if (!itemId || !concept.trim() || !amount || Number(amount) <= 0) { setError('Revisá los campos requeridos'); return }
@@ -171,8 +174,11 @@ export default function NewInvoiceModal({ items, issuers, defaultItemId, onClose
               <input className={input} value={concept} onChange={e => setConcept(e.target.value)} />
             </div>
             <div>
-              <label className={label}>Monto</label>
+              <label className={label}>{addsIva ? 'Monto (neto, sin IVA)' : 'Monto'}</label>
               <input type="number" step="any" className={input} value={amount} onChange={e => setAmount(e.target.value)} />
+              {totalWithIva != null && (
+                <p className="text-xs text-gray-400 mt-1">Total a facturar con IVA ({ivaRate}%): <strong className="text-gray-600 dark:text-gray-300">{totalWithIva.toLocaleString('es-AR', { style: 'currency', currency: 'ARS' })}</strong></p>
+              )}
             </div>
 
             {(missingForPdf.length > 0 || missingCustomerAddress) && (

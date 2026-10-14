@@ -184,7 +184,7 @@ async function getLedger(req, res, next) {
       ...movements.map(mv => ({
         date: mv.date, kind: 'payment', id: `mov${mv.id}`,
         concept: mv.check ? `Cobro · Cheque N° ${mv.check.number}` : `Cobro · ${mv.account.name}`,
-        checkPending: mv.check?.status === 'pending', checkDate: mv.check?.estimatedCollectionDate || null,
+        checkPending: mv.check?.status === 'pending', checkDate: mv.check?.estimatedCollectionDate || null, checkId: mv.check?.id || null,
         appliedTo: mv.invoice?.number || null,
         facturado: '0', cobrado: mv.amount.toString(),
       })),

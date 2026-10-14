@@ -12,7 +12,7 @@ function fmtDate(iso) {
 
 // "Movimientos" (sección 4.5a): filtro desde/hasta, fila de saldo anterior,
 // filas cronológicas con saldo acumulado.
-export default function CustomerLedgerPanel({ itemId, currency, refreshKey }) {
+export default function CustomerLedgerPanel({ itemId, currency, refreshKey, onCreditCheck }) {
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
   const [data, setData] = useState(null)
@@ -64,7 +64,14 @@ export default function CustomerLedgerPanel({ itemId, currency, refreshKey }) {
                     <span className="ml-1.5 inline-flex items-center gap-1 text-xs text-gray-400"><Icon as={Paperclip} size={11} />{row.attachments[0].name}</span>
                   )}
                   {row.kind === 'payment' && row.checkPending && (
-                    <span className="ml-1.5 text-[11px] bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400 rounded-full px-1.5 py-0.5">Cheque pendiente · {fmtDate(row.checkDate)}</span>
+                    row.checkId && onCreditCheck ? (
+                      <button type="button" onClick={() => onCreditCheck(row.checkId)}
+                        className="ml-1.5 text-[11px] bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400 hover:bg-orange-200 dark:hover:bg-orange-900/50 rounded-full px-1.5 py-0.5">
+                        Cheque pendiente · {fmtDate(row.checkDate)}
+                      </button>
+                    ) : (
+                      <span className="ml-1.5 text-[11px] bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400 rounded-full px-1.5 py-0.5">Cheque pendiente · {fmtDate(row.checkDate)}</span>
+                    )
                   )}
                   {row.kind === 'payment' && row.appliedTo && <span className="ml-1.5 text-xs text-gray-400">→ {row.appliedTo}</span>}
                 </td>

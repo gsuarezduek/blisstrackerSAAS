@@ -5,6 +5,7 @@ const { parseDate } = require('./_shared')
 const { isValidTaskStatus } = require('../../lib/financeCatalog')
 const { syncDashboardOnResponsibleChange } = require('../../lib/financeTaskDashboard')
 const { resolveModuleAccess, memberRoleNames } = require('../../lib/moduleAccess')
+const { completeNextActionTx } = require('./nextActions.controller')
 
 function todayUTCNoon() {
   const d = new Date()
@@ -31,7 +32,7 @@ function ordinal(n) { return ORDINALS[n] || `${n}°` }
  */
 async function syncGeneratedTasks(workspaceId) {
   const today = todayUTCNoon()
-  const live = [] // [{ origin, originId, title, detail, amount, date }]
+  const live = [] // [{ origin, originId, itemId, title, detail, amount, date }]
 
   // Regla 1: cheques por vencer (≤ hoy + 2 días), todavía pendientes.
   const dueChecks = await prisma.financeCheck.findMany({
@@ -39,7 +40,7 @@ async function syncGeneratedTasks(workspaceId) {
     include: { movement: { include: { item: true } } },
   })
   for (const c of dueChecks) {
-    live.push({ origin: 'check', originId: c.id, title: `Controlar cheque N° ${c.number} de ${c.movement.item?.name || '—'}`, amount: c.movement.amount, date: c.estimatedCollectionDate })
+    live.push({ origin: 'check', originId: c.id, itemId: c.movement.itemId, title: `Controlar cheque N° ${c.number} de ${c.movement.item?.name || '—'}`, amount: c.movement.amount, date: c.estimatedCollectionDate })
   }
 
   // Regla 2: cheques rechazados sin resolver (condición terminal — una vez
@@ -49,7 +50,7 @@ async function syncGeneratedTasks(workspaceId) {
     include: { movement: { include: { item: true } } },
   })
   for (const c of rejectedChecks) {
-    live.push({ origin: 'check_rejected', originId: c.id, title: `Resolver cheque rechazado de ${c.movement.item?.name || '—'}`, amount: c.movement.amount, date: c.rejectedAt })
+    live.push({ origin: 'check_rejected', originId: c.id, itemId: c.movement.itemId, title: `Resolver cheque rechazado de ${c.movement.item?.name || '—'}`, amount: c.movement.amount, date: c.rejectedAt })
   }
 
   // Regla 3: facturas vencidas, agrupadas por cliente. `kind:'invoice'`
@@ -73,7 +74,7 @@ async function syncGeneratedTasks(workspaceId) {
     const totalPending = list.reduce((s, x) => s.plus(x.pending), toDecimal(0))
     const title = list.length === 1 ? `Cobrar ${list[0].invoice.number} a ${item.name}` : `Cobrar ${list.length} facturas a ${item.name}`
     const earliestDueDate = list.map(x => x.invoice.dueDate).sort((a, b) => new Date(a) - new Date(b))[0]
-    live.push({ origin: 'invoice', originId: itemId, title, amount: totalPending.toString(), date: earliestDueDate })
+    live.push({ origin: 'invoice', originId: itemId, itemId, title, amount: totalPending.toString(), date: earliestDueDate })
   }
 
   // Regla 4: extra terminado con pagos pendientes — nombra el próximo a cobrar.
@@ -84,7 +85,7 @@ async function syncGeneratedTasks(workspaceId) {
   for (const ex of finishedExtras) {
     const unpaid = ex.payments.filter(p => !p.movementId)
     if (unpaid.length === 0) continue
-    live.push({ origin: 'extra', originId: ex.id, title: `Cobrar ${ordinal(unpaid[0].number)} pago a ${ex.item.name}`, amount: unpaid[0].amount, date: ex.date })
+    live.push({ origin: 'extra', originId: ex.id, itemId: ex.itemId, title: `Cobrar ${ordinal(unpaid[0].number)} pago a ${ex.item.name}`, amount: unpaid[0].amount, date: ex.date })
   }
 
   // Regla 5: extra cobrado con equipo sin pagar.
@@ -94,7 +95,7 @@ async function syncGeneratedTasks(workspaceId) {
   })
   for (const ex of collectedExtras) {
     if (toDecimal(ex.teamAmount).lessThanOrEqualTo(0)) continue
-    live.push({ origin: 'extra', originId: ex.id, title: `Pagar al equipo: ${ex.action} de ${ex.item.name}`, amount: ex.teamAmount, date: ex.date })
+    live.push({ origin: 'extra', originId: ex.id, itemId: ex.itemId, title: `Pagar al equipo: ${ex.action} de ${ex.item.name}`, amount: ex.teamAmount, date: ex.date })
   }
 
   // Regla 6: próximas acciones vencidas.
@@ -103,7 +104,7 @@ async function syncGeneratedTasks(workspaceId) {
     include: { item: true },
   })
   for (const a of dueActions) {
-    live.push({ origin: 'next_action', originId: a.id, title: a.text, detail: a.item ? `Cliente: ${a.item.name}` : null, date: a.date })
+    live.push({ origin: 'next_action', originId: a.id, itemId: a.itemId, title: a.text, detail: a.item ? `Cliente: ${a.item.name}` : null, date: a.date })
   }
 
   // Regla 7: facturas/notas de ARCA que quedaron sin confirmar (Etapa 5) —
@@ -114,7 +115,7 @@ async function syncGeneratedTasks(workspaceId) {
     include: { item: true },
   })
   for (const inv of stuckArca) {
-    live.push({ origin: 'invoice_reconcile', originId: inv.id, title: `Reconciliar ${inv.kind === 'invoice' ? 'factura' : 'nota'} de ${inv.item.name}`, detail: inv.concept, date: inv.issueDate })
+    live.push({ origin: 'invoice_reconcile', originId: inv.id, itemId: inv.itemId, title: `Reconciliar ${inv.kind === 'invoice' ? 'factura' : 'nota'} de ${inv.item.name}`, detail: inv.concept, date: inv.issueDate })
   }
 
   const liveKeySet = new Set(live.map(l => `${l.origin}:${l.originId}`))
@@ -129,11 +130,11 @@ async function syncGeneratedTasks(workspaceId) {
       if (existing) {
         await tx.financeTask.update({
           where: { id: existing.id },
-          data: { title: l.title, detail: l.detail ?? null, amount: l.amount ?? null, date: l.date ?? null },
+          data: { title: l.title, detail: l.detail ?? null, amount: l.amount ?? null, date: l.date ?? null, itemId: l.itemId ?? null },
         })
       } else {
         await tx.financeTask.create({
-          data: { workspaceId, kind: 'generated', origin: l.origin, originId: l.originId, title: l.title, detail: l.detail ?? null, amount: l.amount ?? null, date: l.date ?? null, status: 'open' },
+          data: { workspaceId, kind: 'generated', origin: l.origin, originId: l.originId, itemId: l.itemId ?? null, title: l.title, detail: l.detail ?? null, amount: l.amount ?? null, date: l.date ?? null, status: 'open' },
         })
       }
     }
@@ -158,29 +159,50 @@ async function getOpenTasks(workspaceId) {
       OR: [{ status: { in: ['open'] } }, { status: 'postponed', postponedUntil: { lte: today } }],
     },
     orderBy: [{ date: 'asc' }, { createdAt: 'asc' }],
-    include: { doneBy: { select: { id: true, name: true } }, responsible: { select: { id: true, name: true } } },
+    include: { doneBy: { select: { id: true, name: true } }, responsible: { select: { id: true, name: true } }, item: { select: { id: true, name: true } } },
   })
 }
 
+// `itemId` presente = tareas manuales de ese cliente (para fusionarlas con
+// "Próximas acciones" en su ficha, ver CustomerDetail.jsx) — no corre el sync
+// de generadas, es solo una lectura puntual, no la cola completa de Pendientes.
 async function listTasks(req, res, next) {
   try {
+    const { itemId } = req.query
+    if (itemId) {
+      const tasks = await prisma.financeTask.findMany({
+        where: { workspaceId: req.workspace.id, itemId: Number(itemId), kind: 'manual', deletedAt: null },
+        orderBy: [{ date: 'asc' }, { createdAt: 'asc' }],
+      })
+      return res.json(tasks)
+    }
     const tasks = await getOpenTasks(req.workspace.id)
     res.json(tasks)
   } catch (err) { next(err) }
 }
 
-// POST /api/finanzas/tasks — manual: { title, detail?, date?, amount? }
+// POST /api/finanzas/tasks — manual: { title, detail?, date?, amount?, itemId? }
+// `itemId` es opcional: vincula la tarea a un cliente para que aparezca
+// también en su ficha (fusionada con "Próximas acciones").
 async function createTask(req, res, next) {
   try {
     const workspaceId = req.workspace.id
-    const { title, detail, date, amount } = req.body
+    const { title, detail, date, amount, itemId } = req.body
     if (!title?.trim()) return res.status(400).json({ error: 'Título requerido' })
     const parsedDate = date ? parseDate(date) : null
     if (date && !parsedDate) return res.status(400).json({ error: 'Fecha inválida' })
 
+    let resolvedItemId = null
+    if (itemId != null) {
+      if (!Number.isInteger(itemId)) return res.status(400).json({ error: 'Cliente inválido' })
+      const item = await prisma.financeItem.findFirst({ where: { id: itemId, workspaceId }, select: { id: true } })
+      if (!item) return res.status(400).json({ error: 'Cliente no encontrado' })
+      resolvedItemId = item.id
+    }
+
     const task = await prisma.financeTask.create({
       data: {
-        workspaceId, kind: 'manual', title: title.trim(), detail: detail?.trim() || null,
+        workspaceId, kind: 'manual', title: title.trim(), detail: detail?.trim() || null, itemId: resolvedItemId,
         date: parsedDate, amount: amount != null ? toDecimal(amount).toString() : null, createdById: req.user.userId,
       },
     })
@@ -227,7 +249,19 @@ async function updateTask(req, res, next) {
       data.responsibleId = responsibleId
     }
 
-    let task = await prisma.financeTask.update({ where: { id }, data, include: { responsible: { select: { id: true, name: true } } } })
+    // Completar/reabrir una tarea generada de origin='next_action' sincroniza
+    // también la acción de la que nació — antes era de un solo sentido
+    // (cliente→Pendientes sí cerraba esta tarea, pero Pendientes→cliente no
+    // marcaba la acción, así que seguía apareciendo pendiente en la ficha del
+    // cliente). "Posponer" no toca la acción — no tiene equivalente ahí.
+    let task
+    await prisma.$transaction(async (tx) => {
+      task = await tx.financeTask.update({ where: { id }, data, include: { responsible: { select: { id: true, name: true } } } })
+      if ((status === 'done' || status === 'open') && existing.origin === 'next_action' && existing.originId) {
+        const action = await tx.financeNextAction.findFirst({ where: { id: existing.originId, workspaceId, deletedAt: null } })
+        if (action) await completeNextActionTx(tx, action, { completed: status === 'done', userId: req.user.userId })
+      }
+    })
 
     if (responsibleId !== undefined) {
       await syncDashboardOnResponsibleChange(task, {

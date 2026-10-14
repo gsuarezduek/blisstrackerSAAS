@@ -84,6 +84,7 @@ export default function ExtrasList({ items, onChanged }) {
               <th className="py-2 pr-2 font-medium">Pagos</th>
               <th className="py-2 pr-2 font-medium text-right">Total</th>
               <th className="py-2 pr-2 font-medium text-right">Empresa</th>
+              <th className="py-2 pr-2 font-medium text-right">Proveedores</th>
               <th className="py-2 pr-2 font-medium text-right">Equipo</th>
               <th className="py-2 pr-2 font-medium">Estado</th>
               <th className="py-2 pl-2 font-medium">Notas</th>
@@ -100,13 +101,14 @@ export default function ExtrasList({ items, onChanged }) {
                   <td className="py-2 pr-2 text-gray-500 dark:text-gray-400 whitespace-nowrap">{ex.paidCount} de {ex.totalPayments}</td>
                   <td className="py-2 pr-2 text-right text-gray-900 dark:text-white">{fmtMoney(ex.total, 'ARS')}</td>
                   <td className="py-2 pr-2 text-right text-gray-500 dark:text-gray-400">{fmtMoney(ex.companyAmount, 'ARS')}</td>
+                  <td className="py-2 pr-2 text-right text-gray-500 dark:text-gray-400">{fmtMoney(ex.providerAmount, 'ARS')}</td>
                   <td className="py-2 pr-2 text-right text-gray-500 dark:text-gray-400">{fmtMoney(ex.teamAmount, 'ARS')}</td>
                   <td className="py-2 pr-2"><span className={`text-[11px] rounded-full px-2 py-0.5 ${STATUS_BADGE[meta.color]}`}>{meta.label}</span></td>
                   <td className="py-2 pl-2 text-gray-400 truncate max-w-[8rem]">{ex.notes}</td>
                 </tr>
               )
             })}
-            {extras !== null && extras.length === 0 && <tr><td colSpan={9} className="text-center text-xs text-gray-400 py-6">Sin extras.</td></tr>}
+            {extras !== null && extras.length === 0 && <tr><td colSpan={10} className="text-center text-xs text-gray-400 py-6">Sin extras.</td></tr>}
           </tbody>
         </table>
       </div>

@@ -47,6 +47,33 @@ function nextOccurrenceDate(date, recurrence) {
   return d
 }
 
+/**
+ * Completa/reabre una próxima acción dentro de una transacción ya abierta —
+ * compartido con tasks.controller.js (`updateTask`), que llama esto cuando se
+ * marca "Hecho" desde Pendientes una tarea generada de origin='next_action',
+ * para que quede resuelta también en "Próximas acciones" del cliente (antes
+ * la sincronización era de un solo sentido: cliente→Pendientes sí cerraba la
+ * tarea generada, pero Pendientes→cliente no marcaba la acción). Al completar
+ * una recurrente, crea sola la siguiente ocurrencia (3.7).
+ */
+async function completeNextActionTx(tx, existing, { completed, userId }) {
+  const updated = await tx.financeNextAction.update({
+    where: { id: existing.id },
+    data: { completed: !!completed, completedAt: completed ? new Date() : null },
+  })
+  let created = null
+  if (completed === true && existing.recurrence !== 'once') {
+    created = await tx.financeNextAction.create({
+      data: {
+        workspaceId: existing.workspaceId, itemId: existing.itemId, text: existing.text,
+        date: nextOccurrenceDate(updated.date, existing.recurrence), recurrence: existing.recurrence,
+        previousActionId: existing.id, createdById: userId,
+      },
+    })
+  }
+  return { updated, created }
+}
+
 // PATCH /api/finanzas/next-actions/:id — { text?, date?, completed? }
 async function updateNextAction(req, res, next) {
   try {
@@ -61,25 +88,17 @@ async function updateNextAction(req, res, next) {
     if (date !== undefined) { const d = parseDate(date); if (!d) return res.status(400).json({ error: 'Fecha inválida' }); data.date = d }
 
     let created = null
+    let action
     if (completed !== undefined) {
-      data.completed = !!completed
-      data.completedAt = completed ? new Date() : null
+      const result = await prisma.$transaction(async (tx) => {
+        if (Object.keys(data).length) await tx.financeNextAction.update({ where: { id }, data })
+        return completeNextActionTx(tx, { ...existing, ...data }, { completed, userId: req.user.userId })
+      })
+      action = result.updated
+      created = result.created
+    } else {
+      action = await prisma.financeNextAction.update({ where: { id }, data })
     }
-
-    const action = await prisma.$transaction(async (tx) => {
-      const updated = await tx.financeNextAction.update({ where: { id }, data })
-      // Al completar una acción recurrente, se crea la siguiente ocurrencia (3.7).
-      if (completed === true && existing.recurrence !== 'once') {
-        created = await tx.financeNextAction.create({
-          data: {
-            workspaceId, itemId: existing.itemId, text: existing.text,
-            date: nextOccurrenceDate(updated.date, existing.recurrence), recurrence: existing.recurrence,
-            previousActionId: existing.id, createdById: req.user.userId,
-          },
-        })
-      }
-      return updated
-    })
 
     if (completed !== undefined) {
       await logFinanceAudit({
@@ -114,4 +133,4 @@ async function deleteNextAction(req, res, next) {
   } catch (err) { next(err) }
 }
 
-module.exports = { listNextActions, createNextAction, updateNextAction, deleteNextAction }
+module.exports = { listNextActions, createNextAction, updateNextAction, deleteNextAction, completeNextActionTx }

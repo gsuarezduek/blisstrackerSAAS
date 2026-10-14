@@ -9,27 +9,37 @@ import PendingInvoicesList from './PendingInvoicesList'
 import CustomerInfoCard from './CustomerInfoCard'
 import NewInvoiceModal from './NewInvoiceModal'
 import LoadMovementModal from './LoadMovementModal'
+import CreditCheckModal from './CreditCheckModal'
 
 const SUBTABS = [{ id: 'movimientos', label: 'Movimientos' }, { id: 'facturas', label: 'Facturas' }]
 
 // Detalle del cliente (sección 4.5): header + saldo + pestañas Movimientos/
 // Facturas + columna lateral (Próximas acciones, Facturas pendientes, Datos).
-export default function CustomerDetail({ itemId, accounts, categoriesList, items, taxes, issuers, onBack }) {
+export default function CustomerDetail({ itemId, accounts, categoriesList, items, taxes, issuers, financeIvaMode, onBack }) {
   const [customer, setCustomer] = useState(null)
   const [actions, setActions] = useState([])
+  const [tasks, setTasks] = useState([])
   const [subtab, setSubtab] = useState('movimientos')
   const [refreshKey, setRefreshKey] = useState(0)
   const [showNewInvoice, setShowNewInvoice] = useState(false)
   const [paymentContext, setPaymentContext] = useState(null) // { item, invoiceId } | null | 'new'
+  const [creditingCheck, setCreditingCheck] = useState(null)
 
   const load = useCallback(async () => {
-    const [custRes, actionsRes] = await Promise.all([
+    const [custRes, actionsRes, tasksRes] = await Promise.all([
       api.get(`/finanzas/customers/${itemId}`),
       api.get('/finanzas/next-actions', { params: { itemId } }),
+      api.get('/finanzas/tasks', { params: { itemId } }),
     ])
     setCustomer(custRes.data)
     setActions(actionsRes.data)
+    setTasks(tasksRes.data)
   }, [itemId])
+
+  async function handleOpenCheck(checkId) {
+    const res = await api.get('/finanzas/checks', { params: { status: 'pending' } })
+    setCreditingCheck(res.data.find(c => c.id === checkId) || null)
+  }
 
   useEffect(() => { load() }, [load])
 
@@ -75,22 +85,22 @@ export default function CustomerDetail({ itemId, accounts, categoriesList, items
           </div>
           <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-4">
             {subtab === 'movimientos' ? (
-              <CustomerLedgerPanel itemId={itemId} currency={currency} refreshKey={refreshKey} />
+              <CustomerLedgerPanel itemId={itemId} currency={currency} refreshKey={refreshKey} onCreditCheck={handleOpenCheck} />
             ) : (
-              <CustomerInvoicesPanel itemId={itemId} currency={currency} refreshKey={refreshKey} customer={customer} issuers={issuers} />
+              <CustomerInvoicesPanel itemId={itemId} currency={currency} refreshKey={refreshKey} customer={customer} issuers={issuers} financeIvaMode={financeIvaMode} />
             )}
           </div>
         </div>
 
         <div className="space-y-5">
-          <NextActionsList itemId={itemId} actions={actions} onChanged={handleChanged} />
+          <NextActionsList itemId={itemId} actions={actions} tasks={tasks} onChanged={handleChanged} />
           <PendingInvoicesList invoices={customer.invoices} currency={currency} onRegisterPayment={(inv) => setPaymentContext({ invoiceId: inv.id })} />
           <CustomerInfoCard customer={customer} issuers={issuers} onChanged={handleChanged} />
         </div>
       </div>
 
       {showNewInvoice && (
-        <NewInvoiceModal items={items} issuers={issuers} defaultItemId={itemId}
+        <NewInvoiceModal items={items} issuers={issuers} defaultItemId={itemId} financeIvaMode={financeIvaMode}
           onClose={() => setShowNewInvoice(false)}
           onSaved={() => { setShowNewInvoice(false); handleChanged() }} />
       )}
@@ -102,6 +112,12 @@ export default function CustomerDetail({ itemId, accounts, categoriesList, items
           onClose={() => setPaymentContext(null)}
           onSaved={() => { setPaymentContext(null); handleChanged() }}
         />
+      )}
+
+      {creditingCheck && (
+        <CreditCheckModal check={creditingCheck} accounts={accounts} taxes={taxes}
+          onClose={() => setCreditingCheck(null)}
+          onSaved={() => { setCreditingCheck(null); handleChanged() }} />
       )}
     </div>
   )

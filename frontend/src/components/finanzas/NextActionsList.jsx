@@ -11,16 +11,23 @@ function fmtDate(iso) {
 
 // "Próximas acciones" (sección 4.5, columna lateral): lista + "+" que abre un
 // form inline (texto, fecha, repetición). Al completar una recurrente, el
-// backend genera sola la siguiente ocurrencia (3.7).
-export default function NextActionsList({ itemId, actions, onChanged }) {
+// backend genera sola la siguiente ocurrencia (3.7). Fusiona además las
+// tareas manuales de Pendientes que se vincularon a este cliente (`tasks`,
+// `FinanceTask.itemId` — ver tasks.controller.js) con una etiqueta "Tarea"
+// para distinguirlas; se completan vía su propio endpoint.
+export default function NextActionsList({ itemId, actions, tasks, onChanged }) {
   const [adding, setAdding] = useState(false)
   const [text, setText] = useState('')
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10))
   const [recurrence, setRecurrence] = useState('once')
   const [saving, setSaving] = useState(false)
 
-  const pending = actions.filter(a => !a.completed)
-  const done = actions.filter(a => a.completed)
+  const items = [
+    ...actions.map(a => ({ kind: 'action', id: a.id, text: a.text, date: a.date, recurrence: a.recurrence, completed: a.completed })),
+    ...(tasks || []).map(t => ({ kind: 'task', id: t.id, text: t.title, date: t.date, completed: t.status === 'done' })),
+  ]
+  const pending = items.filter(a => !a.completed)
+  const done = items.filter(a => a.completed)
 
   async function handleAdd() {
     if (!text.trim()) return
@@ -32,8 +39,12 @@ export default function NextActionsList({ itemId, actions, onChanged }) {
     } finally { setSaving(false) }
   }
 
-  async function toggle(action) {
-    await api.patch(`/finanzas/next-actions/${action.id}`, { completed: !action.completed })
+  async function toggle(entry) {
+    if (entry.kind === 'task') {
+      await api.patch(`/finanzas/tasks/${entry.id}`, { status: entry.completed ? 'open' : 'done' })
+    } else {
+      await api.patch(`/finanzas/next-actions/${entry.id}`, { completed: !entry.completed })
+    }
     onChanged()
   }
 
@@ -60,11 +71,14 @@ export default function NextActionsList({ itemId, actions, onChanged }) {
         {pending.length === 0 && done.length === 0 && <p className="text-xs text-gray-400">Sin próximas acciones.</p>}
 
         {pending.map(a => (
-          <label key={a.id} className="flex items-start gap-2 text-sm cursor-pointer">
+          <label key={`${a.kind}-${a.id}`} className="flex items-start gap-2 text-sm cursor-pointer">
             <input type="checkbox" className="mt-0.5" checked={false} onChange={() => toggle(a)} />
             <span className="flex-1">
-              <span className="text-gray-900 dark:text-white block">{a.text}</span>
-              <span className="text-xs text-gray-400">{fmtDate(a.date)}{a.recurrence !== 'once' ? ` · se repite ${a.recurrence === 'monthly' ? 'cada mes' : 'cada año'}` : ''}</span>
+              <span className="text-gray-900 dark:text-white block">
+                {a.kind === 'task' && <span className="text-[10px] bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-300 rounded-full px-1.5 py-0.5 mr-1.5 align-middle">Tarea</span>}
+                {a.text}
+              </span>
+              <span className="text-xs text-gray-400">{a.date ? fmtDate(a.date) : ''}{a.recurrence && a.recurrence !== 'once' ? ` · se repite ${a.recurrence === 'monthly' ? 'cada mes' : 'cada año'}` : ''}</span>
             </span>
           </label>
         ))}
@@ -74,7 +88,7 @@ export default function NextActionsList({ itemId, actions, onChanged }) {
             <summary className="text-xs text-gray-400 cursor-pointer">{done.length} resuelta{done.length === 1 ? '' : 's'}</summary>
             <div className="mt-1 space-y-1">
               {done.map(a => (
-                <label key={a.id} className="flex items-start gap-2 text-sm cursor-pointer opacity-50">
+                <label key={`${a.kind}-${a.id}`} className="flex items-start gap-2 text-sm cursor-pointer opacity-50">
                   <input type="checkbox" className="mt-0.5" checked={true} onChange={() => toggle(a)} />
                   <span className="text-gray-700 dark:text-gray-300 line-through">{a.text}</span>
                 </label>

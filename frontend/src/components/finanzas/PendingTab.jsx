@@ -34,7 +34,7 @@ export default function PendingTab({ items, onNavigate }) {
       {tasks === null ? (
         <p className="text-sm text-gray-400 text-center py-6">Cargando…</p>
       ) : (
-        <TasksList tasks={tasks} members={members} onChanged={loadTasks} onNavigate={onNavigate} />
+        <TasksList tasks={tasks} members={members} items={items} onChanged={loadTasks} onNavigate={onNavigate} />
       )}
 
       <ExtrasList items={items} onChanged={loadTasks} />

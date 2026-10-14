@@ -60,6 +60,8 @@ function MovementForm({ type, accounts, categories, items, taxes, prefill, onClo
   const [accountApplication, setAccountApplication] = useState(prefill?.invoiceId ? 'invoice' : 'on_account')
   const [invoiceId, setInvoiceId] = useState(prefill?.invoiceId ? String(prefill.invoiceId) : '')
   const [pendingInvoices, setPendingInvoices] = useState([])
+  const [pendingExtraPayments, setPendingExtraPayments] = useState([])
+  const [extraPaymentId, setExtraPaymentId] = useState('')
   const [taxIds, setTaxIds] = useState(new Set())
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -79,6 +81,23 @@ function MovementForm({ type, accounts, categories, items, taxes, prefill, onClo
         const first = prefill?.invoiceId && pending.some(p => p.id === prefill.invoiceId) ? prefill.invoiceId : pending[0].id
         setInvoiceId(String(first))
       }
+    })
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [item?.id, accountApplication])
+
+  // "A cuenta" con un item que tiene extras con pagos pendientes — ofrecer
+  // vincular el cobro a uno puntual (opcional), mismo mecanismo que ya existe
+  // para facturas (ver movements.controller.js `extraPaymentId`).
+  useEffect(() => {
+    if (!isIncome || !item?.tracksAccount || accountApplication !== 'on_account') { setPendingExtraPayments([]); setExtraPaymentId(''); return }
+    let cancelled = false
+    api.get('/finanzas/extras', { params: { itemId: item.id, payments: 'pending' } }).then(res => {
+      if (cancelled) return
+      const flat = res.data.flatMap(ex => ex.payments
+        .filter(p => !p.movementId)
+        .map(p => ({ id: p.id, label: `${ex.action} · pago ${p.number} de ${ex.payments.length} · ${fmtMoney(p.amount, 'ARS')}` })))
+      setPendingExtraPayments(flat)
     })
     return () => { cancelled = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -116,6 +135,7 @@ function MovementForm({ type, accounts, categories, items, taxes, prefill, onClo
         if (item.tracksAccount) {
           body.accountApplication = accountApplication
           if (accountApplication === 'invoice') body.invoiceId = Number(invoiceId)
+          if (accountApplication === 'on_account' && extraPaymentId) body.extraPaymentId = Number(extraPaymentId)
         }
         if (isCheck) body.check = { number: checkNumber.trim(), issuingBank: checkBank.trim(), estimatedCollectionDate: checkDate }
         else body.taxIds = [...taxIds]
@@ -213,6 +233,12 @@ function MovementForm({ type, accounts, categories, items, taxes, prefill, onClo
             ) : (
               <p className="text-xs text-gray-400 mt-1">Este cliente no tiene facturas pendientes.</p>
             )
+          )}
+          {accountApplication === 'on_account' && pendingExtraPayments.length > 0 && (
+            <select className={`${input} mt-2`} value={extraPaymentId} onChange={e => setExtraPaymentId(e.target.value)}>
+              <option value="">¿Corresponde a un pago de un extra? (opcional)</option>
+              {pendingExtraPayments.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
+            </select>
           )}
         </div>
       )}

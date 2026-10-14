@@ -12,11 +12,14 @@ function fmtDate(iso) {
   return new Date(iso).toLocaleDateString('es-AR', { day: '2-digit', month: 'short' })
 }
 
-// Modal simple "+ Agregar tarea" (manual): título, detalle, fecha.
-function NewTaskModal({ onClose, onSaved }) {
+// Modal simple "+ Agregar tarea" (manual): título, detalle, fecha, y
+// opcionalmente un cliente — si se elige uno, la tarea también aparece
+// fusionada en "Próximas acciones" de su ficha (ver NextActionsList.jsx).
+function NewTaskModal({ customers, onClose, onSaved }) {
   const [title, setTitle] = useState('')
   const [detail, setDetail] = useState('')
   const [date, setDate] = useState('')
+  const [itemId, setItemId] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
@@ -24,7 +27,10 @@ function NewTaskModal({ onClose, onSaved }) {
     if (!title.trim()) { setError('Título requerido'); return }
     setSaving(true); setError('')
     try {
-      await api.post('/finanzas/tasks', { title: title.trim(), detail: detail.trim() || undefined, date: date || undefined })
+      await api.post('/finanzas/tasks', {
+        title: title.trim(), detail: detail.trim() || undefined, date: date || undefined,
+        itemId: itemId ? Number(itemId) : undefined,
+      })
       onSaved()
     } catch (err) {
       setError(err.response?.data?.error || 'No se pudo guardar')
@@ -40,6 +46,12 @@ function NewTaskModal({ onClose, onSaved }) {
           <input autoFocus className={input} placeholder="Título" value={title} onChange={e => setTitle(e.target.value)} />
           <input className={input} placeholder="Detalle (opcional)" value={detail} onChange={e => setDetail(e.target.value)} />
           <input type="date" className={input} value={date} onChange={e => setDate(e.target.value)} />
+          {customers?.length > 0 && (
+            <select className={input} value={itemId} onChange={e => setItemId(e.target.value)}>
+              <option value="">Sin cliente vinculado</option>
+              {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          )}
           {error && <p className="text-sm text-red-500">{error}</p>}
           <div className="flex gap-3 pt-1">
             <button onClick={onClose} className="flex-1 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg py-2 text-sm font-medium">Cancelar</button>
@@ -67,10 +79,11 @@ function PostponeInline({ onConfirm, onCancel }) {
 // esa persona — mismo mecanismo que el to-do de Reuniones), acción
 // ("Hecho"/"Acreditado"...), Posponer, Ver›. `members` = workspace members
 // (useMembers()), para el selector de responsable.
-export default function TasksList({ tasks, members, onChanged, onNavigate }) {
+export default function TasksList({ tasks, members, items, onChanged, onNavigate }) {
   const [showNew, setShowNew] = useState(false)
   const [postponing, setPostponing] = useState(null)
   const [assignError, setAssignError] = useState(null) // { taskId, message }
+  const customers = items?.filter(i => i.tracksAccount) || []
 
   async function markDone(task) {
     await api.patch(`/finanzas/tasks/${task.id}`, { status: 'done' })
@@ -109,7 +122,7 @@ export default function TasksList({ tasks, members, onChanged, onNavigate }) {
             <div className="flex items-center gap-3">
               {t.origin && <span className="text-[11px] bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300 rounded-full px-2 py-0.5 shrink-0">{taskOriginLabel(t.origin)}</span>}
               <div className="flex-1 min-w-0">
-                <p className="text-sm text-gray-900 dark:text-white truncate">{t.title}</p>
+                <p className="text-sm text-gray-900 dark:text-white truncate">{t.title}{t.item && <span className="ml-1.5 text-xs text-gray-400 font-normal">· {t.item.name}</span>}</p>
                 {(t.detail || t.date) && <p className="text-xs text-gray-400 truncate">{t.detail}{t.detail && t.date ? ' · ' : ''}{fmtDate(t.date)}</p>}
               </div>
               {t.amount != null && <span className="text-sm font-medium text-gray-700 dark:text-gray-300 shrink-0">{fmtMoney(t.amount, 'ARS')}</span>}
@@ -141,7 +154,7 @@ export default function TasksList({ tasks, members, onChanged, onNavigate }) {
         ))}
       </div>
 
-      {showNew && <NewTaskModal onClose={() => setShowNew(false)} onSaved={() => { setShowNew(false); onChanged() }} />}
+      {showNew && <NewTaskModal customers={customers} onClose={() => setShowNew(false)} onSaved={() => { setShowNew(false); onChanged() }} />}
     </div>
   )
 }
