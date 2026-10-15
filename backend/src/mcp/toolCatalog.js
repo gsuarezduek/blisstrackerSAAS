@@ -285,6 +285,25 @@ const tools = [
       body: { enabledSections },
     }),
   },
+  {
+    name: 'marketing_refresh_run',
+    description: 'Dispara un refresco masivo de fuentes de Marketing (GA4, Search Console, Domain Rating, Keywords, Instagram/Facebook/LinkedIn/TikTok/YouTube, Google Ads, Meta Ads, PageSpeed) — vuelve a traer los datos de cada fuente, lo que automáticamente deja al día el progreso de los objetivos de marketing y el health score (ninguno de los dos se cachea: se recalculan solos en cada lectura, no hace falta nada más). Async: devuelve un jobId al instante, consultar con marketing_refresh_status. Sigue con las demás fuentes/proyectos si una falla.',
+    inputSchema: {
+      projectId: z.number().int().optional().describe('Proyecto puntual. Sin esto, actualiza todos los proyectos activos del workspace.'),
+      sources: z.array(z.enum([
+        'analytics', 'search_console', 'domain_rating', 'keywords',
+        'instagram', 'facebook', 'linkedin', 'tiktok', 'youtube',
+        'google_ads', 'meta_ads', 'pagespeed',
+      ])).optional().describe('Sin esto, usa las fuentes que cada proyecto tenga conectadas (excepto pagespeed, que consume cuota de la API de Google y solo corre si se pide explícito).'),
+    },
+    request: ({ projectId, sources }) => ({ method: 'POST', path: '/marketing/refresh', body: { projectId, sources } }),
+  },
+  {
+    name: 'marketing_refresh_status',
+    description: 'Estado de un refresco masivo disparado con marketing_refresh_run: running o completed, resumen de conteos (ok/error/sin conexión/en cooldown) y el detalle por proyecto × fuente (incluye el motivo si una fuente falló, ej. token vencido o cooldown activo).',
+    inputSchema: { jobId: z.number().int() },
+    request: ({ jobId }) => ({ method: 'GET', path: `/marketing/refresh/${jobId}` }),
+  },
 
   // ── Tareas (resto del sistema) ───────────────────────────────────────────
   {

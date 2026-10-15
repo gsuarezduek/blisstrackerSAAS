@@ -47,6 +47,7 @@ const contentGap        = require('../controllers/contentGap.controller')
 const adsAdvisor        = require('../controllers/adsAdvisor.controller')
 const rrssAdvisor       = require('../controllers/rrssAdvisor.controller')
 const marketingPending  = require('../controllers/marketingPending.controller')
+const marketingRefresh  = require('../controllers/marketingRefresh.controller')
 
 // ─── SIN AUTH — Los callbacks OAuth no llevan Authorization header ────────────
 router.get('/integrations/google/callback',    integrations.handleCallback)
@@ -258,6 +259,13 @@ router.post('/projects/:id/keywords/:kwId/serp/refresh',  keywords.refreshSerpSn
 // Ads Snapshots por proyecto
 router.post('/projects/:id/ads-snapshots',  adsSnapshot.saveSnapshot)
 router.get('/projects/:id/ads-snapshots',   adsSnapshot.listSnapshots)
+
+// Refresco masivo de fuentes (GA4, Search Console, Domain Rating, Keywords, RRSS,
+// Ads, PageSpeed) — un proyecto puntual (body) o todos los activos del workspace,
+// async con polling (mismo patrón que GeoAudit). projectId viaja en el body, no en
+// la URL, por eso NO cuelga de '/projects/:id' (ese prefijo exige un :id siempre).
+router.post('/refresh',            marketingRefresh.startRefresh)
+router.get('/refresh/:jobId',      marketingRefresh.getRefreshStatus)
 
 // Vistas cross-proyecto (sin proyecto seleccionado)
 router.get('/summary/analytics',   summary.getAnalyticsSummary)

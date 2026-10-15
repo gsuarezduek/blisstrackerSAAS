@@ -464,6 +464,10 @@ DELETE /api/marketing/projects/:id/content-gaps/:gapId
 POST   /api/marketing/projects/:id/ads-snapshots            # body: { month, type: "meta_ads"|"google_ads" } — guardar snapshot manual
 GET    /api/marketing/projects/:id/ads-snapshots            # ?type=meta_ads|google_ads&months=6 — historial
 
+# Marketing — Refresco masivo (GA4, Search Console, Domain Rating, Keywords, RRSS, Ads, PageSpeed)
+POST   /api/marketing/refresh                               # body: { projectId?, sources?: [...] } — async, devuelve { jobId }
+GET    /api/marketing/refresh/:jobId                        # polling: { status, summary, results: [{projectId,projectName,source,status,detail?,waitMinutes?}] }
+
 # Marketing — Vistas cross-proyecto (sin proyecto seleccionado)
 GET    /api/marketing/summary/analytics                     # AnalyticsSnapshot más reciente por proyecto, ordenado por sesiones desc
 GET    /api/marketing/summary/performance                   # PageSpeedResult más reciente por proyecto, ordenado por score desc

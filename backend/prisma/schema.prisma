@@ -224,6 +224,7 @@ model Workspace {
   whatsappBotEscalations     WhatsappBotEscalation[]
   deviceTokens               DeviceToken[]
   mcpTokens                  McpToken[]
+  marketingRefreshJobs       MarketingRefreshJob[]
   calendarEvents             CalendarEvent[]
   calendarEventParticipants  CalendarEventParticipant[]
   calendarEventRecurrences   CalendarEventRecurrence[]
@@ -466,6 +467,7 @@ model User {
   dismissedFindings                 DismissedFinding[]
   deviceTokens                      DeviceToken[]
   mcpTokens                         McpToken[]
+  marketingRefreshJobsRequested     MarketingRefreshJob[]
   calendarEventsOrganized           CalendarEvent[]             @relation("CalendarEventOrganizer")
   calendarEventParticipations       CalendarEventParticipant[]  @relation("CalendarEventParticipant")
   calendarEventRecurrencesOrganized CalendarEventRecurrence[]   @relation("CalendarEventRecurrenceOrganizer")
@@ -1439,6 +1441,32 @@ model GeoAudit {
 
   @@index([workspaceId])
   @@index([projectId])
+}
+
+// Job de refresco masivo de fuentes de Marketing (GA4, Search Console, Domain
+// Rating, Keywords, RRSS, Ads, PageSpeed) — mismo patrón async que GeoAudit
+// (status + polling), pero puede abarcar VARIOS proyectos a la vez, por eso
+// `projectId` es solo el filtro con el que se lanzó (no una relation: un job
+// "todos los proyectos" no apunta a ninguno en particular) y el detalle real
+// vive en `results` (un objeto por proyecto×fuente). Ver "Marketing refresh
+// masivo (MCP)" en backend/CLAUDE.md.
+model MarketingRefreshJob {
+  id          Int       @id @default(autoincrement())
+  workspaceId Int
+  projectId   Int?      // filtro al lanzar (null = todos los proyectos activos del workspace)
+  sources     String    @default("[]") // JSON array pedido explícitamente ([] = las conectadas de cada proyecto)
+  status      String    @default("running") // running | completed | failed
+  results     String    @default("[]") // JSON: [{ projectId, projectName, source, status, detail?, waitMinutes? }], se va completando a medida que corre
+  errorMsg    String?   // solo si status=failed (error inesperado del job, no de una fuente puntual)
+  startedAt   DateTime  @default(now())
+  finishedAt  DateTime?
+
+  requestedByUserId Int?
+
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  requestedBy User?     @relation(fields: [requestedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId])
 }
 
 // ─── FEATURE FLAGS ───────────────────────────────────────────────────────────
