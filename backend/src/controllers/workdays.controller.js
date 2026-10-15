@@ -20,13 +20,72 @@ const liveWhere = (today) => ({ OR: [{ scheduledFor: null }, { scheduledFor: { l
 // tocan — reactivar el proyecto las vuelve a mostrar tal cual quedaron).
 const activeProjectWhere = { project: { active: true } }
 
+// Vista de SOLO LECTURA de la jornada de otra persona (ej. admin/bot consultando el
+// día de otro miembro) — a propósito NO reusa el resto de getOrCreateToday: ese flujo
+// crea el WorkDay si falta, lo REABRE si ya estaba cerrado (endedAt→null) y materializa
+// tareas futuras/recurrentes — efectos secundarios que tienen sentido para el dueño de
+// la jornada, pero serían un bug grave si los dispara quien solo está mirando. Acá, si
+// no hay WorkDay hoy para esa persona, se devuelve "sin datos" sin crear nada.
+async function getForeignToday(workspaceId, date, targetUserId) {
+  const workDay = await prisma.workDay.findUnique({
+    where: { userId_workspaceId_date: { userId: targetUserId, workspaceId, date } },
+  })
+  if (!workDay) return { date, startedAt: null, endedAt: null, tasks: [], carryOverTasks: [], futureTasks: [] }
+
+  const [tasks, carryOverTasks, futureTasks] = await Promise.all([
+    prisma.task.findMany({
+      where: { workDayId: workDay.id, ...liveWhere(date), ...activeProjectWhere },
+      include: taskInclude,
+      orderBy: { createdAt: 'desc' },
+    }),
+    prisma.task.findMany({
+      where: {
+        userId: targetUserId,
+        status: { in: ['PENDING', 'IN_PROGRESS', 'PAUSED', 'BLOCKED'] },
+        workDay: { date: { lt: date }, workspaceId },
+        ...liveWhere(date),
+        ...activeProjectWhere,
+      },
+      include: taskInclude,
+      orderBy: { createdAt: 'desc' },
+    }),
+    prisma.task.findMany({
+      where: {
+        userId: targetUserId,
+        status: { not: 'COMPLETED' },
+        scheduledFor: { gt: date },
+        workDay: { workspaceId },
+        ...activeProjectWhere,
+      },
+      include: taskInclude,
+      orderBy: { scheduledFor: 'asc' },
+    }),
+  ])
+
+  return { ...workDay, tasks, carryOverTasks, futureTasks }
+}
+
 async function getOrCreateToday(req, res, next) {
   try {
-    const userId = req.user.userId
     const workspaceId = req.workspace.id
     const tz = req.workspace.timezone
     const date = todayString(tz)
 
+    // ?userId= ajeno = vista de solo lectura, admin/owner-only (mismo criterio que
+    // Productividad/RRHH: ver la jornada de otra persona es dato sensible).
+    const requestedUserId = req.query.userId ? Number(req.query.userId) : null
+    if (requestedUserId && requestedUserId !== req.user.userId) {
+      const isAdmin = req.workspaceMember.role === 'admin' || req.workspaceMember.role === 'owner'
+      if (!isAdmin) return res.status(403).json({ error: 'Se requieren permisos de administrador para ver la jornada de otra persona' })
+      const target = await prisma.workspaceMember.findUnique({
+        where: { workspaceId_userId: { workspaceId, userId: requestedUserId } },
+      })
+      if (!target) return res.status(404).json({ error: 'Usuario no encontrado en este workspace' })
+      const view = await getForeignToday(workspaceId, date, requestedUserId)
+      return res.json(view)
+    }
+
+    const userId = req.user.userId
     const whereKey = { userId_workspaceId_date: { userId, workspaceId, date } }
 
     let workDay = await prisma.workDay.findUnique({ where: whereKey })

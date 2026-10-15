@@ -308,9 +308,9 @@ const tools = [
   // ── Tareas (resto del sistema) ───────────────────────────────────────────
   {
     name: 'tasks_today',
-    description: 'La jornada de hoy del usuario conectado: tareas pendientes/en curso/bloqueadas/completadas de hoy.',
-    inputSchema: {},
-    request: () => ({ method: 'GET', path: '/workdays/today' }),
+    description: 'La jornada de hoy: tareas pendientes/en curso/bloqueadas/completadas de hoy. Sin userId, la del usuario conectado. Con userId de otra persona, vista de SOLO LECTURA (requiere admin/owner) — no crea ni reabre la jornada de esa persona, ni materializa tareas futuras/recurrentes como sí hace para el dueño.',
+    inputSchema: { userId: z.number().int().optional().describe('Ver la jornada de otra persona (admin/owner). Sin esto, la propia.') },
+    request: ({ userId }) => ({ method: 'GET', path: '/workdays/today', query: { userId } }),
   },
   {
     name: 'task_create',
@@ -780,6 +780,45 @@ const tools = [
     description: 'Elimina una versión de propuesta.',
     inputSchema: { leadId: z.number().int(), proposalId: z.number().int() },
     request: ({ leadId, proposalId }) => ({ method: 'DELETE', path: `/ventas/leads/${leadId}/proposals/${proposalId}` }),
+  },
+
+  // ── Equipo y Productividad ────────────────────────────────────────────────
+  {
+    name: 'team_list',
+    description: 'Lista todo el equipo del workspace: nombre, email, rol (owner/admin/member), rol de equipo (ej. "CM", "Pasante") y roles adicionales, activo/inactivo. Las cuentas asignadas a cada persona se ven cruzando esto con list_projects (cada proyecto trae su equipo).',
+    inputSchema: {},
+    request: () => ({ method: 'GET', path: '/workspaces/current/members' }),
+  },
+  {
+    name: 'team_attendance',
+    description: 'Asistencia y tardanzas de una persona: hora de ingreso por día, horario pactado, minutos de tardanza (con tolerancia del workspace) y % de puntualidad. Requiere admin/owner. No incluye hora de salida (el producto no la trackea, solo el login).',
+    inputSchema: { userId: z.number().int() },
+    request: ({ userId }) => ({ method: 'GET', path: `/admin/rrhh/user-summary/${userId}` }),
+  },
+  {
+    name: 'team_task_history',
+    description: 'Listado detallado de tareas (no agregado): título, proyecto, responsable, estado, fecha de creación/inicio/fin, duración real trabajada y pausas con fecha (sin motivo — solo bloquear pide motivo). El motivo de bloqueo solo viaja si la tarea está bloqueada ahora mismo (no hay historial de bloqueos pasados). Sin "fecha límite" ni "duración estimada": el producto no los captura. Requiere admin/owner. Útil para reportes de productividad, tendencias semana a semana e historial de completadas.',
+    inputSchema: {
+      userId: z.number().int().optional().describe('Sin esto, de todo el workspace'),
+      from: z.string().optional().describe('YYYY-MM-DD, default hace 30 días'),
+      to:   z.string().optional().describe('YYYY-MM-DD, default hoy'),
+    },
+    request: ({ userId, from, to }) => ({ method: 'GET', path: '/admin/productivity/tasks', query: { userId, from, to } }),
+  },
+  {
+    name: 'services_list',
+    description: 'Catálogo de servicios del workspace (id + nombre) — para resolver el serviceId antes de usar project_update_services.',
+    inputSchema: {},
+    request: () => ({ method: 'GET', path: '/services' }),
+  },
+  {
+    name: 'project_update_services',
+    description: 'Reemplaza la lista COMPLETA de servicios contratados de un proyecto (ej. sumarle "Meta" a una cuenta). No es aditivo: hay que mandar todos los serviceIds que debe tener el proyecto, no solo el nuevo — leé primero list_projects (ya trae los servicios actuales de cada proyecto) o services_list para resolver los ids. Requiere admin/owner.',
+    inputSchema: {
+      ...projectIdParam,
+      serviceIds: z.array(z.number().int()).describe('Lista COMPLETA de IDs de servicio que debe tener el proyecto (reemplaza, no suma)'),
+    },
+    request: ({ projectId, serviceIds }) => ({ method: 'PUT', path: `/projects/${projectId}`, body: { serviceIds } }),
   },
 ]
 

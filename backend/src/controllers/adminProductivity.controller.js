@@ -4,6 +4,7 @@ const { getWorkspaceStats, getAttendanceStats, getHoursHistory, computeBenchmark
 const { sendTestDigest } = require('../services/productivityDigest.service')
 const { getProductivityPeriod, businessDaysBetween, tzOffsetStr, taskMins, daysBetweenInclusive } = require('../lib/timeMetrics')
 const { createTtlCache } = require('../lib/ttlCache')
+const { todayString, dateStringInTz } = require('../utils/dates')
 
 // La tabla de productividad hace bucketing pesado de logins + tareas + asistencia sobre
 // todo el equipo en cada request. TTL 60s: para una vista analítica de admin el desfase
@@ -307,6 +308,74 @@ async function refreshProductivity(req, res, next) {
   } catch (err) { next(err) }
 }
 
+/**
+ * GET /api/admin/productivity/tasks
+ * Listado detallado (no agregado) de tareas — para automatización/reportes: título,
+ * proyecto, responsable, estado, fechas, duración real trabajada (mismo cálculo que
+ * el resto de Productividad, taskMins) y pausas con fecha (huecos entre TaskSession).
+ * NO incluye "fecha límite" ni "duración estimada" — el producto no captura esos datos.
+ * El motivo de bloqueo solo viaja si la tarea está bloqueada AHORA (se borra al
+ * desbloquear, no hay historial de bloqueos pasados en una tabla aparte).
+ * Query: userId? (sin esto, de todo el workspace), from?/to? (YYYY-MM-DD, default
+ * últimos 30 días). Tope defensivo de 500 filas.
+ */
+async function taskHistory(req, res, next) {
+  try {
+    const workspaceId = req.workspace.id
+    const tz = req.workspace.timezone
+    const { userId, from, to } = req.query
+
+    if ((from && !DATE_RE.test(from)) || (to && !DATE_RE.test(to))) {
+      return res.status(400).json({ error: 'from/to deben tener formato YYYY-MM-DD' })
+    }
+    const toStr   = to   || todayString(tz)
+    const fromStr = from || dateStringInTz(new Date(Date.now() - 30 * 86400000), tz)
+    if (fromStr > toStr) return res.status(400).json({ error: 'from no puede ser posterior a to' })
+    if (daysBetweenInclusive(fromStr, toStr) > MAX_CUSTOM_RANGE_DAYS) {
+      return res.status(400).json({ error: `El rango no puede superar ${MAX_CUSTOM_RANGE_DAYS} días` })
+    }
+
+    const where = { workDay: { workspaceId, date: { gte: fromStr, lte: toStr } } }
+    if (userId) where.userId = Number(userId)
+
+    const tasks = await prisma.task.findMany({
+      where,
+      select: {
+        id: true, description: true, status: true, blockedReason: true,
+        createdAt: true, startedAt: true, completedAt: true,
+        pausedMinutes: true, minutesOverride: true,
+        user:    { select: { id: true, name: true } },
+        project: { select: { id: true, name: true } },
+        sessions: { select: { startedAt: true, endedAt: true }, orderBy: { startedAt: 'asc' } },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 500,
+    })
+
+    res.json(tasks.map(t => {
+      // Pausas = huecos entre el fin de una sesión y el inicio de la siguiente —
+      // no tienen motivo (solo bloquear pide motivo, pausar no).
+      const pauses = []
+      for (let i = 0; i < t.sessions.length - 1; i++) {
+        if (t.sessions[i].endedAt) pauses.push({ pausedAt: t.sessions[i].endedAt, resumedAt: t.sessions[i + 1].startedAt })
+      }
+      return {
+        id:            t.id,
+        title:         t.description,
+        project:       t.project,
+        responsible:   t.user,
+        status:        t.status,
+        createdAt:     t.createdAt,
+        startedAt:     t.startedAt,
+        completedAt:   t.completedAt,
+        workedMinutes: taskMins(t),
+        pauses,
+        blockedReason: t.status === 'BLOCKED' ? t.blockedReason : null,
+      }
+    }))
+  } catch (err) { next(err) }
+}
+
 // POST /api/admin/productivity/digest/send-now — envía el aviso de prueba al admin que lo pide.
 async function sendDigestNow(req, res, next) {
   try {
@@ -317,4 +386,4 @@ async function sendDigestNow(req, res, next) {
   } catch (err) { next(err) }
 }
 
-module.exports = { listProductivity, userOverview, userBreakdown, userHoursHistory, refreshProductivity, sendDigestNow }
+module.exports = { listProductivity, userOverview, userBreakdown, userHoursHistory, taskHistory, refreshProductivity, sendDigestNow }

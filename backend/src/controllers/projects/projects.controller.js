@@ -36,7 +36,7 @@ async function list(req, res, next) {
 
     const monday = weekMondayStr(tz)
 
-    const [activeCounts, completedWeekRaw, starredRows] = await Promise.all([
+    const [activeCounts, completedWeekRaw, starredRows, lastActivityRaw] = await Promise.all([
       prisma.task.groupBy({
         by: ['projectId', 'status'],
         where: { projectId: { in: projectIds }, status: { in: ['PENDING', 'IN_PROGRESS', 'PAUSED', 'BLOCKED'] } },
@@ -50,9 +50,16 @@ async function list(req, res, next) {
         where: { userId, projectId: { in: projectIds } },
         select: { projectId: true },
       }),
+      // Última actividad de cada cuenta — última tarea creada (independiente de su estado).
+      prisma.task.groupBy({
+        by: ['projectId'],
+        where: { projectId: { in: projectIds } },
+        _max: { createdAt: true },
+      }),
     ])
 
     const starredSet = new Set(starredRows.map(r => r.projectId))
+    const lastActivityMap = Object.fromEntries(lastActivityRaw.map(r => [r.projectId, r._max.createdAt]))
 
     const countsMap = {}
     for (const row of activeCounts) {
@@ -80,6 +87,7 @@ async function list(req, res, next) {
         ...p,
         locked: false,
         starred: starredSet.has(p.id),
+        lastActivityAt: lastActivityMap[p.id] ?? null,
         taskCounts: {
           IN_PROGRESS:    countsMap[p.id]?.IN_PROGRESS    ?? 0,
           PENDING:        countsMap[p.id]?.PENDING        ?? 0,

@@ -48,7 +48,7 @@ PATCH  /api/workspaces/current/features/:key         # admin: toggle opt-out de 
 GET    /api/workspaces/current/module-access         # admin: acceso por rol resuelto de los 4 módulos (ventas/marketing/contenido/rrhh) — EOS/Gamification no aplican, admin-only fijo
 PATCH  /api/workspaces/current/module-access/:key     # admin: { allMembers, roles } — actualiza el acceso de un módulo
 
-GET    /api/workdays/today
+GET    /api/workdays/today                           # ?userId= ajeno = solo lectura, admin/owner-only (no crea/reabre ni materializa nada para esa persona)
 POST   /api/workdays/finish
 
 POST   /api/tasks
@@ -113,6 +113,7 @@ GET    /api/reports/mine/productivity       # self-view de productividad del usu
 
 GET    /api/admin/productivity              # tabla por persona (?mode=current|closed)
 GET    /api/admin/productivity/users/:userId/breakdown   # drill persona→proyecto→tarea del período (lazy)
+GET    /api/admin/productivity/tasks                     # listado detallado (no agregado) de tareas — ?userId=&from=&to= (YYYY-MM-DD, default últimos 30 días)
 POST   /api/admin/productivity/:userId/refresh           # regenera el análisis IA de una persona
 POST   /api/admin/productivity/digest/send-now           # envía el digest de prueba al admin actual
 
