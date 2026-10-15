@@ -72,6 +72,7 @@ function lazyWithReload(importer) {
 
 const Landing          = lazyWithReload(() => import('./pages/Landing'))
 const Pricing          = lazyWithReload(() => import('./pages/Pricing'))
+const Contact          = lazyWithReload(() => import('./pages/Contact'))
 const SolutionMarketing = lazyWithReload(() => import('./pages/SolutionMarketing'))
 const SolutionEos       = lazyWithReload(() => import('./pages/SolutionEos'))
 const SolutionVentas    = lazyWithReload(() => import('./pages/SolutionVentas'))
@@ -191,6 +192,7 @@ export default function App() {
           <Route path="/login"    element={<Login2     />} />
           <Route path="/register" element={<Register   />} />
           <Route path="/pricing"  element={<Pricing    />} />
+          <Route path="/contacto" element={<Contact    />} />
           <Route path="/soluciones/marketing" element={<SolutionMarketing />} />
           <Route path="/soluciones/eos"       element={<SolutionEos       />} />
           <Route path="/soluciones/ventas"    element={<SolutionVentas    />} />

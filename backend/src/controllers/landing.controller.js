@@ -1,5 +1,6 @@
 const prisma = require('../lib/prisma')
 const { validateImageUpload } = require('../lib/imageType')
+const { sendPlatformNotification, platformCard, escHtml } = require('../services/email.service')
 
 const CONTENT_ID = 1 // fila única
 
@@ -16,11 +17,11 @@ const CONTENT_DEFAULTS = {
   demoVideoUrl:         null,
 
   problemTitle:    'Tu agencia merece dejar de hacer esto.',
-  problemSubtitle: 'Cuando reportar a un cliente se vuelve más caro que ejecutar para él, algo está roto.',
+  problemSubtitle: 'El equipo trabaja, pero una parte importante de su tiempo y energía se pierde en la propia gestión del trabajo.',
   problemCards: [
-    { emoji: '🪟', title: '7 pestañas para reportar un mes', desc: 'GA4, Search Console, Ads, Meta, TikTok, Excel, PowerPoint. Tu PM pierde 4 horas armando lo que el cliente lee en 4 minutos.' },
-    { emoji: '🤷', title: '¿En qué está cada cuenta?', desc: 'Sin reunión de status, nadie sabe el avance. Con reunión, perdés 30 min × persona × semana. Y tampoco quedan respuestas.' },
-    { emoji: '🔥', title: 'Lo urgente del cliente come tu roadmap', desc: 'Cada cliente cree que es prioritario. Sin foco explícito, el equipo apaga incendios y el trabajo planificado queda para "después".' },
+    { emoji: '⏳', title: 'Demasiado tiempo gestionando, poco tiempo avanzando.', desc: 'Entre reuniones, mensajes, reportes y herramientas desconectadas, tu equipo pierde horas coordinando el trabajo en lugar de hacerlo.' },
+    { emoji: '🤷', title: 'Si tenés que preguntar, te falta visibilidad.', desc: '¿En qué está cada persona? ¿Qué pasó con cada proyecto? Sin una visión clara del avance, terminás persiguiendo tareas y organizando reuniones para saber qué está pasando.' },
+    { emoji: '🔥', title: 'Lo urgente siempre le gana a lo importante.', desc: 'Los pedidos de los clientes y las urgencias del día desplazan las prioridades. El equipo vive apagando incendios mientras los proyectos importantes quedan para después.' },
   ],
 
   solutionTitle:      'No es otro gestor de tareas.',
@@ -627,6 +628,47 @@ async function deleteTestimonial(req, res, next) {
   }
 }
 
+// ─── Formulario de contacto (público) ────────────────────────────────────────
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+/**
+ * POST /api/landing/contact
+ * Público, sin auth. Body: { name, email, company?, message, website? }.
+ * `website` es un honeypot (input oculto en el form): si viene completo, es un
+ * bot — se responde 201 igual pero sin mandar ningún email.
+ */
+async function submitContact(req, res, next) {
+  try {
+    const { name, email, company, message, website } = req.body
+    if (website && String(website).trim()) {
+      return res.status(201).json({ ok: true })
+    }
+
+    const cleanName    = String(name ?? '').trim().slice(0, 160)
+    const cleanEmail   = String(email ?? '').trim().slice(0, 160)
+    const cleanCompany = String(company ?? '').trim().slice(0, 160)
+    const cleanMessage = String(message ?? '').trim().slice(0, 5000)
+
+    if (!cleanName)    return res.status(400).json({ error: 'El nombre es requerido' })
+    if (!EMAIL_RE.test(cleanEmail)) return res.status(400).json({ error: 'Ingresá un email válido' })
+    if (!cleanMessage) return res.status(400).json({ error: 'El mensaje es requerido' })
+
+    sendPlatformNotification('contactForm', {
+      subject: `📩 Nuevo contacto desde la landing — ${cleanName}`,
+      bodyHtml: platformCard('Nuevo contacto desde la landing', [
+        ['Nombre',  escHtml(cleanName)],
+        ['Email',   escHtml(cleanEmail)],
+        ['Empresa', escHtml(cleanCompany) || '—'],
+        ['Mensaje', escHtml(cleanMessage).replace(/\n/g, '<br>')],
+      ]),
+      replyTo: `${cleanName} <${cleanEmail}>`,
+    })
+
+    res.status(201).json({ ok: true })
+  } catch (err) { next(err) }
+}
+
 module.exports = {
   getContent, updateContent,
   listTrustedCompanies, serveTrustedCompanyImage,
@@ -635,4 +677,5 @@ module.exports = {
   listTestimonials, serveTestimonialImage,
   listAllTestimonials, createTestimonial, updateTestimonial,
   reorderTestimonials, toggleTestimonial, deleteTestimonial,
+  submitContact,
 }

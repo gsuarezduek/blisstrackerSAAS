@@ -7,5 +7,6 @@ router.get('/trusted-companies', c.listTrustedCompanies)
 router.get('/trusted-companies/:id/image', c.serveTrustedCompanyImage)
 router.get('/testimonials', c.listTestimonials)
 router.get('/testimonials/:id/image', c.serveTestimonialImage)
+router.post('/contact', c.submitContact)
 
 module.exports = router

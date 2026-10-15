@@ -12,6 +12,7 @@ import { Link } from 'react-router-dom'
 import { Target } from 'lucide-react'
 import { MODULE_CATALOG } from '../../lib/moduleCatalog'
 import { Icon } from '../ui/Icon'
+import Carousel from './Carousel'
 
 const TILES = [
   {
@@ -66,6 +67,66 @@ const TILES = [
     ],
     to: '/soluciones/ventas',
   },
+  {
+    id: 'contenido',
+    icon: MODULE_CATALOG.contenido.icon,
+    label: 'Módulo opcional',
+    title: MODULE_CATALOG.contenido.label,
+    desc: 'Para quien gestiona redes sociales de clientes.',
+    bullets: [
+      'Calendario de piezas por proyecto',
+      'Vistas Calendario, Tabla y Kanban',
+      'Aprobación del cliente sin que se loguee',
+    ],
+  },
+  {
+    id: 'rrhh',
+    icon: MODULE_CATALOG.rrhh.icon,
+    label: 'Módulo opcional',
+    title: MODULE_CATALOG.rrhh.label,
+    desc: 'Para gestionar al equipo más allá de las tareas.',
+    bullets: [
+      'Legajos, licencias y vacaciones',
+      'Acumulación automática configurable',
+      'Beneficios de horas libres y días home',
+    ],
+  },
+  {
+    id: 'calendario',
+    icon: MODULE_CATALOG.calendario.icon,
+    label: 'Módulo opcional',
+    title: MODULE_CATALOG.calendario.label,
+    desc: 'Para coordinar al equipo sin ida y vuelta.',
+    bullets: [
+      'Disponibilidad real de cada persona',
+      'Reuniones agendadas con aceptación',
+      'Huecos comunes entre varias personas',
+    ],
+  },
+  {
+    id: 'finanzas',
+    icon: MODULE_CATALOG.finanzas.icon,
+    label: 'Módulo opcional',
+    title: MODULE_CATALOG.finanzas.label,
+    desc: 'Para la gestión financiera interna de la agencia.',
+    bullets: [
+      'Ingresos, egresos y saldos por cuenta',
+      'Cuenta corriente de clientes',
+      'Tablero de pendientes asistido por IA',
+    ],
+  },
+  {
+    id: 'gamification',
+    icon: MODULE_CATALOG.gamification.icon,
+    label: 'Módulo opcional',
+    title: MODULE_CATALOG.gamification.label,
+    desc: 'Para equipos que quieren competir con objetivos.',
+    bullets: [
+      'Desafíos entre proyectos, personas o equipos',
+      'Votaciones y rankings con premio',
+      'Botón flotante con los juegos activos',
+    ],
+  },
 ]
 
 export default function SegmentCards() {
@@ -85,10 +146,12 @@ export default function SegmentCards() {
           </p>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-          {TILES.map(t => (
-            <div key={t.id}
-              className={`rounded-2xl p-6 flex flex-col ${
+        <Carousel
+          items={TILES}
+          perView={{ base: 1, sm: 2, lg: 4 }}
+          renderItem={t => (
+            <div
+              className={`w-full h-full rounded-2xl p-6 flex flex-col ${
                 t.primary
                   ? 'bg-gradient-to-br from-primary-500 to-primary-600 text-white shadow-xl shadow-primary-200'
                   : 'bg-gray-50 border border-gray-200 text-gray-900'
@@ -120,8 +183,8 @@ export default function SegmentCards() {
                 </Link>
               )}
             </div>
-          ))}
-        </div>
+          )}
+        />
       </div>
     </section>
   )

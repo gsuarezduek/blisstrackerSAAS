@@ -151,6 +151,25 @@ function AppMockup() {
   )
 }
 
+// ─── Título de "Cómo funciona" con una frase destacada ────────────────────────
+
+function HighlightedTitle({ text, phrase }) {
+  const idx = text.toLowerCase().indexOf(phrase.toLowerCase())
+  if (idx === -1) return <>{text}</>
+  const before = text.slice(0, idx)
+  const match  = text.slice(idx, idx + phrase.length)
+  const after  = text.slice(idx + phrase.length)
+  return (
+    <>
+      {before}
+      <span className="italic text-primary-500 underline underline-offset-8 decoration-4 decoration-primary-200">
+        {match}
+      </span>
+      {after}
+    </>
+  )
+}
+
 // ─── FAQ Item ─────────────────────────────────────────────────────────────────
 
 function FaqItem({ q, a, open, onClick }) {
@@ -189,11 +208,11 @@ const CONTENT_DEFAULTS = {
   demoVideoUrl:         null,
 
   problemTitle:    'Tu agencia merece dejar de hacer esto.',
-  problemSubtitle: 'Cuando reportar a un cliente se vuelve más caro que ejecutar para él, algo está roto.',
+  problemSubtitle: 'El equipo trabaja, pero una parte importante de su tiempo y energía se pierde en la propia gestión del trabajo.',
   problemCards: [
-    { emoji: '🪟', title: '7 pestañas para reportar un mes', desc: 'GA4, Search Console, Ads, Meta, TikTok, Excel, PowerPoint. Tu PM pierde 4 horas armando lo que el cliente lee en 4 minutos.' },
-    { emoji: '🤷', title: '¿En qué está cada cuenta?', desc: 'Sin reunión de status, nadie sabe el avance. Con reunión, perdés 30 min × persona × semana. Y tampoco quedan respuestas.' },
-    { emoji: '🔥', title: 'Lo urgente del cliente come tu roadmap', desc: 'Cada cliente cree que es prioritario. Sin foco explícito, el equipo apaga incendios y el trabajo planificado queda para "después".' },
+    { emoji: '⏳', title: 'Demasiado tiempo gestionando, poco tiempo avanzando.', desc: 'Entre reuniones, mensajes, reportes y herramientas desconectadas, tu equipo pierde horas coordinando el trabajo en lugar de hacerlo.' },
+    { emoji: '🤷', title: 'Si tenés que preguntar, te falta visibilidad.', desc: '¿En qué está cada persona? ¿Qué pasó con cada proyecto? Sin una visión clara del avance, terminás persiguiendo tareas y organizando reuniones para saber qué está pasando.' },
+    { emoji: '🔥', title: 'Lo urgente siempre le gana a lo importante.', desc: 'Los pedidos de los clientes y las urgencias del día desplazan las prioridades. El equipo vive apagando incendios mientras los proyectos importantes quedan para después.' },
   ],
 
   solutionTitle:      'No es otro gestor de tareas.',
@@ -375,6 +394,12 @@ export default function Landing() {
               Blog
             </Link>
             <Link
+              to="/contacto"
+              className="text-sm text-gray-600 hover:text-gray-900 font-medium px-3 py-2 rounded-lg hover:bg-gray-50 transition-colors hidden sm:block"
+            >
+              Contacto
+            </Link>
+            <Link
               to="/login"
               className="text-sm text-gray-600 hover:text-gray-900 font-medium px-2 sm:px-3 py-2 rounded-lg hover:bg-gray-50 transition-colors"
             >
@@ -420,6 +445,13 @@ export default function Landing() {
               className="block text-sm text-gray-600 hover:text-gray-900 font-medium px-3 py-2.5 rounded-lg hover:bg-gray-50 transition-colors"
             >
               Blog
+            </Link>
+            <Link
+              to="/contacto"
+              onClick={() => setMobileMenuOpen(false)}
+              className="block text-sm text-gray-600 hover:text-gray-900 font-medium px-3 py-2.5 rounded-lg hover:bg-gray-50 transition-colors"
+            >
+              Contacto
             </Link>
           </div>
         )}
@@ -516,15 +548,14 @@ export default function Landing() {
             La solución
           </p>
           <BlissLogo variant="lockup" dark={false} className="h-12 w-auto mx-auto mb-8" />
-          <h2 className="text-3xl sm:text-4xl font-extrabold text-gray-900 mb-6">
+          <h2 className="text-3xl sm:text-4xl font-extrabold text-gray-900 mb-8">
             {hero.solutionTitle}
           </h2>
-          <p className="text-gray-500 text-lg leading-relaxed mb-4">
-            {hero.solutionParagraph1}
-          </p>
-          <p className="text-gray-500 text-lg leading-relaxed">
-            {hero.solutionParagraph2}
-          </p>
+          <div className="max-w-2xl mx-auto bg-primary-50 border border-primary-100 rounded-2xl px-6 sm:px-10 py-7 sm:py-9">
+            <p className="text-gray-900 text-xl sm:text-2xl font-bold leading-snug">
+              {hero.solutionParagraph1}
+            </p>
+          </div>
         </div>
       </section>
 
@@ -570,7 +601,7 @@ export default function Landing() {
               Cómo funciona
             </p>
             <h2 className="text-3xl sm:text-4xl font-extrabold text-gray-900">
-              {hero.stepsTitle}
+              <HighlightedTitle text={hero.stepsTitle} phrase="equipo enfocado" />
             </h2>
           </div>
 
@@ -818,7 +849,7 @@ export default function Landing() {
             <div>
               <p className="text-xs font-semibold uppercase tracking-wider text-gray-300 mb-3">Empresa</p>
               <ul className="space-y-2 text-sm">
-                <li><a href="mailto:gaston@blissmkt.ar" className="hover:text-white transition-colors">Contacto</a></li>
+                <li><Link to="/contacto" className="hover:text-white transition-colors">Contacto</Link></li>
                 <li><a href="https://blissmkt.ar" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">BlissMKT ↗</a></li>
               </ul>
             </div>

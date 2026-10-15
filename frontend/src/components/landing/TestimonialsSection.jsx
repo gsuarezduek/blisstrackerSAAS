@@ -6,6 +6,7 @@
 import { useState, useEffect } from 'react'
 import api from '../../api/client'
 import TestimonialCard from './TestimonialCard'
+import Carousel from './Carousel'
 
 const API_URL = import.meta.env.VITE_API_URL || ''
 
@@ -35,10 +36,11 @@ export default function TestimonialsSection() {
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {testimonials.map(t => (
+        <Carousel
+          items={testimonials}
+          perView={{ base: 1, md: 3 }}
+          renderItem={t => (
             <TestimonialCard
-              key={t.id}
               name={t.name}
               role={t.role}
               company={t.company}
@@ -46,8 +48,8 @@ export default function TestimonialsSection() {
               metric={t.metric}
               photo={t.photoUrl ? `${API_URL}${t.photoUrl}` : null}
             />
-          ))}
-        </div>
+          )}
+        />
       </div>
     </section>
   )

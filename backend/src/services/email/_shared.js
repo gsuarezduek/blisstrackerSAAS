@@ -90,6 +90,7 @@ async function getEmailFrom(workspaceId) {
 // Mapa evento → toggle de setting que lo habilita.
 const PLATFORM_EVENT_TOGGLE = {
   feedback:        'notifyOnFeedback',
+  contactForm:     'notifyOnContactForm',
   newWorkspace:    'notifyOnNewWorkspace',
   paymentSuccess:  'notifyOnPaymentSuccess',
   paymentFailed:   'notifyOnPaymentFailed',
@@ -123,9 +124,11 @@ async function logEmail({ workspaceId, to, subject, type, status, errorMsg }) {
  * está apagado. Nunca lanza — los hooks la llaman fire-and-forget.
  *
  * @param {string} event     clave de PLATFORM_EVENT_TOGGLE
- * @param {object} opts      { subject, bodyHtml, workspaceId? }
+ * @param {object} opts      { subject, bodyHtml, workspaceId?, replyTo? }
+ *   `replyTo` — opcional, para que responder el aviso le conteste directo a un
+ *   tercero (ej: quien completó el formulario de contacto) en vez de a `from`.
  */
-async function sendPlatformNotification(event, { subject, bodyHtml, workspaceId = null }) {
+async function sendPlatformNotification(event, { subject, bodyHtml, workspaceId = null, replyTo = null }) {
   try {
     const toggleKey = PLATFORM_EVENT_TOGGLE[event]
     if (toggleKey) {
@@ -138,7 +141,10 @@ async function sendPlatformNotification(event, { subject, bodyHtml, workspaceId 
     if (!to.length) return // casilla no configurada → sistema apagado
 
     const from = await getPlatformFrom()
-    const { error } = await resend.emails.send({ from, to, subject, html: emailShell(bodyHtml) })
+    const { error } = await resend.emails.send({
+      from, to, subject, html: emailShell(bodyHtml),
+      ...(replyTo ? { replyTo } : {}),
+    })
     if (error) throw new Error(error.message)
     await logEmail({ workspaceId, to: to.join(', '), subject, type: 'adminAlert', status: 'sent' })
   } catch (err) {

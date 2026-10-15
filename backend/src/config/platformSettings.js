@@ -495,6 +495,14 @@ const PLATFORM_SETTINGS = [
     help:    'Enviar un aviso a la casilla de administración cada vez que un usuario de cualquier workspace envía una sugerencia o reporta un error.',
   },
   {
+    key:     'notifyOnContactForm',
+    type:    'boolean',
+    default: true,
+    group:   'platform',
+    label:   'Avisar: formulario de contacto (landing)',
+    help:    'Enviar un aviso a la casilla de administración cada vez que alguien completa el formulario de contacto público en blisstracker.app/contacto.',
+  },
+  {
     key:     'notifyOnNewWorkspace',
     type:    'boolean',
     default: true,

@@ -133,12 +133,20 @@ const aiLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
 })
+const contactLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 5,
+  message: { error: 'Demasiados mensajes. Intentá de nuevo en 1 hora.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+})
 app.use('/api', globalLimiter)
 app.use('/api/auth/login', loginLimiter)
 app.use('/api/auth/google', loginLimiter)
 app.use('/api/auth/forgot-password', forgotPasswordLimiter)
 app.use('/api/insights/refresh', aiLimiter)
 app.use('/api/marketing/geo/audit', aiLimiter)
+app.use('/api/landing/contact', contactLimiter)
 
 app.use('/api/auth',              authRoutes)
 app.use('/api/workspaces',        workspaceRoutes)
