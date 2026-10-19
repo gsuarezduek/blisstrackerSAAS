@@ -4,6 +4,7 @@ const { isAdmin, canWrite } = require('../lib/projectAccess')
 const { todayString } = require('../utils/dates')
 const { getBusyBlocks, findCommonFreeSlots, DEFAULT_TASK_BLOCK_MINS } = require('../services/availability.service')
 const { startMeetingParticipants } = require('../lib/projectMeetingLifecycle')
+const { taskInclude } = require('./tasks/_shared')
 const { createTaskForParticipant, syncTaskFields, removeTaskIfPending } = require('../lib/calendarEventTasks')
 const googleCalendarSync = require('../services/googleCalendarSync.service')
 const {
@@ -106,7 +107,30 @@ async function getAvailability(req, res, next) {
     // materializó las ocurrencias del rango (ensureOccurrences es idempotente).
     await ensureOccurrences({ workspaceId, from, to, tz: req.workspace.timezone })
 
-    const busy = await getBusyBlocks({ workspaceId, userIds, fromDate: from, toDate: to })
+    // Tareas futuras SIN hora (Task.scheduledFor con scheduledTime null) — se pintan
+    // como "todo el día" pero NO entran en getBusyBlocks: no ocupan franja, así que
+    // no afectan el buscador de huecos comunes. Solo las del propio requester (una
+    // tarea es personal, ver arriba: en la columna de otra persona no aportaría
+    // nada sin título ni hora, y llenaría la vista Equipo).
+    const includeOwnTasks = userIds.includes(requesterId)
+    const [busy, untimedTasks] = await Promise.all([
+      getBusyBlocks({ workspaceId, userIds, fromDate: from, toDate: to }),
+      includeOwnTasks
+        ? prisma.task.findMany({
+            where: {
+              userId:        requesterId,
+              workDay:       { workspaceId },
+              scheduledFor:  { gte: from, lte: to },
+              scheduledTime: null,
+              status:        { not: 'COMPLETED' },
+            },
+            // Mismo shape que el buscador global (search.controller.js): el frontend
+            // las abre con el modal de detalle vía `bliss:open-task`.
+            include: { ...taskInclude, user: { select: { id: true, name: true, avatar: true } } },
+            orderBy: { createdAt: 'asc' },
+          })
+        : [],
+    ])
 
     // Proyecto privado (ver concepto "Proyectos privados"): un calendar_event de
     // un proyecto privado ajeno se enmascara como si fuera una tarea — se ve el
@@ -140,6 +164,7 @@ async function getAvailability(req, res, next) {
           const revealed = isSelf || (b.kind === 'calendar_event' && hasAccessToProject(b.projectId))
           return revealed ? b : { date: b.date, start: b.start, end: b.end, kind: b.kind, tentative: b.tentative }
         }),
+        allDayTasks: isSelf ? untimedTasks : [],
       }
     }
     res.json(sanitized)

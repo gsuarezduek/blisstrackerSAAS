@@ -98,9 +98,8 @@ export default function Calendario() {
     try {
       const [eventsRes, availRes] = await Promise.all([
         api.get('/calendar/events', { params: range }),
-        view !== 'mes'
-          ? api.get('/calendar/availability', { params: { ...range, userIds: availabilityUserIds.join(',') } })
-          : Promise.resolve({ data: {} }),
+        // En Mes también se pide (solo para mí): trae mis tareas futuras sin hora (allDayTasks).
+        api.get('/calendar/availability', { params: { ...range, userIds: availabilityUserIds.join(',') } }),
       ])
       setEvents(eventsRes.data)
       setAvailability(availRes.data)
@@ -173,6 +172,23 @@ export default function Calendario() {
         onClick: b.kind === 'calendar_event' && b.refId ? () => openEventById(b.refId) : undefined,
       }))
   }
+
+  // Tareas futuras sin hora (allDayTasks, solo vienen en mi propia columna) — se
+  // abren con el mismo modal de detalle global que usa el buscador (GlobalShortcuts).
+  function openTask(task) {
+    window.dispatchEvent(new CustomEvent('bliss:open-task', { detail: task }))
+  }
+  function allDayItemsFor(key, onlyDate) {
+    return (availability[key]?.allDayTasks || [])
+      .filter(t => t.scheduledFor === onlyDate)
+      .map(t => ({ id: `task-${t.id}`, title: t.description, recurring: !!t.recurrenceId, onClick: () => openTask(t) }))
+  }
+
+  // Editar/borrar/traer a hoy desde el modal global avisa con este evento.
+  useEffect(() => {
+    window.addEventListener('bliss:task-created', load)
+    return () => window.removeEventListener('bliss:task-created', load)
+  }, [load])
 
   // ── Rango horario de la grilla: recortado al horario laboral real ──────────
   // Por defecto WeekTimeGrid mostraría 7–22, y la mayor parte de esa franja no
@@ -313,6 +329,8 @@ export default function Calendario() {
         {!loading && !loadError && view === 'mes' && (
           <CalendarMonthView
             events={events}
+            tasks={availability[user.id]?.allDayTasks || []}
+            onOpenTask={openTask}
             month={monthOf(date)}
             onMonthChange={m => updateParams({ date: `${m}-01` })}
             onOpenEvent={setDetailEvent}
@@ -326,6 +344,7 @@ export default function Calendario() {
             startHour={weekHourRange.startHour}
             endHour={weekHourRange.endHour}
             getBlocks={colDate => blocksFor(targetUserId, colDate)}
+            getAllDayItems={colDate => allDayItemsFor(targetUserId, colDate)}
             getWorkWindow={() => {
               const s = availability[targetUserId]
               return s?.workStart && s?.workEnd ? { start: s.workStart, end: s.workEnd } : null
@@ -345,6 +364,7 @@ export default function Calendario() {
             startHour={teamHourRange.startHour}
             endHour={teamHourRange.endHour}
             getBlocks={uid => blocksFor(uid, date)}
+            getAllDayItems={uid => allDayItemsFor(uid, date)}
             getWorkWindow={uid => {
               const s = availability[uid]
               return s?.workStart && s?.workEnd ? { start: s.workStart, end: s.workEnd } : null

@@ -8,6 +8,7 @@ function toMins(hhmm) {
 }
 
 const HOUR_HEIGHT_PX = 48
+const ALL_DAY_ITEM_PX = 24
 
 /**
  * Grilla horaria genérica (columna de horas × N columnas) — no existe nada
@@ -23,10 +24,20 @@ const HOUR_HEIGHT_PX = 48
  * `isPast(key)`: → boolean (día ya transcurrido — la columna se pinta en gris suave,
  *   como Google Calendar, y sus bloques se atenúan; sigue siendo clickeable)
  * `onSlotClick(key, "HH:MM")`: click en un hueco vacío (para agendar ahí, redondeado a 15min)
+ * `getAllDayItems(key)`: → [{ id, title, recurring?, onClick? }] (opcional) — ítems sin
+ *   hora (ej. tareas futuras sin Task.scheduledTime), en una franja "todo el día" bajo
+ *   el encabezado. La franja solo aparece si alguna columna tiene ítems, y tiene la
+ *   misma altura en todas para no desalinear la grilla.
  */
 export default function WeekTimeGrid({
-  columns, startHour = 7, endHour = 22, getBlocks, getWorkWindow, isFullDayOff, isPast, onSlotClick,
+  columns, startHour = 7, endHour = 22, getBlocks, getWorkWindow, isFullDayOff, isPast, onSlotClick, getAllDayItems,
 }) {
+  const allDayByCol = getAllDayItems ? columns.map(col => getAllDayItems(col.key) || []) : []
+  const showAllDay = allDayByCol.some(items => items.length > 0)
+  // Altura fija (la de la columna con más ítems) en TODAS las columnas, incluida
+  // la de horas — si cada una creciera por su cuenta, la grilla de abajo quedaría
+  // desalineada entre columnas.
+  const allDayHeight = 8 + Math.max(1, ...allDayByCol.map(items => items.length)) * ALL_DAY_ITEM_PX
   const hours = useMemo(() => {
     const arr = []
     for (let h = startHour; h <= endHour; h++) arr.push(h)
@@ -59,6 +70,11 @@ export default function WeekTimeGrid({
               queden siempre alineadas (ver fix de totalHeight arriba) */}
           <div className="shrink-0 w-16 border-r border-gray-100 dark:border-gray-700">
             <div className="h-8" />
+            {showAllDay && (
+              <div className="border-b border-gray-100 dark:border-gray-700 px-1 py-1 text-[10px] text-gray-400 dark:text-gray-500 text-right" style={{ height: allDayHeight }}>
+                Sin hora
+              </div>
+            )}
             <div className="relative" style={{ height: totalHeight }}>
               {hours.map(h => (
                 <div
@@ -73,7 +89,8 @@ export default function WeekTimeGrid({
           </div>
 
           {/* Columnas (días o personas, según el caller) */}
-          {columns.map(col => {
+          {columns.map((col, colIdx) => {
+            const allDay = allDayByCol[colIdx] || []
             const blocks = getBlocks ? getBlocks(col.key) : []
             const window = getWorkWindow ? getWorkWindow(col.key) : null
             const dayOff = isFullDayOff ? isFullDayOff(col.key) : false
@@ -92,6 +109,21 @@ export default function WeekTimeGrid({
                     {col.subLabel && <div className="text-[10px] text-gray-400 dark:text-gray-500">{col.subLabel}</div>}
                   </div>
                 </div>
+                {showAllDay && (
+                  <div className="border-b border-gray-100 dark:border-gray-700 p-1 space-y-0.5 overflow-hidden" style={{ height: allDayHeight }}>
+                    {allDay.map(item => (
+                      <div
+                        key={item.id}
+                        onClick={() => item.onClick?.()}
+                        title={item.title}
+                        className={`rounded-md px-1.5 py-0.5 border border-gray-300 bg-gray-100 dark:bg-gray-700/60 dark:border-gray-600 ${
+                          item.onClick ? 'cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-700' : ''} ${past ? 'opacity-60 grayscale' : ''}`}
+                      >
+                        <span className="text-[10px] font-medium text-gray-700 dark:text-gray-200 truncate block">{item.recurring && <Icon as={Repeat} size={10} className="inline-block mr-0.5 align-[-1px]" />}{item.title}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
                 <div
                   className="relative"
                   style={{ height: totalHeight }}

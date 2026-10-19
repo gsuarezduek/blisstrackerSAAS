@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import MonthGrid from './MonthGrid'
 import { monthLabel, todayYMD } from './dateHelpers'
-import { Repeat } from 'lucide-react'
+import { CircleDashed, Repeat } from 'lucide-react'
 import { Icon } from '../ui/Icon'
 
 const STATUS_DOT = { confirmed: 'bg-green-500', pending: 'bg-amber-400', partial: 'bg-red-400' }
@@ -12,14 +12,17 @@ const MAX_CHIPS_PER_DAY = 4
  * ContentCalendarView.jsx, sobre el layout compartido MonthGrid.jsx. Sin
  * drag&drop (a diferencia de Contenido, no se pidió). Click en un chip abre el
  * detalle; click en un día vacío navega a la vista semanal centrada ahí.
+ * `tasks`: mis tareas futuras sin hora (Task.scheduledFor) — van primero en el día,
+ * como los eventos "todo el día" de Google Calendar; click abre su detalle.
  */
-export default function CalendarMonthView({ events, month, onMonthChange, onOpenEvent, onOpenDay }) {
+export default function CalendarMonthView({ events, tasks = [], month, onMonthChange, onOpenEvent, onOpenTask, onOpenDay }) {
   const byDay = useMemo(() => {
     const map = {}
-    for (const e of events) (map[e.date] ??= []).push(e)
-    for (const key of Object.keys(map)) map[key].sort((a, b) => a.startTime.localeCompare(b.startTime))
+    for (const e of events) (map[e.date] ??= []).push({ kind: 'event', item: e })
+    for (const key of Object.keys(map)) map[key].sort((a, b) => a.item.startTime.localeCompare(b.item.startTime))
+    for (const t of tasks) (map[t.scheduledFor] ??= []).unshift({ kind: 'task', item: t })
     return map
-  }, [events])
+  }, [events, tasks])
 
   const today = todayYMD()
 
@@ -49,7 +52,21 @@ export default function CalendarMonthView({ events, month, onMonthChange, onOpen
                   {dayNum}
                 </div>
                 <div className="space-y-1">
-                  {items.slice(0, MAX_CHIPS_PER_DAY).map(e => (
+                  {items.slice(0, MAX_CHIPS_PER_DAY).map(({ kind, item: e }) => kind === 'task' ? (
+                    <div
+                      key={`task-${e.id}`}
+                      onClick={ev => { ev.stopPropagation(); onOpenTask?.(e) }}
+                      title={e.description}
+                      className={`flex items-center gap-1 px-1.5 py-0.5 rounded border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer transition-colors ${
+                        past ? 'opacity-60 grayscale' : ''}`}
+                    >
+                      <Icon as={CircleDashed} size={11} className="shrink-0 text-gray-400" />
+                      <span className="text-[11px] text-gray-700 dark:text-gray-300 truncate">
+                        {e.recurrenceId && <span title="Tarea recurrente" className="inline-flex align-[-1px] mr-0.5"><Icon as={Repeat} size={11} /></span>}
+                        {e.description}
+                      </span>
+                    </div>
+                  ) : (
                     <div
                       key={e.id}
                       onClick={ev => { ev.stopPropagation(); onOpenEvent(e) }}
