@@ -30,17 +30,29 @@ async function resolveDocAccess(docKey, token) {
   const parsed = parseDocKey(docKey)
   if (!parsed) throw new Error('Documento desconocido')
 
-  const { userId, workspaceId, role, teamRole, isSuperAdmin, name } = decoded
-  const workspace = await prisma.workspace.findUnique({ where: { id: workspaceId } })
+  const { userId, workspaceId, isSuperAdmin, name } = decoded
+  const workspace = await prisma.workspace.findUnique({
+    where: { id: workspaceId },
+    omit: { logoData: true, bannerData: true },
+  })
   if (!workspace) throw new Error('Workspace no encontrado')
 
+  // La membresía se lee fresca de la DB — mismo criterio que `resolveWorkspace`
+  // para las requests HTTP. NO se usa el `role`/`teamRole` del JWT: queda
+  // congelado hasta 12h desde el login, así que alguien ascendido a admin (o con
+  // un rol de equipo nuevo) veía la página por HTTP pero el editor colaborativo
+  // lo rechazaba ("Sin acceso a este documento").
+  const member = await prisma.workspaceMember.findUnique({
+    where: { workspaceId_userId: { workspaceId, userId } },
+  })
+  if (!member || !member.active) throw new Error('No sos miembro de este workspace')
+  const { role } = member
+
   // `req` mínimo para reusar canWrite/hasModuleAccess tal cual los usan los
-  // controllers HTTP — el JWT ya trae el role/teamRole vigentes de este
-  // workspace (se reemite al cambiar de workspace), no hace falta re-consultar
-  // WorkspaceMember.
+  // controllers HTTP.
   const req = {
     workspace,
-    workspaceMember: { role, teamRole, userId },
+    workspaceMember: member,
     user: { userId, isSuperAdmin },
   }
 
@@ -59,12 +71,6 @@ async function resolveDocAccess(docKey, token) {
     const id = Number(parsed.rawId)
     const lead = id && await prisma.lead.findFirst({ where: { id, workspaceId }, select: { id: true } })
     if (!lead) throw new Error('Lead no encontrado')
-    // El JWT no lleva los roles adicionales: se leen de la DB solo cuando hace falta.
-    const member = await prisma.workspaceMember.findUnique({
-      where: { workspaceId_userId: { workspaceId, userId } },
-      select: { extraTeamRoles: true },
-    })
-    req.workspaceMember.extraTeamRoles = member?.extraTeamRoles ?? []
     if (!hasModuleAccess(req, 'ventas')) throw new Error('Sin acceso al módulo de Ventas')
     await assertFeatureFlag('ventas', workspace, isSuperAdmin)
     return { userId, workspaceId, name }
