@@ -60,6 +60,8 @@ async function getBusyBlocks({ workspaceId, userIds, fromDate, toDate }) {
         userId:         { in: userIds },
         scheduledTime:  { not: null },
         status:         { not: 'COMPLETED' },
+        // Las tareas que ejecutan sus agentes de IA no ocupan el tiempo de la persona.
+        isAgentTask:    false,
         OR: [
           { scheduledFor: { gte: fromDate, lte: toDate } },
           { scheduledFor: null, workDay: { workspaceId, date: { gte: fromDate, lte: toDate } } },

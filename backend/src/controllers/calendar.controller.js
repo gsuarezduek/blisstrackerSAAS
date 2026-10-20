@@ -123,6 +123,7 @@ async function getAvailability(req, res, next) {
               scheduledFor:  { gte: from, lte: to },
               scheduledTime: null,
               status:        { not: 'COMPLETED' },
+              isAgentTask:   false, // las de sus agentes de IA no van en su calendario
             },
             // Mismo shape que el buscador global (search.controller.js): el frontend
             // las abre con el modal de detalle vía `bliss:open-task`.

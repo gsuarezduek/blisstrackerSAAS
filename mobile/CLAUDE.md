@@ -887,3 +887,17 @@ Vacaciones y beneficios.
 
 No hay modo offline en la v1 (se evalúa si se vuelve un problema real de uso
 en campo con mala señal).
+
+## Pendiente — tareas de agentes de IA (revisar cuando se retome la app)
+
+Desde octubre 2026 el backend separa las **tareas que ejecutan los agentes de IA**
+(`Task.isAgentTask`, ver concepto "Agentes IA (tareas de agente)" en `../CLAUDE.md`).
+`GET /workdays/today` (el `getToday` de `src/api/tasks.js`) ya **no las incluye** en
+`tasks`/`carryOverTasks`/`futureTasks`: vienen aparte en `agentTasks`. La app todavía no
+las muestra en ningún lado — en la app simplemente desaparecieron (no es un error: no son
+tareas que haga la persona). Al retomar la app, evaluar: una sección/pestaña "Agentes" como
+la del Dashboard web (`AgentTasksPanel.jsx` + franja "Tus agentes trabajando ahora",
+`AgentsWorkingStrip.jsx`), el aviso cuando un agente bloquea una tarea (la notificación
+`BLOCKED` sin actor ya llega por push al dueño) y "Delegar a mi agente"
+(`PATCH /tasks/:id/agent`). Además, el Dashboard web ya no tiene sección "Para hoy" (foco =
+destacadas + bloqueadas; el resto va al Backlog) — decidir si la app sigue ese criterio.

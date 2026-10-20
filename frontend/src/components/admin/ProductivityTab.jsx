@@ -502,7 +502,7 @@ function TeamCompare({ stats, benchmark }) {
 }
 
 // "Sus agentes": lo que hicieron los agentes de IA de la persona en el período (tareas
-// completadas y tiempo de ejecución, por agente y por proyecto). Va aparte a propósito:
+// completadas y tiempo registrado, por agente y por proyecto). Va aparte a propósito:
 // nada de esto suma a sus horas, tareas, tasa ni asistencia. El tiempo de un agente no
 // se compara con el de una persona — la métrica principal son las tareas completadas.
 export function AgentsBlock({ agents }) {
@@ -520,7 +520,7 @@ export function AgentsBlock({ agents }) {
             {current.completed} <span className="text-sm font-normal text-gray-500 dark:text-gray-400">tarea{current.completed === 1 ? '' : 's'} completada{current.completed === 1 ? '' : 's'}</span>
           </p>
           <p className="text-xs text-gray-500 dark:text-gray-400">
-            {fmtHours(Math.round(current.minutes / 60 * 10) / 10)} de ejecución
+            {fmtHours(Math.round(current.minutes / 60 * 10) / 10)} registradas
             {' · '}período anterior: {previous.completed}
             {pct != null && pct !== 0 && (
               <span className={pct > 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}> ({pct > 0 ? '+' : ''}{Math.round(pct * 100)}%)</span>

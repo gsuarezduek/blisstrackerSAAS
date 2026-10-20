@@ -96,6 +96,7 @@ async function projectCompletedHistory(req, res, next) {
       include: {
         user: { select: { id: true, name: true, avatar: true } },
         _count: { select: { comments: true } },
+        agent: { select: { id: true, label: true } }, // tarea de agente: la ejecutó un agente de IA de esa persona
       },
       orderBy: { completedAt: 'desc' },
       skip,
