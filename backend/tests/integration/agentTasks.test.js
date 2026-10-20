@@ -12,7 +12,7 @@ jest.mock('../../src/lib/prisma', () => ({
     updateMany: jest.fn(),
   },
   taskRecurrence: { update: jest.fn(), findMany: jest.fn() },
-  taskSession:    { create: jest.fn() },
+  taskSession:    { create: jest.fn(), updateMany: jest.fn() },
   workDay: {
     findUnique: jest.fn(),
     create:     jest.fn(),
@@ -21,7 +21,11 @@ jest.mock('../../src/lib/prisma', () => ({
   eOSTodo:            { updateMany: jest.fn() },
   projectMeetingTodo: { updateMany: jest.fn() },
   financeTask:        { updateMany: jest.fn() },
-  leadAction:         { updateMany: jest.fn() },
+  leadAction:         { updateMany: jest.fn(), findUnique: jest.fn() },
+  notification:       { create: jest.fn(), createMany: jest.fn() },
+  projectMember:      { findMany: jest.fn() },
+  taskFollow:         { findMany: jest.fn() },
+  projectMeetingParticipant: { findUnique: jest.fn() },
   $transaction: jest.fn(ops => Promise.all(ops)),
 }))
 
@@ -306,5 +310,62 @@ describe('GET /api/tasks/agent-queue', () => {
       .set('X-Workspace', WORKSPACE_SLUG)
 
     expect(prisma.workDay.create).not.toHaveBeenCalled()
+  })
+})
+
+// ─── Avisos ───────────────────────────────────────────────────────────────────
+
+describe('avisos de tareas de agente', () => {
+  beforeEach(() => {
+    prisma.projectMember.findMany.mockResolvedValue([{ userId: 2 }, { userId: 3 }])
+    prisma.taskFollow.findMany.mockResolvedValue([])
+    prisma.projectMeetingParticipant.findUnique.mockResolvedValue(null)
+    prisma.leadAction.findUnique.mockResolvedValue(null)
+  })
+
+  it('completar una tarea de agente no notifica a nadie', async () => {
+    prisma.task.findUnique.mockResolvedValue(makeTask({ status: 'IN_PROGRESS', isAgentTask: true, agentId: AGENT_ID }))
+    prisma.task.update.mockResolvedValue(makeTask({ status: 'COMPLETED', isAgentTask: true, agentId: AGENT_ID }))
+
+    const res = await request(app)
+      .patch('/api/tasks/1/complete')
+      .set('Authorization', authHeader({ mcpTokenId: AGENT_ID }))
+      .set('X-Workspace', WORKSPACE_SLUG)
+
+    expect(res.status).toBe(200)
+    expect(prisma.notification.createMany).not.toHaveBeenCalled()
+    expect(prisma.projectMember.findMany).not.toHaveBeenCalled()
+  })
+
+  it('completar una tarea humana sigue notificando al equipo', async () => {
+    prisma.task.findUnique.mockResolvedValue(makeTask({ status: 'IN_PROGRESS' }))
+    prisma.task.update.mockResolvedValue(makeTask({ status: 'COMPLETED' }))
+
+    await request(app)
+      .patch('/api/tasks/1/complete')
+      .set('Authorization', authHeader())
+      .set('X-Workspace', WORKSPACE_SLUG)
+
+    expect(prisma.notification.createMany).toHaveBeenCalled()
+  })
+
+  it('el bloqueo de un agente le avisa solo a su dueño, sin actor y nombrando al agente', async () => {
+    prisma.task.findUnique.mockResolvedValue(makeTask({ status: 'IN_PROGRESS', isAgentTask: true, agentId: AGENT_ID }))
+    prisma.task.update.mockResolvedValue(makeTask({ status: 'BLOCKED', isAgentTask: true, agentId: AGENT_ID, agent: { id: AGENT_ID, label: 'Grok' } }))
+
+    const res = await request(app)
+      .patch('/api/tasks/1/block')
+      .set('Authorization', authHeader({ mcpTokenId: AGENT_ID }))
+      .set('X-Workspace', WORKSPACE_SLUG)
+      .send({ reason: 'Falta el acceso a GA4' })
+
+    expect(res.status).toBe(200)
+    expect(prisma.notification.createMany).not.toHaveBeenCalled()
+    expect(prisma.notification.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        userId: 1, actorId: null, type: 'BLOCKED',
+        message: 'Tu agente «Grok» bloqueó "Tarea de prueba": Falta el acceso a GA4',
+      }),
+    })
   })
 })

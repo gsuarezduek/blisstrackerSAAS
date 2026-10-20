@@ -461,7 +461,9 @@ async function completeTask(req, res, next) {
       prisma.taskSession.updateMany({ where: { taskId, endedAt: null }, data: { endedAt: now } }),
     ])
 
-    const recipients = await taskLifecycleRecipients(task, userId)
+    // Lo que completa un agente no genera aviso: es trabajo de su dueño, que ya lo ve
+    // en la pestaña "Agentes" — un agente que cierra 20 tareas por día llenaría la campana.
+    const recipients = task.isAgentTask ? new Set() : await taskLifecycleRecipients(task, userId)
     if (recipients.size > 0) {
       const desc = task.description.length > 60 ? task.description.slice(0, 57) + '...' : task.description
       const message = `completó "${desc}"`
@@ -569,6 +571,20 @@ async function blockTask(req, res, next) {
       prisma.taskSession.updateMany({ where: { taskId, endedAt: null }, data: { endedAt: now } }),
     ])
 
+    // Tarea de agente: el bloqueo es el agente pidiéndole ayuda a su dueño — le llega
+    // solo a esa persona (no al equipo del proyecto), sin actor (lo hizo el agente, no
+    // ella) y con el mensaje autocontenido, igual que las notificaciones del cliente.
+    if (task.isAgentTask) {
+      const desc = task.description.length > 60 ? task.description.slice(0, 57) + '...' : task.description
+      const message = `Tu agente ${task.agent?.label ? `«${task.agent.label}» ` : ''}bloqueó "${desc}": ${reason.trim()}`
+      await prisma.notification.create({
+        data: { userId: task.userId, actorId: null, taskId: task.id, projectId: task.projectId, workspaceId, type: 'BLOCKED', message },
+      })
+      sendPushToUser({ userId: task.userId, workspaceId, type: 'BLOCKED', taskId: task.id, message }).catch(() => {})
+      await notifyContentPieceTaskChange(task, workspaceId)
+      return res.json(task)
+    }
+
     // Destinatarios: miembros del proyecto + seguidores + quien delegó la tarea, igual
     // que al completarla — así el bloqueo llega a quien más lo necesita, no solo al equipo.
     const recipients = await taskLifecycleRecipients(task, userId)
@@ -627,7 +643,8 @@ async function unblockTask(req, res, next) {
     ])
 
     // Cierra el loop del BLOCKED: avisa a los mismos destinatarios que se desbloqueó.
-    const recipients = await taskLifecycleRecipients(task, userId)
+    // En una tarea de agente el bloqueo solo le llegó a su dueño, que es quien la destraba.
+    const recipients = task.isAgentTask ? new Set() : await taskLifecycleRecipients(task, userId)
     if (recipients.size > 0) {
       const desc = task.description.length > 60 ? task.description.slice(0, 57) + '...' : task.description
       const message = `desbloqueó "${desc}"`

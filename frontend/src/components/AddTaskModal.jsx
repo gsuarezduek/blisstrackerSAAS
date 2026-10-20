@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
+import useMyAgents, { agentName } from '../hooks/useMyAgents'
 import api from '../api/client'
 import { useAuth } from '../context/AuthContext'
 import useRoles from '../hooks/useRoles'
@@ -149,7 +150,8 @@ export default function AddTaskModal({ onAdd, onClose, lockedProject, defaultPro
   // esperar al fetch de /projects (evita el parpadeo de "sin selección").
   const [projects, setProjects] = useState(defaultProject ? [defaultProject] : [])
   const [members, setMembers] = useState([])
-  const [assigneeId, setAssigneeId] = useState('')
+  const [assigneeId, setAssigneeId] = useState('') // userId, o 'agent:any' / 'agent:<id>' = la hace mi agente
+  const myAgents = useMyAgents()
   const [loading, setLoading] = useState(false)
   const [showGtdWarning, setShowGtdWarning] = useState(false)
 
@@ -322,7 +324,13 @@ export default function AddTaskModal({ onAdd, onClose, lockedProject, defaultPro
     setLoading(true)
     try {
       const body = { description: description.trim(), projectId }
-      if (assigneeId && assigneeId !== String(user?.id)) body.targetUserId = assigneeId
+      if (assigneeId.startsWith('agent:')) {
+        // La ejecuta uno de mis agentes (Task.isAgentTask): queda a mi nombre, en la
+        // pestaña "Agentes" del Dashboard. 'agent:any' = cualquiera de mis agentes.
+        body.executor = 'agent'
+        const agentId = assigneeId.slice('agent:'.length)
+        if (agentId !== 'any') body.agentId = Number(agentId)
+      } else if (assigneeId && assigneeId !== String(user?.id)) body.targetUserId = assigneeId
       if (scheduledTime) {
         body.scheduledTime = scheduledTime
         body.scheduledDurationMins = scheduledDurationMins
@@ -488,7 +496,7 @@ export default function AddTaskModal({ onAdd, onClose, lockedProject, defaultPro
             )}
           </div>
 
-          {members.length > 1 && (
+          {(members.length > 1 || myAgents.length > 0) && (
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Asignar a</label>
               <select
@@ -514,7 +522,20 @@ export default function AddTaskModal({ onAdd, onClose, lockedProject, defaultPro
                     ))}
                   </optgroup>
                 )}
+                {myAgents.length > 0 && (
+                  <optgroup label="La hace mi agente de IA">
+                    {myAgents.length > 1 && <option value="agent:any">Cualquiera de mis agentes</option>}
+                    {myAgents.map(a => (
+                      <option key={a.id} value={`agent:${a.id}`}>{agentName(a)}</option>
+                    ))}
+                  </optgroup>
+                )}
               </select>
+              {assigneeId.startsWith('agent:') && (
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  La ejecuta tu agente: no ocupa tu tarea en curso y la ves en la pestaña Agentes. El agente la toma la próxima vez que revise su lista.
+                </p>
+              )}
             </div>
           )}
 

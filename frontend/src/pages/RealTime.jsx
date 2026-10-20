@@ -10,7 +10,7 @@ import TaskCommentsModal from '../components/TaskCommentsModal'
 import { fmtMins, fmtDuration, activeSeconds } from '../utils/format'
 import { roleColor } from '../utils/roleColor'
 import { useAuth } from '../context/AuthContext'
-import { Lock, Palmtree } from 'lucide-react'
+import { Lock, Palmtree, Bot } from 'lucide-react'
 import { Icon } from '../components/ui/Icon'
 
 const REFRESH_INTERVAL = 30 // seconds
@@ -168,6 +168,11 @@ function UserCard({ entry, now, onOpenUser, onOpenTask, ownUserId }) {
           <span><strong className="text-gray-700 dark:text-gray-300">{stats.pending}</strong> pendientes</span>
           {stats.blocked > 0 && (
             <span><strong className="text-red-600 dark:text-red-400">{stats.blocked}</strong> bloqueadas</span>
+          )}
+          {stats.agentInProgress > 0 && (
+            <span className="inline-flex items-center gap-1" title="Tareas que sus agentes de IA están ejecutando ahora">
+              <Icon as={Bot} size={13} /><strong className="text-gray-700 dark:text-gray-300">{stats.agentInProgress}</strong> de sus agentes en curso
+            </span>
           )}
         </div>
         <span className="font-medium text-gray-600 dark:text-gray-400">{fmtMins(stats.totalMinutes)} registradas</span>

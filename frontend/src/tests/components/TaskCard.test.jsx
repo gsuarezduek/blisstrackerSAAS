@@ -5,6 +5,11 @@ import { MemoryRouter } from 'react-router-dom'
 const patch = vi.fn()
 vi.mock('../../api/client', () => ({ default: { patch: (...a) => patch(...a), delete: vi.fn() } }))
 vi.mock('../../hooks/useMembers', () => ({ default: () => ({ members: [] }) }))
+let mockAgents = []
+vi.mock('../../hooks/useMyAgents', () => ({
+  default: () => mockAgents,
+  agentName: a => a?.label || `Agente #${a?.id}`,
+}))
 
 import TaskCard from '../../components/TaskCard'
 
@@ -17,7 +22,7 @@ function renderCard(props) {
 }
 
 describe('TaskCard (Dashboard)', () => {
-  beforeEach(() => patch.mockReset())
+  beforeEach(() => { patch.mockReset(); mockAgents = [] })
 
   it('con otra tarea en curso, "Iniciar" pausa la activa y después arranca esta', async () => {
     patch.mockImplementation((url) => { return Promise.resolve({ data: String(url).endsWith('/pause') ? { ...active, status: 'PAUSED' } : { ...task, status: 'IN_PROGRESS' } }) })
@@ -45,5 +50,30 @@ describe('TaskCard (Dashboard)', () => {
     renderCard({ task: { ...task, status: 'BLOCKED', blockedReason: 'Falta acceso' } })
     expect(screen.getByText('Falta acceso')).toBeTruthy()
     expect(screen.getAllByRole('button', { name: 'Desbloquear' }).length).toBeGreaterThan(0)
+  })
+
+  it('sin agentes conectados no ofrece "Delegar a mi agente"', () => {
+    renderCard({ onDelegated: vi.fn() })
+    fireEvent.click(screen.getAllByRole('button', { name: 'Más acciones' })[0])
+    expect(screen.queryByRole('menuitem', { name: 'Delegar a mi agente' })).toBeNull()
+  })
+
+  it('con un agente, "Delegar a mi agente" la pasa al agente y avisa', async () => {
+    mockAgents = [{ id: 7, label: 'Grok' }]
+    patch.mockResolvedValue({ data: { ...task, isAgentTask: true, agentId: 7 } })
+    const onDelegated = vi.fn()
+    renderCard({ onDelegated })
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Más acciones' })[0])
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Delegar a mi agente' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Delegar' }))
+
+    await waitFor(() => expect(onDelegated).toHaveBeenCalled())
+    expect(patch).toHaveBeenCalledWith('/tasks/2/agent', { executor: 'agent', agentId: 7 })
+  })
+
+  it('muestra qué agente creó la tarea', () => {
+    renderCard({ task: { ...task, createdByAgent: { id: 7, label: 'Grok' } } })
+    expect(screen.getByTitle('La creó un agente de IA')).toHaveTextContent('Grok')
   })
 })

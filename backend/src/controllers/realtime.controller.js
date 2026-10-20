@@ -55,10 +55,14 @@ async function snapshot(req, res, next) {
 
     let result = workDays.map(wd => {
       const carryOver = carryOverByUser[wd.userId] ?? []
-      const allTasks  = [...wd.tasks, ...carryOver]
+      // Las tareas de sus agentes no son "lo que la persona está haciendo": quedan fuera
+      // de currentTask y de los conteos, y se informa aparte cuántas tienen en curso.
+      const agentInProgress = [...wd.tasks, ...carryOver].filter(t => t.isAgentTask && t.status === 'IN_PROGRESS').length
+      const allTasks  = [...wd.tasks, ...carryOver].filter(t => !t.isAgentTask)
+      const humanToday = wd.tasks.filter(t => !t.isAgentTask)
       const inProgressTask = allTasks.find(t => t.status === 'IN_PROGRESS') ?? null
-      const completedCount = wd.tasks.filter(t => t.status === 'COMPLETED').length
-      const totalMins = wd.tasks
+      const completedCount = humanToday.filter(t => t.status === 'COMPLETED').length
+      const totalMins = humanToday
         .filter(t => t.status === 'COMPLETED')
         .reduce((s, t) => s + taskWorkedMinutes(t), 0)
 
@@ -72,6 +76,7 @@ async function snapshot(req, res, next) {
           pending: allTasks.filter(t => t.status === 'PENDING').length,
           blocked: allTasks.filter(t => t.status === 'BLOCKED').length,
           totalMinutes: totalMins,
+          agentInProgress,
         },
       }
     })

@@ -1318,6 +1318,7 @@ Así el agente sabe sus límites desde el primer mensaje, sin que tengas que exp
 Las que tienen efecto hacia afuera o consumen IA: mandarle algo al cliente (pedir aprobación, comentarios visibles en el portal, confirmar una propuesta), borrar, convertir un lead, y correr auditorías, informes, investigaciones o propuestas con IA, que gastan el presupuesto de tokens del workspace.`,
         tips: [
           'Pedile al agente que use executor "agent" en las tareas que va a hacer él: así no se mezclan con las tuyas.',
+          'Para pasarle una tarea tuya al agente: menú ⋯ de la tarea → "Delegar a mi agente". Al crear una tarea, en "Asignar a" elegí tu agente. Todo lo que hacen tus agentes está en la pestaña Agentes del Dashboard; si uno se traba, te avisa a vos.',
         ],
         related: ['agentes-ia-conectar', 'agentes-ia-seguridad', 'como-usa-la-ia'],
       },

@@ -42,6 +42,7 @@ async function projectTasks(req, res, next) {
           createdBy: { select: { id: true, name: true } },
           _count:    { select: { comments: true } },
           sessions:  { select: { startedAt: true, endedAt: true } },
+          agent:     { select: { id: true, label: true } }, // tarea de agente: la ejecuta un agente de IA de esa persona
         },
         orderBy: [{ status: 'asc' }, { createdAt: 'desc' }],
         take: ACTIVE_LIMIT,

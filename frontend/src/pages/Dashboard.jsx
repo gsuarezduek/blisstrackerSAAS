@@ -14,6 +14,8 @@ import api from '../api/client'
 import ConfirmModal from '../components/ConfirmModal'
 import NowCard from '../components/dashboard/NowCard'
 import LaterTabs from '../components/dashboard/LaterTabs'
+import AgentTasksPanel from '../components/dashboard/AgentTasksPanel'
+import useMyAgents from '../hooks/useMyAgents'
 import { useAuth } from '../context/AuthContext'
 import { completedMinutes } from '../utils/format'
 import {
@@ -65,6 +67,9 @@ export default function Dashboard() {
 
   const [carryOver, setCarryOver] = useState([])
   const [future, setFuture] = useState([])
+  // Tareas que ejecutan mis agentes de IA (Task.isAgentTask) — pestaña "Agentes", fuera del foco.
+  const [agentTasks, setAgentTasks] = useState([])
+  const myAgents = useMyAgents()
   const [delegated, setDelegated] = useState([])
   const [followedTasks, setFollowedTasks] = useState([])
   const [seguimientoTab, setSeguimientoTab] = useState('SEGUIDAS')  // 'SEGUIDAS' | 'DELEGADAS'
@@ -100,10 +105,11 @@ export default function Dashboard() {
     setWorkdayError(null)
     try {
       const { data } = await api.get('/workdays/today')
-      const { carryOverTasks, futureTasks, ...wd } = data
+      const { carryOverTasks, futureTasks, agentTasks: agentList, ...wd } = data
       setWorkDay(wd)
       setCarryOver(carryOverTasks ?? [])
       setFuture(futureTasks ?? [])
+      setAgentTasks(agentList ?? [])
 
       const storedId = localStorage.getItem('autoPaused')
       if (storedId) {
@@ -217,6 +223,12 @@ export default function Dashboard() {
   }
 
   function handleAddTask(task) {
+    // La hace uno de mis agentes: va a la pestaña Agentes, no a mi foco.
+    if (task.isAgentTask) {
+      setAgentTasks(prev => [task, ...prev])
+      setLaterTab('agentes')
+      return
+    }
     // Tarea delegada a otra persona: no es mía, no debe aparecer en mi foco de hoy.
     // La respuesta de POST /tasks no trae el `user` (asignado) con avatar incluido
     // (taskInclude solo trae `createdBy`), así que refrescamos /tasks/delegated en
@@ -244,6 +256,10 @@ export default function Dashboard() {
   }
 
   function handleUpdateTask(updated) {
+    if (agentTasks.find(t => t.id === updated.id)) {
+      setAgentTasks(prev => prev.map(t => t.id === updated.id ? { ...t, ...updated } : t))
+      return
+    }
     if (carryOver.find(t => t.id === updated.id)) {
       // Si la tarea pasó a la jornada de hoy (se completó, o se re-alojó al quitarle la estrella),
       // sale del carry-over y entra a las tareas del día para que cuente y quede como pendiente de hoy.
@@ -262,6 +278,7 @@ export default function Dashboard() {
   }
 
   function handleDeleteTask(id, recurrenceId) {
+    setAgentTasks(prev => prev.filter(t => t.id !== id && (!recurrenceId || t.recurrenceId !== recurrenceId)))
     // Borrado de serie: quitar todas las instancias de esa recurrencia de todas las listas.
     if (recurrenceId) {
       const keep = t => t.recurrenceId !== recurrenceId
@@ -298,6 +315,20 @@ export default function Dashboard() {
     setWorkDay(prev => ({ ...prev, tasks: update(prev.tasks) }))
     setCarryOver(prev => update(prev))
     setCompletedHistory(prev => update(prev))
+  }
+
+  // Delegar a mi agente / devolverme una tarea: la tarea cambia de lista (y con
+  // scope=series, toda la serie) — se recarga la jornada entera en vez de mover a mano.
+  function handleAgentHandoff() {
+    loadToday()
+  }
+
+  const agentBlockedCount = useMemo(() => agentTasks.filter(t => t.status === 'BLOCKED').length, [agentTasks])
+  const agentOpenCount = useMemo(() => agentTasks.filter(t => t.status !== 'COMPLETED').length, [agentTasks])
+
+  function goToAgents() {
+    setLaterTab('agentes')
+    setTimeout(() => laterRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0)
   }
 
   // Derived state
@@ -573,7 +604,7 @@ export default function Dashboard() {
 
   const dayEnded = !!workDay?.endedAt
   const leftToday = starred.length + paused.length + blocked.length + pending.length
-  const taskProps = { onUpdate: handleUpdateTask, onDelete: handleDeleteTask, activeTask, onMoveToBacklog: handleUpdateTask, onOpenComments: setCommentTask }
+  const taskProps = { onUpdate: handleUpdateTask, onDelete: handleDeleteTask, activeTask, onMoveToBacklog: handleUpdateTask, onOpenComments: setCommentTask, onDelegated: handleAgentHandoff }
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -668,6 +699,18 @@ export default function Dashboard() {
             </button>
           )}
 
+          {/* Aviso: un agente se trabó y pide ayuda (la tarea sigue a mi nombre) */}
+          {agentBlockedCount > 0 && (
+            <button onClick={goToAgents}
+              className="w-full flex items-center gap-3 text-left rounded-xl border border-red-200 dark:border-red-900 bg-red-50/70 dark:bg-red-900/20 px-4 py-3 hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors">
+              <span className="w-2 h-2 rounded-full bg-red-500 flex-shrink-0" />
+              <span className="text-sm text-red-800 dark:text-red-300 flex-1">
+                {agentBlockedCount === 1 ? 'Tu agente se trabó en una tarea y necesita tu ayuda' : `Tus agentes se trabaron en ${agentBlockedCount} tareas y necesitan tu ayuda`}
+              </span>
+              <span className="text-sm font-semibold text-red-700 dark:text-red-300">Ver →</span>
+            </button>
+          )}
+
           {/* 2. Foco del día (destacadas) */}
           {starredSorted.length > 0 && (
             <TaskSection title="Foco del día" count={starredSorted.length} hint="Tus destacadas, de mayor a menor prioridad">
@@ -699,6 +742,10 @@ export default function Dashboard() {
                 { key: 'seguimiento', label: 'Seguimiento', count: followedTasks.length + delegated.length, alert: seguimientoBlockedCount > 0 },
                 { key: 'programadas', label: 'Programadas', count: future.length },
                 { key: 'completadas', label: 'Completadas', count: completed.length, countLabel: completed.length ? `${completed.length} hoy` : null },
+                // Solo si tengo agentes conectados o alguno tiene tareas (ej. tokens ya revocados).
+                ...(myAgents.length > 0 || agentTasks.length > 0
+                  ? [{ key: 'agentes', label: 'Agentes', count: agentOpenCount, alert: agentBlockedCount > 0 }]
+                  : []),
               ]}
             />
 
@@ -727,7 +774,7 @@ export default function Dashboard() {
                           {isOpen && (
                             <div className="divide-y divide-gray-100 dark:divide-gray-700/70 border-t border-gray-100 dark:border-gray-700/70">
                               {projectTasks.map(t => (
-                                <TaskCard key={t.id} task={t} onUpdate={handleUpdateTask} onDelete={handleDeleteTask} backlog onAddToToday={handleAddToToday} onOpenComments={setCommentTask} />
+                                <TaskCard key={t.id} task={t} onUpdate={handleUpdateTask} onDelete={handleDeleteTask} backlog onAddToToday={handleAddToToday} onOpenComments={setCommentTask} onDelegated={handleAgentHandoff} />
                               ))}
                             </div>
                           )}
@@ -772,10 +819,21 @@ export default function Dashboard() {
                 ) : (
                   <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200/80 dark:border-gray-700 divide-y divide-gray-100 dark:divide-gray-700/70">
                     {future.map(t => (
-                      <TaskCard key={t.id} task={t} onUpdate={handleUpdateTask} onDelete={handleDeleteTask} future onBringToToday={handleBringToToday} onOpenComments={setCommentTask} />
+                      <TaskCard key={t.id} task={t} onUpdate={handleUpdateTask} onDelete={handleDeleteTask} future onBringToToday={handleBringToToday} onOpenComments={setCommentTask} onDelegated={handleAgentHandoff} />
                     ))}
                   </div>
                 )
+              )}
+
+              {laterTab === 'agentes' && (
+                <AgentTasksPanel
+                  tasks={agentTasks}
+                  today={workDay?.date ?? todayDate}
+                  hasAgents={myAgents.length > 0}
+                  onChanged={handleUpdateTask}
+                  onReturned={handleAgentHandoff}
+                  onOpenComments={setCommentTask}
+                />
               )}
 
               {laterTab === 'completadas' && (

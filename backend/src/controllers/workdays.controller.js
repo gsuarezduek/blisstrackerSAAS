@@ -1,6 +1,7 @@
 const prisma = require('../lib/prisma')
 const { todayString } = require('../utils/dates')
 const { materializeForUser } = require('../services/recurrence.service')
+const { buildCompletedAtWhere } = require('../lib/timeMetrics')
 
 const taskInclude = {
   project: true,
@@ -10,6 +11,9 @@ const taskInclude = {
   // Pieza de Contenido vinculada (si la tarea vino de "Enviar al dashboard") — alcanza con
   // el id para armar el deep-link a /contenido?projectId=&piece= desde TaskCard.
   contentPiece: { select: { id: true } },
+  // Agentes IA: quién la ejecuta (tarea de agente) y qué agente la creó, con su nombre.
+  agent: { select: { id: true, label: true } },
+  createdByAgent: { select: { id: true, label: true } },
 }
 
 // Predicado "tarea visible/activa": no programada a futuro. Las tareas con scheduledFor
@@ -20,21 +24,44 @@ const liveWhere = (today) => ({ OR: [{ scheduledFor: null }, { scheduledFor: { l
 // tocan — reactivar el proyecto las vuelve a mostrar tal cual quedaron).
 const activeProjectWhere = { project: { active: true } }
 
+// Las tareas que ejecuta un agente (Task.isAgentTask) no son parte del foco de la
+// persona: van aparte, en `agentTasks` (pestaña "Agentes" del Dashboard).
+const humanWhere = { isAgentTask: false }
+
+// Tareas de los agentes de la persona: todas las abiertas (incluidas las programadas a
+// futuro, que el frontend separa por scheduledFor) + las completadas hoy.
+function agentTasksQuery(userId, workspaceId, date, tz) {
+  return prisma.task.findMany({
+    where: {
+      userId,
+      isAgentTask: true,
+      workDay: { workspaceId },
+      ...activeProjectWhere,
+      OR: [
+        { status: { not: 'COMPLETED' } },
+        { status: 'COMPLETED', completedAt: buildCompletedAtWhere(date, date, tz) },
+      ],
+    },
+    include: taskInclude,
+    orderBy: { createdAt: 'desc' },
+  })
+}
+
 // Vista de SOLO LECTURA de la jornada de otra persona (ej. admin/bot consultando el
 // día de otro miembro) — a propósito NO reusa el resto de getOrCreateToday: ese flujo
 // crea el WorkDay si falta, lo REABRE si ya estaba cerrado (endedAt→null) y materializa
 // tareas futuras/recurrentes — efectos secundarios que tienen sentido para el dueño de
 // la jornada, pero serían un bug grave si los dispara quien solo está mirando. Acá, si
 // no hay WorkDay hoy para esa persona, se devuelve "sin datos" sin crear nada.
-async function getForeignToday(workspaceId, date, targetUserId) {
+async function getForeignToday(workspaceId, date, targetUserId, tz) {
   const workDay = await prisma.workDay.findUnique({
     where: { userId_workspaceId_date: { userId: targetUserId, workspaceId, date } },
   })
-  if (!workDay) return { date, startedAt: null, endedAt: null, tasks: [], carryOverTasks: [], futureTasks: [] }
+  if (!workDay) return { date, startedAt: null, endedAt: null, tasks: [], carryOverTasks: [], futureTasks: [], agentTasks: [] }
 
-  const [tasks, carryOverTasks, futureTasks] = await Promise.all([
+  const [tasks, carryOverTasks, futureTasks, agentTasks] = await Promise.all([
     prisma.task.findMany({
-      where: { workDayId: workDay.id, ...liveWhere(date), ...activeProjectWhere },
+      where: { workDayId: workDay.id, ...humanWhere, ...liveWhere(date), ...activeProjectWhere },
       include: taskInclude,
       orderBy: { createdAt: 'desc' },
     }),
@@ -43,6 +70,7 @@ async function getForeignToday(workspaceId, date, targetUserId) {
         userId: targetUserId,
         status: { in: ['PENDING', 'IN_PROGRESS', 'PAUSED', 'BLOCKED'] },
         workDay: { date: { lt: date }, workspaceId },
+        ...humanWhere,
         ...liveWhere(date),
         ...activeProjectWhere,
       },
@@ -55,14 +83,16 @@ async function getForeignToday(workspaceId, date, targetUserId) {
         status: { not: 'COMPLETED' },
         scheduledFor: { gt: date },
         workDay: { workspaceId },
+        ...humanWhere,
         ...activeProjectWhere,
       },
       include: taskInclude,
       orderBy: { scheduledFor: 'asc' },
     }),
+    agentTasksQuery(targetUserId, workspaceId, date, tz),
   ])
 
-  return { ...workDay, tasks, carryOverTasks, futureTasks }
+  return { ...workDay, tasks, carryOverTasks, futureTasks, agentTasks }
 }
 
 async function getOrCreateToday(req, res, next) {
@@ -81,7 +111,7 @@ async function getOrCreateToday(req, res, next) {
         where: { workspaceId_userId: { workspaceId, userId: requestedUserId } },
       })
       if (!target) return res.status(404).json({ error: 'Usuario no encontrado en este workspace' })
-      const view = await getForeignToday(workspaceId, date, requestedUserId)
+      const view = await getForeignToday(workspaceId, date, requestedUserId, tz)
       return res.json(view)
     }
 
@@ -122,7 +152,7 @@ async function getOrCreateToday(req, res, next) {
 
     // Tareas de hoy (excluye futuras programadas y proyectos desactivados)
     const tasks = await prisma.task.findMany({
-      where: { workDayId: workDay.id, ...liveWhere(date), ...activeProjectWhere },
+      where: { workDayId: workDay.id, ...humanWhere, ...liveWhere(date), ...activeProjectWhere },
       include: taskInclude,
       orderBy: { createdAt: 'desc' },
     })
@@ -133,6 +163,7 @@ async function getOrCreateToday(req, res, next) {
         userId,
         status: { in: ['PENDING', 'IN_PROGRESS', 'PAUSED', 'BLOCKED'] },
         workDay: { date: { lt: date }, workspaceId },
+        ...humanWhere,
         ...liveWhere(date),
         ...activeProjectWhere,
       },
@@ -147,13 +178,16 @@ async function getOrCreateToday(req, res, next) {
         status: { not: 'COMPLETED' },
         scheduledFor: { gt: date },
         workDay: { workspaceId },
+        ...humanWhere,
         ...activeProjectWhere,
       },
       include: taskInclude,
       orderBy: { scheduledFor: 'asc' },
     })
 
-    res.json({ ...workDay, tasks, carryOverTasks, futureTasks })
+    const agentTasks = await agentTasksQuery(userId, workspaceId, date, tz)
+
+    res.json({ ...workDay, tasks, carryOverTasks, futureTasks, agentTasks })
   } catch (err) { next(err) }
 }
 

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import api from '../../api/client'
+import { invalidateMyAgents } from '../../hooks/useMyAgents'
 
 const MCP_URL = `${import.meta.env.VITE_API_URL}/api/mcp`
 
@@ -54,6 +55,7 @@ export default function AgentsTab() {
     setError('')
     try {
       const { data } = await api.post('/mcp-tokens', { label: label.trim() })
+      invalidateMyAgents()
       setRevealed({ token: data.token, label: data.label })
       setLabel('')
       load()
@@ -69,6 +71,7 @@ export default function AgentsTab() {
     setRevokingId(id)
     try {
       await api.patch(`/mcp-tokens/${id}/revoke`)
+      invalidateMyAgents()
       load()
     } finally {
       setRevokingId(null)

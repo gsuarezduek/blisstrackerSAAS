@@ -7,8 +7,9 @@ import RoleBadge from '../../components/RoleBadge'
 import { linkify } from '../../utils/linkify'
 import { fmtMins, activeMinutes } from '../../utils/format'
 import { Card, CardHeader, TextButton, Avatar, EmptyNote } from './ui'
-import { Repeat } from 'lucide-react'
+import { Repeat, Bot } from 'lucide-react'
 import { Icon } from '../../components/ui/Icon'
+import { agentName } from '../../hooks/useMyAgents'
 
 // Pestaña "Resumen" — lo primero que se ve al entrar a un proyecto. Responde
 // "¿cómo está esta cuenta?" sin recorrer pestañas: la situación escrita por el
@@ -32,7 +33,13 @@ function TaskLine({ task, user, onOpen, tone = 'default' }) {
           className="text-sm text-gray-800 dark:text-gray-200 leading-snug break-words cursor-pointer hover:text-primary-600 dark:hover:text-primary-400 line-clamp-2">
           {linkify(task.description)}
         </p>
-        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{user.name}</p>
+        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+          {user.name}
+          {/* Tarea de agente: la ejecuta un agente de IA de esa persona, no ella. */}
+          {task.isAgentTask && (
+            <span className="inline-flex items-center gap-1 ml-1.5"><Icon as={Bot} size={12} />{task.agent ? agentName(task.agent) : 'su agente'}</span>
+          )}
+        </p>
         {tone === 'danger' && task.blockedReason && (
           <p className="mt-1 text-xs text-red-700 dark:text-red-400 border-l-2 border-red-300 dark:border-red-700 pl-2">{task.blockedReason}</p>
         )}

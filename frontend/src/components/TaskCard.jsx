@@ -8,8 +8,10 @@ import UserLink from './UserLink'
 import useMembers from '../hooks/useMembers'
 import StarButton from './dashboard/StarButton'
 import ReasonModal from './ventas/ReasonModal'
-import { Repeat, CalendarDays, MessageSquare, Paperclip } from 'lucide-react'
+import { Repeat, CalendarDays, MessageSquare, Paperclip, Bot } from 'lucide-react'
 import { Icon } from './ui/Icon'
+import useMyAgents, { agentName } from '../hooks/useMyAgents'
+import DelegateAgentModal from './dashboard/DelegateAgentModal'
 
 // Fila de tarea del Dashboard (foco del día, Backlog y Programadas). Una sola acción
 // principal visible según el estado — el resto (mover al Backlog, eliminar) vive en
@@ -21,7 +23,7 @@ import { Icon } from './ui/Icon'
 // IN_PROGRESS por persona; acá solo se encadenan las dos llamadas que antes el
 // usuario tenía que hacer a mano). El tooltip avisa qué tarea se va a pausar.
 
-function OverflowMenu({ items }) {
+export function OverflowMenu({ items }) {
   const [pos, setPos] = useState(null) // null = cerrado; { top, right } en coordenadas del viewport
   const btnRef = useRef(null)
   const menuRef = useRef(null)
@@ -93,12 +95,15 @@ function OverflowMenu({ items }) {
   )
 }
 
-function TaskCard({ task, onUpdate, onDelete, activeTask, backlog, future, onAddToToday, onBringToToday, onMoveToBacklog, onOpenComments }) {
+// onDelegated(task, scope): la tarea pasó a uno de mis agentes (sale de mis listas).
+function TaskCard({ task, onUpdate, onDelete, activeTask, backlog, future, onAddToToday, onBringToToday, onMoveToBacklog, onOpenComments, onDelegated }) {
   const { members } = useMembers()
   const navigate = useNavigate()
+  const myAgents = useMyAgents()
   const [loading, setLoading] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [showBlock, setShowBlock] = useState(false)
+  const [showDelegate, setShowDelegate] = useState(false)
 
   async function patch(endpoint) {
     const { data } = await api.patch(`/tasks/${task.id}/${endpoint}`)
@@ -175,6 +180,11 @@ function TaskCard({ task, onUpdate, onDelete, activeTask, backlog, future, onAdd
   if (task.status === 'IN_PROGRESS') {
     menu.push({ label: 'Marcar como bloqueada', onClick: () => setShowBlock(true) })
   }
+  // Delegar a mi agente: solo si tengo alguno conectado y la tarea no está en curso
+  // (cambiar quién la ejecuta en plena ejecución lo rechaza el backend).
+  if (onDelegated && myAgents.length > 0 && ['PENDING', 'PAUSED', 'BLOCKED'].includes(task.status)) {
+    menu.push({ label: 'Delegar a mi agente', onClick: () => setShowDelegate(true) })
+  }
   if (onOpenComments) menu.push({ label: 'Abrir detalle', onClick: () => onOpenComments(task) })
   if (task.status === 'PENDING' || task.status === 'PAUSED') {
     menu.push({ label: 'Eliminar', danger: true, onClick: () => setShowDeleteConfirm(true) })
@@ -229,6 +239,11 @@ function TaskCard({ task, onUpdate, onDelete, activeTask, backlog, future, onAdd
             <Link to={`/contenido?projectId=${task.project.id}&piece=${task.contentPiece.id}`} className="inline-flex items-center gap-1 text-sky-700 dark:text-sky-300 hover:underline" title="Ver pieza de contenido">
               <Icon as={CalendarDays} size={13} />Contenido
             </Link>
+          )}
+          {task.createdByAgent && (
+            <span className="inline-flex items-center gap-1" title="La creó un agente de IA">
+              <Icon as={Bot} size={13} />{agentName(task.createdByAgent)}
+            </span>
           )}
           {task.createdBy && (
             <span>
@@ -303,6 +318,9 @@ function TaskCard({ task, onUpdate, onDelete, activeTask, backlog, future, onAdd
             )}
           </div>
         </div>
+      )}
+      {showDelegate && (
+        <DelegateAgentModal task={task} agents={myAgents} onClose={() => setShowDelegate(false)} onDelegated={onDelegated} />
       )}
       <ReasonModal
         open={showBlock}
