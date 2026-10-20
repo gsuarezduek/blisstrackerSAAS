@@ -9,7 +9,8 @@ import { fmtK, fmtUSD, fmtPct } from './networks/format'
 import { KpiCard, BrandSpinner } from './networks/ui'
 import ConnectScreen, { OAuthMethod, TokenMethod, ExpiredNotice } from './networks/ConnectScreen'
 import AccountHeader from './networks/AccountHeader'
-import { DollarSign, Eye, Image, Megaphone, MousePointerClick } from 'lucide-react'
+import AdsBrowser from './networks/AdsBrowser'
+import { DollarSign, Eye, Heart, Image, MousePointerClick } from 'lucide-react'
 import { Icon } from '../ui/Icon'
 
 const BRAND = BRANDS.meta_ads
@@ -144,54 +145,68 @@ function CampaignsTable({ campaigns }) {
   )
 }
 
-// ── Mejores anuncios (creativo + destacados) ──────────────────────────────────
+// ── Anuncios (creativo + destacados, todos con orden y filtros) ──────────────
 
-function MetaTopAds({ ads }) {
+const META_AD_METRICS = [
+  { key: 'reach',       label: 'Alcance',         get: a => a.reach,       fmt: fmtK },
+  { key: 'impressions', label: 'Impresiones',     get: a => a.impressions, fmt: fmtK },
+  { key: 'videoViews',  label: 'Reproducciones',  get: a => a.videoViews || null, fmt: fmtK },
+  { key: 'engagement',  label: 'Interacción',     get: a => a.engagement,  fmt: fmtK },
+  { key: 'spend',       label: 'Gasto',           get: a => a.spend,       fmt: fmtUSD },
+  { key: 'clicks',      label: 'Clics',           get: a => a.clicks,      fmt: fmtK },
+  { key: 'ctr',         label: 'CTR',             get: a => a.ctr,         fmt: fmtPct },
+  { key: 'conversions', label: 'Resultados',      get: a => a.conversions, fmt: fmtK },
+  { key: 'cpr',         label: 'Costo por resultado', get: a => a.costPerConversion, fmt: fmtUSD, lowerIsBetter: true },
+]
+
+const maxBy = (ads, get) => ads.reduce((best, a) => (get(a) > 0 && (!best || get(a) > get(best)) ? a : best), null)?.id
+
+function MetaThumb({ ad, className, iconSize = 28 }) {
+  return (
+    <div className={`bg-gray-100 dark:bg-gray-700 flex items-center justify-center overflow-hidden ${className}`}>
+      {ad.thumbnailUrl
+        ? <img src={ad.thumbnailUrl} alt={ad.name} className="w-full h-full object-cover" loading="lazy" />
+        : <Icon as={Image} size={iconSize} className="text-gray-300 dark:text-gray-600" />}
+    </div>
+  )
+}
+
+function MetaAds({ ads }) {
   if (!ads || ads.length === 0) return null
 
-  const bestReachId = ads[0]?.id // ya vienen ordenados por alcance desc
-  const bestCtrId   = [...ads].filter(a => a.ctr > 0).sort((a, b) => b.ctr - a.ctr)[0]?.id
+  const bestReachId = maxBy(ads, a => a.reach)
+  const bestCtrId   = maxBy(ads, a => a.ctr)
 
   return (
-    <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
-      <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-700">
-        <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">
-          Mejores anuncios ({ads.length})
-        </p>
-      </div>
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 p-4">
-        {ads.map(ad => {
-          const badges = []
-          if (ad.id === bestReachId) badges.push({ label: 'Mayor alcance', cls: 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300' })
-          if (ad.id === bestCtrId)   badges.push({ label: 'Mejor CTR',     cls: 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300' })
-          return (
-            <div key={ad.id} className="flex flex-col border border-gray-100 dark:border-gray-700 rounded-lg overflow-hidden bg-gray-50 dark:bg-gray-800/50">
-              <div className="aspect-square bg-gray-100 dark:bg-gray-700 flex items-center justify-center overflow-hidden">
-                {ad.thumbnailUrl
-                  ? <img src={ad.thumbnailUrl} alt={ad.name} className="w-full h-full object-cover" loading="lazy" />
-                  : <span><Icon as={Image} size={28} className="inline-block text-gray-300 dark:text-gray-600" /></span>}
-              </div>
-              <div className="p-2.5 flex flex-col gap-1.5">
-                {badges.length > 0 && (
-                  <div className="flex flex-wrap gap-1">
-                    {badges.map(b => (
-                      <span key={b.label} className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full ${b.cls}`}>{b.label}</span>
-                    ))}
-                  </div>
-                )}
-                <p className="text-xs font-medium text-gray-800 dark:text-gray-200 truncate" title={ad.name}>{ad.name || 'Anuncio'}</p>
-                <div className="grid grid-cols-2 gap-x-2 gap-y-0.5 text-[11px] text-gray-500 dark:text-gray-400">
-                  <span><Icon as={Eye} size={12} className="inline align-[-2px] mr-1" />{fmtK(ad.reach)}</span>
-                  <span><Icon as={MousePointerClick} size={12} className="inline align-[-2px] mr-1" />{fmtPct(ad.ctr)}</span>
-                  <span><Icon as={Megaphone} size={12} className="inline align-[-2px] mr-1" />{fmtK(ad.impressions)}</span>
-                  <span><Icon as={DollarSign} size={12} className="inline align-[-2px] mr-1" />{fmtUSD(ad.spend)}</span>
+    <AdsBrowser ads={ads} metrics={META_AD_METRICS} defaultSort="reach"
+      gridClass="grid-cols-2 sm:grid-cols-3 lg:grid-cols-5"
+      renderThumb={ad => <MetaThumb ad={ad} className="w-8 h-8 rounded shrink-0" iconSize={14} />}
+      renderCard={ad => {
+        const badges = []
+        if (ad.id === bestReachId) badges.push({ label: 'Mayor alcance', cls: 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300' })
+        if (ad.id === bestCtrId)   badges.push({ label: 'Mejor CTR',     cls: 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300' })
+        return (
+          <div className="flex flex-col border border-gray-100 dark:border-gray-700 rounded-lg overflow-hidden bg-gray-50 dark:bg-gray-800/50">
+            <MetaThumb ad={ad} className="aspect-square" />
+            <div className="p-2.5 flex flex-col gap-1.5">
+              {badges.length > 0 && (
+                <div className="flex flex-wrap gap-1">
+                  {badges.map(b => (
+                    <span key={b.label} className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full ${b.cls}`}>{b.label}</span>
+                  ))}
                 </div>
+              )}
+              <p className="text-xs font-medium text-gray-800 dark:text-gray-200 truncate" title={ad.name}>{ad.name || 'Anuncio'}</p>
+              <div className="grid grid-cols-2 gap-x-2 gap-y-0.5 text-[11px] text-gray-500 dark:text-gray-400">
+                <span title="Alcance"><Icon as={Eye} size={12} className="inline align-[-2px] mr-1" />{fmtK(ad.reach)}</span>
+                <span title="CTR"><Icon as={MousePointerClick} size={12} className="inline align-[-2px] mr-1" />{fmtPct(ad.ctr)}</span>
+                <span title="Interacción"><Icon as={Heart} size={12} className="inline align-[-2px] mr-1" />{fmtK(ad.engagement)}</span>
+                <span title="Gasto"><Icon as={DollarSign} size={12} className="inline align-[-2px] mr-1" />{fmtUSD(ad.spend)}</span>
               </div>
             </div>
-          )
-        })}
-      </div>
-    </div>
+          </div>
+        )
+      }} />
   )
 }
 
@@ -405,8 +420,8 @@ export default function MetaAdsTab({ projectId, onSelectProject, projects = [] }
         datePreset={datePreset}
       />
 
-      {/* Mejores anuncios (creativo) */}
-      {data && <MetaTopAds ads={data.topAds} />}
+      {/* Anuncios (creativo), todos con orden y filtros */}
+      {data && <MetaAds ads={data.ads ?? data.topAds} />}
 
       {/* Tabla de campañas */}
       {data && <CampaignsTable campaigns={data.campaigns} />}

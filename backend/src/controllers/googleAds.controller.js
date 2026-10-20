@@ -30,7 +30,7 @@ async function getGoogleAdsData(req, res, next) {
       return res.status(500).json({ error: 'GOOGLE_ADS_DEVELOPER_TOKEN no configurado en el servidor' })
     }
 
-    const data = await fetchGoogleAdsData(integration, datePreset)
+    const data = await fetchGoogleAdsData(integration, datePreset, null, { allAds: true })
     res.json(data)
   } catch (err) {
     // Helper local: marcar la integración como expirada (token muerto).

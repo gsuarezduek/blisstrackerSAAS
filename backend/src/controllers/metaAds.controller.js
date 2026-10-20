@@ -24,7 +24,7 @@ async function getMetaAdsData(req, res, next) {
     }
 
     const token = await getValidFbToken(integration)
-    const data  = await fetchMetaAdsData(integration.propertyId, token, datePreset)
+    const data  = await fetchMetaAdsData(integration.propertyId, token, datePreset, null, { allAds: true })
 
     res.json(data)
   } catch (err) {

@@ -28,6 +28,9 @@ const CHANNEL_LABEL = {
   DISCOVERY:       'Discovery',
 }
 
+// Tope de anuncios en modo "todos" (para no traer sin fin en cuentas enormes).
+const MAX_ADS = 500
+
 /** Elimina guiones del Customer ID — la API espera solo dígitos */
 function normalizeCustomerId(id) {
   return String(id).replace(/-/g, '').trim()
@@ -44,8 +47,10 @@ function normalizeCustomerId(id) {
  * @param {object} integration
  * @param {string} datePreset   — clave de GAQL_DATE_CLAUSE (ignorado si se pasa dateRange)
  * @param {{ startDate: string, endDate: string }|null} dateRange — rango específico YYYY-MM-DD
+ * @param {{ allAds?: boolean }} opts — allAds: trae todos los anuncios con actividad (hasta
+ *   MAX_ADS) en `ads`; sin él solo los 25 con más impresiones (alcanza para `topAds`).
  */
-async function fetchGoogleAdsData(integration, datePreset = 'this_month', dateRange = null) {
+async function fetchGoogleAdsData(integration, datePreset = 'this_month', dateRange = null, { allAds = false } = {}) {
   const accessToken = await getValidAccessToken(integration)
   const customerId  = normalizeCustomerId(integration.customerId)
   const dateClause  = dateRange
@@ -95,18 +100,21 @@ async function fetchGoogleAdsData(integration, datePreset = 'this_month', dateRa
       ad_group_ad.ad.type,
       ad_group_ad.ad.responsive_search_ad.headlines,
       ad_group_ad.ad.responsive_search_ad.descriptions,
+      ad_group_ad.status,
       ad_group.name,
+      campaign.id,
       campaign.name,
       metrics.impressions,
       metrics.clicks,
       metrics.cost_micros,
       metrics.ctr,
-      metrics.conversions
+      metrics.conversions,
+      metrics.interactions
     FROM ad_group_ad
     WHERE segments.date ${dateRange ? dateClause : `DURING ${dateClause}`}
       AND ad_group_ad.status != 'REMOVED'
     ORDER BY metrics.impressions DESC
-    LIMIT 25
+    LIMIT ${allAds ? MAX_ADS : 25}
   `
 
   const [{ data }, adsData] = await Promise.all([
@@ -156,7 +164,9 @@ async function fetchGoogleAdsData(integration, datePreset = 'this_month', dateRa
 
   // Anuncios individuales: preview de texto para Búsqueda (RSA), etiqueta de tipo
   // para el resto. No hay imagen ni reach en Google Ads.
-  const topAds = (adsData?.results ?? [])
+  // `ads` va ordenado por impresiones desc (el front reordena a gusto); `topAds`
+  // son los 10 primeros — lo que consumen informes, snapshot y Asesor IA.
+  const ads = (adsData?.results ?? [])
     .map(row => {
       const ad = row.adGroupAd?.ad ?? {}
       const headlines    = (ad.responsiveSearchAd?.headlines    ?? []).map(h => h.text).filter(Boolean)
@@ -165,6 +175,8 @@ async function fetchGoogleAdsData(integration, datePreset = 'this_month', dateRa
         id:           ad.id,
         name:         ad.name || null,
         type:         ad.type || null,
+        status:       row.adGroupAd?.status ?? null,
+        campaignId:   row.campaign?.id     ?? null,
         adGroupName:  row.adGroup?.name    ?? null,
         campaignName: row.campaign?.name   ?? null,
         // Preview de texto (RSA): hasta 3 títulos + 1 descripción
@@ -175,11 +187,13 @@ async function fetchGoogleAdsData(integration, datePreset = 'this_month', dateRa
         cost:         (parseInt(row.metrics?.costMicros ?? 0, 10)) / 1_000_000,
         ctr:          parseFloat((parseFloat(row.metrics?.ctr ?? 0) * 100).toFixed(2)),
         conversions:  parseFloat(row.metrics?.conversions ?? 0),
+        // Interacciones: clics en anuncios de texto, reproducciones en video, etc.
+        engagement:   parseInt(row.metrics?.interactions ?? 0, 10),
       }
     })
     .filter(a => a.impressions > 0 || a.cost > 0)
     .sort((a, b) => b.impressions - a.impressions)
-    .slice(0, 10)
+  const topAds = ads.slice(0, 10)
 
   return {
     cost:        parseFloat(totalCost.toFixed(2)),
@@ -189,6 +203,7 @@ async function fetchGoogleAdsData(integration, datePreset = 'this_month', dateRa
     ctr:         avgCtr,
     avgCpc:      parseFloat(avgCpc.toFixed(2)),
     campaigns,
+    ads,
     topAds,
     customerName,
     datePreset,

@@ -90,14 +90,67 @@ function extractConversions(actions) {
   return { conversions: Math.round(conversions), breakdown }
 }
 
+// Tope de anuncios por consulta en modo "todos" (para no paginar sin fin en cuentas
+// enormes). Se piden ordenados por gasto desc, así lo que queda afuera es lo que menos invirtió.
+const MAX_ADS = 500
+// Sin `allAds` (informes, snapshot, Asesor IA, panel cross-proyecto) alcanza con una página.
+const TOP_ADS_PAGE = 25
+
+const sumActions = list => Array.isArray(list)
+  ? list.reduce((s, a) => s + parseFloat(a.value ?? 0), 0)
+  : 0
+
+/**
+ * Anuncios con actividad en el período vía `/insights?level=ad` (solo devuelve los que
+ * tuvieron entrega — a diferencia del edge `/ads`, que trae toda la historia de la cuenta),
+ * paginando hasta `max`. Después completa estado + miniatura del creativo con `?ids=`
+ * (de a 50, el máximo de Graph API). Best-effort: si algo falla devuelve null.
+ */
+async function fetchAdsInsights(adAccountId, accessToken, dateParam, max) {
+  const rows = []
+  let url    = `${FB_GRAPH}/${adAccountId}/insights`
+  let params = {
+    level:        'ad',
+    fields:       'ad_id,ad_name,campaign_id,campaign_name,spend,reach,impressions,clicks,ctr,actions,inline_post_engagement,video_play_actions',
+    sort:         'spend_descending',
+    limit:        Math.min(max, 100),
+    ...dateParam,
+    access_token: accessToken,
+  }
+  while (url && rows.length < max) {
+    const { data } = await axios.get(url, { params })
+    rows.push(...(data.data ?? []))
+    url    = data.paging?.next ?? null
+    params = undefined // `next` ya trae todos los params (token incluido)
+  }
+  const ads = rows.slice(0, max)
+
+  // Estado + miniatura: best-effort por lote, un lote que falla deja esos sin imagen.
+  const meta = {}
+  const ids  = ads.map(a => a.ad_id).filter(Boolean)
+  const chunks = []
+  for (let i = 0; i < ids.length; i += 50) chunks.push(ids.slice(i, i + 50))
+  await Promise.all(chunks.map(chunk =>
+    axios.get(FB_GRAPH, {
+      params: { ids: chunk.join(','), fields: 'effective_status,creative{thumbnail_url}', access_token: accessToken },
+    })
+      .then(({ data }) => Object.assign(meta, data))
+      .catch(err => console.warn('[MetaAds] Lote de creativos falló:', err.response?.data?.error?.message || err.message))
+  ))
+
+  return ads.map(a => ({ ...a, _meta: meta[a.ad_id] ?? {} }))
+}
+
 /**
  * Obtiene métricas de la cuenta publicitaria y sus campañas.
  * @param {string} adAccountId  — e.g. "act_1234567890"
  * @param {string} accessToken
  * @param {string} datePreset   — uno de DATE_PRESETS (ignorado si se pasa dateRange)
  * @param {{ startDate: string, endDate: string }|null} dateRange — rango específico YYYY-MM-DD
+ * @param {{ allAds?: boolean }} opts — allAds: trae todos los anuncios con actividad (hasta
+ *   MAX_ADS) en `ads`; sin él solo la primera página (alcanza para `topAds`).
  */
-async function fetchMetaAdsData(adAccountId, accessToken, datePreset = 'this_month', dateRange = null) {
+async function fetchMetaAdsData(adAccountId, accessToken, datePreset = 'this_month', dateRange = null, { allAds = false } = {}) {
   if (!dateRange && !DATE_PRESETS.has(datePreset)) datePreset = 'this_month'
 
   // Parámetros de fecha: date_preset o time_range
@@ -127,16 +180,10 @@ async function fetchMetaAdsData(adAccountId, accessToken, datePreset = 'this_mon
         access_token: accessToken,
       },
     }),
-    // Anuncios individuales con creativo (miniatura) + métricas incorporadas.
-    // El edge /ads es best-effort: si falla (permiso/rate limit) seguimos sin topAds.
-    axios.get(`${FB_GRAPH}/${adAccountId}/ads`, {
-      params: {
-        fields:       `id,name,effective_status,creative{thumbnail_url},${insightsParam}`,
-        limit:        50,
-        access_token: accessToken,
-      },
-    }).catch(err => {
-      console.warn('[MetaAds] Edge /ads falló (se omite topAds):', err.response?.data?.error?.message || err.message)
+    // Anuncios individuales con métricas + creativo (miniatura). Best-effort: si
+    // falla (permiso/rate limit) seguimos sin anuncios.
+    fetchAdsInsights(adAccountId, accessToken, dateParam, allAds ? MAX_ADS : TOP_ADS_PAGE).catch(err => {
+      console.warn('[MetaAds] Insights por anuncio fallaron (se omiten anuncios):', err.response?.data?.error?.message || err.message)
       return null
     }),
   ])
@@ -166,22 +213,28 @@ async function fetchMetaAdsData(adAccountId, accessToken, datePreset = 'this_mon
     .filter(c => c.spend > 0 || c.status === 'ACTIVE')
     .sort((a, b) => b.spend - a.spend)
 
-  // Anuncios individuales: solo los que tuvieron actividad en el período. Se
-  // ordenan por alcance desc; los consumidores derivan "mejor CTR" del array.
-  const topAds = (adsRes?.data?.data ?? [])
+  // Anuncios individuales: solo los que tuvieron actividad en el período.
+  // `ads` va ordenado por alcance desc (el front reordena a gusto); `topAds` son los
+  // 10 primeros — lo que consumen informes, snapshot y Asesor IA.
+  const ads = (adsRes ?? [])
     .map(a => {
-      const spend = parseFloat(a.insights?.data?.[0]?.spend ?? 0)
-      const conv  = extractConversions(a.insights?.data?.[0]?.actions)
+      const spend = parseFloat(a.spend ?? 0)
+      const conv  = extractConversions(a.actions)
       return {
-        id:               a.id,
-        name:             a.name,
-        status:           a.effective_status ?? null,
-        thumbnailUrl:     a.creative?.thumbnail_url ?? null,
+        id:               a.ad_id,
+        name:             a.ad_name,
+        status:           a._meta.effective_status ?? null,
+        thumbnailUrl:     a._meta.creative?.thumbnail_url ?? null,
+        campaignId:       a.campaign_id ?? null,
+        campaignName:     a.campaign_name ?? null,
         spend,
-        reach:            parseInt(  a.insights?.data?.[0]?.reach       ?? 0, 10),
-        impressions:      parseInt(  a.insights?.data?.[0]?.impressions ?? 0, 10),
-        clicks:           parseInt(  a.insights?.data?.[0]?.clicks      ?? 0, 10),
-        ctr:              parseFloat(a.insights?.data?.[0]?.ctr         ?? 0),
+        reach:            parseInt(  a.reach       ?? 0, 10),
+        impressions:      parseInt(  a.impressions ?? 0, 10),
+        clicks:           parseInt(  a.clicks      ?? 0, 10),
+        ctr:              parseFloat(a.ctr         ?? 0),
+        // Interacción con la publicación (reacciones, comentarios, compartidos, clics)
+        engagement:       parseInt(  a.inline_post_engagement ?? 0, 10),
+        videoViews:       Math.round(sumActions(a.video_play_actions)),
         conversions:      conv.conversions,
         costPerConversion: conv.conversions > 0 ? parseFloat((spend / conv.conversions).toFixed(2)) : null,
         resultsBreakdown: conv.breakdown,
@@ -189,7 +242,7 @@ async function fetchMetaAdsData(adAccountId, accessToken, datePreset = 'this_mon
     })
     .filter(a => a.impressions > 0 || a.spend > 0)
     .sort((a, b) => b.reach - a.reach)
-    .slice(0, 10)
+  const topAds = ads.slice(0, 10)
 
   return {
     spend:             parseFloat(summary.spend       ?? 0),
@@ -203,6 +256,7 @@ async function fetchMetaAdsData(adAccountId, accessToken, datePreset = 'this_mon
     costPerConversion: summaryConv.conversions > 0 ? parseFloat((parseFloat(summary.spend ?? 0) / summaryConv.conversions).toFixed(2)) : null,
     resultsBreakdown:  summaryConv.breakdown,
     campaigns,
+    ads,
     topAds,
     datePreset,
   }

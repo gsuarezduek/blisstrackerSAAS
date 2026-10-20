@@ -9,7 +9,8 @@ import { fmtNum, fmtK, fmtUSD, fmtPct } from './networks/format'
 import { KpiCard, BrandSpinner } from './networks/ui'
 import ConnectScreen, { OAuthMethod, ExpiredNotice } from './networks/ConnectScreen'
 import AccountHeader from './networks/AccountHeader'
-import { DollarSign, Folder, KeyRound, Megaphone, MousePointerClick } from 'lucide-react'
+import AdsBrowser from './networks/AdsBrowser'
+import { DollarSign, Folder, Heart, KeyRound, Megaphone, MousePointerClick } from 'lucide-react'
 import { Icon } from '../ui/Icon'
 
 const BRAND = BRANDS.google_ads
@@ -139,59 +140,65 @@ const AD_TYPE_LABEL = {
   APP_AD:               'App',
 }
 
-function GoogleTopAds({ ads }) {
+const GOOGLE_AD_METRICS = [
+  { key: 'impressions', label: 'Impresiones',  get: a => a.impressions, fmt: fmtK },
+  { key: 'engagement',  label: 'Interacciones', get: a => a.engagement,  fmt: fmtK },
+  { key: 'cost',        label: 'Gasto',        get: a => a.cost,        fmt: fmtUSD },
+  { key: 'clicks',      label: 'Clics',        get: a => a.clicks,      fmt: fmtK },
+  { key: 'ctr',         label: 'CTR',          get: a => a.ctr,         fmt: fmtPct },
+  { key: 'conversions', label: 'Conversiones', get: a => a.conversions, fmt: fmtNum },
+  { key: 'cpa',         label: 'Costo por conversión', get: a => (a.conversions > 0 ? a.cost / a.conversions : null), fmt: fmtUSD, lowerIsBetter: true },
+]
+
+const maxBy = (ads, get) => ads.reduce((best, a) => (get(a) > 0 && (!best || get(a) > get(best)) ? a : best), null)?.id
+
+function GoogleAds({ ads }) {
   if (!ads || ads.length === 0) return null
 
-  const bestImpId = ads[0]?.id // ya vienen ordenados por impresiones desc
-  const bestCtrId = [...ads].filter(a => a.ctr > 0).sort((a, b) => b.ctr - a.ctr)[0]?.id
+  const bestImpId = maxBy(ads, a => a.impressions)
+  const bestCtrId = maxBy(ads, a => a.ctr)
 
   return (
-    <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
-      <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-700">
-        <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">
-          Mejores anuncios ({ads.length})
-        </p>
-      </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 p-4">
-        {ads.map(ad => {
-          const badges = []
-          if (ad.id === bestImpId) badges.push({ label: 'Más impresiones', cls: 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300' })
-          if (ad.id === bestCtrId) badges.push({ label: 'Mejor CTR',       cls: 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300' })
-          const typeLabel = AD_TYPE_LABEL[ad.type] ?? ad.type
-          return (
-            <div key={ad.id} className="flex flex-col gap-2 border border-gray-100 dark:border-gray-700 rounded-lg p-3 bg-gray-50 dark:bg-gray-800/50">
-              <div className="flex items-center justify-between gap-2">
-                {typeLabel && (
-                  <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400">{typeLabel}</span>
-                )}
-                <div className="flex flex-wrap gap-1 justify-end">
-                  {badges.map(b => (
-                    <span key={b.label} className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full ${b.cls}`}>{b.label}</span>
-                  ))}
-                </div>
-              </div>
-              {/* Preview del anuncio de texto (estilo resultado de búsqueda) */}
-              {ad.headline
-                ? (
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium text-blue-700 dark:text-blue-400 line-clamp-2" title={ad.headline}>{ad.headline}</p>
-                    {ad.description && <p className="text-xs text-gray-500 dark:text-gray-400 line-clamp-2 mt-0.5">{ad.description}</p>}
-                  </div>
-                )
-                : (
-                  <p className="text-sm text-gray-700 dark:text-gray-300 truncate" title={ad.name}>{ad.name || 'Anuncio'}</p>
-                )}
-              {ad.campaignName && <p className="text-[10px] text-gray-400 truncate"><Icon as={Folder} size={12} className="inline align-[-2px] mr-1" />{ad.campaignName}</p>}
-              <div className="grid grid-cols-3 gap-x-2 text-[11px] text-gray-500 dark:text-gray-400 border-t border-gray-100 dark:border-gray-700 pt-2 mt-auto">
-                <span><Icon as={Megaphone} size={12} className="inline align-[-2px] mr-1" />{fmtK(ad.impressions)}</span>
-                <span><Icon as={MousePointerClick} size={12} className="inline align-[-2px] mr-1" />{fmtPct(ad.ctr)}</span>
-                <span><Icon as={DollarSign} size={12} className="inline align-[-2px] mr-1" />{fmtUSD(ad.cost)}</span>
+    <AdsBrowser ads={ads} metrics={GOOGLE_AD_METRICS} defaultSort="impressions"
+      gridClass="grid-cols-1 sm:grid-cols-2 lg:grid-cols-3"
+      renderCard={ad => {
+        const badges = []
+        if (ad.id === bestImpId) badges.push({ label: 'Más impresiones', cls: 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300' })
+        if (ad.id === bestCtrId) badges.push({ label: 'Mejor CTR',       cls: 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300' })
+        const typeLabel = AD_TYPE_LABEL[ad.type] ?? ad.type
+        return (
+          <div className="flex flex-col gap-2 border border-gray-100 dark:border-gray-700 rounded-lg p-3 bg-gray-50 dark:bg-gray-800/50">
+            <div className="flex items-center justify-between gap-2">
+              {typeLabel && (
+                <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400">{typeLabel}</span>
+              )}
+              <div className="flex flex-wrap gap-1 justify-end">
+                {badges.map(b => (
+                  <span key={b.label} className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full ${b.cls}`}>{b.label}</span>
+                ))}
               </div>
             </div>
-          )
-        })}
-      </div>
-    </div>
+            {/* Preview del anuncio de texto (estilo resultado de búsqueda) */}
+            {ad.headline
+              ? (
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-blue-700 dark:text-blue-400 line-clamp-2" title={ad.headline}>{ad.headline}</p>
+                  {ad.description && <p className="text-xs text-gray-500 dark:text-gray-400 line-clamp-2 mt-0.5">{ad.description}</p>}
+                </div>
+              )
+              : (
+                <p className="text-sm text-gray-700 dark:text-gray-300 truncate" title={ad.name}>{ad.name || 'Anuncio'}</p>
+              )}
+            {ad.campaignName && <p className="text-[10px] text-gray-400 truncate"><Icon as={Folder} size={12} className="inline align-[-2px] mr-1" />{ad.campaignName}</p>}
+            <div className="grid grid-cols-4 gap-x-2 text-[11px] text-gray-500 dark:text-gray-400 border-t border-gray-100 dark:border-gray-700 pt-2 mt-auto">
+              <span title="Impresiones"><Icon as={Megaphone} size={12} className="inline align-[-2px] mr-1" />{fmtK(ad.impressions)}</span>
+              <span title="Interacciones"><Icon as={Heart} size={12} className="inline align-[-2px] mr-1" />{fmtK(ad.engagement)}</span>
+              <span title="CTR"><Icon as={MousePointerClick} size={12} className="inline align-[-2px] mr-1" />{fmtPct(ad.ctr)}</span>
+              <span title="Gasto"><Icon as={DollarSign} size={12} className="inline align-[-2px] mr-1" />{fmtUSD(ad.cost)}</span>
+            </div>
+          </div>
+        )
+      }} />
   )
 }
 
@@ -548,8 +555,8 @@ export default function GoogleAdsTab({ projectId, onSelectProject, projects = []
         datePreset={datePreset}
       />
 
-      {/* Mejores anuncios (preview de texto) */}
-      {data && <GoogleTopAds ads={data.topAds} />}
+      {/* Anuncios (preview de texto), todos con orden y filtros */}
+      {data && <GoogleAds ads={data.ads ?? data.topAds} />}
 
       {/* Tabla de campañas */}
       {data && <CampaignsTable campaigns={data.campaigns} />}
