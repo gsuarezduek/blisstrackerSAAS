@@ -39,6 +39,7 @@ function fmtHM(mins) {
 }
 
 const LATER_TAB_KEY = 'bliss_dashboard_later_tab'
+const BACKLOG_SORT_KEY = 'bliss_dashboard_backlog_sort' // 'desc' (más nuevas primero) | 'asc'
 
 // Sección del foco del día: título + contador + lista en una sola columna (tarjeta con
 // divisores). Reemplaza a la grilla de 2 columnas por estado, que zigzagueaba al leer.
@@ -79,6 +80,14 @@ export default function Dashboard() {
   const [dismissing, setDismissing] = useState(false)
   const [seguimientoSeen, setSeguimientoSeen] = useState(() => loadSeguimientoSeen(user?.id))
   const [backlogOpenProjects, setBacklogOpenProjects] = useState(() => new Set())
+  // Orden del Backlog por fecha de creación; se recuerda por navegador.
+  const [backlogSort, setBacklogSortState] = useState(() => {
+    try { return localStorage.getItem(BACKLOG_SORT_KEY) === 'asc' ? 'asc' : 'desc' } catch { return 'desc' }
+  })
+  function setBacklogSort(dir) {
+    setBacklogSortState(dir)
+    try { localStorage.setItem(BACKLOG_SORT_KEY, dir) } catch { /* sin storage */ }
+  }
   // Panel "Más tarde" (Backlog / Seguimiento / Programadas / Completadas): reemplaza a
   // los 4 acordeones del final. Recuerda la última pestaña por navegador.
   const [laterTab, setLaterTabState] = useState(() => {
@@ -361,17 +370,20 @@ export default function Dashboard() {
     return [...open.filter(t => t.status === 'PAUSED'), ...open.filter(t => t.status === 'PENDING')]
   }, [allMine])
 
-  // Backlog agrupado por proyecto (mismo criterio que seguimientoByProject: el orden de los
-  // grupos sigue el de la primera aparición en allBacklog, que ya viene newest-first).
+  // Backlog agrupado por proyecto, ordenado solo por fecha de creación según el orden
+  // elegido (el "pausadas primero" de allBacklog se mantiene para la sugerencia de NowCard,
+  // no para esta lista). El orden de los grupos sigue la primera aparición en esa lista.
   const backlogByProject = useMemo(() => {
+    const dir = backlogSort === 'asc' ? 1 : -1
+    const sorted = [...allBacklog].sort((a, b) => dir * (new Date(a.createdAt) - new Date(b.createdAt)))
     const map = {}
-    for (const t of allBacklog) {
+    for (const t of sorted) {
       const pid = t.project.id
       if (!map[pid]) map[pid] = { project: t.project, tasks: [] }
       map[pid].tasks.push(t)
     }
     return Object.values(map)
-  }, [allBacklog])
+  }, [allBacklog, backlogSort])
 
   function toggleBacklogProject(pid) {
     setBacklogOpenProjects(prev => {
@@ -752,9 +764,22 @@ export default function Dashboard() {
                   <p className="text-sm text-gray-400 dark:text-gray-500 px-1 py-6 text-center">No tenés tareas pendientes fuera de tu foco.</p>
                 ) : (
                   <div className="space-y-3">
-                    <div className="flex items-center justify-between px-1">
+                    <div className="flex items-center justify-between gap-3 px-1">
                       <p className="text-xs text-gray-500 dark:text-gray-400">Todas tus tareas fuera del foco. Destacá con la estrella lo que querés hacer hoy, o iniciala directo.</p>
                       <HowToButton topic="dashboard.backlog" />
+                    </div>
+                    <div className="flex items-center gap-2 px-1 text-xs text-gray-500 dark:text-gray-400">
+                      <span>Ordenar por creación:</span>
+                      <div role="group" aria-label="Ordenar por fecha de creación" className="inline-flex rounded-lg border border-gray-200 dark:border-gray-700 p-0.5 bg-white dark:bg-gray-800">
+                        {[{ key: 'desc', label: 'Más nuevas' }, { key: 'asc', label: 'Más antiguas' }].map(o => (
+                          <button key={o.key} type="button" onClick={() => setBacklogSort(o.key)} aria-pressed={backlogSort === o.key}
+                            className={`px-2.5 py-1 rounded-md font-medium transition-colors ${backlogSort === o.key
+                              ? 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white'
+                              : 'text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'}`}>
+                            {o.label}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                     {backlogByProject.map(({ project, tasks: projectTasks }) => {
                       const isOpen = !backlogOpenProjects.has(project.id) // el set guarda los proyectos COLAPSADOS: abiertos por defecto

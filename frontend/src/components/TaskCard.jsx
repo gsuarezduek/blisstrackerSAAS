@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { Link, useNavigate } from 'react-router-dom'
 import api from '../api/client'
 import { renderRichText } from '../utils/richText'
-import { fmtMins, activeMinutes } from '../utils/format'
+import { fmtMins, activeMinutes, fmtCreatedAt, createdAtTitle } from '../utils/format'
 import UserLink from './UserLink'
 import useMembers from '../hooks/useMembers'
 import StarButton from './dashboard/StarButton'
@@ -256,6 +256,7 @@ function TaskCard({ task, onUpdate, onDelete, activeTask, backlog, future, onAdd
               </UserLink>
             </span>
           )}
+          {task.createdAt && <span title={createdAtTitle(task.createdAt)}>Creada {fmtCreatedAt(task.createdAt)}</span>}
           {onOpenComments && comments > 0 && (
             <button type="button" onClick={() => onOpenComments(task)} className="inline-flex items-center gap-1 hover:text-primary-600 dark:hover:text-primary-400" title="Comentarios">
               <Icon as={MessageSquare} size={13} />{comments}

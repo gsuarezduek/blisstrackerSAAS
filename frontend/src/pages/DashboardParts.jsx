@@ -2,7 +2,7 @@ import { useState, useRef, memo } from 'react'
 import LoadingSpinner from '../components/LoadingSpinner'
 import { avatarUrl } from '../utils/avatarUrl'
 import UserLink from '../components/UserLink'
-import { completedMinutes, fmtMins, completedDuration } from '../utils/format'
+import { completedMinutes, fmtMins, completedDuration, fmtCreatedAt, createdAtTitle } from '../utils/format'
 import { MessageSquare, X, Check, TriangleAlert, Target, CircleCheck, Lightbulb, ThumbsUp, ThumbsDown, ChevronDown } from 'lucide-react'
 import { Icon } from '../components/ui/Icon'
 
@@ -150,6 +150,12 @@ export const CompletedTaskRow = memo(function CompletedTaskRow({ task: t, varian
           {dateStr && (
             <>
               <span className="text-xs text-gray-400 dark:text-gray-500 capitalize">{dateStr}</span>
+              <span className="text-xs text-gray-300 dark:text-gray-600">·</span>
+            </>
+          )}
+          {t.createdAt && (
+            <>
+              <span className="text-xs text-gray-400 dark:text-gray-500" title={createdAtTitle(t.createdAt)}>Creada {fmtCreatedAt(t.createdAt)}</span>
               <span className="text-xs text-gray-300 dark:text-gray-600">·</span>
             </>
           )}

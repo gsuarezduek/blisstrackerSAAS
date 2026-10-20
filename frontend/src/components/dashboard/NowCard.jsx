@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import api from '../../api/client'
-import { activeSeconds, fmtDuration } from '../../utils/format'
+import { activeSeconds, fmtDuration, fmtCreatedAt, createdAtTitle } from '../../utils/format'
 import { renderRichText } from '../../utils/richText'
 import useMembers from '../../hooks/useMembers'
 import StarButton from './StarButton'
@@ -34,6 +34,7 @@ function Meta({ task, onOpenComments }) {
         <Link to={`/contenido?projectId=${task.project.id}&piece=${task.contentPiece.id}`} className="inline-flex items-center gap-1 text-sky-700 dark:text-sky-300 hover:underline"><Icon as={CalendarDays} size={14} />Contenido</Link>
       )}
       {task.createdBy && <span>De {task.createdBy.name.split(' ')[0]}</span>}
+      {task.createdAt && <span title={createdAtTitle(task.createdAt)}>Creada {fmtCreatedAt(task.createdAt)}</span>}
       <button type="button" onClick={() => onOpenComments(task)} className="inline-flex items-center gap-1 hover:text-primary-600">
         <Icon as={MessageSquare} size={14} />{comments > 0 ? comments : 'Comentar'}
       </button>

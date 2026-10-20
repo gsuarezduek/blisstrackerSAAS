@@ -88,6 +88,27 @@ export function completedDuration(task) {
   return fmtMins(mins)
 }
 
+// Fecha de creación de una tarea para las filas de las listas: "hoy" / "ayer" /
+// "12 oct" / "12 oct 2025" (el año solo si no es el actual). Zona ART, igual que el
+// resto de las fechas cortas de tareas. Va acompañada de createdAtTitle() como tooltip.
+const ART = 'America/Argentina/Buenos_Aires'
+const dayKey = d => d.toLocaleDateString('en-CA', { timeZone: ART }) // "YYYY-MM-DD"
+
+export function fmtCreatedAt(iso, now = new Date()) {
+  if (!iso) return null
+  const d = new Date(iso)
+  const key = dayKey(d)
+  if (key === dayKey(now)) return 'hoy'
+  if (key === dayKey(new Date(now.getTime() - 86400000))) return 'ayer'
+  const sameYear = key.slice(0, 4) === dayKey(now).slice(0, 4)
+  return d.toLocaleDateString('es-AR', { day: 'numeric', month: 'short', ...(sameYear ? {} : { year: 'numeric' }), timeZone: ART })
+}
+
+export function createdAtTitle(iso) {
+  if (!iso) return undefined
+  return `Creada el ${new Date(iso).toLocaleString('es-AR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: ART })}`
+}
+
 // Fracción de meses entre dos fechas "YYYY-MM-DD" (inclusive ambos extremos).
 // Usa 30.4375 días/mes (365.25 / 12) para que la proporción sea estable.
 export function monthsInRange(from, to) {

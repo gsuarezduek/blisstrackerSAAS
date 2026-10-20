@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { linkify } from '../../utils/linkify'
-import { completedDuration } from '../../utils/format'
+import { completedDuration, fmtCreatedAt, createdAtTitle } from '../../utils/format'
 import DateRangeFilter from '../../components/DateRangeFilter'
 import RoleBadge from '../../components/RoleBadge'
 import UserLink from '../../components/UserLink'
@@ -53,6 +53,7 @@ function TaskRow({ task, onOpenComments }) {
             <AgentTag task={task} />
             {task.recurrenceId && <span className="inline-flex items-center gap-1"><Icon as={Repeat} size={13} />Recurrente</span>}
             {task.createdBy && <span>De {task.createdBy.name.split(' ')[0]}</span>}
+            {task.createdAt && <span title={createdAtTitle(task.createdAt)}>Creada {fmtCreatedAt(task.createdAt)}</span>}
             <button type="button" onClick={() => onOpenComments(task)} className="inline-flex items-center gap-1 hover:text-primary-600 dark:hover:text-primary-400">
               <Icon as={MessageSquare} size={13} />{comments > 0 ? comments : 'Comentar'}
             </button>
@@ -187,7 +188,8 @@ export default function TareasTab({
                           {linkify(task.description)}
                         </p>
                         <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
-                          {task.isAgentTask ? `Agente de ${task.user.name.split(' ')[0]}${task.agent ? ` (${agentName(task.agent)})` : ''}` : task.user.name} · {fmtDate(task.completedAt, data?.project?.timezone)}
+                          {task.isAgentTask ? `Agente de ${task.user.name.split(' ')[0]}${task.agent ? ` (${agentName(task.agent)})` : ''}` : task.user.name} · Completada {fmtDate(task.completedAt, data?.project?.timezone)}
+                          {task.createdAt && <span title={createdAtTitle(task.createdAt)}> · Creada {fmtCreatedAt(task.createdAt)}</span>}
                         </p>
                       </div>
                       <div className="flex items-center gap-2 flex-shrink-0 mt-0.5">

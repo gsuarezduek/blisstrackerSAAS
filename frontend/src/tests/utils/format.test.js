@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { fmtMins, activeMinutes, activeSeconds, fmtDuration, completedDuration } from '../../utils/format'
+import { fmtMins, activeMinutes, activeSeconds, fmtDuration, completedDuration, fmtCreatedAt } from '../../utils/format'
 
 // ── fmtMins ───────────────────────────────────────────────────────────────────
 
@@ -146,5 +146,33 @@ describe('completedDuration', () => {
       pausedMinutes: 0,
     }
     expect(completedDuration(task)).toBe('2h 30m')
+  })
+})
+
+// ── fmtCreatedAt ──────────────────────────────────────────────────────────────
+
+describe('fmtCreatedAt', () => {
+  // 20 oct 2026, 15:00 ART
+  const now = new Date('2026-10-20T18:00:00Z')
+
+  it('devuelve null sin fecha', () => {
+    expect(fmtCreatedAt(null, now)).toBeNull()
+  })
+
+  it('"hoy" para el mismo día en ART', () => {
+    expect(fmtCreatedAt('2026-10-20T04:00:00Z', now)).toBe('hoy') // 01:00 ART
+  })
+
+  it('"ayer" respeta la zona ART (23:30 ART del día anterior)', () => {
+    expect(fmtCreatedAt('2026-10-20T02:30:00Z', now)).toBe('ayer')
+  })
+
+  it('día y mes sin año dentro del año actual', () => {
+    expect(fmtCreatedAt('2026-10-05T15:00:00Z', now)).toMatch(/^5 oct/)
+    expect(fmtCreatedAt('2026-10-05T15:00:00Z', now)).not.toMatch(/2026/)
+  })
+
+  it('agrega el año si es de otro año', () => {
+    expect(fmtCreatedAt('2025-12-31T15:00:00Z', now)).toMatch(/2025/)
   })
 })

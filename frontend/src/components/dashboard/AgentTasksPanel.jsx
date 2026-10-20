@@ -5,7 +5,7 @@ import api from '../../api/client'
 import { Icon } from '../ui/Icon'
 import { OverflowMenu } from '../TaskCard'
 import { agentName } from '../../hooks/useMyAgents'
-import { fmtMins, activeMinutes, completedMinutes } from '../../utils/format'
+import { fmtMins, activeMinutes, completedMinutes, fmtCreatedAt, createdAtTitle } from '../../utils/format'
 
 // Pestaña "Agentes" del Dashboard: las tareas que ejecutan mis agentes de IA
 // (Task.isAgentTask), separadas de mi foco. Siguen a mi nombre — soy quien las
@@ -86,6 +86,7 @@ function AgentTaskRow({ task, today, onChanged, onReturned, onOpenComments }) {
           <span>{task.agent ? agentName(task.agent) : 'Cualquiera de mis agentes'}</span>
           {scheduledLabel && <span className="text-indigo-600 dark:text-indigo-300 capitalize">Aparece el {scheduledLabel}</span>}
           {task.recurrenceId && <span className="inline-flex items-center gap-1" title="Tarea recurrente"><Icon as={Repeat} size={13} />Recurrente</span>}
+          {task.createdAt && <span title={createdAtTitle(task.createdAt)}>Creada {fmtCreatedAt(task.createdAt)}</span>}
           {mins > 0 && <span>{fmtMins(mins)}</span>}
         </div>
         {task.status === 'BLOCKED' && task.blockedReason && (
