@@ -322,6 +322,20 @@ describe('GET /api/tasks/agent-queue', () => {
     expect(where.AND).toEqual([{ OR: [{ agentId: AGENT_ID }, { agentId: null }] }])
   })
 
+  it('view=dashboard devuelve abiertas + completadas hoy sin materializar', async () => {
+    const res = await request(app)
+      .get('/api/tasks/agent-queue?view=dashboard')
+      .set('Authorization', authHeader())
+      .set('X-Workspace', WORKSPACE_SLUG)
+
+    expect(res.status).toBe(200)
+    const { where } = prisma.task.findMany.mock.calls[0][0]
+    expect(where).toEqual(expect.objectContaining({ userId: 1, isAgentTask: true }))
+    expect(where.OR).toHaveLength(2) // abiertas | completadas hoy
+    expect(prisma.task.count).not.toHaveBeenCalled()
+    expect(prisma.workDay.create).not.toHaveBeenCalled()
+  })
+
   it('desde la app devuelve las de todos los agentes de la persona', async () => {
     await request(app)
       .get('/api/tasks/agent-queue')

@@ -233,4 +233,4 @@ async function finish(req, res, next) {
   }
 }
 
-module.exports = { getOrCreateToday, finish }
+module.exports = { getOrCreateToday, finish, agentTasksQuery }

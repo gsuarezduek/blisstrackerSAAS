@@ -129,6 +129,9 @@ function TaskCard({ task, onUpdate, onDelete, activeTask, backlog, future, onAdd
         const { data: paused } = await api.patch(`/tasks/${activeTask.id}/pause`)
         onUpdate(paused)
       }
+      // Una tarea marcada como Backlog (isBacklog) no se puede iniciar sin pasarla al día:
+      // el Dashboard ya no separa "Para hoy" de Backlog, así que se encadena acá.
+      if (task.isBacklog) await patch('add-to-today')
       const data = await patch(endpoint)
       if (data.meetingStarted) {
         onDelete?.(task.id)

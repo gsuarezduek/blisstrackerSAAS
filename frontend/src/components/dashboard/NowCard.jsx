@@ -60,6 +60,11 @@ export default function NowCard({ activeTask, suggestion, onUpdate, onOpenCommen
   async function call(task, endpoint, body) {
     setBusy(endpoint)
     try {
+      // La sugerencia puede venir del Backlog (isBacklog): pasarla al día antes de
+      // iniciarla/reanudarla, que el backend no permite sobre una tarea de Backlog.
+      if (task.isBacklog && (endpoint === 'start' || endpoint === 'resume')) {
+        await api.patch(`/tasks/${task.id}/add-to-today`)
+      }
       const { data } = await api.patch(`/tasks/${task.id}/${endpoint}`, body)
       if (data.meetingStarted) {
         navigate(`/my-projects/${data.projectId}?infoTab=reuniones&meeting=${data.meetingId}`)

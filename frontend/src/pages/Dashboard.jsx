@@ -15,6 +15,7 @@ import ConfirmModal from '../components/ConfirmModal'
 import NowCard from '../components/dashboard/NowCard'
 import LaterTabs from '../components/dashboard/LaterTabs'
 import AgentTasksPanel from '../components/dashboard/AgentTasksPanel'
+import AgentsWorkingStrip from '../components/dashboard/AgentsWorkingStrip'
 import useMyAgents from '../hooks/useMyAgents'
 import { useAuth } from '../context/AuthContext'
 import { completedMinutes } from '../utils/format'
@@ -298,16 +299,6 @@ export default function Dashboard() {
     setWorkDay(prev => ({ ...prev, tasks: prev.tasks.filter(t => t.id !== id) }))
   }
 
-  // "Agregar a hoy" desde Backlog: mueve carry-over a workDay.tasks, o actualiza task existente
-  function handleAddToToday(updated) {
-    if (carryOver.find(t => t.id === updated.id)) {
-      setCarryOver(prev => prev.filter(t => t.id !== updated.id))
-      setWorkDay(prev => ({ ...prev, tasks: [...prev.tasks, updated] }))
-    } else {
-      setWorkDay(prev => ({ ...prev, tasks: prev.tasks.map(t => t.id === updated.id ? updated : t) }))
-    }
-  }
-
   function handleCommentAdded(taskId, newCount) {
     const update = list => list.map(t =>
       t.id === taskId ? { ...t, _count: { ...t._count, comments: newCount } } : t
@@ -323,6 +314,23 @@ export default function Dashboard() {
     loadToday()
   }
 
+  // Los agentes trabajan en paralelo y del lado del servidor: refresco liviano de sus
+  // tareas cada 30s (solo con la pestaña visible y si hay agentes), para que la franja
+  // "Tus agentes trabajando ahora" y la pestaña Agentes no queden congeladas.
+  const hasAgents = myAgents.length > 0 || agentTasks.length > 0
+  useEffect(() => {
+    if (!hasAgents) return
+    const refresh = () => {
+      if (document.visibilityState !== 'visible') return
+      api.get('/tasks/agent-queue', { params: { view: 'dashboard' } })
+        .then(r => setAgentTasks(r.data))
+        .catch(() => {})
+    }
+    const t = setInterval(refresh, 30000)
+    document.addEventListener('visibilitychange', refresh)
+    return () => { clearInterval(t); document.removeEventListener('visibilitychange', refresh) }
+  }, [hasAgents])
+
   const agentBlockedCount = useMemo(() => agentTasks.filter(t => t.status === 'BLOCKED').length, [agentTasks])
   const agentOpenCount = useMemo(() => agentTasks.filter(t => t.status !== 'COMPLETED').length, [agentTasks])
 
@@ -334,25 +342,24 @@ export default function Dashboard() {
   // Derived state
   const tasks = workDay?.tasks ?? []
 
-  // Carry-over activos: IN_PROGRESS/PAUSED/BLOCKED (sin isBacklog) o DESTACADAS (con estrella) se
-  // muestran en el foco normal. Una pendiente destacada NO cae al backlog: se mantiene en el foco
-  // (sección Destacadas) hasta que se complete o se le quite la estrella.
-  // Carry-over con isBacklog=true siempre van al backlog, sin importar el status.
+  // Dos zonas nada más: el FOCO (lo destacado, lo en curso y lo bloqueado) y el BACKLOG
+  // (todas las demás tareas abiertas: de hoy, arrastradas de días anteriores o marcadas
+  // como Backlog). Ya no hay una sección "Para hoy" aparte. Las programadas a futuro
+  // viven en su pestaña (vienen en `future`, no en tasks/carryOver).
   const isStarred = t => (t.starred ?? 0) > 0
-  const carryOverActive  = useMemo(() => carryOver.filter(t => !t.isBacklog && (t.status !== 'PENDING' || isStarred(t))), [carryOver])
-  const carryOverPending = useMemo(() => carryOver.filter(t => t.isBacklog || (t.status === 'PENDING' && !isStarred(t))),  [carryOver])
-
-  // Today focus = tasks in today's workday that are NOT backlog + carry-over activos, newest first
+  const allMine = useMemo(() =>
+    [...tasks, ...carryOver].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)),
+    [tasks, carryOver]
+  )
   const focusTasks = useMemo(() =>
-    [...tasks.filter(t => !t.isBacklog), ...carryOverActive].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)),
-    [tasks, carryOverActive]
+    allMine.filter(t => t.status === 'COMPLETED' || t.status === 'IN_PROGRESS' || t.status === 'BLOCKED' || isStarred(t)),
+    [allMine]
   )
-
-  // Backlog = today's backlog tasks + carry-over PENDING de días anteriores, newest first
-  const allBacklog = useMemo(() =>
-    [...tasks.filter(t => t.isBacklog), ...carryOverPending].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)),
-    [tasks, carryOverPending]
-  )
+  // Backlog: pausadas primero (ya tienen trabajo invertido), después pendientes, newest first.
+  const allBacklog = useMemo(() => {
+    const open = allMine.filter(t => (t.status === 'PENDING' || t.status === 'PAUSED') && !isStarred(t))
+    return [...open.filter(t => t.status === 'PAUSED'), ...open.filter(t => t.status === 'PENDING')]
+  }, [allMine])
 
   // Backlog agrupado por proyecto (mismo criterio que seguimientoByProject: el orden de los
   // grupos sigue el de la primera aparición en allBacklog, que ya viene newest-first).
@@ -575,36 +582,30 @@ export default function Dashboard() {
     clearAutoPaused()
   }
 
-  // Sections from focus tasks
-  const { inProgress, completed, starred, paused, blocked, pending, totalMins, activeFocusCount } = useMemo(() => {
-    const inProgress = focusTasks.filter(t => t.status === 'IN_PROGRESS')
+  // Secciones del foco
+  const { completed, starred, blocked, totalMins } = useMemo(() => {
     const completed  = focusTasks
       .filter(t => t.status === 'COMPLETED')
       .sort((a, b) => new Date(b.completedAt ?? 0) - new Date(a.completedAt ?? 0))
-    const starred    = focusTasks.filter(t => (t.starred ?? 0) > 0 && t.status !== 'COMPLETED' && t.status !== 'IN_PROGRESS')
+    const starred    = focusTasks.filter(t => isStarred(t) && t.status !== 'COMPLETED' && t.status !== 'IN_PROGRESS')
     const starredIds = new Set(starred.map(t => t.id))
-    const paused     = focusTasks.filter(t => t.status === 'PAUSED'  && !starredIds.has(t.id))
     const blocked    = focusTasks.filter(t => t.status === 'BLOCKED' && !starredIds.has(t.id))
-    const pending    = focusTasks.filter(t => t.status === 'PENDING' && !starredIds.has(t.id))
-    const totalMins  = completed.reduce((acc, t) => {
-      const m = completedMinutes(t)
-      return acc + (m ?? 0)
-    }, 0)
-    const activeFocusCount = focusTasks.filter(t => t.status !== 'COMPLETED').length
-    return { inProgress, completed, starred, paused, blocked, pending, totalMins, activeFocusCount }
+    const totalMins  = completed.reduce((acc, t) => acc + (completedMinutes(t) ?? 0), 0)
+    return { completed, starred, blocked, totalMins }
   }, [focusTasks])
 
-  // Destacadas por prioridad (3 = roja primero) y, para "Para hoy", pausadas antes que
-  // pendientes (ya tienen trabajo invertido).
+  // Destacadas por prioridad (3 = roja primero).
   const starredSorted = useMemo(() => [...starred].sort((a, b) => (b.starred ?? 0) - (a.starred ?? 0)), [starred])
-  const forToday = useMemo(() => [...paused, ...pending], [paused, pending])
 
-  // Sugerencia de la tarjeta "Ahora" cuando no hay nada en curso.
-  const suggestion = activeTask ? null : (starredSorted.find(t => t.status !== 'BLOCKED') ?? paused[0] ?? pending[0] ?? null)
+  // Sugerencia de la tarjeta "Ahora" cuando no hay nada en curso: la destacada de mayor
+  // prioridad, si no la pausada más reciente del Backlog, si no la pendiente más nueva.
+  const suggestion = activeTask ? null : (starredSorted.find(t => t.status !== 'BLOCKED') ?? allBacklog[0] ?? null)
 
   const dayEnded = !!workDay?.endedAt
-  const leftToday = starred.length + paused.length + blocked.length + pending.length
-  const taskProps = { onUpdate: handleUpdateTask, onDelete: handleDeleteTask, activeTask, onMoveToBacklog: handleUpdateTask, onOpenComments: setCommentTask, onDelegated: handleAgentHandoff }
+  const inFocus = starred.length + blocked.length
+  const leftToday = inFocus + allBacklog.length
+  // Sin onMoveToBacklog: con un solo Backlog para todo lo no destacado, "Mover al Backlog" ya no aplica.
+  const taskProps = { onUpdate: handleUpdateTask, onDelete: handleDeleteTask, activeTask, onOpenComments: setCommentTask, onDelegated: handleAgentHandoff }
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -624,7 +625,7 @@ export default function Dashboard() {
                 {!dayEnded && elapsed && <span>Jornada <span className="font-medium text-gray-700 dark:text-gray-200">{elapsed}</span></span>}
                 <span><span className="font-medium text-gray-700 dark:text-gray-200">{completed.length}</span> completada{completed.length === 1 ? '' : 's'}</span>
                 <span><span className="font-medium text-gray-700 dark:text-gray-200">{fmtHM(totalMins)}</span> registradas</span>
-                {!dayEnded && <span><span className="font-medium text-gray-700 dark:text-gray-200">{leftToday}</span> por hacer</span>}
+                {!dayEnded && <span><span className="font-medium text-gray-700 dark:text-gray-200">{inFocus}</span> en foco</span>}
               </p>
             )}
           </div>
@@ -687,6 +688,9 @@ export default function Dashboard() {
             />
           )}
 
+          {/* Lo que mis agentes de IA están haciendo en paralelo (compacto, en azul) */}
+          <AgentsWorkingStrip tasks={agentTasks} onOpenComments={setCommentTask} onSeeAll={goToAgents} />
+
           {/* Aviso: algo que delegué o sigo está bloqueado (antes quedaba escondido en un acordeón cerrado) */}
           {seguimientoBlockedCount > 0 && (
             <button onClick={goToSeguimiento}
@@ -725,13 +729,6 @@ export default function Dashboard() {
             </TaskSection>
           )}
 
-          {/* 4. Para hoy (pausadas + pendientes) */}
-          {forToday.length > 0 && (
-            <TaskSection title="Para hoy" count={forToday.length}>
-              {forToday.map(t => <TaskCard key={t.id} task={t} {...taskProps} />)}
-            </TaskSection>
-          )}
-
           {/* 5. Más tarde: Backlog / Seguimiento / Programadas / Completadas */}
           <div ref={laterRef} className="scroll-mt-20 pt-2">
             <LaterTabs
@@ -739,24 +736,24 @@ export default function Dashboard() {
               onChange={setLaterTab}
               tabs={[
                 { key: 'backlog', label: 'Backlog', count: allBacklog.length },
-                { key: 'seguimiento', label: 'Seguimiento', count: followedTasks.length + delegated.length, alert: seguimientoBlockedCount > 0 },
                 { key: 'programadas', label: 'Programadas', count: future.length },
-                { key: 'completadas', label: 'Completadas', count: completed.length, countLabel: completed.length ? `${completed.length} hoy` : null },
                 // Solo si tengo agentes conectados o alguno tiene tareas (ej. tokens ya revocados).
                 ...(myAgents.length > 0 || agentTasks.length > 0
                   ? [{ key: 'agentes', label: 'Agentes', count: agentOpenCount, alert: agentBlockedCount > 0 }]
                   : []),
+                { key: 'seguimiento', label: 'Seguimiento', count: followedTasks.length + delegated.length, alert: seguimientoBlockedCount > 0 },
+                { key: 'completadas', label: 'Completadas', count: completed.length, countLabel: completed.length ? `${completed.length} hoy` : null },
               ]}
             />
 
             <div className="mt-3">
               {laterTab === 'backlog' && (
                 allBacklog.length === 0 ? (
-                  <p className="text-sm text-gray-400 dark:text-gray-500 px-1 py-6 text-center">Tu Backlog está vacío. Lo que no sea para hoy, mandalo acá desde el menú ⋯ de la tarea.</p>
+                  <p className="text-sm text-gray-400 dark:text-gray-500 px-1 py-6 text-center">No tenés tareas pendientes fuera de tu foco.</p>
                 ) : (
                   <div className="space-y-3">
                     <div className="flex items-center justify-between px-1">
-                      <p className="text-xs text-gray-500 dark:text-gray-400">Lo que querés hacer, pero no hoy. Traé al foco lo que esté listo para trabajarse.</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">Todas tus tareas fuera del foco. Destacá con la estrella lo que querés hacer hoy, o iniciala directo.</p>
                       <HowToButton topic="dashboard.backlog" />
                     </div>
                     {backlogByProject.map(({ project, tasks: projectTasks }) => {
@@ -774,7 +771,7 @@ export default function Dashboard() {
                           {isOpen && (
                             <div className="divide-y divide-gray-100 dark:divide-gray-700/70 border-t border-gray-100 dark:border-gray-700/70">
                               {projectTasks.map(t => (
-                                <TaskCard key={t.id} task={t} onUpdate={handleUpdateTask} onDelete={handleDeleteTask} backlog onAddToToday={handleAddToToday} onOpenComments={setCommentTask} onDelegated={handleAgentHandoff} />
+                                <TaskCard key={t.id} task={t} {...taskProps} />
                               ))}
                             </div>
                           )}

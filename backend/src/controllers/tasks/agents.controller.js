@@ -2,6 +2,7 @@ const prisma = require('../../lib/prisma')
 const { todayString } = require('../../utils/dates')
 const { materializeForUser } = require('../../services/recurrence.service')
 const { taskInclude, requestAgentId, assertOwnAgent } = require('./_shared')
+const { agentTasksQuery } = require('../workdays.controller')
 
 // Agentes IA (MCP) — ver concepto "Agentes IA" en backend/CLAUDE.md.
 // Una tarea de agente (Task.isAgentTask) la EJECUTA un agente; userId sigue siendo la
@@ -36,6 +37,13 @@ async function agentQueue(req, res, next) {
     const userId = req.user.userId
     const workspaceId = req.workspace.id
     const today = todayString(req.workspace.timezone)
+
+    // ?view=dashboard: refresco liviano de la pestaña Agentes / franja "Tus agentes
+    // trabajando" del Dashboard (lo pide cada ~30s) — mismo shape que `agentTasks` de
+    // /workdays/today (abiertas + completadas hoy), sin materializar nada.
+    if (req.query.view === 'dashboard') {
+      return res.json(await agentTasksQuery(userId, workspaceId, today, req.workspace.timezone))
+    }
 
     // Solo lo del agente (agentOnly) y sin abrir un WorkDay si no hace falta: un WorkDay
     // vacío creado acá contaría como "la persona estuvo" en Asistencia (ver
