@@ -51,7 +51,7 @@ async function hoursHistory(req, res, next) {
         },
         select: {
           id: true, description: true, startedAt: true, completedAt: true,
-          pausedMinutes: true, minutesOverride: true,
+          pausedMinutes: true, minutesOverride: true, isAgentTask: true,
           user: { select: { id: true, name: true, avatar: true } },
         },
         orderBy: { completedAt: 'desc' },
@@ -65,13 +65,19 @@ async function hoursHistory(req, res, next) {
 
     const bucket = {}
     for (const m of monthKeys) {
-      bucket[m] = { month: m, label: monthLabel(m), totalMinutes: 0, taskCount: 0, byUser: {}, monthlyHours: monthlyHoursByMonth[m] }
+      bucket[m] = { month: m, label: monthLabel(m), totalMinutes: 0, taskCount: 0, byUser: {}, monthlyHours: monthlyHoursByMonth[m], agentTasks: 0, agentMinutes: 0 }
     }
     for (const t of tasks) {
       const key = monthStringInTz(t.completedAt, tz)
       const b = bucket[key]
       if (!b) continue // fuera del rango pedido (no debería pasar dado el filtro de completedAt)
       const mins = taskMins(t)
+      // Horas del mes vs contratadas = horas de personas; lo de los agentes de IA va aparte.
+      if (t.isAgentTask) {
+        b.agentTasks += 1
+        b.agentMinutes += mins
+        continue
+      }
       b.totalMinutes += mins
       b.taskCount += 1
       const uid = t.user.id

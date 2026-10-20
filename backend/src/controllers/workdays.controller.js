@@ -119,6 +119,11 @@ async function getOrCreateToday(req, res, next) {
     const whereKey = { userId_workspaceId_date: { userId, workspaceId, date } }
 
     let workDay = await prisma.workDay.findUnique({ where: whereKey })
+    // Vía MCP (el agente consultando la jornada): solo lectura, sin crear un WorkDay que
+    // contaría como día presente en Asistencia ni materializar nada a nombre de la persona.
+    if (!workDay && req.user.mcpTokenId) {
+      return res.json(await getForeignToday(workspaceId, date, userId, tz))
+    }
     if (!workDay) {
       try {
         workDay = await prisma.workDay.create({ data: { userId, workspaceId, date } })

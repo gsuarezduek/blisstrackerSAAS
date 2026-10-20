@@ -5,6 +5,7 @@ const { sendTestDigest } = require('../services/productivityDigest.service')
 const { getProductivityPeriod, businessDaysBetween, tzOffsetStr, taskMins, daysBetweenInclusive } = require('../lib/timeMetrics')
 const { createTtlCache } = require('../lib/ttlCache')
 const { todayString, dateStringInTz } = require('../utils/dates')
+const { HUMAN_TASK_WHERE } = require('../lib/agentTasks')
 
 // La tabla de productividad hace bucketing pesado de logins + tareas + asistencia sobre
 // todo el equipo en cada request. TTL 60s: para una vista analítica de admin el desfase
@@ -46,7 +47,7 @@ function cacheKeyFor(workspaceId, params) {
 
 const EMPTY_STATS = { current: { totalCompleted: 0, totalMinutes: 0, daysWorked: 0, tasaCompletado: 0 },
   delta: { tareasPct: null, horasPct: null, tasaCompletadoPts: 0 },
-  porProyecto: [], topProject: null, weeklySeries: [], stuckTasks: 0, recentInactive: false, hasData: false }
+  porProyecto: [], topProject: null, weeklySeries: [], stuckTasks: 0, recentInactive: false, hasData: false, agents: null }
 
 // Da forma a la fila de un miembro (tabla completa y overview de un solo usuario comparten
 // exactamente este cálculo, para que los números nunca diverjan entre ambas vistas).
@@ -83,6 +84,8 @@ function shapeMember(m, statsMap, attendanceMap, hist) {
       attendance: attendanceOut,
       utilization,
       hoursHistory,
+      // Sus agentes de IA (tareas completadas, minutos, por agente/proyecto) — aparte de lo de arriba.
+      agents: s.agents,
     },
     insight: insight && (insight.tendencias || insight.fortalezas || insight.areasDeAtencion)
       ? { tendencias: insight.tendencias, fortalezas: insight.fortalezas, areasDeAtencion: insight.areasDeAtencion, updatedAt: insight.updatedAt }
@@ -235,6 +238,7 @@ async function userBreakdown(req, res, next) {
           lte: new Date(period.curEnd   + 'T23:59:59' + offset),
         },
         workDay: { workspaceId },
+        ...HUMAN_TASK_WHERE, // el detalle es de las horas de la persona; sus agentes van aparte
       },
       select: {
         id: true, description: true, startedAt: true, completedAt: true,
@@ -347,6 +351,8 @@ async function taskHistory(req, res, next) {
         user:    { select: { id: true, name: true } },
         project: { select: { id: true, name: true } },
         sessions: { select: { startedAt: true, endedAt: true }, orderBy: { startedAt: 'asc' } },
+        isAgentTask: true,
+        agent: { select: { id: true, label: true } },
       },
       orderBy: { createdAt: 'desc' },
       take: 500,
@@ -364,6 +370,8 @@ async function taskHistory(req, res, next) {
         title:         t.description,
         project:       t.project,
         responsible:   t.user,
+        // Tarea de agente: la ejecutó un agente de IA de la persona responsable, no ella.
+        executedByAgent: t.isAgentTask ? { id: t.agent?.id ?? null, name: t.agent?.label ?? null } : null,
         status:        t.status,
         createdAt:     t.createdAt,
         startedAt:     t.startedAt,

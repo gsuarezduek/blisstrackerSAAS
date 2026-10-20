@@ -10,8 +10,9 @@ jest.mock('../../src/lib/prisma', () => ({
     create:     jest.fn(),
     update:     jest.fn(),
     updateMany: jest.fn(),
+    count:      jest.fn(),
   },
-  taskRecurrence: { update: jest.fn(), findMany: jest.fn() },
+  taskRecurrence: { update: jest.fn(), findMany: jest.fn(), count: jest.fn() },
   taskSession:    { create: jest.fn(), updateMany: jest.fn() },
   workDay: {
     findUnique: jest.fn(),
@@ -276,6 +277,37 @@ describe('GET /api/tasks/agent-queue', () => {
     prisma.task.findMany.mockResolvedValue([])
     prisma.task.updateMany.mockResolvedValue({ count: 0 })
     prisma.taskRecurrence.findMany.mockResolvedValue([])
+    prisma.task.count.mockResolvedValue(0)
+    prisma.taskRecurrence.count.mockResolvedValue(0)
+  })
+
+  it('sin nada que materializar no abre un WorkDay (contaría como presencia)', async () => {
+    prisma.workDay.findUnique.mockResolvedValue(null)
+
+    await request(app)
+      .get('/api/tasks/agent-queue')
+      .set('Authorization', authHeader({ mcpTokenId: AGENT_ID }))
+      .set('X-Workspace', WORKSPACE_SLUG)
+
+    expect(prisma.workDay.create).not.toHaveBeenCalled()
+    expect(prisma.task.updateMany).not.toHaveBeenCalled()
+  })
+
+  it('con una serie del agente, materializa solo lo del agente', async () => {
+    prisma.workDay.findUnique.mockResolvedValue({ id: 10 })
+    prisma.taskRecurrence.count.mockResolvedValue(1)
+
+    await request(app)
+      .get('/api/tasks/agent-queue')
+      .set('Authorization', authHeader({ mcpTokenId: AGENT_ID }))
+      .set('X-Workspace', WORKSPACE_SLUG)
+
+    expect(prisma.task.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ isAgentTask: true }),
+    }))
+    expect(prisma.taskRecurrence.findMany).toHaveBeenCalledWith({
+      where: { userId: 1, workspaceId: WORKSPACE_ID, active: true, isAgentTask: true },
+    })
   })
 
   it('vía MCP devuelve las del agente + las delegadas a cualquiera', async () => {

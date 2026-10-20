@@ -9,6 +9,7 @@ const prisma = require('../lib/prisma')
 const { todayString } = require('../utils/dates')
 const { tzOffsetStr, getNWeeksAgoMonday, daysAgo, taskMins, addDays, businessDaysBetween } = require('../lib/timeMetrics')
 const { inArrivalWindow, laborableDays } = require('../lib/attendance')
+const { HUMAN_TASK_WHERE, PRESENCE_WORKDAY_WHERE, isPresenceTask, computeAgentStats } = require('../lib/agentTasks')
 
 const STUCK_DAYS = 7
 
@@ -24,7 +25,9 @@ function pctChange(cur, prev) {
 
 function summarize(workDays, completedTasks) {
   const totalCreated   = workDays.reduce((s, wd) => s + wd.tasks.length, 0)
-  const daysWorked     = workDays.filter(wd => wd.tasks.length > 0).length
+  // Día trabajado = la persona tuvo alguna tarea propia ese día (no una que le creó un
+  // agente: ese WorkDay lo pudo haber abierto el agente — ver lib/agentTasks.js).
+  const daysWorked     = workDays.filter(wd => wd.tasks.some(isPresenceTask)).length
   const totalCompleted = completedTasks.length
   const totalMinutes   = completedTasks.reduce((s, t) => s + taskMins(t), 0)
   return {
@@ -43,7 +46,7 @@ function summarize(workDays, completedTasks) {
 // Computa stats de un miembro a partir de filas ya traídas de la DB.
 // period = { curStart, curEnd, prevStart, prevEnd }: las dos ventanas se bucketean explícitamente
 // (con ventanas de igual largo puede haber un "hueco" entre prevEnd y curStart que se descarta).
-function computeMemberStats({ workDays, completedTasks, stuckCount, period }) {
+function computeMemberStats({ workDays, completedTasks, stuckCount, period, agentTasks = [] }) {
   const { curStart, curEnd, prevStart, prevEnd } = period
   const inCur  = d => d >= curStart  && d <= curEnd
   const inPrev = d => d >= prevStart && d <= prevEnd
@@ -78,7 +81,7 @@ function computeMemberStats({ workDays, completedTasks, stuckCount, period }) {
   for (const wd of curWorkDays) {
     const idx = Math.min(3, Math.max(0, Math.floor(dateDiffDays(curStart, wd.date) / 7)))
     weeks[idx].created += wd.tasks.length
-    if (wd.tasks.length > 0) weeks[idx].days.add(wd.date)
+    if (wd.tasks.some(isPresenceTask)) weeks[idx].days.add(wd.date)
   }
   for (const t of curCompleted) {
     const idx = Math.min(3, Math.max(0, Math.floor(dateDiffDays(curStart, t.completedDate) / 7)))
@@ -109,6 +112,8 @@ function computeMemberStats({ workDays, completedTasks, stuckCount, period }) {
     stuckTasks: stuckCount,
     recentInactive,
     hasData: current.daysWorked > 0 || current.totalCompleted > 0,
+    // Lo que hicieron sus agentes de IA — aparte: nada de esto suma a las métricas de arriba.
+    agents: computeAgentStats(agentTasks, period),
   }
 }
 
@@ -134,16 +139,26 @@ async function fetchRows(workspaceId, tz, { userId = null, period = null } = {})
 
   const userFilter = userId ? { userId } : {}
 
-  const [workDays, completedTasks, stuckTasks] = await Promise.all([
+  const completedRange = {
+    gte: new Date(prevStart + 'T00:00:00' + offset),
+    lte: new Date(curEnd    + 'T23:59:59' + offset),
+  }
+
+  // Todo lo de la persona excluye las tareas que ejecutan sus agentes (HUMAN_TASK_WHERE);
+  // las de los agentes se traen aparte (agentTasks) para el bloque "Sus agentes".
+  const [workDays, completedTasks, stuckTasks, agentTasks] = await Promise.all([
     prisma.workDay.findMany({
       where: { workspaceId, date: { gte: prevStart, lte: curEnd }, ...userFilter },
       select: {
         userId: true,
         date: true,
         tasks: {
+          where: HUMAN_TASK_WHERE,
           select: {
             projectId: true,
             status: true,
+            isAgentTask: true,
+            createdByAgentId: true,
             project: { select: { name: true } },
           },
         },
@@ -152,11 +167,9 @@ async function fetchRows(workspaceId, tz, { userId = null, period = null } = {})
     prisma.task.findMany({
       where: {
         status: 'COMPLETED',
-        completedAt: {
-          gte: new Date(prevStart + 'T00:00:00' + offset),
-          lte: new Date(curEnd    + 'T23:59:59' + offset),
-        },
+        completedAt: completedRange,
         workDay: { workspaceId },
+        ...HUMAN_TASK_WHERE,
         ...userFilter,
       },
       select: {
@@ -175,9 +188,29 @@ async function fetchRows(workspaceId, tz, { userId = null, period = null } = {})
         status: { in: ['PAUSED', 'BLOCKED'] },
         updatedAt: { lt: stuckCutoff },
         workDay: { workspaceId },
+        ...HUMAN_TASK_WHERE,
         ...userFilter,
       },
       select: { userId: true },
+    }),
+    prisma.task.findMany({
+      where: {
+        status: 'COMPLETED',
+        isAgentTask: true,
+        completedAt: completedRange,
+        workDay: { workspaceId },
+        ...userFilter,
+      },
+      select: {
+        userId: true,
+        projectId: true,
+        startedAt: true,
+        completedAt: true,
+        pausedMinutes: true,
+        minutesOverride: true,
+        project: { select: { name: true } },
+        agent: { select: { id: true, label: true } },
+      },
     }),
   ])
 
@@ -189,14 +222,23 @@ async function fetchRows(workspaceId, tz, { userId = null, period = null } = {})
       ? new Date(t.completedAt).toLocaleDateString('en-CA', { timeZone: tz })
       : t.workDay.date,
   }))
+  const agentWithDate = agentTasks.map(t => ({
+    ...t,
+    completedDate: new Date(t.completedAt).toLocaleDateString('en-CA', { timeZone: tz }),
+  }))
 
-  return { workDays, completedTasks: completedWithDate, stuckTasks, period: usePeriod, curStart, prevStart, curEnd }
+  return { workDays, completedTasks: completedWithDate, stuckTasks, agentTasks: agentWithDate, period: usePeriod, curStart, prevStart, curEnd }
 }
 
 function groupByUser(rows) {
   const wdByUser   = new Map()
   const compByUser = new Map()
   const stuckByUser = new Map()
+  const agentByUser = new Map()
+  for (const t of rows.agentTasks) {
+    if (!agentByUser.has(t.userId)) agentByUser.set(t.userId, [])
+    agentByUser.get(t.userId).push(t)
+  }
   for (const wd of rows.workDays) {
     if (!wdByUser.has(wd.userId)) wdByUser.set(wd.userId, [])
     wdByUser.get(wd.userId).push(wd)
@@ -208,7 +250,7 @@ function groupByUser(rows) {
   for (const t of rows.stuckTasks) {
     stuckByUser.set(t.userId, (stuckByUser.get(t.userId) || 0) + 1)
   }
-  return { wdByUser, compByUser, stuckByUser }
+  return { wdByUser, compByUser, stuckByUser, agentByUser }
 }
 
 // Stats de un solo miembro (usado por el servicio de memoria de insights).
@@ -220,6 +262,7 @@ async function getMemberStats(userId, workspaceId, tz) {
     completedTasks: rows.completedTasks,
     stuckCount: rows.stuckTasks.length,
     period: rows.period,
+    agentTasks: rows.agentTasks,
   })
 }
 
@@ -227,8 +270,8 @@ async function getMemberStats(userId, workspaceId, tz) {
 // Devuelve Map<userId, stats>.
 async function getWorkspaceStats(workspaceId, tz, period = null) {
   const rows = await fetchRows(workspaceId, tz, { period })
-  const { wdByUser, compByUser, stuckByUser } = groupByUser(rows)
-  const userIds = new Set([...wdByUser.keys(), ...compByUser.keys(), ...stuckByUser.keys()])
+  const { wdByUser, compByUser, stuckByUser, agentByUser } = groupByUser(rows)
+  const userIds = new Set([...wdByUser.keys(), ...compByUser.keys(), ...stuckByUser.keys(), ...agentByUser.keys()])
   const result = new Map()
   for (const userId of userIds) {
     result.set(userId, computeMemberStats({
@@ -236,6 +279,7 @@ async function getWorkspaceStats(workspaceId, tz, period = null) {
       completedTasks: compByUser.get(userId) || [],
       stuckCount: stuckByUser.get(userId) || 0,
       period: rows.period,
+      agentTasks: agentByUser.get(userId) || [],
     }))
   }
   return result
@@ -258,7 +302,8 @@ async function getAttendanceStats(workspaceId, tz, period) {
   const [ws, members, workDays, leaves, logins] = await Promise.all([
     prisma.workspace.findUnique({ where: { id: workspaceId }, select: { attendanceTrackingEnabled: true, lateToleranceMins: true } }),
     prisma.workspaceMember.findMany({ where: { workspaceId, active: true }, select: { userId: true, workStartTime: true, workEndTime: true } }),
-    prisma.workDay.findMany({ where: { workspaceId, date: { gte: curStart, lte: curEnd } }, select: { userId: true, date: true } }),
+    // Solo días en que la persona estuvo: un WorkDay que abrió su agente no es presencia.
+    prisma.workDay.findMany({ where: { workspaceId, date: { gte: curStart, lte: curEnd }, ...PRESENCE_WORKDAY_WHERE }, select: { userId: true, date: true } }),
     prisma.vacationRequest.findMany({
       where: { workspaceId, status: 'approved', startDate: { lte: curEnd }, endDate: { gte: curStart } },
       select: { userId: true, startDate: true, endDate: true },
@@ -387,6 +432,7 @@ async function getHoursHistory(workspaceId, tz, { weeks = 12, granularity = 'wee
       status: 'COMPLETED',
       completedAt: { gte: new Date(startDate + 'T00:00:00' + tzOff), lte: new Date(endDate + 'T23:59:59' + tzOff) },
       workDay: { workspaceId },
+      ...HUMAN_TASK_WHERE,
     },
     select: { userId: true, startedAt: true, completedAt: true, pausedMinutes: true, minutesOverride: true },
   })

@@ -13,6 +13,7 @@ const {
   buildPerformanceSection, buildSeoSection, buildKeywordsSection,
 } = require('./sectionBuilders/webAndSeo')
 const { generateAnalysis } = require('./analysis')
+const { HUMAN_TASK_WHERE } = require('../../lib/agentTasks')
 
 /**
  * Recopila todos los datos necesarios para el informe mensual de un proyecto.
@@ -229,12 +230,15 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
       },
     }),
 
-    // Tasks COMPLETED en el mes
+    // Tasks COMPLETED en el mes — solo las de personas: el "Trabajo realizado" del
+    // informe muestra quién la hizo y cuánto tardó, y una tarea de agente de IA
+    // aparecería a nombre de su dueño con un tiempo que no trabajó.
     prisma.task.findMany({
       where: {
         projectId,
         status:      'COMPLETED',
         completedAt: { gte: monthStart, lte: monthEnd },
+        ...HUMAN_TASK_WHERE,
       },
       select: {
         id: true, description: true, completedAt: true,

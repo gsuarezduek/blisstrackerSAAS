@@ -157,13 +157,16 @@ async function spawnInstance(client, rec, scheduledFor, workDayId) {
 
 // Activa las tareas programadas del usuario cuya fecha ya llegó: las engancha al workday
 // de hoy y limpia scheduledFor (pasan a ser tareas normales del día).
-async function activateDueTasks(client, { userId, workspaceId, todayWorkDayId, today }) {
+// agentOnly: solo las tareas de agente (la lista de trabajo del agente las materializa sin
+// tocar las de la persona — ver controllers/tasks/agents.controller.js).
+async function activateDueTasks(client, { userId, workspaceId, todayWorkDayId, today, agentOnly = false }) {
   const { count } = await client.task.updateMany({
     where: {
       userId,
       scheduledFor: { not: null, lte: today },
       status:       { not: 'COMPLETED' },
       workDay:      { workspaceId },
+      ...(agentOnly ? { isAgentTask: true } : {}),
     },
     data: { workDayId: todayWorkDayId, scheduledFor: null },
   })
@@ -172,9 +175,9 @@ async function activateDueTasks(client, { userId, workspaceId, todayWorkDayId, t
 
 // Asegura que cada recurrencia activa del usuario tenga su próxima instancia futura
 // materializada (a lo sumo una por adelantado, sin backfill de ocurrencias perdidas).
-async function topUpUserRecurrences(client, { userId, workspaceId, todayWorkDayId, today }) {
+async function topUpUserRecurrences(client, { userId, workspaceId, todayWorkDayId, today, agentOnly = false }) {
   const recurrences = await client.taskRecurrence.findMany({
-    where: { userId, workspaceId, active: true },
+    where: { userId, workspaceId, active: true, ...(agentOnly ? { isAgentTask: true } : {}) },
   })
 
   for (const rec of recurrences) {

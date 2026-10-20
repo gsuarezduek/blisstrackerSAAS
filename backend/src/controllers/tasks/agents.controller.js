@@ -37,9 +37,19 @@ async function agentQueue(req, res, next) {
     const workspaceId = req.workspace.id
     const today = todayString(req.workspace.timezone)
 
+    // Solo lo del agente (agentOnly) y sin abrir un WorkDay si no hace falta: un WorkDay
+    // vacío creado acá contaría como "la persona estuvo" en Asistencia (ver
+    // lib/agentTasks.js PRESENCE_WORKDAY_WHERE). Con algo que materializar, el WorkDay
+    // queda solo con tareas de agente y no cuenta como presencia.
     try {
-      const workDay = await ensureTodayWorkDay(userId, workspaceId, today)
-      if (workDay) await materializeForUser(prisma, { userId, workspaceId, todayWorkDayId: workDay.id, today })
+      const [dueAgentTasks, agentRecurrences] = await Promise.all([
+        prisma.task.count({ where: { userId, isAgentTask: true, scheduledFor: { not: null, lte: today }, status: { not: 'COMPLETED' }, workDay: { workspaceId } } }),
+        prisma.taskRecurrence.count({ where: { userId, workspaceId, active: true, isAgentTask: true } }),
+      ])
+      if (dueAgentTasks > 0 || agentRecurrences > 0) {
+        const workDay = await ensureTodayWorkDay(userId, workspaceId, today)
+        if (workDay) await materializeForUser(prisma, { userId, workspaceId, todayWorkDayId: workDay.id, today, agentOnly: true })
+      }
     } catch (matErr) {
       console.error('[agent-queue] Error materializando tareas:', matErr.message)
     }

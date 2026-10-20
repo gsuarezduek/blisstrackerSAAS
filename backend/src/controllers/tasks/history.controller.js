@@ -8,7 +8,8 @@ async function completedHistory(req, res, next) {
     const take   = 10
     const { before } = req.query
 
-    const where = { userId, status: 'COMPLETED', workDay: { workspaceId } }
+    // Historial de lo que completó la persona; lo de sus agentes vive en la pestaña Agentes.
+    const where = { userId, status: 'COMPLETED', workDay: { workspaceId }, isAgentTask: false }
     if (before) where.workDay = { ...where.workDay, date: { lt: before } }
 
     const tasks = await prisma.task.findMany({

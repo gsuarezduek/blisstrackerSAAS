@@ -6,6 +6,7 @@ const { anthropic } = require('../lib/claude')
 const AI_TIMEOUT_MS = 20000
 const { logTokens } = require('../lib/logTokens')
 const { getSetting } = require('../lib/platformSettings')
+const { HUMAN_TASK_WHERE } = require('../lib/agentTasks')
 
 function fmtMins(m) {
   if (m < 60) return `${m}m`
@@ -141,6 +142,24 @@ function buildMemoryContext(memories) {
   return ctx
 }
 
+// Resumen de lo que hacen los agentes de IA de la persona (Task.isAgentTask). Va aparte
+// de sus tareas y con la aclaración explícita para que la IA no le sugiera hacerlas ella
+// ni lea su volumen como trabajo propio; solo las bloqueadas requieren algo de su parte.
+function buildAgentContext(agentTasks) {
+  if (!agentTasks?.length) return ''
+  const done    = agentTasks.filter(t => t.status === 'COMPLETED').length
+  const blocked = agentTasks.filter(t => t.status === 'BLOCKED')
+  const open    = agentTasks.filter(t => t.status !== 'COMPLETED' && t.status !== 'BLOCKED').length
+  let ctx = `\nSUS AGENTES DE IA (tareas que ejecuta un agente automático, NO la persona — no le sugieras hacerlas ni las cuentes como trabajo suyo): ${done} completada(s) esta semana, ${open} en la lista del agente`
+  if (blocked.length > 0) {
+    ctx += `, ${blocked.length} BLOQUEADA(S) esperando que la persona destrabe algo:\n`
+    for (const t of blocked) ctx += `  - "${t.description}"${t.blockedReason ? ` — motivo: "${t.blockedReason}"` : ''}\n`
+  } else {
+    ctx += '.\n'
+  }
+  return ctx
+}
+
 function buildContext(user, todayTasks, carryOver, completedThisWeek, roleExpectation, memory, yesterdayInsight, today, tz) {
   const now = new Date()
   const timeStr = now.toLocaleTimeString('es-AR', { timeZone: tz, hour: '2-digit', minute: '2-digit' })
@@ -252,7 +271,9 @@ async function generateInsight(userId, workspace, member) {
   const insightMemoryEnabled = member?.insightMemoryEnabled ?? true
   const taskQualityEnabled   = member?.taskQualityEnabled   ?? true
 
-  const [user, workDay, carryOver, completedThisWeek] = await Promise.all([
+  // Las tareas que ejecutan sus agentes de IA quedan fuera de las listas de la persona
+  // (no son trabajo suyo pendiente): se resumen aparte en agentTasks.
+  const [user, workDay, carryOver, completedThisWeek, agentTasks] = await Promise.all([
     prisma.user.findUnique({
       where: { id: userId },
       select: { id: true, name: true },
@@ -264,7 +285,7 @@ async function generateInsight(userId, workspace, member) {
           // Excluir tareas futuras (scheduledFor > hoy): quedan enganchadas al workDay del
           // día de creación como placeholder, pero no son trabajo pendiente de hoy — son
           // recordatorios para más adelante y no deben leerse como algo sin resolver.
-          where: { OR: [{ scheduledFor: null }, { scheduledFor: { lte: today } }] },
+          where: { OR: [{ scheduledFor: null }, { scheduledFor: { lte: today } }], ...HUMAN_TASK_WHERE },
           include: { project: true },
           orderBy: { createdAt: 'asc' },
         },
@@ -276,6 +297,7 @@ async function generateInsight(userId, workspace, member) {
         status: { in: ['PENDING', 'IN_PROGRESS', 'PAUSED', 'BLOCKED'] },
         workDay: { date: { lt: today }, workspaceId },
         OR: [{ scheduledFor: null }, { scheduledFor: { lte: today } }],
+        ...HUMAN_TASK_WHERE,
       },
       include: { project: true, workDay: { select: { date: true } } },
     }),
@@ -284,8 +306,21 @@ async function generateInsight(userId, workspace, member) {
         userId,
         status: 'COMPLETED',
         workDay: { date: { gte: weekStart, lte: today }, workspaceId },
+        ...HUMAN_TASK_WHERE,
       },
       include: { project: true },
+    }),
+    prisma.task.findMany({
+      where: {
+        userId,
+        isAgentTask: true,
+        workDay: { workspaceId },
+        OR: [
+          { status: { in: ['PENDING', 'IN_PROGRESS', 'PAUSED', 'BLOCKED'] }, OR: [{ scheduledFor: null }, { scheduledFor: { lte: today } }] },
+          { status: 'COMPLETED', workDay: { date: { gte: weekStart, lte: today }, workspaceId } },
+        ],
+      },
+      select: { status: true, description: true, blockedReason: true },
     }),
   ])
 
@@ -311,6 +346,7 @@ async function generateInsight(userId, workspace, member) {
   const userWithRole = { ...user, teamRole, extraTeamRoles }
   const todayTasks = workDay?.tasks ?? []
   const context = buildContext(userWithRole, todayTasks, carryOver, completedThisWeek, roleExpectation, memory, yesterdayInsight, today, tz)
+    + buildAgentContext(agentTasks)
 
   const msg = await anthropic.messages.create({
     model: 'claude-haiku-4-5-20251001',

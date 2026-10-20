@@ -1,6 +1,7 @@
 const prisma = require('../lib/prisma')
 const { taskMins, tzOffsetStr } = require('../lib/timeMetrics')
 const { isAdmin } = require('../lib/projectAccess')
+const { HUMAN_TASK_WHERE } = require('../lib/agentTasks')
 
 // Filtro Prisma { gte, lte } para un intervalo de días [startStr, endStr] (YYYY-MM-DD), en la TZ dada.
 function utcRange(startStr, endStr, tz) {
@@ -168,18 +169,18 @@ async function getUserProfile(req, res, next) {
       // Completadas del mes en curso (1 → hoy): se bucketea día/semana/mes en JS.
       prisma.task.findMany({
         where: {
-          userId: targetId, status: 'COMPLETED', workDay: { workspaceId },
+          userId: targetId, status: 'COMPLETED', workDay: { workspaceId }, ...HUMAN_TASK_WHERE,
           completedAt: utcRange(monthStart, todayStr, TZ),
         },
         select: { completedAt: true, minutesOverride: true, startedAt: true, pausedMinutes: true },
       }),
       prisma.task.findMany({
-        where: { userId: targetId, status: { not: 'COMPLETED' }, workDay: { workspaceId }, ...notFuture },
+        where: { userId: targetId, status: { not: 'COMPLETED' }, workDay: { workspaceId }, ...notFuture, ...HUMAN_TASK_WHERE },
         include: profileTaskInclude,
         orderBy: { createdAt: 'desc' },
       }),
       prisma.task.findMany({
-        where: { userId: targetId, status: { not: 'COMPLETED' }, workDay: { workspaceId }, scheduledFor: { gt: todayStr } },
+        where: { userId: targetId, status: { not: 'COMPLETED' }, workDay: { workspaceId }, scheduledFor: { gt: todayStr }, ...HUMAN_TASK_WHERE },
         include: profileTaskInclude,
         orderBy: { scheduledFor: 'asc' },
       }),
@@ -193,7 +194,7 @@ async function getUserProfile(req, res, next) {
       }),
       prisma.task.findMany({
         where: {
-          userId: targetId, status: { not: 'COMPLETED' }, workDay: { workspaceId }, ...notFuture,
+          userId: targetId, status: { not: 'COMPLETED' }, workDay: { workspaceId }, ...notFuture, ...HUMAN_TASK_WHERE,
           AND: [{ createdById: { not: null } }, { createdById: { not: targetId } }],
         },
         include: profileTaskInclude,
@@ -274,7 +275,7 @@ async function getUserCompleted(req, res, next) {
 
     const tasksRaw = await prisma.task.findMany({
       where: {
-        userId: targetId, status: 'COMPLETED', workDay: { workspaceId },
+        userId: targetId, status: 'COMPLETED', workDay: { workspaceId }, ...HUMAN_TASK_WHERE,
         completedAt: utcRange(startStr, endStr, TZ),
       },
       include: profileTaskInclude,

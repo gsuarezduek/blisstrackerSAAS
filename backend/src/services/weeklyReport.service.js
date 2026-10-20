@@ -5,6 +5,7 @@ const { parseAIJson } = require('../utils/parseAIJson')
 const { anthropic } = require('../lib/claude')
 const AI_TIMEOUT_MS = 30000
 const { logTokens } = require('../lib/logTokens')
+const { HUMAN_TASK_WHERE, PRESENCE_WORKDAY_WHERE } = require('../lib/agentTasks')
 
 // Devuelve el string de offset UTC para una timezone dada, p.ej. "-03:00" o "+05:30".
 // Se calcula dinámicamente para respetar el horario de verano.
@@ -99,6 +100,7 @@ async function getWeeklyData(userId, workspace) {
           lte: new Date(currentWeek.to   + 'T23:59:59' + offset),
         },
         workDay: { workspaceId },
+        ...HUMAN_TASK_WHERE, // el resumen semanal es del trabajo de la persona, no de sus agentes de IA
       },
       include: {
         project:  { select: { id: true, name: true } },
@@ -112,6 +114,7 @@ async function getWeeklyData(userId, workspace) {
         userId,
         status: { in: ['PENDING', 'PAUSED', 'BLOCKED'] },
         workDay: { workspaceId },
+        ...HUMAN_TASK_WHERE,
       },
       include: { project: { select: { id: true, name: true } } },
       orderBy: { createdAt: 'asc' },
@@ -128,6 +131,7 @@ async function getWeeklyData(userId, workspace) {
           lte: new Date(prevWeek.to   + 'T23:59:59' + offset),
         },
         workDay: { workspaceId },
+        ...HUMAN_TASK_WHERE,
       },
       select: {
         id: true, minutesOverride: true, pausedMinutes: true, startedAt: true, completedAt: true,
@@ -140,6 +144,7 @@ async function getWeeklyData(userId, workspace) {
         userId,
         workspaceId,
         date: { gte: currentWeek.from, lte: currentWeek.to },
+        ...PRESENCE_WORKDAY_WHERE, // un WorkDay que abrió su agente no es un día trabajado
       },
       select: { date: true, startedAt: true, endedAt: true },
     }),

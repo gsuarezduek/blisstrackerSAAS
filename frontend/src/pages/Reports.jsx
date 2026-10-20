@@ -8,7 +8,7 @@ import EditDurationModal from '../components/EditDurationModal'
 import RoleBadge from '../components/RoleBadge'
 import api from '../api/client'
 import { fmtMins } from '../utils/format'
-import { ChartColumn, Pencil, Search, X } from 'lucide-react'
+import { Bot, ChartColumn, Pencil, Search, X } from 'lucide-react'
 import { Icon } from '../components/ui/Icon'
 
 function fmtTaskDate(iso) {
@@ -144,6 +144,11 @@ function ByProjectView({ data, sortBy, search, statusFilter, loading, onEditTask
               <div className="flex items-center gap-2 min-w-0">
                 <span className="font-medium text-gray-800 dark:text-gray-200 truncate">{d.project.name}</span>
                 <span className="text-xs bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 rounded px-2 py-0.5 shrink-0">{d.taskCount} tareas</span>
+                {d.agentTasks > 0 && (
+                  <span className="inline-flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400 shrink-0" title="Tareas completadas por agentes de IA: no suman a las horas de personas">
+                    <Icon as={Bot} size={12} />{d.agentTasks}
+                  </span>
+                )}
                 {statusBadge && (status === 'over' || status === 'near' || status === 'noActivity') && (
                   <span className={`hidden md:inline text-xs rounded px-2 py-0.5 shrink-0 border ${statusBadge.cls}`}>{statusBadge.label}</span>
                 )}

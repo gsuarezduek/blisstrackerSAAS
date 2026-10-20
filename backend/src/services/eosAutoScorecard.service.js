@@ -20,6 +20,7 @@ const { monthBounds, prevMonthStr } = require('../lib/monthUtils')
 const { EOS_AUTO_METRICS } = require('../lib/eosAutoMetricCatalog')
 const { computeObjectives } = require('./marketingObjectives.service')
 const { inArrivalWindow, laborableDays } = require('../lib/attendance')
+const { HUMAN_TASK_WHERE } = require('../lib/agentTasks')
 
 // Filtro de informes "generados" (no placeholders vacíos) — espejo de GENERATED_WHERE.
 const GENERATED_REPORT_OR = [
@@ -99,6 +100,7 @@ async function occupancyByBucket(workspaceId, tz, offset, rangeStart, rangeEnd, 
         status: 'COMPLETED',
         completedAt: { gte: new Date(rangeStart + 'T00:00:00' + offset), lte: new Date(rangeEnd + 'T23:59:59' + offset) },
         workDay: { workspaceId },
+        ...HUMAN_TASK_WHERE, // ocupación = horas de personas, no de sus agentes de IA
       },
       select: { userId: true, completedAt: true, pausedMinutes: true, minutesOverride: true, startedAt: true },
     }),
@@ -244,6 +246,7 @@ async function computeTareasCompletadasWeekly(workspaceId, tz, offset, rangeStar
       status: 'COMPLETED',
       completedAt: { gte: new Date(rangeStart + 'T00:00:00' + offset), lte: new Date(rangeEnd + 'T23:59:59' + offset) },
       workDay: { workspaceId },
+      ...HUMAN_TASK_WHERE, // ranking de personas: lo que completan sus agentes no suma
     },
     select: { userId: true, completedAt: true },
   })

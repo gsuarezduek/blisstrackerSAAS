@@ -4,7 +4,7 @@ import LoadingSpinner from './LoadingSpinner'
 import RoleBadge from './RoleBadge'
 import { linkify } from '../utils/linkify'
 import { fmtMins } from '../utils/format'
-import { ChartColumn, Pencil } from 'lucide-react'
+import { Bot, ChartColumn, Pencil } from 'lucide-react'
 import { Icon } from './ui/Icon'
 
 // Misma clasificación de estado que Reports.jsx (deriveProjectStatus), acá aplicada
@@ -411,6 +411,11 @@ export default function ProjectReports({ projectId }) {
                   <span className="text-xs bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 rounded px-2 py-0.5 shrink-0">
                     {m.taskCount} tarea{m.taskCount !== 1 ? 's' : ''}
                   </span>
+                {m.agentTasks > 0 && (
+                  <span className="inline-flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400 shrink-0" title="Tareas completadas por agentes de IA: no suman a las horas de personas">
+                    <Icon as={Bot} size={12} />{m.agentTasks}
+                  </span>
+                )}
                   {statusBadge && (
                     <span className={`hidden md:inline text-xs rounded px-2 py-0.5 shrink-0 border ${statusBadge.cls}`}>{statusBadge.label}</span>
                   )}

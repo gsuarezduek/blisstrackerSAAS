@@ -1,6 +1,7 @@
 const prisma = require('../lib/prisma')
 const { getProductivityPeriod, taskMins, buildCompletedAtWhere } = require('../lib/timeMetrics')
 const { DEFAULT_TZ } = require('../utils/dates')
+const { HUMAN_TASK_WHERE } = require('../lib/agentTasks')
 const {
   getWorkspaceStats, getAttendanceStats, getHoursHistory, computeBenchmark, memberStatus, median,
 } = require('../services/productivityStats.service')
@@ -32,16 +33,30 @@ async function byProject(req, res, next) {
     if (!from && !to) ({ from, to } = defaultDateRange(tz))
     const completedAtRange = buildCompletedAtWhere(from, to, tz)
 
-    const tasks = await prisma.task.findMany({
-      where: {
-        status: 'COMPLETED',
-        startedAt: { not: null },
-        completedAt: { not: null, ...completedAtRange },
-        workDay: { workspaceId },
-      },
-      select: taskSelect,
-      orderBy: { completedAt: 'desc' },
-    })
+    // Horas usadas vs contratadas = horas de PERSONAS. Lo que hicieron los agentes de IA
+    // se informa aparte (agentTasks/agentMinutes por proyecto), nunca suma a totalMinutes.
+    const [tasks, agentTasks] = await Promise.all([
+      prisma.task.findMany({
+        where: {
+          status: 'COMPLETED',
+          startedAt: { not: null },
+          completedAt: { not: null, ...completedAtRange },
+          workDay: { workspaceId },
+          ...HUMAN_TASK_WHERE,
+        },
+        select: taskSelect,
+        orderBy: { completedAt: 'desc' },
+      }),
+      prisma.task.findMany({
+        where: {
+          status: 'COMPLETED',
+          isAgentTask: true,
+          completedAt: { not: null, ...completedAtRange },
+          workDay: { workspaceId },
+        },
+        select: { startedAt: true, completedAt: true, pausedMinutes: true, minutesOverride: true, project: { select: { id: true, name: true, hoursEnabled: true, monthlyHours: true } } },
+      }),
+    ])
 
     const map = {}
     for (const t of tasks) {
@@ -76,7 +91,18 @@ async function byProject(req, res, next) {
       map[project.id] = { project, totalMinutes: 0, taskCount: 0, byUser: {} }
     }
 
+    // Trabajo de agentes por proyecto (un proyecto donde solo trabajaron agentes también
+    // aparece, con 0 horas de personas).
+    for (const t of agentTasks) {
+      const key = t.project.id
+      if (!map[key]) map[key] = { project: t.project, totalMinutes: 0, taskCount: 0, byUser: {} }
+      map[key].agentTasks   = (map[key].agentTasks || 0) + 1
+      map[key].agentMinutes = (map[key].agentMinutes || 0) + taskMins(t)
+    }
+
     const result = Object.values(map).map(({ byUser, ...rest }) => ({
+      agentTasks: 0,
+      agentMinutes: 0,
       ...rest,
       byUser: Object.values(byUser),
     }))
@@ -98,6 +124,7 @@ async function byUser(req, res, next) {
       startedAt: { not: null },
       completedAt: { not: null, ...completedAtRange },
       workDay: { workspaceId },
+      ...HUMAN_TASK_WHERE,
     }
     if (userId) where.userId = Number(userId)
 
@@ -133,6 +160,7 @@ async function mine(req, res, next) {
         startedAt: { not: null },
         completedAt: { not: null, ...completedAtRange },
         workDay: { workspaceId },
+        ...HUMAN_TASK_WHERE,
       },
       select: {
         id: true, description: true, startedAt: true,

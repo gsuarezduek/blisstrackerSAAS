@@ -258,7 +258,8 @@ export default function OverviewTab({ data, encodedId, authUser, onOpenComments,
   const members = (project.members ?? []).map(pm => pm.user)
   const links = project.linksEnabled !== false ? (project.links ?? []) : []
   const services = (project.services ?? []).map(ps => ps.service)
-  const openMins = rows.reduce((sum, r) => sum + activeMinutes(r.task), 0)
+  // Solo tareas de personas: las horas del proyecto no cuentan el tiempo de los agentes de IA.
+  const openMins = rows.filter(r => !r.task.isAgentTask).reduce((sum, r) => sum + activeMinutes(r.task), 0)
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
