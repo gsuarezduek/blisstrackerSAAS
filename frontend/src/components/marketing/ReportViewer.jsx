@@ -735,7 +735,13 @@ export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, o
         <SectionCard title="Trabajo realizado en el mes" sectionKey="tasks">
           <ul className="space-y-2">
             {s.tasks.map((task) => {
-              const mins = task.minutesOverride != null
+              // Tarea ejecutada por un agente de IA: se muestra como "Agente de <dueño>" y
+              // sin duración — su tiempo de ejecución no son horas trabajadas por una persona.
+              const byAgent = !!task.isAgentTask
+              const who = byAgent
+                ? `Agente de ${task.user?.name?.split(' ')[0] ?? 'IA'}`
+                : task.user?.name
+              const mins = byAgent ? null : task.minutesOverride != null
                 ? task.minutesOverride
                 : (task.startedAt && task.completedAt)
                   ? Math.max(0, Math.round((new Date(task.completedAt) - new Date(task.startedAt)) / 60000) - (task.pausedMinutes || 0))
@@ -751,8 +757,8 @@ export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, o
                     {duration && (
                       <span className="text-xs text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 rounded">{duration}</span>
                     )}
-                    {task.user?.name && (
-                      <span className="text-xs text-gray-400 dark:text-gray-500">{task.user.name}</span>
+                    {who && (
+                      <span className="text-xs text-gray-400 dark:text-gray-500">{who}</span>
                     )}
                   </div>
                 </li>
