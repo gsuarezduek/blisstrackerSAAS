@@ -27,6 +27,16 @@ const planSchema = z.object({
 })
 
 const tools = [
+  // ── Identidad ────────────────────────────────────────────────────────────
+  // (bliss_guide, la otra tool "de arranque", no pega a la API: se registra
+  // aparte en server.js a partir de mcp/guide.js)
+  {
+    name: 'whoami',
+    description: 'Quién es la persona dueña del token (nombre, email, rol de equipo), si es admin/owner del workspace y a qué módulos tiene acceso (moduleAccess: marketing, contenido, ventas, rrhh, eos, gamification). Llamala al empezar para saber qué tools vas a poder usar.',
+    inputSchema: {},
+    request: () => ({ method: 'GET', path: '/auth/me' }),
+  },
+
   // ── Proyectos ────────────────────────────────────────────────────────────
   {
     name: 'list_projects',

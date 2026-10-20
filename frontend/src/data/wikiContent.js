@@ -7,7 +7,7 @@
 //     id,                 // único en todo el Wiki (usado en la URL ?article=<id>)
 //     title,
 //     audience,           // 'todos' | 'admin'
-//     module,             // null | 'marketing' | 'eos'  (badge informativo)
+//     module,             // null | 'marketing' | 'eos' | 'contenido' | 'calendario' | 'ventas' | 'finanzas' | 'mcp'  (badge informativo)
 //     summary,            // una línea (buscador + lista)
 //     body,               // markdown (ver components/docs/wikiMarkdown.jsx)
 //     tips?,              // string[]  → callout "Para empezar"
@@ -17,7 +17,7 @@
 
 // Fecha de última actualización del Wiki (YYYY-MM-DD). Actualizar al cambiar el contenido.
 // Se muestra al inicio del Wiki como referencia para el equipo.
-export const WIKI_LAST_UPDATED = '2026-08-16'
+export const WIKI_LAST_UPDATED = '2026-10-19'
 
 export const WIKI_CATEGORIES = [
   // ── Primeros pasos ────────────────────────────────────────────────────────
@@ -386,6 +386,58 @@ Cada brief muestra su progreso (X/Y campos) y un estado: Sin empezar / En progre
           'Arrancá siempre por el brief de Marca: el resto asume que ya está completo.',
         ],
         related: ['marketing-intro', 'contenido-intro', 'preferencias'],
+      },
+      {
+        id: 'ficha-proyecto-resumen',
+        title: 'Ficha del proyecto: Resumen, Reuniones y Nube',
+        audience: 'todos',
+        module: null,
+        summary: 'La pestaña Resumen responde "¿cómo está esta cuenta?"; Reuniones registra cada encuentro con tiempo y to-dos; Nube guarda los archivos.',
+        body: `La ficha del proyecto se abre en la pestaña **Resumen**. Las demás pestañas son Tareas, Reuniones, Nube, Briefs, Links y accesos, Horas y Ajustes.
+
+## Resumen
+
+Responde de un vistazo **cómo está la cuenta**: situación de la cuenta (se guarda sola), lo que **necesita atención** (tareas bloqueadas y su motivo), quién está **trabajando ahora**, la última y la próxima reunión, horas del mes contra las contratadas, el estado del contenido, links, equipo y servicios. Cada bloque te lleva a su pestaña.
+
+## Reuniones
+
+Cada reunión registra fecha, título opcional, tipo (**equipo** o **cliente**), notas y to-dos con responsable.
+
+- Antes de empezar, sumá a los **participantes** (quien crea la reunión queda agregado solo).
+- Al **Iniciar**, cada participante pasa a tener una tarea "en reunión" en curso: el tiempo cuenta para el proyecto y para sus horas. Ningún participante puede tener otra tarea en curso en ese momento.
+- Al **Finalizar**, esas tareas se completan y los **to-dos con responsable se envían solos a su dashboard** como tareas del proyecto. Tildar la tarea tilda el to-do.
+
+## Nube
+
+El repositorio de archivos del proyecto, con carpetas. Los adjuntos de las tareas se guardan acá solos, en \`Tareas / <Mes> / <tarea>\`. Podés compartir una carpeta con un link público.`,
+        tips: [
+          'Usá la Situación de la cuenta como "estado en dos líneas": cualquiera del workspace la puede actualizar.',
+          'Cargá los to-dos de la reunión con responsable: al finalizarla llegan solos al dashboard de cada uno.',
+        ],
+        related: ['ficha-proyecto', 'proyectos-privados', 'calendario'],
+      },
+      {
+        id: 'proyectos-privados',
+        title: 'Proyectos privados',
+        audience: 'todos',
+        module: null,
+        summary: 'Un proyecto privado solo muestra su contenido a su equipo y a los admins; el resto del workspace ve únicamente el nombre.',
+        body: `Por defecto, cualquier persona del workspace puede ver cualquier proyecto y crear tareas en él. **El equipo es una etiqueta, no una barrera.**
+
+Un proyecto **privado** es la excepción: solo su equipo y los admins ven la ficha completa (tareas, situación, links, accesos, briefs, reuniones, archivos, marketing, contenido y el canal de chat). El resto del workspace ve solo el **nombre** del proyecto, con un candado.
+
+## Cómo se marca
+
+En la ficha → **Ajustes** → "Proyecto privado". Lo puede hacer cualquier integrante del equipo o un admin.
+
+Si alguien que no es del equipo tiene tareas abiertas en el proyecto, no se puede marcar como privado hasta resolverlas (reasignarlas o completarlas).
+
+## Qué cambia
+
+- En **Actividad**, quien no tiene acceso ve "está trabajando en Proyecto X" sin el detalle de la tarea.
+- Para crear tareas o @mencionar a alguien en el proyecto hay que ser del equipo.
+- Los agentes de IA conectados por MCP respetan las mismas reglas.`,
+        related: ['modelo-acceso-proyectos', 'ficha-proyecto-resumen'],
       },
     ],
   },
@@ -1066,6 +1118,229 @@ Apenas el cliente decide, llega una **notificación** en la campanita (filtro �
           'Desactivar un contacto le corta el acceso al instante, aunque haya iniciado sesión hace poco.',
         ],
         related: ['contenido-intro', 'notificaciones'],
+      },
+    ],
+  },
+  // ── Equipo y comunicación ─────────────────────────────────────────────────
+  {
+    id: 'comunicacion',
+    label: 'Chat y calendario',
+    icon: '💬',
+    articles: [
+      {
+        id: 'chat',
+        title: 'Chat interno',
+        audience: 'todos',
+        module: null,
+        summary: 'Un chat flotante con #general, un canal por proyecto y canales propios, con menciones, respuestas, reacciones y mensajes fijados.',
+        body: `El chat no es una página: es el **ícono flotante** abajo a la derecha. Se abre como panel sin salir de lo que estás haciendo.
+
+## Canales
+
+- **#general** — uno por workspace.
+- **Un canal por proyecto** — se crea solo con cada proyecto y lo sigue (si el proyecto se archiva, el canal también).
+- **Canales propios** — los crean los admins.
+
+Cualquier persona del workspace participa en cualquier canal, salvo los **privados** (candado): esos los ven solo los admins, o el equipo del proyecto si el proyecto es privado.
+
+## Menciones
+
+- \`@nombre\` avisa a una persona.
+- \`@equipo\` avisa solo al equipo del proyecto del canal.
+- \`@everyone\` avisa a todos los que ven el canal.
+- **Responder** a un mensaje cuenta como mencionar a su autor.
+
+También podés reaccionar con emoji, fijar mensajes importantes (cualquiera puede) y mandar GIFs.`,
+        tips: [
+          'Usá el canal del proyecto para todo lo que es de esa cuenta: queda el historial en un solo lugar.',
+          'Los canales con menciones sin leer suben arriba en el selector.',
+        ],
+        related: ['notificaciones', 'proyectos-privados'],
+      },
+      {
+        id: 'calendario',
+        title: 'Calendario y reuniones agendadas',
+        audience: 'todos',
+        module: 'calendario',
+        summary: 'Disponibilidad del equipo, tareas con horario y reuniones con invitación, sincronizable con Google Calendar.',
+        body: `En **/calendario** ves la disponibilidad del equipo en tres vistas: **Mi semana**, **Equipo** y **Mes**.
+
+## Qué bloquea una franja
+
+- Tu **horario laboral** (lo carga el admin en Equipo).
+- **Tareas con hora**: al crear una tarea podés darle hora y duración opcionales.
+- **Reuniones agendadas**.
+
+## Reuniones
+
+Al crear una reunión elegís proyecto (obligatorio), fecha, hora, duración, invitados, link de Meet y notas. Cada invitado **acepta o rechaza**. Al aceptar, la reunión aparece como **tarea en su dashboard** para ese día y horario. Si la reunión es recurrente, aceptar acepta toda la serie.
+
+Iniciar esa tarea arranca la reunión real del proyecto para todos los participantes y te lleva directo a sus notas.
+
+## Google Calendar
+
+Desde el calendario podés conectar tu cuenta de Google para que tus reuniones de BlissTracker aparezcan también allá.`,
+        related: ['ficha-proyecto-resumen', 'puntualidad-horarios'],
+      },
+    ],
+  },
+
+  // ── Ventas y Finanzas ─────────────────────────────────────────────────────
+  {
+    id: 'ventas-finanzas',
+    label: 'Ventas y Finanzas',
+    icon: '💼',
+    articles: [
+      {
+        id: 'ventas-crm',
+        title: 'Ventas (CRM)',
+        audience: 'todos',
+        module: 'ventas',
+        summary: 'Empresas, contactos y leads con pipeline, próximas acciones, investigación con IA y propuestas comerciales.',
+        body: `El módulo **Ventas** es el CRM de la agencia. Acceden los admins y los roles que se habiliten desde Preferencias → Módulos.
+
+## Las piezas
+
+- **Empresa** y sus **contactos**.
+- **Lead** — la oportunidad: empresa + contacto principal + responsable comercial.
+- **Timeline** — notas manuales y eventos automáticos (cambios de estado, de responsable, propuestas…).
+
+## Pipeline
+
+\`prospecto → contactado → reunión → propuesta → ganado / perdido\`. Marcar un lead como **perdido** pide el motivo. Un lead se puede **archivar** para sacarlo del pipeline sin borrarlo.
+
+## Próximas acciones
+
+Cada lead puede tener varias. Si una acción tiene fecha, se crea sola una **tarea futura** para el responsable; completar la tarea resuelve la acción y viceversa.
+
+## IA
+
+- **Investigación de la empresa** (lee su sitio web) y un **informe de diagnóstico** listo para mandar al cliente.
+- **Propuestas** redactadas por IA a partir de uno o más planes de precio. **Los precios los ponés vos**: la IA nunca los inventa. Una propuesta confirmada tiene link público para el cliente.
+
+## Convertir en cliente
+
+Un lead en propuesta o ganado se **convierte en proyecto** con un click: queda marcado como ganado y vinculado al proyecto nuevo.`,
+        related: ['agentes-ia-capacidades', 'tareas-futuras-recurrentes'],
+      },
+      {
+        id: 'finanzas',
+        title: 'Finanzas',
+        audience: 'admin',
+        module: 'finanzas',
+        summary: 'Ingresos, egresos, saldos, cuenta corriente de clientes, facturación electrónica AFIP/ARCA y un tablero de pendientes.',
+        body: `**Finanzas** es la administración interna de la agencia. Acceden los admins y los roles habilitados; la **Configuración** (cuentas, categorías, items, impuestos) es solo para admins. Es un módulo en etapa de prueba: lo habilita el equipo de BlissTracker por workspace.
+
+## Pestañas
+
+- **Ingresos / Egresos** — movimientos con filtros, impuestos y cheques.
+- **Saldos** — por cuenta y moneda, con acreditación de cheques y movimientos de fondos.
+- **Resumen** — la foto del período.
+- **Clientes** — cuenta corriente de cada cliente: facturas, cobros y próximas acciones.
+- **Pendientes** — tablero de cosas por hacer (reglas automáticas, extras y sugerencias con IA). Cada pendiente se puede asignar a un responsable y llega a su dashboard como tarea.
+
+## Facturación electrónica
+
+Desde Clientes se emiten **facturas electrónicas AFIP/ARCA**, con PDF oficial y QR, y también **notas de crédito y débito**. El padrón de AFIP completa los datos del cliente a partir del CUIT. "Reconciliar" compara lo emitido con lo que registró ARCA. Si faltan datos para el PDF, el formulario te avisa antes de emitir.`,
+        tips: [
+          'Completá primero la Configuración (cuentas, categorías e impuestos): el resto de las pestañas depende de ella.',
+          'Elegí en Preferencias el proyecto donde se crean las tareas de Pendientes.',
+        ],
+        related: ['preferencias', 'facturacion'],
+      },
+    ],
+  },
+
+  // ── Agentes IA (MCP) ──────────────────────────────────────────────────────
+  {
+    id: 'agentes-ia',
+    label: 'Agentes IA (MCP)',
+    icon: '🔌',
+    articles: [
+      {
+        id: 'agentes-ia-conectar',
+        title: 'Conectar un agente de IA (Grok u otro)',
+        audience: 'todos',
+        module: 'mcp',
+        summary: 'Generá tu token en Preferencias → Agentes IA y pegalo en tu asistente para que trabaje en BlissTracker en tu nombre.',
+        body: `BlissTracker tiene un **servidor MCP** (Model Context Protocol), el estándar que usan los asistentes de IA para conectarse a otras herramientas. Con él, un agente como **Grok** puede leer y cargar información en BlissTracker por vos: ver tu jornada, crear tareas, consultar métricas de marketing, cargar leads, etc.
+
+## Paso a paso
+
+1. Andá a **Preferencias → Agentes IA**.
+2. Copiá la **URL del servidor MCP**.
+3. Tocá **Generar token** (podés ponerle un nombre, ej. "Grok personal"). El token se muestra **una sola vez**: copialo en ese momento.
+4. En tu asistente, agregá un conector remoto de tipo MCP. En Grok: \`grok.com/connectors\` → **Custom**. Pegá la URL y, como autenticación, el token como **Bearer**.
+
+## Qué lee el agente al conectarse
+
+Apenas se conecta, el servidor le manda instrucciones de uso y le pide que lea dos cosas antes de actuar:
+
+- **\`bliss_guide\`** — la guía completa: qué puede y qué no puede hacer, las reglas del negocio y los flujos recomendados.
+- **\`whoami\`** — en nombre de quién actúa, si es admin y a qué módulos tiene acceso.
+
+Así el agente sabe sus límites desde el primer mensaje, sin que tengas que explicarle nada.`,
+        tips: [
+          'Si el agente no parece conocer las reglas, pedile: "leé bliss_guide y whoami antes de seguir".',
+          'Un token por agente o dispositivo: así podés revocar uno sin cortar los demás.',
+        ],
+        related: ['agentes-ia-capacidades', 'agentes-ia-seguridad'],
+      },
+      {
+        id: 'agentes-ia-capacidades',
+        title: 'Qué puede (y qué no puede) hacer un agente',
+        audience: 'todos',
+        module: 'mcp',
+        summary: 'Proyectos, tareas, equipo, marketing, SEO, contenido y ventas sí; chat, calendario, finanzas, RRHH, EOS y archivos todavía no.',
+        body: `El agente usa **tus mismos permisos**: puede hacer lo que vos podés hacer en la app, nunca más. Si no tenés acceso a un módulo, el agente tampoco.
+
+## Lo que sí puede hacer
+
+- **Proyectos** — listar proyectos y su equipo; consultar el catálogo de servicios. Los admins pueden cambiar los servicios contratados de un proyecto.
+- **Tareas** — ver la jornada de hoy; crear tareas (también futuras y recurrentes, y asignadas a otra persona); iniciar, pausar, reanudar, completar, bloquear y desbloquear; corregir el tiempo de una tarea ya completada.
+- **Equipo** — listar el equipo. Los admins además: asistencia y tardanzas de una persona, historial detallado de tareas y ver la jornada de otra persona (solo lectura).
+- **Marketing** — salud del proyecto, GA4, Search Console, Domain Rating, keywords, oportunidades SEO, las 5 redes, Meta y Google Ads, competidores, objetivos, informes y auditorías GEO. Puede agregar keywords y competidores, correr una auditoría GEO, regenerar un informe y refrescar todas las fuentes.
+- **SEO avanzado** — Canibalización, Content Brief, Auditoría On-Page y Content Gap: correr, listar, ver y borrar.
+- **Contenido** — ver, crear, editar y borrar piezas; ver historial y comentarios; comentar; enviar al dashboard del responsable; pedir aprobación al cliente.
+- **Ventas** — dashboard y métricas; empresas, contactos y leads (crear, editar, borrar); cambiar estado y responsable; archivar; convertir a proyecto; próximas acciones y notas; investigación con IA, informe de diagnóstico y propuestas.
+
+## Lo que todavía no puede hacer
+
+- Chat, notificaciones, Calendario y reuniones, Briefs, Nube/archivos, links y accesos de proyectos.
+- Finanzas, RRHH (vacaciones, legajos, beneficios), EOS, Gamification y WhatsApp.
+- Administración: invitar o desactivar personas, roles, preferencias, módulos, facturación.
+- En tareas: borrarlas, editar el texto, destacarlas, moverlas al backlog, comentarlas o adjuntar archivos.
+- **Subir archivos o imágenes** de cualquier tipo, ni conectar integraciones (Google, Meta, TikTok, LinkedIn): esas cosas necesitan el navegador.
+
+## Acciones que el agente confirma antes
+
+Las que tienen efecto hacia afuera o consumen IA: mandarle algo al cliente (pedir aprobación, comentarios visibles en el portal, confirmar una propuesta), borrar, convertir un lead, y correr auditorías, informes, investigaciones o propuestas con IA, que gastan el presupuesto de tokens del workspace.`,
+        related: ['agentes-ia-conectar', 'agentes-ia-seguridad', 'como-usa-la-ia'],
+      },
+      {
+        id: 'agentes-ia-seguridad',
+        title: 'Seguridad y tokens de agentes',
+        audience: 'todos',
+        module: 'mcp',
+        summary: 'Cada token es tuyo y hereda tus permisos; todo queda a tu nombre; podés revocarlo cuando quieras.',
+        body: `## Cómo funciona el token
+
+- Cada token pertenece a **una persona en un workspace**. Todo lo que el agente hace queda registrado **a tu nombre**, como si lo hubieras hecho vos desde la app.
+- El token **hereda tus permisos reales**: rol, módulos, proyectos privados. Si te sacan acceso a algo, el agente lo pierde en el mismo momento.
+- BlissTracker no guarda el token en claro: por eso se muestra una sola vez. Si lo perdés, generá otro.
+
+## Revocar
+
+En **Preferencias → Agentes IA** ves tus tokens con su último uso y un botón **Revocar**. Revocar corta el acceso al instante.
+
+Cuando un admin **desactiva a una persona**, todos sus tokens se revocan solos. Si la reactivan, tiene que generar uno nuevo.
+
+## Buenas prácticas
+
+- No compartas el token: es equivalente a tu sesión.
+- Revisá lo que el agente propone antes de confirmar acciones que llegan al cliente.
+- El equipo de BlissTracker puede ver qué agentes están conectados en cada workspace (sin ver los tokens).`,
+        related: ['agentes-ia-conectar', 'agentes-ia-capacidades', 'equipo'],
       },
     ],
   },

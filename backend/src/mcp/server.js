@@ -2,6 +2,8 @@ const { McpServer } = require('@modelcontextprotocol/sdk/server/mcp.js')
 const { StreamableHTTPServerTransport } = require('@modelcontextprotocol/sdk/server/streamableHttp.js')
 const { tools } = require('./toolCatalog')
 const { callApi } = require('./apiBridge')
+const { INSTRUCTIONS, buildGuide, GUIDE_TOPICS } = require('./guide')
+const { z } = require('zod')
 
 // Quita keys undefined antes de mandarlas como query/body — evita que axios/Express
 // terminen viendo "undefined" literal para args opcionales que el cliente no mandó.
@@ -15,7 +17,18 @@ function clean(obj) {
 // ESTA identidad, no sobre una global: dos requests concurrentes de dos
 // personas (o dos workspaces) nunca se pisan.
 function buildServer(identity) {
-  const server = new McpServer({ name: 'blisstracker-mcp', version: '1.0.0' })
+  // `instructions` viaja en el handshake initialize: el cliente se lo pasa al
+  // modelo apenas se conecta, sin que tenga que llamar nada (ver guide.js).
+  const server = new McpServer({ name: 'blisstracker-mcp', version: '1.0.0' }, { instructions: INSTRUCTIONS })
+
+  server.registerTool(
+    'bliss_guide',
+    {
+      description: 'LEER PRIMERO. Guía de uso de BlissTracker para agentes: qué podés y qué no podés hacer, permisos, reglas del negocio, flujos recomendados y qué módulos no están disponibles por MCP. Sin topic devuelve la guía completa.',
+      inputSchema: { topic: z.enum(GUIDE_TOPICS).optional().describe('Una sección puntual; omitido = guía completa') },
+    },
+    async ({ topic } = {}) => ({ content: [{ type: 'text', text: buildGuide(tools, topic) }] })
+  )
 
   for (const tool of tools) {
     server.registerTool(
@@ -53,4 +66,4 @@ async function handleMcpRequest(req, res) {
   await transport.handleRequest(req, res, req.body)
 }
 
-module.exports = { handleMcpRequest }
+module.exports = { handleMcpRequest, buildServer }
