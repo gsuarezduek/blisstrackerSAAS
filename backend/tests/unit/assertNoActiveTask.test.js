@@ -46,7 +46,7 @@ describe('assertNoActiveTask', () => {
     prisma.task.findFirst.mockResolvedValue(null)
     await assertNoActiveTask(42, WORKSPACE_ID)
     expect(prisma.task.findFirst).toHaveBeenCalledWith({
-      where: { userId: 42, status: 'IN_PROGRESS' },
+      where: { userId: 42, status: 'IN_PROGRESS', isAgentTask: false },
       include: { workDay: { select: { workspaceId: true } } },
     })
   })

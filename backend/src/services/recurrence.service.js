@@ -133,6 +133,10 @@ async function spawnInstance(client, rec, scheduledFor, workDayId) {
         recurrenceId: rec.id,
         scheduledTime:         rec.scheduledTime ?? null,
         scheduledDurationMins: rec.scheduledDurationMins ?? null,
+        // Agentes IA: la serie de un agente genera instancias de agente.
+        isAgentTask:           rec.isAgentTask ?? false,
+        agentId:               rec.agentId ?? null,
+        createdByAgentId:      rec.createdByAgentId ?? null,
       },
     })
   } catch (err) {

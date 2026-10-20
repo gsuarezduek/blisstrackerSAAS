@@ -337,16 +337,37 @@ const tools = [
         month: z.number().int().min(1).max(12).optional().describe('Solo annual: mes (default: el mes actual)'),
         endDate: z.string().optional().describe('YYYY-MM-DD — última fecha en que se genera una ocurrencia. Omitido = nunca termina.'),
       }).optional().describe('Si se manda, crea una serie recurrente en vez de una tarea normal'),
+      executor: z.enum(['agent', 'user']).optional().describe('Quién la ejecuta: "agent" = la hacés vos (el agente) — va a tu lista de trabajo y no ocupa el lugar de "1 en curso" de la persona; "user" (default) = la hace la persona. "agent" no se combina con targetUserId.'),
     },
-    request: ({ projectId, description, targetUserId, scheduledFor, recurrence }) => ({
+    request: ({ projectId, description, targetUserId, scheduledFor, recurrence, executor }) => ({
       method: 'POST',
       path: '/tasks',
-      body: { projectId, description, targetUserId, scheduledFor, recurrence },
+      body: { projectId, description, targetUserId, scheduledFor, recurrence, executor },
+    }),
+  },
+  {
+    name: 'tasks_agent_queue',
+    description: 'Tu lista de trabajo como agente: tareas de agente abiertas (pendientes/en curso/pausadas/bloqueadas) — las asignadas a vos y las que la persona delegó a "cualquiera de sus agentes". Revisala al empezar a trabajar.',
+    inputSchema: {},
+    request: () => ({ method: 'GET', path: '/tasks/agent-queue' }),
+  },
+  {
+    name: 'task_set_executor',
+    description: 'Cambia quién ejecuta una tarea propia que NO esté en curso ni completada: "agent" = te la tomás vos (pasa a tu lista de trabajo), "user" = se la devolvés a la persona. scope "series" en una tarea recurrente aplica a toda la serie.',
+    inputSchema: {
+      taskId: z.number().int(),
+      executor: z.enum(['agent', 'user']),
+      scope: z.enum(['this', 'series']).optional().describe('Solo tareas recurrentes: "series" = esta y toda la serie'),
+    },
+    request: ({ taskId, executor, scope }) => ({
+      method: 'PATCH', path: `/tasks/${taskId}/agent`,
+      query: { scope: scope === 'series' ? 'series' : undefined },
+      body: { executor },
     }),
   },
   {
     name: 'task_start',
-    description: 'Inicia una tarea (pasa a IN_PROGRESS). Falla si el usuario ya tiene otra tarea en curso.',
+    description: 'Inicia una tarea (pasa a IN_PROGRESS). En una tarea humana falla si la persona ya tiene otra en curso; las tareas de agente no tienen ese límite.',
     inputSchema: { taskId: z.number().int() },
     request: ({ taskId }) => ({ method: 'PATCH', path: `/tasks/${taskId}/start` }),
   },

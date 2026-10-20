@@ -102,7 +102,9 @@ async function getOrCreateToday(req, res, next) {
       }
     }
 
-    if (workDay?.endedAt) {
+    // Reabrir la jornada cerrada solo si la abre la persona: que su agente (MCP,
+    // req.user.mcpTokenId) consulte tasks_today no debe "re-loguearla".
+    if (workDay?.endedAt && !req.user.mcpTokenId) {
       workDay = await prisma.workDay.update({
         where: whereKey,
         data: { endedAt: null, startedAt: new Date() },
@@ -163,9 +165,10 @@ async function finish(req, res, next) {
     const date = todayString(tz)
     const now = new Date()
 
-    // Auto-pausar cualquier tarea IN_PROGRESS antes de cerrar la jornada
+    // Auto-pausar la tarea IN_PROGRESS antes de cerrar la jornada — solo la humana:
+    // cerrar el día de la persona no frena lo que están haciendo sus agentes.
     const activeTask = await prisma.task.findFirst({
-      where: { userId, status: 'IN_PROGRESS', workDay: { workspaceId } },
+      where: { userId, status: 'IN_PROGRESS', isAgentTask: false, workDay: { workspaceId } },
     })
     if (activeTask) {
       await prisma.$transaction([

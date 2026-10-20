@@ -65,6 +65,9 @@ PATCH  /api/tasks/:id/move-to-backlog
 PATCH  /api/tasks/:id?scope=series        # editar: scope=series actualiza la serie recurrente
 DELETE /api/tasks/:id?scope=series        # borrar: scope=series elimina toda la serie recurrente
 POST   /api/tasks  body: { ..., scheduledFor?, recurrence? }  # tarea futura / recurrente
+POST   /api/tasks  body: { ..., executor?: 'agent'|'user', agentId? }  # executor:'agent' = la ejecuta un agente (solo para uno mismo)
+GET    /api/tasks/agent-queue            # tareas de agente abiertas de la persona (vía MCP: las de ese agente + las delegadas a cualquiera); materializa recurrentes sin reabrir la jornada
+PATCH  /api/tasks/:id/agent?scope=series # body { executor:'agent'|'user', agentId? } — delegar a mi agente / devolver; no sobre tareas en curso ni completadas
 GET    /api/tasks/completed              # ?skip=N&before=YYYY-MM-DD, 10/page
 PATCH  /api/tasks/:id/duration           # task owner or admin
 DELETE /api/tasks/:id

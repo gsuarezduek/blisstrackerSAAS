@@ -74,9 +74,9 @@ async function addToToday(req, res, next) {
       return res.status(400).json({ error: 'La tarea ya está en el día de hoy.' })
     }
 
-    if (task.status === 'IN_PROGRESS') {
+    if (task.status === 'IN_PROGRESS' && !task.isAgentTask) {
       const otherActive = await prisma.task.findFirst({
-        where: { userId, status: 'IN_PROGRESS', id: { not: taskId } },
+        where: { userId, status: 'IN_PROGRESS', isAgentTask: false, id: { not: taskId } },
       })
       if (otherActive) throw Object.assign(
         new Error('Ya tenés una tarea en curso. Pausala o completala primero.'),

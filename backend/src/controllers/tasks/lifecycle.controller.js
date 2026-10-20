@@ -11,7 +11,7 @@ const { maybeAutoFinishMeeting } = require('../../lib/projectMeetingLifecycle')
 const { loadEvent } = require('../../lib/calendarEvents')
 const { startMeetingCore } = require('../calendar.controller')
 const { statusSideEffects, logEvent, loadPiece, formatPiece, emitPieceUpdated } = require('../content/_shared')
-const { taskInclude, assertNoActiveTask, handleActiveTaskConflict } = require('./_shared')
+const { taskInclude, assertNoActiveTask, handleActiveTaskConflict, requestAgentId, assertOwnAgent } = require('./_shared')
 const { sendPushToUser } = require('../../services/pushNotification.service')
 
 // Resuelve @menciones de un texto contra los miembros activos del workspace (cualquiera
@@ -165,6 +165,28 @@ async function create(req, res, next) {
       }
     }
 
+    // ── Agentes IA ───────────────────────────────────────────────────────────
+    // createdByAgentId: lo setea solo el backend si la request viene por MCP.
+    // executor:'agent' = la tarea la EJECUTA un agente (no ocupa el lugar de "1 en
+    // curso" de la persona). Un agente solo trabaja para su dueño: no se puede
+    // combinar con asignarle la tarea a otra persona. agentId: el agente de la
+    // request (MCP), o uno elegido de los propios (UI); null = cualquiera de mis agentes.
+    const createdByAgentId = requestAgentId(req)
+    const isAgentTask = req.body.executor === 'agent'
+    if (req.body.executor != null && !['agent', 'user'].includes(req.body.executor)) {
+      return res.status(400).json({ error: "executor inválido ('agent' | 'user')" })
+    }
+    let agentId = null
+    if (isAgentTask) {
+      if (userId !== requesterId) {
+        return res.status(400).json({ error: 'Una tarea para un agente solo puede ser de su dueño: no se puede asignar a otra persona' })
+      }
+      agentId = req.body.agentId != null
+        ? await assertOwnAgent(req.body.agentId, requesterId, workspaceId)
+        : createdByAgentId
+    }
+    const agentFields = { isAgentTask, agentId, createdByAgentId }
+
     const wdKey = { userId_workspaceId_date: { userId, workspaceId, date: today } }
     let workDay = await prisma.workDay.findUnique({ where: wdKey })
     if (!workDay) {
@@ -208,6 +230,7 @@ async function create(req, res, next) {
           endDate:     recurrence.endDate || null,
           scheduledTime,
           scheduledDurationMins,
+          ...agentFields,
         },
       })
       const first = firstScheduledDate(rec)
@@ -230,6 +253,7 @@ async function create(req, res, next) {
           scheduledFor: scheduledFor || null,
           scheduledTime,
           scheduledDurationMins,
+          ...agentFields,
         },
         include: taskInclude,
       })
@@ -289,12 +313,13 @@ async function startTask(req, res, next) {
   try {
     const userId = req.user.userId
     const workspaceId = req.workspace.id
-    await assertNoActiveTask(userId, workspaceId)
 
     const existing = await prisma.task.findUnique({ where: { id: Number(req.params.id) } })
     if (!existing || existing.userId !== userId) return res.status(404).json({ error: 'Tarea no encontrada' })
     if (existing.isBacklog) return res.status(400).json({ error: 'Agregá la tarea al día primero para iniciarla.' })
     if (existing.status !== 'PENDING') return res.status(400).json({ error: 'Solo se puede iniciar una tarea pendiente.' })
+    // Una tarea de agente no ocupa el lugar de "1 en curso" de la persona.
+    if (!existing.isAgentTask) await assertNoActiveTask(userId, workspaceId)
 
     const taskId = Number(req.params.id)
 
@@ -322,11 +347,15 @@ async function startTask(req, res, next) {
       }
     }
 
+    // Delegada a "cualquiera de mis agentes" (agentId null): queda asignada al
+    // agente que la toma.
+    const claimAgentId = existing.isAgentTask && existing.agentId == null ? requestAgentId(req) : null
+
     const now = new Date()
     const [task] = await prisma.$transaction([
       prisma.task.update({
         where: { id: taskId, userId },
-        data: { status: 'IN_PROGRESS', startedAt: now },
+        data: { status: 'IN_PROGRESS', startedAt: now, ...(claimAgentId ? { agentId: claimAgentId } : {}) },
         include: taskInclude,
       }),
       prisma.taskSession.create({ data: { taskId, startedAt: now } }),
@@ -376,7 +405,6 @@ async function pauseTask(req, res, next) {
 async function resumeTask(req, res, next) {
   try {
     const userId = req.user.userId
-    await assertNoActiveTask(userId, req.workspace?.id)
 
     const current = await prisma.task.findUnique({ where: { id: Number(req.params.id) } })
     if (!current || current.userId !== userId) {
@@ -384,6 +412,7 @@ async function resumeTask(req, res, next) {
     }
     if (current.isBacklog) return res.status(400).json({ error: 'Agregá la tarea al día primero para reanudarla.' })
     if (current.status !== 'PAUSED') return res.status(400).json({ error: 'Solo se puede reanudar una tarea pausada.' })
+    if (!current.isAgentTask) await assertNoActiveTask(userId, req.workspace?.id)
 
     const now       = new Date()
     const pausedMs  = current.pausedAt ? now.getTime() - new Date(current.pausedAt).getTime() : 0
@@ -574,7 +603,6 @@ async function unblockTask(req, res, next) {
   try {
     const userId = req.user.userId
     const workspaceId = req.workspace.id
-    await assertNoActiveTask(userId, req.workspace?.id)
 
     const current = await prisma.task.findUnique({ where: { id: Number(req.params.id) } })
     if (!current || current.userId !== userId) {
@@ -582,6 +610,7 @@ async function unblockTask(req, res, next) {
     }
     if (current.isBacklog) return res.status(400).json({ error: 'Agregá la tarea al día primero para desbloquearla.' })
     if (current.status !== 'BLOCKED') return res.status(400).json({ error: 'Solo se puede desbloquear una tarea bloqueada.' })
+    if (!current.isAgentTask) await assertNoActiveTask(userId, req.workspace?.id)
 
     const now       = new Date()
     const blockedMs = current.pausedAt ? now.getTime() - new Date(current.pausedAt).getTime() : 0
@@ -673,6 +702,16 @@ async function editTask(req, res, next) {
         return res.status(400).json({ error: 'El usuario no pertenece a este workspace' })
       }
       data.userId = newUserId
+      // Un agente trabaja solo para su dueño: reasignar una tarea de agente a otra
+      // persona la vuelve una tarea humana de esa persona. En curso no se puede (pasaría
+      // a ocupar su lugar de "1 en curso" sin que esa persona la haya iniciado).
+      if (task.isAgentTask) {
+        if (task.status === 'IN_PROGRESS') {
+          return res.status(409).json({ error: 'El agente está trabajando en esta tarea: pausala antes de reasignarla' })
+        }
+        data.isAgentTask = false
+        data.agentId = null
+      }
       const today = todayString(tz)
       const wdKey = { userId_workspaceId_date: { userId: newUserId, workspaceId, date: today } }
       let workDay = await prisma.workDay.findUnique({ where: wdKey })

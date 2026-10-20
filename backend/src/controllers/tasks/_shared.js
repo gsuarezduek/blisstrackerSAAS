@@ -10,9 +10,12 @@ const taskInclude = {
   contentPiece: { select: { id: true } },
 }
 
+// "Una sola tarea en curso por persona" aplica solo a tareas HUMANAS: las que ejecuta
+// un agente (Task.isAgentTask) no ocupan el lugar de su dueño, y un agente puede tener
+// varias en curso (mismo criterio que el índice parcial one_active_task_per_user).
 async function assertNoActiveTask(userId, currentWorkspaceId) {
   const active = await prisma.task.findFirst({
-    where: { userId, status: 'IN_PROGRESS' },
+    where: { userId, status: 'IN_PROGRESS', isAgentTask: false },
     include: { workDay: { select: { workspaceId: true } } },
   })
   if (!active) return
@@ -37,4 +40,22 @@ function handleActiveTaskConflict(err) {
   return err
 }
 
-module.exports = { taskInclude, assertNoActiveTask, handleActiveTaskConflict }
+// Agente (McpToken) que hace esta request, si viene por MCP — claim interno que solo
+// firma mcp/apiBridge.js. null = request normal del frontend/app.
+function requestAgentId(req) {
+  return Number.isInteger(req.user?.mcpTokenId) ? req.user.mcpTokenId : null
+}
+
+// Valida que `agentId` sea un agente (McpToken no revocado) de ESA persona en ese
+// workspace: una persona solo puede delegar en sus propios agentes. Devuelve el id o
+// lanza 400 (isOperational) si no corresponde.
+async function assertOwnAgent(agentId, userId, workspaceId) {
+  const id = Number(agentId)
+  const row = Number.isInteger(id)
+    ? await prisma.mcpToken.findFirst({ where: { id, userId, workspaceId, revokedAt: null }, select: { id: true } })
+    : null
+  if (!row) throw Object.assign(new Error('Agente inválido: tiene que ser uno de tus agentes activos'), { status: 400, isOperational: true })
+  return row.id
+}
+
+module.exports = { taskInclude, assertNoActiveTask, handleActiveTaskConflict, requestAgentId, assertOwnAgent }

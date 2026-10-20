@@ -1298,6 +1298,7 @@ Así el agente sabe sus límites desde el primer mensaje, sin que tengas que exp
 
 - **Proyectos** — listar proyectos y su equipo; consultar el catálogo de servicios. Los admins pueden cambiar los servicios contratados de un proyecto.
 - **Tareas** — ver la jornada de hoy; crear tareas (también futuras y recurrentes, y asignadas a otra persona); iniciar, pausar, reanudar, completar, bloquear y desbloquear; corregir el tiempo de una tarea ya completada.
+- **Tareas propias del agente** — el agente puede crear tareas que **ejecuta él mismo** (no vos): quedan en su propia lista de trabajo, puede tener varias en curso a la vez y no ocupan tu lugar de "una tarea en curso". También puede tomar las tareas que le delegues y devolvértelas. Si algo lo frena, bloquea la tarea con un motivo para pedirte ayuda.
 - **Equipo** — listar el equipo. Los admins además: asistencia y tardanzas de una persona, historial detallado de tareas y ver la jornada de otra persona (solo lectura).
 - **Marketing** — salud del proyecto, GA4, Search Console, Domain Rating, keywords, oportunidades SEO, las 5 redes, Meta y Google Ads, competidores, objetivos, informes y auditorías GEO. Puede agregar keywords y competidores, correr una auditoría GEO, regenerar un informe y refrescar todas las fuentes.
 - **SEO avanzado** — Canibalización, Content Brief, Auditoría On-Page y Content Gap: correr, listar, ver y borrar.
@@ -1315,6 +1316,9 @@ Así el agente sabe sus límites desde el primer mensaje, sin que tengas que exp
 ## Acciones que el agente confirma antes
 
 Las que tienen efecto hacia afuera o consumen IA: mandarle algo al cliente (pedir aprobación, comentarios visibles en el portal, confirmar una propuesta), borrar, convertir un lead, y correr auditorías, informes, investigaciones o propuestas con IA, que gastan el presupuesto de tokens del workspace.`,
+        tips: [
+          'Pedile al agente que use executor "agent" en las tareas que va a hacer él: así no se mezclan con las tuyas.',
+        ],
         related: ['agentes-ia-conectar', 'agentes-ia-seguridad', 'como-usa-la-ia'],
       },
       {

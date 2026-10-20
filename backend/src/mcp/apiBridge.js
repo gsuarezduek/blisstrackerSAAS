@@ -19,17 +19,22 @@ const BASE_URL = `http://127.0.0.1:${PORT}/api`
 // de este proceso. `isSuperAdmin: false` a propósito: el MCP nunca debe poder
 // escalar por encima del rol real que el usuario tiene en WorkspaceMember
 // (eso lo resuelve resolveWorkspace leyendo la DB, no el JWT).
-function mintInternalToken(userId) {
-  return jwt.sign({ userId, isSuperAdmin: false }, process.env.JWT_SECRET, {
+//
+// `mcpTokenId`: qué agente (McpToken) hace la llamada — la API lo lee como
+// req.user.mcpTokenId para marcar Task.createdByAgentId / la cola del agente
+// (ver concepto "Agentes IA" en backend/CLAUDE.md). Solo se puede obtener
+// firmando con JWT_SECRET, o sea solo desde acá: un cliente no lo puede falsificar.
+function mintInternalToken(userId, mcpTokenId) {
+  return jwt.sign({ userId, isSuperAdmin: false, mcpTokenId: mcpTokenId ?? null }, process.env.JWT_SECRET, {
     algorithm: 'HS256',
     expiresIn: '2m',
   })
 }
 
-// identity: { userId, workspaceSlug }. method: 'GET'|'POST'|'PATCH'|'DELETE'.
+// identity: { userId, workspaceSlug, tokenId }. method: 'GET'|'POST'|'PATCH'|'DELETE'.
 // path: con leading slash, ej '/tasks'.
 async function callApi(identity, method, path, { query, body } = {}) {
-  const token = mintInternalToken(identity.userId)
+  const token = mintInternalToken(identity.userId, identity.tokenId)
 
   const response = await axios({
     method,

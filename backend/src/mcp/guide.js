@@ -55,7 +55,7 @@ const SECTIONS = {
 Modelo mental (igual que en la app):
 - Cada persona tiene una **jornada** (WorkDay) por día. \`tasks_today\` la devuelve (y la abre si no existe). Las tareas pendientes/pausadas/bloqueadas de días anteriores se arrastran solas.
 - Estados: PENDING → IN_PROGRESS → PAUSED / BLOCKED / COMPLETED. BLOCKED y PAUSED vuelven a IN_PROGRESS con \`task_unblock\` / \`task_resume\`.
-- **Una sola tarea IN_PROGRESS por persona.** \`task_start\` falla (409) si ya hay otra en curso: pausá la actual primero (\`task_pause\`) y recién ahí iniciá la otra.
+- **Una sola tarea IN_PROGRESS por persona** (tareas humanas). \`task_start\` falla (409) si ya hay otra en curso: pausá la actual primero (\`task_pause\`) y recién ahí iniciá la otra. Las **tareas de agente** (ver abajo) no cuentan para esa regla.
 - El tiempo se mide solo mientras la tarea está IN_PROGRESS. \`task_set_duration\` corrige minutos de una tarea YA completada (no sirve para tareas abiertas).
 - \`task_block\` exige motivo y notifica al equipo del proyecto: usalo solo si de verdad algo frena el trabajo.
 
@@ -63,8 +63,15 @@ Crear tareas (\`task_create\`):
 - Escribí la descripción como acción concreta y verificable ("Enviar propuesta de pauta a Juan", no "Pauta").
 - Por defecto se asigna a la persona del token; \`targetUserId\` la asigna a otro miembro (ID de \`team_list\`). Se le notifica.
 - \`scheduledFor\` (YYYY-MM-DD) = tarea futura: no aparece hasta esa fecha. \`recurrence\` = serie recurrente (diaria/semanal con días/mensual/anual, con \`endDate\` opcional). Son excluyentes.
+- **\`executor\`: decidí SIEMPRE quién la va a hacer.** \`executor: "agent"\` si la vas a ejecutar VOS (el agente): queda en tu lista de trabajo, separada de las tareas de la persona, no ocupa su lugar de "1 en curso" y su tiempo no se mezcla con el de ella. \`executor: "user"\` (default) si es trabajo para la persona (o para otro miembro con \`targetUserId\`). Una tarea de agente no se puede asignar a otra persona.
 
-Lo que NO se puede hacer por MCP con tareas: borrar, editar el texto, destacar (estrella), mover al backlog, comentar, adjuntar archivos ni seguir/delegar. Esas acciones se hacen desde la app.
+## Tareas de agente (tu lista de trabajo)
+- \`tasks_agent_queue\`: tus tareas abiertas (las tuyas + las que la persona delegó a "cualquiera de sus agentes"). Revisala al empezar a trabajar: la persona puede delegarte tareas desde la app.
+- Ejecutá con el mismo ciclo: \`task_start\` → \`task_complete\`. Podés tener varias en curso. Si algo te frena, \`task_block\` con un motivo claro: es la forma de pedirle ayuda a la persona.
+- No dejes tareas en curso indefinidamente: completalas o pausalas al terminar de trabajar (el tiempo de ejecución se mide).
+- \`task_set_executor\` cambia quién ejecuta una tarea propia que no esté en curso: \`agent\` (te la tomás vos) o \`user\` (se la devolvés a la persona). Con \`scope: "series"\` en una tarea recurrente aplica a toda la serie.
+
+Lo que NO se puede hacer por MCP con tareas: borrar, editar el texto, destacar (estrella), mover al backlog, comentar, adjuntar archivos ni seguir/delegar a otra persona. Esas acciones se hacen desde la app.
 - Ver la jornada de OTRA persona: \`tasks_today\` con \`userId\` (solo admin/owner, solo lectura).`,
 
   equipo: `## Equipo y productividad

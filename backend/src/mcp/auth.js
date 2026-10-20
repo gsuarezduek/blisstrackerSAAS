@@ -49,7 +49,9 @@ async function mcpAuth(req, res, next) {
     return res.status(401).json({ error: 'Invalid token' })
   }
 
-  req.mcpIdentity = { userId: row.userId, workspaceId: row.workspaceId, workspaceSlug: row.workspace.slug }
+  // tokenId = identidad del AGENTE (no solo de la persona): viaja en el JWT interno
+  // (apiBridge) para que la API sepa qué tareas creó/ejecuta este agente.
+  req.mcpIdentity = { userId: row.userId, workspaceId: row.workspaceId, workspaceSlug: row.workspace.slug, tokenId: row.id }
   // Best-effort, no bloquea la request si falla.
   prisma.mcpToken.update({ where: { id: row.id }, data: { lastUsedAt: new Date() } }).catch(() => {})
 

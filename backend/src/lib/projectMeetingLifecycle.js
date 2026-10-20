@@ -104,7 +104,7 @@ async function startMeetingParticipants(meeting, participants, { requesterId, wo
   // Bloqueo: nadie del grupo puede tener una tarea en curso al iniciar.
   if (participantIds.length) {
     const busy = await prisma.task.findMany({
-      where:   { userId: { in: participantIds }, status: 'IN_PROGRESS' },
+      where:   { userId: { in: participantIds }, status: 'IN_PROGRESS', isAgentTask: false }, // las de sus agentes no cuentan
       include: { user: { select: { name: true } } },
     })
     if (busy.length) {

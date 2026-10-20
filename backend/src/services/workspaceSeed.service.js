@@ -79,7 +79,7 @@ async function seedWorkspace(workspaceId, ownerId, tx = prisma) {
   // creación viola esa constraint (P2002) y rompe todo el seed. Caso típico: una
   // cuenta ya existente que crea un workspace adicional.
   const hasActiveTaskElsewhere = !!(await tx.task.findFirst({
-    where: { userId: ownerId, status: 'IN_PROGRESS' },
+    where: { userId: ownerId, status: 'IN_PROGRESS', isAgentTask: false },
     select: { id: true },
   }))
 

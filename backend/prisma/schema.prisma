@@ -935,6 +935,19 @@ model Task {
   // completado si se borra la serie.
   recurrenceId          Int?
   recurrence            TaskRecurrence? @relation(fields: [recurrenceId], references: [id], onDelete: SetNull)
+  // Agentes IA (MCP): la tarea la EJECUTA un agente — userId sigue siendo la persona
+  // responsable (la que supervisa y recibe los bloqueos). Booleano aparte de agentId a
+  // propósito: si el McpToken se borra, la tarea no debe volverse "humana" en silencio
+  // (rompería el índice one_active_task_per_user, que solo aplica a tareas humanas).
+  // agentId null + isAgentTask = delegada a "cualquiera de mis agentes" (la toma el
+  // primero que la inicia).
+  isAgentTask           Boolean         @default(false)
+  agentId               Int?
+  agent                 McpToken?       @relation("TaskAgent", fields: [agentId], references: [id], onDelete: SetNull)
+  // Origen: creada vía MCP (con el token de ese agente), sea para que la ejecute el
+  // agente o la persona. Lo setea solo el backend (claim interno del JWT de apiBridge).
+  createdByAgentId      Int?
+  createdByAgent        McpToken?       @relation("TaskCreatedByAgent", fields: [createdByAgentId], references: [id], onDelete: SetNull)
   createdAt             DateTime        @default(now())
   updatedAt             DateTime        @updatedAt
 
@@ -959,6 +972,7 @@ model Task {
 
   @@unique([recurrenceId, scheduledFor])
   @@index([userId, status])
+  @@index([userId, isAgentTask, status])
   @@index([projectId])
   @@index([workDayId])
   @@index([userId, scheduledFor])
@@ -990,6 +1004,12 @@ model TaskRecurrence {
   // Bloqueo horario opcional (ver Task.scheduledTime) — se copia a cada instancia generada.
   scheduledTime         String?
   scheduledDurationMins Int?
+  // Agentes IA — se copian a cada instancia generada (ver Task.isAgentTask/agentId/createdByAgentId).
+  isAgentTask           Boolean   @default(false)
+  agentId               Int?
+  agent                 McpToken? @relation("RecurrenceAgent", fields: [agentId], references: [id], onDelete: SetNull)
+  createdByAgentId      Int?
+  createdByAgent        McpToken? @relation("RecurrenceCreatedByAgent", fields: [createdByAgentId], references: [id], onDelete: SetNull)
   active                Boolean   @default(true)
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
@@ -4472,6 +4492,12 @@ model McpToken {
 
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  // Agentes IA: cada token es la identidad de un agente (su label es el nombre visible).
+  agentTasks             Task[]           @relation("TaskAgent")
+  createdTasks           Task[]           @relation("TaskCreatedByAgent")
+  agentRecurrences       TaskRecurrence[] @relation("RecurrenceAgent")
+  createdRecurrences     TaskRecurrence[] @relation("RecurrenceCreatedByAgent")
 
   @@index([workspaceId])
 }
