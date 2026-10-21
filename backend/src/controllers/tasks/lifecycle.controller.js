@@ -679,13 +679,16 @@ async function editTask(req, res, next) {
     const tz = req.workspace.timezone
     const requesterId = req.user.userId
     const { description, projectId, targetUserId, scheduledFor } = req.body
-    if (!description?.trim()) return res.status(400).json({ error: 'La descripción es requerida' })
+    // La app siempre manda la descripción; por MCP es opcional (ej. solo reasignar).
+    if (description !== undefined && !description?.trim()) return res.status(400).json({ error: 'La descripción es requerida' })
 
     // Scopear por workspace: evita que un admin/owner edite tareas de otros workspaces vía ID.
     const task = await prisma.task.findFirst({ where: { id, workDay: { workspaceId } } })
     if (!task) return res.status(404).json({ error: 'Tarea no encontrada' })
-    if (!isAdmin(req) && task.userId !== requesterId) {
-      return res.status(403).json({ error: 'No tenés permiso para editar esta tarea' })
+    // Vía MCP un agente solo edita tareas de su dueño (aunque el dueño sea admin).
+    const viaAgent = requestAgentId(req) !== null
+    if (viaAgent ? task.userId !== requesterId : (!isAdmin(req) && task.userId !== requesterId)) {
+      return res.status(403).json({ error: viaAgent ? 'Un agente solo puede editar tareas de la persona para la que trabaja' : 'No tenés permiso para editar esta tarea' })
     }
 
     // Reasignar proyecto/responsable de una tarea ya completada reescribe en silencio
@@ -697,7 +700,7 @@ async function editTask(req, res, next) {
       }
     }
 
-    const desc = description.trim()
+    const desc = description !== undefined ? description.trim() : task.description
     const data = { description: desc }
 
     // ── Proyecto ── (debe existir y pertenecer al workspace)
@@ -804,7 +807,8 @@ async function editTask(req, res, next) {
       const users = wsMembers.map(m => m.user)
       const before = resolveMentions(task.description, users, requesterId)
       const after  = resolveMentions(desc, users, requesterId)
-      const newlyMentioned = [...after].filter(uid => !before.has(uid))
+      // El nuevo responsable ya recibe el aviso de asignación (abajo): no duplicarlo.
+      const newlyMentioned = [...after].filter(uid => !before.has(uid) && uid !== data.userId)
       if (newlyMentioned.length > 0) {
         const shortDesc = desc.length > 60 ? desc.slice(0, 57) + '...' : desc
         await prisma.notification.createMany({
@@ -821,6 +825,21 @@ async function editTask(req, res, next) {
       }
     }
 
+    // Aviso al nuevo responsable (mismo mensaje que al crear una tarea asignada). Si
+    // sigue programada a futuro, igual que en la creación, no se avisa todavía.
+    if (data.userId != null && data.userId !== requesterId && !stillFuture) {
+      const shortDesc = desc.length > 60 ? desc.slice(0, 57) + '...' : desc
+      const message = `te asignó una tarea: "${shortDesc}"`
+      await prisma.notification.create({
+        data: {
+          userId: data.userId, actorId: requesterId, taskId: id,
+          projectId: data.projectId ?? task.projectId, workspaceId,
+          type: 'TASK_MENTION', message,
+        },
+      })
+      sendPushToUser({ userId: data.userId, workspaceId, type: 'TASK_MENTION', taskId: id, message: `${req.user.name} ${message}` }).catch(() => {})
+    }
+
     const updated = await prisma.task.findUnique({ where: { id }, include: taskInclude })
     res.json(updated)
   } catch (err) { next(err) }
@@ -833,8 +852,22 @@ async function remove(req, res, next) {
       where: { id, workDay: { workspaceId: req.workspace.id } },
     })
     if (!task) return res.status(404).json({ error: 'Tarea no encontrada' })
-    // Puede borrar: admin/owner del workspace, el dueño de la tarea, o quien la delegó (creador)
-    if (!isAdmin(req) && task.userId !== req.user.userId && task.createdById !== req.user.userId) {
+
+    // Vía MCP un agente solo borra tareas de agente ABIERTAS de su dueño que le tocan
+    // (las suyas o las delegadas a "cualquiera") — nunca tareas de personas, aunque el
+    // dueño sea admin, ni completadas (son historial: informe al cliente, métricas).
+    const agentId = requestAgentId(req)
+    const isOwnAgentWork = (row) => row.isAgentTask && row.userId === req.user.userId
+      && (row.agentId === null || row.agentId === agentId)
+    if (agentId !== null) {
+      if (!isOwnAgentWork(task)) {
+        return res.status(403).json({ error: 'Un agente solo puede eliminar tareas de agente de su lista de trabajo' })
+      }
+      if (task.status === 'COMPLETED') {
+        return res.status(400).json({ error: 'No se puede eliminar una tarea de agente ya completada' })
+      }
+    } else if (!isAdmin(req) && task.userId !== req.user.userId && task.createdById !== req.user.userId) {
+      // Puede borrar: admin/owner del workspace, el dueño de la tarea, o quien la delegó (creador)
       return res.status(403).json({ error: 'No tenés permiso para eliminar esta tarea' })
     }
 
@@ -843,6 +876,12 @@ async function remove(req, res, next) {
     // y elimina explícitamente las instancias NO completadas (esta + las futuras pendientes).
     if (req.query.scope === 'series' && task.recurrenceId) {
       const recId = task.recurrenceId
+      if (agentId !== null) {
+        const rec = await prisma.taskRecurrence.findUnique({ where: { id: recId } })
+        if (!rec || !isOwnAgentWork(rec)) {
+          return res.status(403).json({ error: 'Un agente solo puede eliminar series de agente de su lista de trabajo' })
+        }
+      }
       const instances = await prisma.task.findMany({
         where: { recurrenceId: recId, status: { not: 'COMPLETED' } },
         select: { id: true },

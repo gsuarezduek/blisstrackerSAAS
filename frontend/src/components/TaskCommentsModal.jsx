@@ -11,8 +11,9 @@ import MessageReactionPicker from './chat/MessageReactionPicker'
 import { groupReactions } from './chat/reactions'
 import { useTaskFileUpload } from './taskFileUpload'
 import { fmtBytes, iconFor } from '../lib/fileIcons'
-import { Eye, Paperclip, MessageSquare, SmilePlus } from 'lucide-react'
+import { Eye, Paperclip, MessageSquare, SmilePlus, Bot } from 'lucide-react'
 import { Icon } from './ui/Icon'
+import { agentName } from '../hooks/useMyAgents'
 
 function timeAgo(dateStr) {
   const diff = Math.floor((Date.now() - new Date(dateStr)) / 1000)
@@ -733,6 +734,11 @@ export default function TaskCommentsModal({ task, onClose, onCommentAdded, onTas
               <div className="flex-1 min-w-0">
                 <div className="flex items-baseline gap-2 flex-wrap">
                   <UserLink userId={c.user.id} className="text-xs font-semibold text-gray-800 dark:text-gray-200 hover:text-primary-600 dark:hover:text-primary-400">{c.user.name}</UserLink>
+                  {c.agent && (
+                    <span className="inline-flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400" title="Lo escribió un agente de IA en nombre de esta persona">
+                      <Icon as={Bot} size={12} />vía {agentName(c.agent)}
+                    </span>
+                  )}
                   <span className="text-xs text-gray-400 dark:text-gray-500">{timeAgo(c.createdAt)}</span>
                 </div>
                 <p className="text-sm text-gray-700 dark:text-gray-300 leading-snug mt-0.5 whitespace-pre-wrap break-words">

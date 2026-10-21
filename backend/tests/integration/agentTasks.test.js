@@ -1,6 +1,6 @@
 jest.mock('../../src/lib/prisma', () => ({
   workspace:       { findUnique: jest.fn() },
-  workspaceMember: { findUnique: jest.fn() },
+  workspaceMember: { findUnique: jest.fn(), findMany: jest.fn() },
   project:         { findFirst: jest.fn() },
   mcpToken:        { findFirst: jest.fn() },
   task: {
@@ -11,8 +11,10 @@ jest.mock('../../src/lib/prisma', () => ({
     update:     jest.fn(),
     updateMany: jest.fn(),
     count:      jest.fn(),
+    delete:     jest.fn(),
+    deleteMany: jest.fn(),
   },
-  taskRecurrence: { update: jest.fn(), findMany: jest.fn(), count: jest.fn() },
+  taskRecurrence: { update: jest.fn(), findMany: jest.fn(), count: jest.fn(), findUnique: jest.fn(), delete: jest.fn() },
   taskSession:    { create: jest.fn(), updateMany: jest.fn() },
   workDay: {
     findUnique: jest.fn(),
@@ -23,7 +25,8 @@ jest.mock('../../src/lib/prisma', () => ({
   projectMeetingTodo: { updateMany: jest.fn() },
   financeTask:        { updateMany: jest.fn() },
   leadAction:         { updateMany: jest.fn(), findUnique: jest.fn() },
-  notification:       { create: jest.fn(), createMany: jest.fn() },
+  notification:       { create: jest.fn(), createMany: jest.fn(), deleteMany: jest.fn() },
+  taskComment:        { create: jest.fn(), findMany: jest.fn() },
   projectMember:      { findMany: jest.fn() },
   taskFollow:         { findMany: jest.fn() },
   projectMeetingParticipant: { findUnique: jest.fn() },
@@ -413,5 +416,183 @@ describe('avisos de tareas de agente', () => {
         message: 'Tu agente «Grok» bloqueó "Tarea de prueba": Falta el acceso a GA4',
       }),
     })
+  })
+})
+
+// ─── Borrar vía MCP ───────────────────────────────────────────────────────────
+
+describe('DELETE /api/tasks/:id — agentes', () => {
+  function del(id, { mcpTokenId = AGENT_ID, query = '' } = {}) {
+    return request(app)
+      .delete(`/api/tasks/${id}${query}`)
+      .set('Authorization', authHeader({ mcpTokenId }))
+      .set('X-Workspace', WORKSPACE_SLUG)
+  }
+
+  it('el agente borra una tarea de agente abierta suya', async () => {
+    prisma.task.findFirst.mockResolvedValue(makeTask({ isAgentTask: true, agentId: AGENT_ID, createdById: 1 }))
+    const res = await del(1)
+    expect(res.status).toBe(200)
+    expect(prisma.task.delete).toHaveBeenCalledWith({ where: { id: 1 } })
+  })
+
+  it('el agente borra una tarea delegada a "cualquiera de mis agentes"', async () => {
+    prisma.task.findFirst.mockResolvedValue(makeTask({ isAgentTask: true, agentId: null, createdById: 1 }))
+    const res = await del(1)
+    expect(res.status).toBe(200)
+    expect(prisma.task.delete).toHaveBeenCalled()
+  })
+
+  it('403 sobre una tarea humana, aunque sea de su dueño', async () => {
+    prisma.task.findFirst.mockResolvedValue(makeTask({ createdById: 1 }))
+    const res = await del(1)
+    expect(res.status).toBe(403)
+    expect(prisma.task.delete).not.toHaveBeenCalled()
+  })
+
+  it('403 aunque el dueño sea admin', async () => {
+    prisma.workspaceMember.findUnique.mockResolvedValue({ workspaceId: WORKSPACE_ID, userId: 1, role: 'admin', active: true })
+    prisma.task.findFirst.mockResolvedValue(makeTask({ userId: 2, createdById: 2 }))
+    const res = await del(1)
+    expect(res.status).toBe(403)
+    expect(prisma.task.delete).not.toHaveBeenCalled()
+  })
+
+  it('403 sobre una tarea de otro agente del mismo dueño', async () => {
+    prisma.task.findFirst.mockResolvedValue(makeTask({ isAgentTask: true, agentId: AGENT_ID + 1 }))
+    const res = await del(1)
+    expect(res.status).toBe(403)
+  })
+
+  it('400 sobre una tarea de agente ya completada', async () => {
+    prisma.task.findFirst.mockResolvedValue(makeTask({ isAgentTask: true, agentId: AGENT_ID, status: 'COMPLETED' }))
+    const res = await del(1)
+    expect(res.status).toBe(400)
+    expect(prisma.task.delete).not.toHaveBeenCalled()
+  })
+
+  it('scope=series borra la serie si la plantilla es del agente', async () => {
+    prisma.task.findFirst.mockResolvedValue(makeTask({ isAgentTask: true, agentId: AGENT_ID, recurrenceId: 5 }))
+    prisma.taskRecurrence.findUnique.mockResolvedValue({ id: 5, userId: 1, isAgentTask: true, agentId: AGENT_ID })
+    prisma.task.findMany.mockResolvedValue([{ id: 1 }, { id: 2 }])
+    const res = await del(1, { query: '?scope=series' })
+    expect(res.status).toBe(200)
+    expect(prisma.taskRecurrence.delete).toHaveBeenCalledWith({ where: { id: 5 } })
+  })
+
+  it('scope=series da 403 si la plantilla es humana', async () => {
+    prisma.task.findFirst.mockResolvedValue(makeTask({ isAgentTask: true, agentId: AGENT_ID, recurrenceId: 5 }))
+    prisma.taskRecurrence.findUnique.mockResolvedValue({ id: 5, userId: 1, isAgentTask: false, agentId: null })
+    const res = await del(1, { query: '?scope=series' })
+    expect(res.status).toBe(403)
+    expect(prisma.taskRecurrence.delete).not.toHaveBeenCalled()
+  })
+
+  it('desde la app la persona sigue pudiendo borrar sus tareas humanas', async () => {
+    prisma.task.findFirst.mockResolvedValue(makeTask({ createdById: 1 }))
+    const res = await request(app)
+      .delete('/api/tasks/1')
+      .set('Authorization', authHeader())
+      .set('X-Workspace', WORKSPACE_SLUG)
+    expect(res.status).toBe(200)
+    expect(prisma.task.delete).toHaveBeenCalled()
+  })
+})
+
+// ─── Editar, reasignar y comentar vía MCP ─────────────────────────────────────
+
+describe('PATCH /api/tasks/:id — agentes', () => {
+  function patch(body, { mcpTokenId = AGENT_ID } = {}) {
+    return request(app)
+      .patch('/api/tasks/1')
+      .set('Authorization', authHeader({ mcpTokenId }))
+      .set('X-Workspace', WORKSPACE_SLUG)
+      .send(body)
+  }
+
+  beforeEach(() => {
+    prisma.task.findUnique.mockResolvedValue(makeTask())
+    prisma.workspaceMember.findMany.mockResolvedValue([])
+  })
+
+  it('corrige el texto de una tarea de su dueño', async () => {
+    prisma.task.findFirst.mockResolvedValue(makeTask())
+    const res = await patch({ description: 'Texto corregido' })
+    expect(res.status).toBe(200)
+    expect(prisma.task.update).toHaveBeenCalledWith({ where: { id: 1 }, data: expect.objectContaining({ description: 'Texto corregido' }) })
+  })
+
+  it('403 sobre una tarea de otra persona, aunque el dueño sea admin', async () => {
+    prisma.workspaceMember.findUnique.mockResolvedValue({ workspaceId: WORKSPACE_ID, userId: 1, role: 'admin', active: true })
+    prisma.task.findFirst.mockResolvedValue(makeTask({ userId: 2 }))
+    const res = await patch({ description: 'x' })
+    expect(res.status).toBe(403)
+    expect(prisma.task.update).not.toHaveBeenCalled()
+  })
+
+  it('reasigna sin mandar la descripción, y le avisa al nuevo responsable', async () => {
+    prisma.task.findFirst.mockResolvedValue(makeTask())
+    prisma.workspaceMember.findUnique.mockImplementation(({ where }) => Promise.resolve(
+      { workspaceId: WORKSPACE_ID, userId: where.workspaceId_userId.userId, role: 'member', active: true },
+    ))
+    const res = await patch({ targetUserId: 2 })
+    expect(res.status).toBe(200)
+    expect(prisma.task.update).toHaveBeenCalledWith({ where: { id: 1 }, data: expect.objectContaining({ userId: 2, description: 'Tarea de prueba', workDayId: 10 }) })
+    expect(prisma.notification.create).toHaveBeenCalledWith({ data: expect.objectContaining({ userId: 2, actorId: 1, type: 'TASK_MENTION' }) })
+  })
+
+  it('reasignar una tarea de agente la vuelve humana', async () => {
+    prisma.task.findFirst.mockResolvedValue(makeTask({ isAgentTask: true, agentId: AGENT_ID }))
+    prisma.workspaceMember.findUnique.mockImplementation(({ where }) => Promise.resolve(
+      { workspaceId: WORKSPACE_ID, userId: where.workspaceId_userId.userId, role: 'member', active: true },
+    ))
+    const res = await patch({ targetUserId: 2 })
+    expect(res.status).toBe(200)
+    expect(prisma.task.update).toHaveBeenCalledWith({ where: { id: 1 }, data: expect.objectContaining({ userId: 2, isAgentTask: false, agentId: null }) })
+  })
+
+  it('400 con una descripción vacía', async () => {
+    prisma.task.findFirst.mockResolvedValue(makeTask())
+    const res = await patch({ description: '  ' })
+    expect(res.status).toBe(400)
+  })
+})
+
+describe('POST /api/tasks/:id/comments — agentes', () => {
+  beforeEach(() => {
+    prisma.task.findFirst.mockResolvedValue(makeTask({ userId: 1, project: { id: 1, isPrivate: false } }))
+    prisma.taskComment.findMany.mockResolvedValue([])
+    prisma.taskFollow.findMany.mockResolvedValue([])
+    prisma.taskComment.create.mockImplementation(({ data }) => Promise.resolve({
+      id: 5, ...data, agent: data.agentId ? { id: data.agentId, label: 'Grok' } : null, reactions: [],
+    }))
+  })
+
+  it('guarda el agente y le avisa a su dueño sin actor', async () => {
+    const res = await request(app)
+      .post('/api/tasks/1/comments')
+      .set('Authorization', authHeader({ mcpTokenId: AGENT_ID }))
+      .set('X-Workspace', WORKSPACE_SLUG)
+      .send({ text: 'Avance: ya revisé las 3 landings' })
+
+    expect(res.status).toBe(201)
+    expect(prisma.taskComment.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: { taskId: 1, userId: 1, agentId: AGENT_ID, content: 'Avance: ya revisé las 3 landings' },
+    }))
+    expect(prisma.notification.create).toHaveBeenCalledWith({ data: expect.objectContaining({
+      userId: 1, actorId: null, type: 'TASK_COMMENT', message: expect.stringContaining('Tu agente «Grok» comentó'),
+    }) })
+  })
+
+  it('desde la app el autor no se autonotifica', async () => {
+    const res = await request(app)
+      .post('/api/tasks/1/comments')
+      .set('Authorization', authHeader())
+      .set('X-Workspace', WORKSPACE_SLUG)
+      .send({ text: 'Nota mía' })
+
+    expect(res.status).toBe(201)
+    expect(prisma.taskComment.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ agentId: null }) }))
+    expect(prisma.notification.create).not.toHaveBeenCalled()
   })
 })

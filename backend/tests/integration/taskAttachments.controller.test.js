@@ -14,16 +14,21 @@ jest.mock('../../src/services/objectStorage.service', () => ({
   headObject:    jest.fn(),
   getObjectHead: jest.fn(),
   deleteObject:  jest.fn(),
+  putObject:     jest.fn(),
   publicUrl:     jest.fn(key => `https://cdn.example.com/${key}`),
 }))
 
 jest.mock('../../src/lib/platformSettings', () => ({ getSettings: jest.fn() }))
+jest.mock('../../src/lib/safeUrl', () => ({ assertPublicUrl: jest.fn() }))
+jest.mock('axios', () => ({ get: jest.fn() }))
 
 const request = require('supertest')
 const jwt     = require('jsonwebtoken')
 const prisma  = require('../../src/lib/prisma')
 const objectStorage = require('../../src/services/objectStorage.service')
 const { getSettings } = require('../../src/lib/platformSettings')
+const { assertPublicUrl } = require('../../src/lib/safeUrl')
+const axios = require('axios')
 const app     = require('../../src/app')
 
 const SECRET         = process.env.JWT_SECRET
@@ -205,5 +210,70 @@ describe('DELETE /api/tasks/:id/attachments/:fileId', () => {
     prisma.taskFile.findFirst.mockResolvedValue(null)
     const res = await req('delete', `${BASE}/55`)
     expect(res.status).toBe(404)
+  })
+})
+
+describe('POST /api/tasks/:id/attachments/direct (agentes vía MCP)', () => {
+  const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0x0d, 0x49, 0x48, 0x44, 0x52])
+
+  beforeEach(() => {
+    prisma.task.findFirst.mockResolvedValue(dbTask())
+    prisma.taskFile.count.mockResolvedValue(0)
+    prisma.projectFile.findFirst.mockResolvedValue({ id: 3 }) // carpetas ya existen
+    prisma.projectFile.create.mockImplementation(({ data }) => Promise.resolve(dbFile({ ...data, id: 77 })))
+    prisma.$transaction.mockImplementation(fn => (typeof fn === 'function' ? fn(prisma) : Promise.all(fn)))
+    objectStorage.putObject.mockResolvedValue({ key: 'files/1/abc.md', url: 'x', size: 10 })
+    assertPublicUrl.mockResolvedValue()
+  })
+
+  it('sube texto como archivo, con el tipo de la extensión, y lo vincula a la tarea', async () => {
+    const res = await req('post', `${BASE}/direct`).send({ name: 'informe.md', content: '# Informe' })
+    expect(res.status).toBe(201)
+    expect(objectStorage.putObject).toHaveBeenCalledWith(expect.any(Buffer), 'text/markdown', { prefix: 'files/1' })
+    expect(prisma.projectFile.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ status: 'ready', name: 'informe.md', mimeType: 'text/markdown', sizeBytes: 9, parentId: 3 }),
+    }))
+    expect(prisma.taskFile.create).toHaveBeenCalledWith({ data: { workspaceId: 1, taskId: TASK_ID, fileId: 77, linkedById: 1 } })
+  })
+
+  it('en base64 el tipo sale de los magic bytes, no del nombre', async () => {
+    const res = await req('post', `${BASE}/direct`).send({ name: 'pieza.bin', contentBase64: PNG.toString('base64') })
+    expect(res.status).toBe(201)
+    expect(objectStorage.putObject).toHaveBeenCalledWith(expect.any(Buffer), 'image/png', expect.anything())
+  })
+
+  it('400 si no hay fuente o hay más de una', async () => {
+    expect((await req('post', `${BASE}/direct`).send({ name: 'a.txt' })).status).toBe(400)
+    expect((await req('post', `${BASE}/direct`).send({ name: 'a.txt', content: 'x', url: 'https://a.com/x' })).status).toBe(400)
+    expect(objectStorage.putObject).not.toHaveBeenCalled()
+  })
+
+  it('rechaza HTML', async () => {
+    const res = await req('post', `${BASE}/direct`).send({ name: 'pagina.html', content: '<p>hola</p>', mimeType: 'text/html' })
+    expect(res.status).toBe(400)
+    expect(objectStorage.putObject).not.toHaveBeenCalled()
+  })
+
+  it('baja una URL pública', async () => {
+    axios.get.mockResolvedValue({ status: 200, headers: { 'content-type': 'image/png' }, data: PNG })
+    const res = await req('post', `${BASE}/direct`).send({ name: 'pieza.png', url: 'https://cdn.example.com/pieza.png' })
+    expect(res.status).toBe(201)
+    expect(axios.get).toHaveBeenCalledWith('https://cdn.example.com/pieza.png', expect.objectContaining({ maxRedirects: 0 }))
+  })
+
+  it('valida cada redirect contra la red interna', async () => {
+    axios.get.mockResolvedValueOnce({ status: 302, headers: { location: 'http://169.254.169.254/latest' }, data: Buffer.alloc(0) })
+    assertPublicUrl.mockResolvedValueOnce().mockRejectedValueOnce(new Error('No se permite acceder a direcciones IP privadas'))
+    const res = await req('post', `${BASE}/direct`).send({ name: 'x.png', url: 'https://evil.example.com/x' })
+    expect(res.status).toBe(400)
+    expect(assertPublicUrl).toHaveBeenLastCalledWith('http://169.254.169.254/latest')
+    expect(objectStorage.putObject).not.toHaveBeenCalled()
+  })
+
+  it('si falla la base, borra el objeto subido', async () => {
+    prisma.taskFile.create.mockRejectedValueOnce(new Error('db down'))
+    const res = await req('post', `${BASE}/direct`).send({ name: 'notas.txt', content: 'hola' })
+    expect(res.status).toBe(500)
+    expect(objectStorage.deleteObject).toHaveBeenCalledWith('files/1/abc.md')
   })
 })

@@ -341,7 +341,7 @@ export default function NotificationBell() {
                           />
                         ) : (
                           <div className="w-7 h-7 rounded-full bg-gray-100 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 flex items-center justify-center text-gray-500 dark:text-gray-400">
-                            <Icon as={isContentApproved ? Check : isContentChanges ? Pencil : isPortalLogin ? UserRound : isWhatsappMessage ? Smartphone : isBlocked ? Bot : Handshake} size={14} />
+                            <Icon as={isContentApproved ? Check : isContentChanges ? Pencil : isPortalLogin ? UserRound : isWhatsappMessage ? Smartphone : (isBlocked || n.type === 'TASK_COMMENT') ? Bot : Handshake} size={14} />
                           </div>
                         )}
                         {isBlocked && (

@@ -1038,6 +1038,9 @@ model TaskComment {
   userId    Int
   user      User          @relation(fields: [userId], references: [id])
   content   String
+  // Agentes IA: lo escribió un agente (McpToken) vía MCP en nombre de userId.
+  agentId   Int?
+  agent     McpToken?     @relation("TaskCommentAgent", fields: [agentId], references: [id], onDelete: SetNull)
   parentId  Int?
   parent    TaskComment?  @relation("CommentReplies", fields: [parentId], references: [id])
   replies   TaskComment[] @relation("CommentReplies")
@@ -1473,11 +1476,11 @@ model GeoAudit {
 model MarketingRefreshJob {
   id          Int       @id @default(autoincrement())
   workspaceId Int
-  projectId   Int?      // filtro al lanzar (null = todos los proyectos activos del workspace)
+  projectId   Int? // filtro al lanzar (null = todos los proyectos activos del workspace)
   sources     String    @default("[]") // JSON array pedido explícitamente ([] = las conectadas de cada proyecto)
   status      String    @default("running") // running | completed | failed
   results     String    @default("[]") // JSON: [{ projectId, projectName, source, status, detail?, waitMinutes? }], se va completando a medida que corre
-  errorMsg    String?   // solo si status=failed (error inesperado del job, no de una fuente puntual)
+  errorMsg    String? // solo si status=failed (error inesperado del job, no de una fuente puntual)
   startedAt   DateTime  @default(now())
   finishedAt  DateTime?
 
@@ -4481,23 +4484,24 @@ model DeviceToken {
 // no requiere cambiar el modelo, solo generar tokens con ese workspaceId.
 // Altas/bajas vía script de uso único (backend/scripts/), no hay UI todavía.
 model McpToken {
-  id         Int       @id @default(autoincrement())
+  id          Int       @id @default(autoincrement())
   workspaceId Int
-  userId     Int
-  tokenHash  String    @unique
-  label      String? // nombre legible, ej. "Grok - Gaston"
-  createdAt  DateTime  @default(now())
-  lastUsedAt DateTime?
-  revokedAt  DateTime? // soft-revoke: no se borra la fila, se conserva el historial
+  userId      Int
+  tokenHash   String    @unique
+  label       String? // nombre legible, ej. "Grok - Gaston"
+  createdAt   DateTime  @default(now())
+  lastUsedAt  DateTime?
+  revokedAt   DateTime? // soft-revoke: no se borra la fila, se conserva el historial
 
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   // Agentes IA: cada token es la identidad de un agente (su label es el nombre visible).
-  agentTasks             Task[]           @relation("TaskAgent")
-  createdTasks           Task[]           @relation("TaskCreatedByAgent")
-  agentRecurrences       TaskRecurrence[] @relation("RecurrenceAgent")
-  createdRecurrences     TaskRecurrence[] @relation("RecurrenceCreatedByAgent")
+  agentTasks         Task[]           @relation("TaskAgent")
+  createdTasks       Task[]           @relation("TaskCreatedByAgent")
+  agentRecurrences   TaskRecurrence[] @relation("RecurrenceAgent")
+  createdRecurrences TaskRecurrence[] @relation("RecurrenceCreatedByAgent")
+  taskComments       TaskComment[]    @relation("TaskCommentAgent")
 
   @@index([workspaceId])
 }
@@ -4964,27 +4968,27 @@ model FinanceAttachment {
 }
 
 model FinanceExtra {
-  id            Int         @id @default(autoincrement())
-  workspaceId   Int
-  workspace     Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  date          DateTime
-  itemId        Int
-  item          FinanceItem @relation(fields: [itemId], references: [id])
-  action        String
-  total         Decimal     @db.Decimal(20, 8)
-  companyAmount Decimal     @db.Decimal(20, 8)
-  providerAmount Decimal    @default(0) @db.Decimal(20, 8) // para proveedores externos
-  teamAmount    Decimal     @db.Decimal(20, 8) // = total - companyAmount - providerAmount al guardar
-  status        String      @default("in_progress") // in_progress | finished | collected
-  teamPaid      Boolean     @default(false)
-  notes         String?
-  createdById   Int?
-  createdBy     User?       @relation("FinanceExtraCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
-  deletedAt     DateTime?
-  deletedById   Int?
-  deletedBy     User?       @relation("FinanceExtraDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
+  id             Int         @id @default(autoincrement())
+  workspaceId    Int
+  workspace      Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  date           DateTime
+  itemId         Int
+  item           FinanceItem @relation(fields: [itemId], references: [id])
+  action         String
+  total          Decimal     @db.Decimal(20, 8)
+  companyAmount  Decimal     @db.Decimal(20, 8)
+  providerAmount Decimal     @default(0) @db.Decimal(20, 8) // para proveedores externos
+  teamAmount     Decimal     @db.Decimal(20, 8) // = total - companyAmount - providerAmount al guardar
+  status         String      @default("in_progress") // in_progress | finished | collected
+  teamPaid       Boolean     @default(false)
+  notes          String?
+  createdById    Int?
+  createdBy      User?       @relation("FinanceExtraCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+  deletedAt      DateTime?
+  deletedById    Int?
+  deletedBy      User?       @relation("FinanceExtraDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
 
   payments FinanceExtraPayment[]
 
@@ -5049,9 +5053,9 @@ model FinanceNextAction {
 // mano en el SQL de la migración (Prisma no soporta índices únicos parciales
 // en el schema) — ver migración de la Etapa 1.
 model FinanceTask {
-  id             Int       @id @default(autoincrement())
+  id             Int          @id @default(autoincrement())
   workspaceId    Int
-  workspace      Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspace      Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   kind           String // 'manual' | 'generated'
   origin         String? // 'check' | 'invoice' | 'extra' | 'next_action' | 'check_rejected' | 'manual'
   originId       Int?
@@ -5063,13 +5067,13 @@ model FinanceTask {
   item           FinanceItem? @relation(fields: [itemId], references: [id], onDelete: SetNull)
   title          String
   detail         String?
-  amount         Decimal?  @db.Decimal(20, 8)
+  amount         Decimal?     @db.Decimal(20, 8)
   date           DateTime?
-  status         String    @default("open") // open | done | postponed
+  status         String       @default("open") // open | done | postponed
   postponedUntil DateTime?
   doneAt         DateTime?
   doneById       Int?
-  doneBy         User?     @relation("FinanceTaskDoneBy", fields: [doneById], references: [id], onDelete: SetNull)
+  doneBy         User?        @relation("FinanceTaskDoneBy", fields: [doneById], references: [id], onDelete: SetNull)
   // Responsable asignado (selector en la pestaña Pendientes, igual que el to-do de
   // Reuniones) + la Task real que se le creó en su dashboard. Sin responsable = no
   // se mandó a nadie. `taskId` único (uno a uno); se crea/mueve/borra según el
@@ -5077,16 +5081,16 @@ model FinanceTask {
   // solo cuando se completa la Task real (tasks/lifecycle.controller.js) — tildar
   // manualmente el FinanceTask (botón "Hecho") NO toca la Task vinculada.
   responsibleId  Int?
-  responsible    User?     @relation("FinanceTaskResponsible", fields: [responsibleId], references: [id], onDelete: SetNull)
-  taskId         Int?      @unique
-  task           Task?     @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  responsible    User?        @relation("FinanceTaskResponsible", fields: [responsibleId], references: [id], onDelete: SetNull)
+  taskId         Int?         @unique
+  task           Task?        @relation(fields: [taskId], references: [id], onDelete: SetNull)
   createdById    Int? // solo kind='manual'
-  createdBy      User?     @relation("FinanceTaskCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  createdBy      User?        @relation("FinanceTaskCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
   deletedAt      DateTime?
   deletedById    Int?
-  deletedBy      User?     @relation("FinanceTaskDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
+  deletedBy      User?        @relation("FinanceTaskDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
 
   @@index([workspaceId, status])
   @@index([workspaceId, kind])

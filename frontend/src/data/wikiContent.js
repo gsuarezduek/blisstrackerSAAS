@@ -1297,8 +1297,9 @@ Así el agente sabe sus límites desde el primer mensaje, sin que tengas que exp
 ## Lo que sí puede hacer
 
 - **Proyectos** — listar proyectos y su equipo; consultar el catálogo de servicios. Los admins pueden cambiar los servicios contratados de un proyecto.
-- **Tareas** — ver la jornada de hoy; crear tareas (también futuras y recurrentes, y asignadas a otra persona); iniciar, pausar, reanudar, completar, bloquear y desbloquear; corregir el tiempo de una tarea ya completada.
-- **Tareas propias del agente** — el agente puede crear tareas que **ejecuta él mismo** (no vos): quedan en su propia lista de trabajo, puede tener varias en curso a la vez y no ocupan tu lugar de "una tarea en curso". También puede tomar las tareas que le delegues y devolvértelas. Si algo lo frena, bloquea la tarea con un motivo para pedirte ayuda.
+- **Tareas** — ver la jornada de hoy; crear tareas (también futuras y recurrentes, y asignadas a otra persona); corregir el texto, el proyecto o la fecha de tus tareas; pasarle una tarea tuya a otra persona del equipo (le llega un aviso); iniciar, pausar, reanudar, completar, bloquear y desbloquear; corregir el tiempo de una tarea ya completada.
+- **Comentarios y adjuntos** — comentar en una tarea para dejar avances o notas sin bloquearla (el comentario aparece con tu nombre y la marca "vía <agente>", y te llega un aviso) y adjuntar archivos: informes y borradores de texto, o archivos publicados en internet como imágenes o PDFs. Quedan en la Nube del proyecto, igual que los que adjuntás vos.
+- **Tareas propias del agente** — el agente puede crear tareas que **ejecuta él mismo** (no vos): quedan en su propia lista de trabajo, puede tener varias en curso a la vez y no ocupan tu lugar de "una tarea en curso". También puede tomar las tareas que le delegues, devolvértelas y **borrar** las de su lista que todavía no completó (nunca tus tareas ni las ya completadas). Si algo lo frena, bloquea la tarea con un motivo para pedirte ayuda.
 - **Equipo** — listar el equipo. Los admins además: asistencia y tardanzas de una persona, historial detallado de tareas y ver la jornada de otra persona (solo lectura).
 - **Marketing** — salud del proyecto, GA4, Search Console, Domain Rating, keywords, oportunidades SEO, las 5 redes, Meta y Google Ads, competidores, objetivos, informes y auditorías GEO. Puede agregar keywords y competidores, correr una auditoría GEO, regenerar un informe y refrescar todas las fuentes.
 - **SEO avanzado** — Canibalización, Content Brief, Auditoría On-Page y Content Gap: correr, listar, ver y borrar.
@@ -1310,8 +1311,8 @@ Así el agente sabe sus límites desde el primer mensaje, sin que tengas que exp
 - Chat, notificaciones, Calendario y reuniones, Briefs, Nube/archivos, links y accesos de proyectos.
 - Finanzas, RRHH (vacaciones, legajos, beneficios), EOS, Gamification y WhatsApp.
 - Administración: invitar o desactivar personas, roles, preferencias, módulos, facturación.
-- En tareas: borrarlas, editar el texto, destacarlas, moverlas al backlog, comentarlas o adjuntar archivos.
-- **Subir archivos o imágenes** de cualquier tipo, ni conectar integraciones (Google, Meta, TikTok, LinkedIn): esas cosas necesitan el navegador.
+- En tareas: borrar las tuyas (solo puede borrar las del agente), editar o pasar tareas de otras personas, destacarlas, moverlas al backlog o seguirlas.
+- **Subir archivos** fuera de las tareas (Contenido, Nube, chat), ni conectar integraciones (Google, Meta, TikTok, LinkedIn): esas cosas necesitan el navegador.
 
 ## Acciones que el agente confirma antes
 

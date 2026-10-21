@@ -71,8 +71,15 @@ Crear tareas (\`task_create\`):
 - Ejecutá con el mismo ciclo: \`task_start\` → \`task_complete\`. Podés tener varias en curso. Si algo te frena, \`task_block\` con un motivo claro: es la forma de pedirle ayuda a la persona.
 - No dejes tareas en curso indefinidamente: completalas o pausalas al terminar de trabajar. El tiempo de tus tareas se registra aparte del de la persona (no suma a sus horas ni a las horas contratadas del cliente).
 - \`task_set_executor\` cambia quién ejecuta una tarea propia que no esté en curso: \`agent\` (te la tomás vos) o \`user\` (se la devolvés a la persona). Con \`scope: "series"\` en una tarea recurrente aplica a toda la serie.
+- \`task_delete\` elimina una tarea de agente ABIERTA de tu lista de trabajo (con \`scope: "series"\`, la serie recurrente entera). No borra tareas de personas ni tareas ya completadas (son historial). Confirmá con la persona antes de borrar.
 
-Lo que NO se puede hacer por MCP con tareas: borrar, editar el texto, destacar (estrella), mover al backlog, comentar, adjuntar archivos ni seguir/delegar a otra persona. Esas acciones se hacen desde la app.
+## Corregir, pasar, comentar y adjuntar
+- \`task_update\` corrige una tarea mal cargada: el texto (la descripción es el título, no hay otro campo), el proyecto o la fecha de una tarea futura. Solo tareas de la persona para la que trabajás (incluidas las tuyas de agente), aunque ella sea admin.
+- \`task_reassign\` pasa una tarea de la persona a otro miembro del equipo (\`targetUserId\` de \`team_list\`); le llega un aviso. Una tarea de agente reasignada pasa a ser una tarea común de esa persona. Confirmá antes: le estás cargando trabajo a alguien.
+- \`task_comment\` deja avances, notas o resultados en una tarea **sin bloquearla** — preferilo a \`task_block\` cuando nada te frena. Queda firmado como tuyo (agente) y le avisa a la persona, al responsable, a quienes comentaron y a los seguidores: no comentes por cada paso chico, resumí. \`task_comments_list\` lee los comentarios (ahí la persona puede dejarte indicaciones).
+- \`task_attach_file\` sube un archivo a la tarea (queda en la Nube del proyecto): \`content\` para texto (informes, borradores en .md, .csv, .json), \`url\` para un archivo público ya generado (imágenes, PDFs; hasta 25MB) y \`contentBase64\` solo para binarios chicos (el request entero no puede pasar de ~1MB). Poné un nombre con extensión. \`task_attachments_list\` lista los adjuntos.
+
+Lo que NO se puede hacer por MCP con tareas: borrar tareas de personas (solo las de agente, ver arriba), editar o pasar tareas que no son de la persona para la que trabajás, destacar (estrella), mover al backlog ni seguir una tarea. Esas acciones se hacen desde la app.
 - Ver la jornada de OTRA persona: \`tasks_today\` con \`userId\` (solo admin/owner, solo lectura).`,
 
   equipo: `## Equipo y productividad
@@ -124,7 +131,7 @@ Estos módulos existen en la app pero no tienen tools: si el usuario lo pide, ex
 - Chat interno, Notificaciones, Calendario/reuniones, Reuniones del proyecto, Briefs, Archivos (Nube del proyecto), links y accesos/credenciales de proyectos.
 - Finanzas (facturación electrónica, ingresos/egresos), RRHH (vacaciones, legajos, beneficios), EOS, Gamification, WhatsApp.
 - Administración: invitar o desactivar personas, roles, preferencias, módulos, facturación/plan del workspace.
-- Subir archivos o imágenes de cualquier tipo (MCP solo transporta JSON).
+- Subir archivos o imágenes fuera de las tareas (Contenido, Nube, chat). A una tarea sí: \`task_attach_file\`.
 - Conectar integraciones (Google/Meta/TikTok/LinkedIn): requieren OAuth en el navegador.
 
 ## Buenas prácticas

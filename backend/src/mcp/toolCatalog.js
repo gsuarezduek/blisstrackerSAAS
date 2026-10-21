@@ -366,6 +366,77 @@ const tools = [
     }),
   },
   {
+    name: 'task_update',
+    description: 'Corrige una tarea de la persona para la que trabajás (incluidas tus tareas de agente): el texto (la descripción ES el título de la tarea, no hay campos separados), el proyecto o la fecha de una tarea futura. Las @menciones nuevas en el texto avisan a quien se menciona. scope "series" en una tarea recurrente aplica texto y proyecto a toda la serie abierta. En una tarea completada solo se puede corregir el texto.',
+    inputSchema: {
+      taskId: z.number().int(),
+      description: z.string().optional().describe('Texto nuevo de la tarea (reemplaza al anterior)'),
+      projectId: z.number().int().optional().describe('Moverla a otro proyecto'),
+      scheduledFor: z.string().optional().describe('YYYY-MM-DD — solo tareas futuras one-off: nueva fecha de aparición (posterior a hoy)'),
+      scope: z.enum(['this', 'series']).optional().describe('Solo tareas recurrentes: "series" = esta y toda la serie'),
+    },
+    request: ({ taskId, description, projectId, scheduledFor, scope }) => ({
+      method: 'PATCH', path: `/tasks/${taskId}`,
+      query: { scope: scope === 'series' ? 'series' : undefined },
+      body: { description, projectId, scheduledFor },
+    }),
+  },
+  {
+    name: 'task_reassign',
+    description: 'Pasa una tarea de la persona para la que trabajás a otro miembro activo del workspace (ids con team_list); le llega un aviso. Si era una tarea de agente, pasa a ser una tarea común de esa persona (no se puede mientras esté en curso). No sirve para tareas completadas.',
+    inputSchema: {
+      taskId: z.number().int(),
+      targetUserId: z.number().int().describe('Nuevo responsable'),
+    },
+    request: ({ taskId, targetUserId }) => ({ method: 'PATCH', path: `/tasks/${taskId}`, body: { targetUserId } }),
+  },
+  {
+    name: 'task_comments_list',
+    description: 'Comentarios de una tarea, del más viejo al más nuevo. Los que dejó un agente traen `agent` ({id,label}).',
+    inputSchema: { taskId: z.number().int() },
+    request: ({ taskId }) => ({ method: 'GET', path: `/tasks/${taskId}/comments` }),
+  },
+  {
+    name: 'task_comment',
+    description: 'Deja un comentario en una tarea (avances, notas, resultados) sin bloquearla. Queda firmado por vos como agente de la persona; le avisa a ella, al responsable de la tarea, a quienes comentaron antes y a los seguidores. @Nombre menciona a alguien del workspace.',
+    inputSchema: {
+      taskId: z.number().int(),
+      text: z.string().describe('Texto plano; los links se muestran clickeables'),
+    },
+    request: ({ taskId, text }) => ({ method: 'POST', path: `/tasks/${taskId}/comments`, body: { text } }),
+  },
+  {
+    name: 'task_attachments_list',
+    description: 'Archivos adjuntos de una tarea (viven en la Nube del proyecto, carpeta "Tareas / <Mes> / <tarea>").',
+    inputSchema: { taskId: z.number().int() },
+    request: ({ taskId }) => ({ method: 'GET', path: `/tasks/${taskId}/attachments` }),
+  },
+  {
+    name: 'task_attach_file',
+    description: 'Adjunta un archivo a una tarea; se guarda en la Nube del proyecto. Mandá exactamente UNA fuente: `content` (texto: informes, borradores, markdown, CSV, JSON — lo más común), `contentBase64` (binario chico: el request entero no puede pasar de ~1MB) o `url` (archivo público descargable, ej. una imagen ya generada; hasta 25MB). No se aceptan HTML ni SVG.',
+    inputSchema: {
+      taskId: z.number().int(),
+      name: z.string().describe('Nombre del archivo con extensión, ej. "informe-octubre.md". La extensión define el tipo si no se puede detectar.'),
+      content: z.string().optional().describe('Contenido de texto del archivo'),
+      contentBase64: z.string().optional().describe('Contenido binario en base64'),
+      url: z.string().optional().describe('URL pública http(s) del archivo a descargar'),
+      mimeType: z.string().optional().describe('Opcional: tipo MIME, si la extensión no alcanza'),
+    },
+    request: ({ taskId, ...body }) => ({ method: 'POST', path: `/tasks/${taskId}/attachments/direct`, body }),
+  },
+  {
+    name: 'task_delete',
+    description: 'Elimina una tarea de agente abierta de tu lista de trabajo (las tuyas o las delegadas a "cualquiera de mis agentes"). No sirve para tareas de personas ni para tareas ya completadas. scope "series" en una tarea recurrente elimina la serie y sus instancias abiertas (las completadas quedan en el historial).',
+    inputSchema: {
+      taskId: z.number().int(),
+      scope: z.enum(['this', 'series']).optional().describe('Solo tareas recurrentes: "series" = esta y toda la serie'),
+    },
+    request: ({ taskId, scope }) => ({
+      method: 'DELETE', path: `/tasks/${taskId}`,
+      query: { scope: scope === 'series' ? 'series' : undefined },
+    }),
+  },
+  {
     name: 'task_start',
     description: 'Inicia una tarea (pasa a IN_PROGRESS). En una tarea humana falla si la persona ya tiene otra en curso; las tareas de agente no tienen ese límite.',
     inputSchema: { taskId: z.number().int() },

@@ -76,6 +76,7 @@ POST   /api/tasks/:id/comments
 POST   /api/tasks/:id/comments/:commentId/reactions  # body { emoji }, toggle por (comentario, usuario, emoji)
 GET    /api/tasks/:id/attachments                    # adjuntos linkeados (ProjectFile ya confirmados)
 POST   /api/tasks/:id/attachments/presign            # { name, mimeType, sizeBytes } — carpeta "Tareas/<mes>/<tarea>" resuelta sola
+POST   /api/tasks/:id/attachments/direct             # { name, content | contentBase64 | url, mimeType? } — sube desde el servidor (agentes vía MCP), hasta 25MB por url
 POST   /api/tasks/:id/attachments/:fileId/confirm    # valida tamaño real + magic bytes, crea el vínculo TaskFile
 DELETE /api/tasks/:id/attachments/:fileId            # saca el vínculo (el archivo sigue en Archivos del proyecto)
 

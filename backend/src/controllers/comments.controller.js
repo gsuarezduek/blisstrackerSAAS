@@ -2,6 +2,7 @@ const prisma = require('../lib/prisma')
 const { resolveMentions } = require('../lib/mentions')
 const { sendPushToUser } = require('../services/pushNotification.service')
 const { isAdmin, isProjectMember } = require('../lib/projectAccess')
+const { requestAgentId } = require('./tasks/_shared')
 
 // Mismo criterio "equipo = etiqueta, no barrera" que el resto del modelo de acceso a
 // proyectos (ver ProjectAccess/Links/lecturas): cualquier miembro activo del workspace
@@ -24,6 +25,7 @@ async function getTaskWithAccess(req, taskId) {
 
 const COMMENT_INCLUDE = {
   user: { select: { id: true, name: true, avatar: true } },
+  agent: { select: { id: true, label: true } },
   reactions: { orderBy: { createdAt: 'asc' }, select: { id: true, emoji: true, userId: true, user: { select: { name: true } } } },
 }
 
@@ -54,10 +56,13 @@ async function addComment(req, res, next) {
     const task = await getTaskWithAccess(req, taskId)
     if (!task) return res.status(403).json({ error: 'No tenés acceso a esta tarea' })
 
+    // Vía MCP: el comentario lo escribe el agente en nombre de su dueño (userId).
+    const agentId = requestAgentId(req)
     const comment = await prisma.taskComment.create({
-      data: { taskId, userId, content: text.trim() },
+      data: { taskId, userId, agentId, content: text.trim() },
       include: COMMENT_INCLUDE,
     })
+    const agentName = agentId ? (comment.agent?.label?.trim() || `Agente #${agentId}`) : null
 
     const desc = task.description.length > 60 ? task.description.slice(0, 57) + '...' : task.description
 
@@ -82,7 +87,7 @@ async function addComment(req, res, next) {
     }
 
     if (mentionedUserIds.size > 0) {
-      const mentionMessage = `te mencionó en "${desc}"`
+      const mentionMessage = agentId ? `te mencionó (vía su agente «${agentName}») en "${desc}"` : `te mencionó en "${desc}"`
       await prisma.notification.createMany({
         data: Array.from(mentionedUserIds).map(uid => ({
           userId:      uid,
@@ -120,8 +125,19 @@ async function addComment(req, res, next) {
       if (!mentionedUserIds.has(f.userId)) toNotify.add(f.userId)
     }
 
+    // Comentario de un agente: el dueño también se entera (en el resto de los casos
+    // nadie se autonotifica), con un aviso autocontenido sin actor — mismo criterio que
+    // el bloqueo de una tarea de agente.
+    if (agentId) {
+      const ownerMessage = `Tu agente «${agentName}» comentó en "${desc}"`
+      await prisma.notification.create({
+        data: { userId, actorId: null, taskId: task.id, projectId: task.projectId, workspaceId, type: 'TASK_COMMENT', message: ownerMessage },
+      })
+      sendPushToUser({ userId, workspaceId, type: 'TASK_COMMENT', taskId: task.id, message: ownerMessage }).catch(() => {})
+    }
+
     if (toNotify.size > 0) {
-      const commentMessage = `comentó en "${desc}"`
+      const commentMessage = agentId ? `comentó (vía su agente «${agentName}») en "${desc}"` : `comentó en "${desc}"`
       await prisma.notification.createMany({
         data: Array.from(toNotify).map(uid => ({
           userId:      uid,

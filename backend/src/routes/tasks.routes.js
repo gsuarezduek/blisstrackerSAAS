@@ -44,6 +44,7 @@ router.post('/:id/comments',         addComment)
 router.post('/:id/comments/:commentId/reactions', toggleReaction)
 router.get('/:id/attachments',                  attachments.listAttachments)
 router.post('/:id/attachments/presign',         attachments.presignAttachment)
+router.post('/:id/attachments/direct',          attachments.directAttachment)
 router.post('/:id/attachments/:fileId/confirm', attachments.confirmAttachment)
 router.delete('/:id/attachments/:fileId',       attachments.removeAttachment)
 
