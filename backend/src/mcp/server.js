@@ -1,5 +1,7 @@
 const { McpServer } = require('@modelcontextprotocol/sdk/server/mcp.js')
 const { StreamableHTTPServerTransport } = require('@modelcontextprotocol/sdk/server/streamableHttp.js')
+const { isInitializeRequest } = require('@modelcontextprotocol/sdk/types.js')
+const { randomUUID } = require('crypto')
 const { tools } = require('./toolCatalog')
 const { callApi } = require('./apiBridge')
 const { INSTRUCTIONS, buildGuide, GUIDE_TOPICS } = require('./guide')
@@ -61,11 +63,68 @@ function buildServer(identity) {
   return server
 }
 
-// Modo stateless (sin sessionId): una instancia nueva de server+transport por
-// request, como recomienda el SDK para este caso (ver streamableHttp.d.ts) —
-// no necesitamos streams/resumabilidad para llamadas simples de tools.
-async function handleMcpRequest(req, res) {
-  const server = buildServer(req.mcpIdentity)
+// ── Sesiones ──────────────────────────────────────────────────────────────────
+// Los clientes MCP guardan la lista de tools que reciben al conectarse. Para que
+// vean las tools nuevas después de un deploy sin reconectar a mano, usamos el
+// mecanismo del estándar: cada `initialize` abre una sesión (header
+// Mcp-Session-Id) que vive en memoria de este proceso. Un deploy reinicia el
+// proceso, las sesiones viejas dejan de existir, y el siguiente request con un
+// id viejo recibe 404 → la spec obliga al cliente a reinicializar, y con eso
+// vuelve a pedir tools/list. (El SDK ya declara `tools.listChanged: true`; no
+// mandamos la notificación porque la lista nunca cambia dentro de un mismo
+// proceso — cambia con el deploy, y ahí lo que avisa es el 404.)
+// Asume una sola instancia del backend (igual que los locks de los crons): con
+// varias réplicas, una sesión abierta en una daría 404 en la otra.
+const SESSION_IDLE_MS = 60 * 60 * 1000
+const MAX_SESSIONS = 500
+const sessions = new Map() // sessionId → { transport, tokenId, lastSeen }
+
+function closeSession(id) {
+  const session = sessions.get(id)
+  if (!session) return
+  sessions.delete(id)
+  session.transport.close().catch(() => {})
+}
+
+// Barre sesiones inactivas (los clientes rara vez mandan DELETE al irse). unref:
+// no mantiene vivo el proceso (tests, shutdown).
+setInterval(() => {
+  const cutoff = Date.now() - SESSION_IDLE_MS
+  for (const [id, session] of sessions) if (session.lastSeen < cutoff) closeSession(id)
+}, 10 * 60 * 1000).unref()
+
+function sessionNotFound(res) {
+  res.status(404).json({ jsonrpc: '2.0', error: { code: -32001, message: 'Session not found' }, id: null })
+}
+
+function hasInitialize(body) {
+  return Array.isArray(body) ? body.some(isInitializeRequest) : isInitializeRequest(body)
+}
+
+async function startSession(req, res, identity) {
+  // Map en orden de inserción: el primero es el más viejo.
+  if (sessions.size >= MAX_SESSIONS) closeSession(sessions.keys().next().value)
+
+  const server = buildServer(identity)
+  const transport = new StreamableHTTPServerTransport({
+    sessionIdGenerator: () => randomUUID(),
+    onsessioninitialized: (id) => sessions.set(id, { transport, tokenId: identity.tokenId, lastSeen: Date.now() }),
+  })
+  // Antes de connect: el Protocol del SDK encadena este onclose con el suyo.
+  // Cubre el DELETE del cliente y el cierre por inactividad.
+  transport.onclose = () => {
+    if (transport.sessionId) sessions.delete(transport.sessionId)
+    server.close().catch(() => {})
+  }
+  await server.connect(transport)
+  await transport.handleRequest(req, res, req.body)
+}
+
+// Sin sesión: una instancia nueva de server+transport por request (el modo de
+// antes). Queda para clientes que no guardan el Mcp-Session-Id — no se cortan,
+// solo no se enteran de las tools nuevas hasta reconectar.
+async function handleStateless(req, res, identity) {
+  const server = buildServer(identity)
   const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined })
   res.on('close', () => {
     transport.close()
@@ -75,4 +134,24 @@ async function handleMcpRequest(req, res) {
   await transport.handleRequest(req, res, req.body)
 }
 
-module.exports = { handleMcpRequest, buildServer }
+async function handleMcpRequest(req, res) {
+  const identity = req.mcpIdentity
+  try {
+    const sessionId = req.headers['mcp-session-id']
+    if (sessionId) {
+      const session = sessions.get(sessionId)
+      // Desconocida (típicamente: hubo un deploy) o abierta con otro token → 404,
+      // así no se puede usar la sesión de otra persona aunque se conozca el id.
+      if (!session || session.tokenId !== identity.tokenId) return sessionNotFound(res)
+      session.lastSeen = Date.now()
+      return await session.transport.handleRequest(req, res, req.body)
+    }
+    if (req.method === 'POST' && hasInitialize(req.body)) return await startSession(req, res, identity)
+    return await handleStateless(req, res, identity)
+  } catch (err) {
+    console.error('[mcp] error manejando request:', err)
+    if (!res.headersSent) res.status(500).json({ jsonrpc: '2.0', error: { code: -32603, message: 'Internal error' }, id: null })
+  }
+}
+
+module.exports = { handleMcpRequest, buildServer, _sessions: sessions }
