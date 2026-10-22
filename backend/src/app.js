@@ -212,16 +212,19 @@ app.use('/api/mcp-tokens',       mcpTokensRoutes)
 app.get('/api/health', (_, res) => res.json({ ok: true }))
 
 const { handlePrismaError } = require('./lib/prismaError')
+const { isUpstreamError, httpStatusFor } = require('./lib/upstreamError')
 
 app.use((err, req, res, next) => {
   if (err.code?.startsWith?.('P2') && handlePrismaError(err, res)) return
 
   const isProd = process.env.NODE_ENV === 'production'
-  const message = isProd && !err.isOperational
-    ? 'Internal server error'
-    : (err.message || 'Internal server error')
+  const message = isUpstreamError(err)
+    ? 'Un servicio externo no está disponible en este momento. Intentá de nuevo más tarde.'
+    : isProd && !err.isOperational
+      ? 'Internal server error'
+      : (err.message || 'Internal server error')
   console.error('[error]', err.code ?? err.message, '\n', err.stack ?? '')
-  res.status(err.status || 500).json({ error: message })
+  res.status(httpStatusFor(err)).json({ error: message })
 })
 
 module.exports = app
