@@ -13,6 +13,7 @@ const {
   buildPerformanceSection, buildSeoSection, buildKeywordsSection,
 } = require('./sectionBuilders/webAndSeo')
 const { generateAnalysis } = require('./analysis')
+const { loadReportHistory } = require('./history')
 
 /**
  * Recopila todos los datos necesarios para el informe mensual de un proyecto.
@@ -57,6 +58,10 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
           metaAds:   cachedData.sections?.metaAds   ?? null,
         })
       : []
+    const history = await loadReportHistory({
+      projectId, workspaceId, dataMonth, period, multiMonth, monthsCovered,
+      sections: cachedData.sections,
+    })
     return {
       project:        cachedData.project,
       month,
@@ -64,6 +69,7 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
       period:         buildPeriodMeta(period, monthsCovered, multiMonth),
       connectedTypes: cachedData.connectedTypes,
       sections:       cachedData.sections,
+      history,
       objectives:     objectivesResults,
       analysis:       validCachedAnalysis,
       analysisError:  null,
@@ -382,6 +388,9 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
       })
     : []
 
+  // ── Historial mes a mes (recalculado siempre, NO se cachea — igual que objetivos) ─
+  const history = await loadReportHistory({ projectId, workspaceId, dataMonth, period, multiMonth, monthsCovered, sections })
+
   // ── Análisis IA ──────────────────────────────────────────────────────────────
   // Si ya existe un análisis cacheado con resumen válido, no se regenera.
   // El análisis solo considera las secciones habilitadas.
@@ -407,6 +416,7 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
     period:         periodMeta,   // { start, end, label, dataLabel, months, multiMonth }
     connectedTypes: [...connectedTypes],
     sections,
+    history,      // { months, highlight, partialMonth, sections: { <sectionKey>: { metrics } } } | null
     objectives: objectivesResults,
     analysis,
     analysisError:  analysis?._error ?? null,

@@ -903,6 +903,10 @@ El informe **no** se arma solo al entrar: lo generás vos. En el modal "Generar 
 
 Para regenerar volvés a elegir secciones; eso limpia el análisis y los datos cacheados y rearma solo lo elegido.
 
+## Comparar con meses anteriores
+
+Cada tarjeta del informe (Analytics, Search Console, cada red social, Meta Ads y Google Ads) trae un bloque **"Últimos 6 meses"** con un gráfico de barras (volúmenes) o de línea (tasas y posición). Debajo de cada mes, una flecha muestra la variación contra el mes anterior, y el mes del informe aparece resaltado con el color de tu marca. El cliente elige qué métrica ver con los chips; en el PDF sale la primera. En las redes se grafican los **seguidores nuevos** de cada mes, no el total. Los meses sin datos aparecen como "s/d", y si el período termina antes de fin de mes, la última barra se marca como parcial. El historial se arma en cada carga con los datos guardados de cada mes, así que también lo muestran los informes ya publicados, sin regenerarlos.
+
 ## Link público
 
 Cada informe tiene un **link público** (\`/report/:token\`) que el cliente abre sin login. Ese link da acceso a **todos los informes generados** del proyecto (puede navegar entre meses), así que tené presente esa implicación de privacidad. El preview en WhatsApp/redes (Open Graph) muestra el banner del informe.
@@ -1283,6 +1287,7 @@ Así el agente sabe sus límites desde el primer mensaje, sin que tengas que exp
         tips: [
           'Si el agente no parece conocer las reglas, pedile: "leé bliss_guide y whoami antes de seguir".',
           'Un token por agente o dispositivo: así podés revocar uno sin cortar los demás.',
+          'Si varios agentes comparten el mismo conector (por ejemplo, varios agentes de Grok), pediles que pasen su nombre en el parámetro agentName: en BlissTracker vas a ver "nombre del token · nombre del agente" en tareas, comentarios, WhatsApp y Productividad. Es un nombre que declara el propio agente: sirve para ordenar, no como control de seguridad.',
         ],
         related: ['agentes-ia-capacidades', 'agentes-ia-seguridad'],
       },
@@ -1291,7 +1296,7 @@ Así el agente sabe sus límites desde el primer mensaje, sin que tengas que exp
         title: 'Qué puede (y qué no puede) hacer un agente',
         audience: 'todos',
         module: 'mcp',
-        summary: 'Proyectos, tareas, equipo, marketing, SEO, contenido y ventas sí; chat, calendario, finanzas, RRHH, EOS y archivos todavía no.',
+        summary: 'Proyectos, tareas, equipo, marketing, SEO, contenido, ventas y responder WhatsApp sí; chat, calendario, finanzas, RRHH, EOS y archivos todavía no.',
         body: `El agente usa **tus mismos permisos**: puede hacer lo que vos podés hacer en la app, nunca más. Si no tenés acceso a un módulo, el agente tampoco.
 
 ## Lo que sí puede hacer
@@ -1306,18 +1311,20 @@ Así el agente sabe sus límites desde el primer mensaje, sin que tengas que exp
 - **SEO avanzado** — Canibalización, Content Brief, Auditoría On-Page y Content Gap: correr, listar, ver y borrar.
 - **Contenido** — ver, crear, editar y borrar piezas; ver historial y comentarios; comentar; enviar al dashboard del responsable; pedir aprobación al cliente.
 - **Ventas** — dashboard y métricas; empresas, contactos y leads (crear, editar, borrar); cambiar estado y responsable; archivar; convertir a proyecto; próximas acciones y notas; investigación con IA, informe de diagnóstico y propuestas.
+- **WhatsApp** — leer las conversaciones y **responder con texto** dentro de la ventana de 24 hs desde el último mensaje del contacto. El mensaje sale a tu nombre y en la bandeja queda rotulado con el nombre del agente. **El agente tiene prioridad sobre el bot**: cuando toma una conversación o responde, el bot deja de contestar ahí y el chip muestra "Agente «nombre»". También podés asignarle una conversación a tu agente desde el chat, en el selector **"La atiende mi agente"**. En la configuración del bot podés activar **"Darle prioridad a los agentes de IA"**: el bot espera unos minutos antes de responder y, si en ese rato un agente o una persona toma la conversación, no contesta. Para que el bot vuelva a atenderla, elegí **"La atiende el bot"**.
 
 ## Lo que todavía no puede hacer
 
 - Chat, notificaciones, Calendario y reuniones, Briefs, Nube/archivos, links y accesos de proyectos.
-- Finanzas, RRHH (vacaciones, legajos, beneficios), EOS, Gamification y WhatsApp.
+- Finanzas, RRHH (vacaciones, legajos, beneficios), EOS y Gamification.
+- En WhatsApp: mandar plantillas o reabrir conversaciones vencidas (tienen costo), mandar imágenes o archivos, y configurar el bot o las automatizaciones.
 - Administración: invitar o desactivar personas, roles, preferencias, módulos, facturación.
 - En tareas: borrar las tuyas (solo puede borrar las del agente), editar o pasar tareas de otras personas, destacarlas, moverlas al backlog o seguirlas.
 - **Subir archivos** fuera de las tareas (Contenido, Nube, chat), ni conectar integraciones (Google, Meta, TikTok, LinkedIn): esas cosas necesitan el navegador.
 
 ## Acciones que el agente confirma antes
 
-Las que tienen efecto hacia afuera o consumen IA: mandarle algo al cliente (pedir aprobación, comentarios visibles en el portal, confirmar una propuesta), borrar, convertir un lead, y correr auditorías, informes, investigaciones o propuestas con IA, que gastan el presupuesto de tokens del workspace.`,
+Las que tienen efecto hacia afuera o consumen IA: mandarle algo al cliente (un WhatsApp, pedir aprobación, comentarios visibles en el portal, confirmar una propuesta), borrar, convertir un lead, y correr auditorías, informes, investigaciones o propuestas con IA, que gastan el presupuesto de tokens del workspace.`,
         tips: [
           'Pedile al agente que use executor "agent" en las tareas que va a hacer él: así no se mezclan con las tuyas.',
           'El tiempo de tus agentes no suma a tus horas, a tu asistencia ni a las horas contratadas del proyecto: en Productividad se ve aparte, en "Sus agentes de IA".',

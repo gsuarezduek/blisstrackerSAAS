@@ -10,6 +10,7 @@ import {
   DeltaChip, SectionCard, ObjectivesResults, ReportSignature,
 } from './ReportViewerParts'
 import { RRSSSection, PublicidadSection, SeoGeoSection, SitioWebSection } from './ReportViewerSections'
+import { ReportHistoryContext } from './ReportHistory'
 
 export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, onRemoveSection, report = null, workspace = null, showFooter = true, compactHero = false, printMode = false }) {
   const [pendingRemove,    setPendingRemove]    = useState(null)   // { keys, label } — confirmación de borrado de sección
@@ -275,6 +276,7 @@ export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, o
 
   return (
    <ReportEditContext.Provider value={{ enabled: editEnabled, requestRemove }}>
+   <ReportHistoryContext.Provider value={{ history: data.history ?? null, brandPrimary, printMode }}>
     {/* Modal de confirmación de borrado de sección */}
     {pendingRemove && (
       <div className="no-print fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={e => e.target === e.currentTarget && !removing && setPendingRemove(null)}>
@@ -784,6 +786,7 @@ export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, o
         </div>
       )}
     </div>
+   </ReportHistoryContext.Provider>
    </ReportEditContext.Provider>
   )
 }

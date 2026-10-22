@@ -8,6 +8,7 @@ import {
   KpiGrid, BestInstagramPost, StoriesBlock, BestAd, BestTikTokVideo, BestYouTubeVideo,
   BestLinkedinPost, BestFacebookPost, LinkedinAudience, CompetitorComparison,
 } from './ReportViewerParts'
+import { SectionHistory } from './ReportHistory'
 
 const AI_LABELS = {
   chatgpt: 'ChatGPT', gemini: 'Gemini', claude: 'Claude',
@@ -113,6 +114,7 @@ export function RRSSSection({ s, contextRRSS, canEdit, contextEditing }) {
                 }
               </p>
             )}
+            <SectionHistory sectionKey="instagram" />
           </SectionCard>
         )}
 
@@ -133,6 +135,7 @@ export function RRSSSection({ s, contextRRSS, canEdit, contextEditing }) {
                 }
               </p>
             )}
+            <SectionHistory sectionKey="tiktok" />
           </SectionCard>
         )}
 
@@ -156,6 +159,7 @@ export function RRSSSection({ s, contextRRSS, canEdit, contextEditing }) {
                 }
               </p>
             )}
+            <SectionHistory sectionKey="youtube" />
           </SectionCard>
         )}
 
@@ -179,6 +183,7 @@ export function RRSSSection({ s, contextRRSS, canEdit, contextEditing }) {
                 }
               </p>
             )}
+            <SectionHistory sectionKey="linkedin" />
           </SectionCard>
         )}
 
@@ -200,6 +205,7 @@ export function RRSSSection({ s, contextRRSS, canEdit, contextEditing }) {
                 }
               </p>
             )}
+            <SectionHistory sectionKey="facebook" />
           </SectionCard>
         )}
       </div>
@@ -228,6 +234,7 @@ export function PublicidadSection({ s, contextPublicidad, canEdit, contextEditin
               { label: 'CTR',         value: s.metaAds.ctr != null ? `${Number(s.metaAds.ctr).toFixed(2)}%` : '—' },
             ]} />
             <BestAd ad={s.metaAds.topAds?.[0]} accent="blue" />
+            <SectionHistory sectionKey="metaAds" />
           </SectionCard>
         )}
         {s.googleAds && (
@@ -240,6 +247,7 @@ export function PublicidadSection({ s, contextPublicidad, canEdit, contextEditin
               ...(s.googleAds.conversions != null && s.googleAds.conversions > 0 ? [{ label: 'Conversiones', value: fmt(s.googleAds.conversions) }] : []),
             ]} />
             <BestAd ad={s.googleAds.topAds?.[0]} accent="green" />
+            <SectionHistory sectionKey="googleAds" />
           </SectionCard>
         )}
       </div>
@@ -384,6 +392,7 @@ export function SeoGeoSection({ s, contextSEO, canEdit, contextEditing }) {
               </div>
             </div>
           )}
+          <SectionHistory sectionKey="seo" />
         </SectionCard>
       )}
 
@@ -579,11 +588,14 @@ export function SitioWebSection({ s, contextSitio, brandPrimary, brandSecondary,
               </div>
             </div>
           )}
+          <SectionHistory sectionKey="analytics" />
         </SectionCard>
       )}
 
-      {/* Evolución multi-mes (hasta 6 meses, sesiones + usuarios nuevos) */}
-      {evolutionPoints && (
+      {/* Evolución multi-mes (hasta 6 meses, sesiones + usuarios nuevos). Con la tarjeta de
+          Analytics presente la reemplaza su bloque "Últimos 6 meses" (SectionHistory); queda
+          solo como respaldo si falta el snapshot GA4 del mes del informe. */}
+      {evolutionPoints && !s.analytics && (
         <SectionCard title="Evolución web">
           {/* Leyenda */}
           {evolutionNewUsers && (
