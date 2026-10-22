@@ -329,6 +329,15 @@ cron.schedule('5 8 * * *', () => runCron('whatsappAutomation', 30 * 60 * 1000, a
   catch (err) { console.error('[WhatsappAutomation] Error en cron diario:', err.message) }
 }), { timezone: DEFAULT_TZ })
 
+// Cron: respuestas del bot de WhatsApp en espera (prioridad a los agentes de IA,
+// WhatsappBotConfig.agentWaitMins) — cada minuto. Sin nada pendiente es un solo
+// query indexado (botReplyDueAt).
+cron.schedule('* * * * *', () => runCron('whatsappBotDue', 5 * 60 * 1000, async () => {
+  const { runDueBotReplies } = require('./services/whatsappBot.service')
+  try { await runDueBotReplies() }
+  catch (err) { console.error('[WhatsApp Bot] Error en cron de respuestas en espera:', err.message) }
+}), { timezone: DEFAULT_TZ })
+
 // Cron: acumulación automática de vacaciones (regla "+N días cada M meses" por
 // aniversario de ingreso) — diario 02:00 ART
 cron.schedule('0 2 * * *', () => runCron('vacationAccrual', 30 * 60 * 1000, async () => {

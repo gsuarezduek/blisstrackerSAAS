@@ -1,6 +1,6 @@
 const prisma = require('../../lib/prisma')
 const { isAdmin } = require('../../lib/projectAccess')
-const { requestAgentId } = require('../tasks/_shared')
+const { requestAgentId, requestAgentName } = require('../tasks/_shared')
 const { resolveProjectId } = require('./_shared')
 const { assertToggleEnabled } = require('./projectSettings.controller')
 
@@ -92,11 +92,13 @@ async function createEntry(req, res, next) {
 
     const userId = req.user.userId
     const agentId = requestAgentId(req)
+    const agentName = requestAgentName(req)
     const entry = await prisma.projectSituationEntry.create({
       data: {
         projectId, content,
         createdById: userId, updatedById: userId,
         createdByAgentId: agentId, updatedByAgentId: agentId,
+        createdByAgentName: agentName, updatedByAgentName: agentName,
       },
       include: ENTRY_INCLUDE,
     })
@@ -120,7 +122,7 @@ async function updateEntry(req, res, next) {
 
     const updated = await prisma.projectSituationEntry.update({
       where: { id: entryId },
-      data: { content, updatedById: req.user.userId, updatedByAgentId: requestAgentId(req) },
+      data: { content, updatedById: req.user.userId, updatedByAgentId: requestAgentId(req), updatedByAgentName: requestAgentName(req) },
       include: ENTRY_INCLUDE,
     })
     res.json(shapeEntry(req, updated, true))

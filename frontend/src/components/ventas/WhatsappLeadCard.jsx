@@ -115,7 +115,7 @@ export default function WhatsappLeadCard({ leadId, lead, onChanged }) {
     const blocking = !conversation.isBlocked
     if (blocking && !window.confirm('¿Marcar este chat como spam? Se bloquea y el bot deja de responder ahí hasta que lo desbloquees.')) return
     const { data } = await api.patch(`/whatsapp/conversations/${conversation.id}/block`, { blocked: blocking })
-    setConversation(c => ({ ...c, isBlocked: data.isBlocked, botEnabled: data.botEnabled }))
+    setConversation(c => ({ ...c, isBlocked: data.isBlocked, botEnabled: data.botEnabled, agentControl: data.isBlocked ? null : c.agentControl, agentControlName: data.isBlocked ? null : c.agentControlName }))
   }, [conversation])
 
   async function reassign(e) {
@@ -144,12 +144,18 @@ export default function WhatsappLeadCard({ leadId, lead, onChanged }) {
     function onStatus({ waMessageId, status }) {
       setMessages(prev => prev.map(m => (m.waMessageId === waMessageId ? { ...m, status } : m)))
     }
+    function onBot({ conversationId, botEnabled, agentControl, agentControlName }) {
+      if (conversationId !== conversationIdRef.current) return
+      setConversation(c => (c ? { ...c, botEnabled, agentControl: agentControl ?? null, agentControlName: agentControlName ?? null } : c))
+    }
 
     socket.on('whatsapp:message', onMessage)
     socket.on('whatsapp:status', onStatus)
+    socket.on('whatsapp:bot', onBot)
     return () => {
       socket.off('whatsapp:message', onMessage)
       socket.off('whatsapp:status', onStatus)
+      socket.off('whatsapp:bot', onBot)
     }
   }, [conversation?.id])
 
@@ -168,8 +174,10 @@ export default function WhatsappLeadCard({ leadId, lead, onChanged }) {
               <WhatsappBotToggle
                 conversationId={conversation.id}
                 botEnabled={conversation.botEnabled}
+                agentControl={conversation.agentControl}
+                agentControlName={conversation.agentControlName}
                 workspaceBotEnabled={botConfig?.enabled}
-                onChanged={(botEnabled) => setConversation(c => ({ ...c, botEnabled }))}
+                onChanged={(botEnabled, agentControl, agentControlName) => setConversation(c => ({ ...c, botEnabled, agentControl, agentControlName }))}
               />
             )}
             <button

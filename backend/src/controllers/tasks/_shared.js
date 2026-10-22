@@ -49,6 +49,15 @@ function requestAgentId(req) {
   return Number.isInteger(req.user?.mcpTokenId) ? req.user.mcpTokenId : null
 }
 
+// Nombre que declaró el agente en la tool (claim interno `mcpAgentName`, ver
+// mcp/apiBridge.js): distingue varios agentes que comparten un token. Solo
+// cuenta si la request viene de un agente; null si no declaró ninguno.
+function requestAgentName(req) {
+  if (requestAgentId(req) === null) return null
+  const name = req.user?.mcpAgentName
+  return typeof name === 'string' && name.trim() ? name.trim().slice(0, 60) : null
+}
+
 // Valida que `agentId` sea un agente (McpToken no revocado) de ESA persona en ese
 // workspace: una persona solo puede delegar en sus propios agentes. Devuelve el id o
 // lanza 400 (isOperational) si no corresponde.
@@ -61,4 +70,4 @@ async function assertOwnAgent(agentId, userId, workspaceId) {
   return row.id
 }
 
-module.exports = { taskInclude, assertNoActiveTask, handleActiveTaskConflict, requestAgentId, assertOwnAgent }
+module.exports = { taskInclude, assertNoActiveTask, handleActiveTaskConflict, requestAgentId, requestAgentName, assertOwnAgent }

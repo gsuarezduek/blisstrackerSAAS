@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import LoadingSpinner from '../LoadingSpinner'
 import { whatsappMediaUrl } from '../../utils/whatsappMediaUrl'
+import { agentName } from '../../hooks/useMyAgents'
 import { FileText, TriangleAlert } from 'lucide-react'
 import { Icon } from '../ui/Icon'
 
@@ -150,7 +151,12 @@ export default function WhatsappMessageList({ messages, loading, loadingMore, ha
                 {out && m.senderType === 'bot' && (
                   <span className="block text-[10px] font-semibold uppercase tracking-wide opacity-75 mb-0.5">Bot</span>
                 )}
-                {out && m.senderType === 'user' && m.senderUser && (
+                {out && m.senderType === 'user' && m.senderAgentId && (
+                  <span className="block text-[10px] font-semibold opacity-75 mb-0.5" title="Lo escribió un agente de IA conectado por MCP">
+                    {m.senderAgent ? agentName(m.senderAgent, m.senderAgentName) : (m.senderAgentName || 'Agente IA')}{m.senderUser ? ` (agente de ${m.senderUser.name})` : ''}
+                  </span>
+                )}
+                {out && m.senderType === 'user' && !m.senderAgentId && m.senderUser && (
                   <span className="block text-[10px] font-semibold opacity-75 mb-0.5">{m.senderUser.name}</span>
                 )}
                 {out && m.senderType === 'app_echo' && (

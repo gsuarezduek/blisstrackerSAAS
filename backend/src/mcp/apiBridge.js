@@ -24,17 +24,29 @@ const BASE_URL = `http://127.0.0.1:${PORT}/api`
 // req.user.mcpTokenId para marcar Task.createdByAgentId / la cola del agente
 // (ver concepto "Agentes IA" en backend/CLAUDE.md). Solo se puede obtener
 // firmando con JWT_SECRET, o sea solo desde acá: un cliente no lo puede falsificar.
-function mintInternalToken(userId, mcpTokenId) {
-  return jwt.sign({ userId, isSuperAdmin: false, mcpTokenId: mcpTokenId ?? null }, process.env.JWT_SECRET, {
+//
+// `mcpAgentName`: el nombre que el agente declaró en el parámetro `agentName` de la
+// tool (ver server.js) — distingue varios agentes que comparten un token. A
+// diferencia de mcpTokenId es autodeclarado: es un rótulo, no una identidad.
+function mintInternalToken(userId, mcpTokenId, mcpAgentName) {
+  return jwt.sign({ userId, isSuperAdmin: false, mcpTokenId: mcpTokenId ?? null, mcpAgentName: mcpAgentName ?? null }, process.env.JWT_SECRET, {
     algorithm: 'HS256',
     expiresIn: '2m',
   })
 }
 
+// Normaliza el nombre declarado por el agente: sin caracteres de control,
+// espacios colapsados, hasta 60 caracteres. Vacío → null.
+function sanitizeAgentName(name) {
+  if (typeof name !== 'string') return null
+  const clean = name.replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 60)
+  return clean || null
+}
+
 // identity: { userId, workspaceSlug, tokenId }. method: 'GET'|'POST'|'PATCH'|'DELETE'.
-// path: con leading slash, ej '/tasks'.
-async function callApi(identity, method, path, { query, body } = {}) {
-  const token = mintInternalToken(identity.userId, identity.tokenId)
+// path: con leading slash, ej '/tasks'. agentName: el declarado por el agente (opcional).
+async function callApi(identity, method, path, { query, body, agentName } = {}) {
+  const token = mintInternalToken(identity.userId, identity.tokenId, sanitizeAgentName(agentName))
 
   const response = await axios({
     method,
@@ -51,4 +63,4 @@ async function callApi(identity, method, path, { query, body } = {}) {
   return { status: response.status, data: response.data }
 }
 
-module.exports = { callApi }
+module.exports = { callApi, sanitizeAgentName }

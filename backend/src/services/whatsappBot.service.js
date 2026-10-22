@@ -487,4 +487,88 @@ async function listEscalations(workspaceId) {
   })
 }
 
-module.exports = { maybeRespondWithBot, generateBotReply, findMatch, buildTranscript, buildExamplesBlock, listEscalations, DEFAULT_PROMPT, DEFAULT_HANDOFF_MESSAGE }
+// Tope de la espera configurable (WhatsappBotConfig.agentWaitMins) y de
+// conversaciones que procesa cada corrida del cron.
+const MAX_AGENT_WAIT_MINS = 60
+const DUE_BATCH_SIZE = 50
+
+/**
+ * Punto de entrada del webhook para un mensaje entrante (no reacción).
+ *
+ * Prioridad a los agentes de IA (MCP): si el workspace configuró
+ * `agentWaitMins` > 0 y tiene algún agente conectado (McpToken activo), el bot
+ * NO responde al instante: agenda `botReplyDueAt` = ahora + N minutos y deja
+ * que `runDueBotReplies` (cron de cada minuto) responda después, solo si en
+ * ese rato nadie tomó ni contestó la conversación. Cada mensaje nuevo corre la
+ * hora, así una ráfaga de mensajes del cliente recibe una sola respuesta.
+ * Persistido en DB (no un setTimeout) para no perder respuestas en un deploy.
+ * Sin espera configurada, o sin agentes, responde como siempre.
+ */
+async function handleInboundForBot({ account, conversation, contact }) {
+  const config = await prisma.whatsappBotConfig.findUnique({ where: { workspaceId: account.workspaceId } })
+  if (!config?.enabled) return
+
+  const waitMins = Math.min(Math.max(Number(config.agentWaitMins) || 0, 0), MAX_AGENT_WAIT_MINS)
+  if (waitMins > 0) {
+    const agents = await prisma.mcpToken.count({ where: { workspaceId: account.workspaceId, revokedAt: null } })
+    if (agents > 0) {
+      await prisma.whatsappConversation.updateMany({
+        where: { id: conversation.id, botEnabled: true, isBlocked: false },
+        data: { botReplyDueAt: new Date(Date.now() + waitMins * 60 * 1000) },
+      })
+      return
+    }
+  }
+
+  return maybeRespondWithBot({ account, conversation, contact })
+}
+
+/**
+ * Cron (cada minuto): responde las conversaciones cuya espera venció.
+ * Cada una se "reclama" con un updateMany condicionado al mismo
+ * `botReplyDueAt` leído — si entró otro mensaje y corrió la hora, o la tomó
+ * otra corrida, no se procesa dos veces. Se saltea si el último mensaje ya es
+ * nuestro (alguien contestó mientras el bot esperaba, aunque no haya tomado el
+ * control); `maybeRespondWithBot` además re-chequea `botEnabled` (un agente o
+ * una persona que tomó el control lo apagó) y el resto de sus condiciones.
+ */
+async function runDueBotReplies(now = new Date()) {
+  const due = await prisma.whatsappConversation.findMany({
+    where: { botReplyDueAt: { lte: now } },
+    select: { id: true, botReplyDueAt: true },
+    orderBy: { botReplyDueAt: 'asc' },
+    take: DUE_BATCH_SIZE,
+  })
+
+  let responded = 0
+  for (const { id, botReplyDueAt } of due) {
+    try {
+      const claimed = await prisma.whatsappConversation.updateMany({
+        where: { id, botReplyDueAt },
+        data: { botReplyDueAt: null },
+      })
+      if (claimed.count !== 1) continue
+
+      const conversation = await prisma.whatsappConversation.findUnique({
+        where: { id },
+        include: { account: true, contact: true },
+      })
+      if (!conversation?.account || !conversation.botEnabled || conversation.isBlocked) continue
+
+      const last = await prisma.whatsappMessage.findFirst({
+        where: { conversationId: id, reactionEmoji: null },
+        orderBy: { id: 'desc' },
+        select: { direction: true },
+      })
+      if (last?.direction !== 'in') continue
+
+      await maybeRespondWithBot({ account: conversation.account, conversation, contact: conversation.contact })
+      responded++
+    } catch (err) {
+      console.error('[WhatsApp Bot] Error respondiendo después de la espera (conversación', id, '):', err.message)
+    }
+  }
+  return { due: due.length, responded }
+}
+
+module.exports = { maybeRespondWithBot, handleInboundForBot, runDueBotReplies, MAX_AGENT_WAIT_MINS, generateBotReply, findMatch, buildTranscript, buildExamplesBlock, listEscalations, DEFAULT_PROMPT, DEFAULT_HANDOFF_MESSAGE }

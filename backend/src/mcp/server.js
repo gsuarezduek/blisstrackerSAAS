@@ -12,6 +12,14 @@ function clean(obj) {
   return Object.fromEntries(Object.entries(obj).filter(([, v]) => v !== undefined))
 }
 
+// Parámetro opcional que se le suma a TODAS las tools del catálogo: varios agentes
+// de un mismo cliente (ej. Grok) pueden compartir un token, y este nombre
+// autodeclarado los distingue en la app ("grokbot · Ventas"). No es verificable:
+// es solo un rótulo, los permisos siguen siendo los del token.
+const agentNameParam = {
+  agentName: z.string().max(60).optional().describe('Tu nombre como agente, si compartís este conector con otros agentes (ej. "Ventas", "SEO"). Pasalo siempre igual en cada llamada: queda registrado junto a lo que hacés.'),
+}
+
 // identity: { userId, workspaceSlug } — resuelta por mcp/auth.js a partir del
 // token de esta request puntual (tabla McpToken). Cada tool queda cerrada sobre
 // ESTA identidad, no sobre una global: dos requests concurrentes de dos
@@ -33,11 +41,12 @@ function buildServer(identity) {
   for (const tool of tools) {
     server.registerTool(
       tool.name,
-      { description: tool.description, inputSchema: tool.inputSchema },
+      { description: tool.description, inputSchema: { ...tool.inputSchema, ...agentNameParam } },
       async (args) => {
         try {
-          const { method, path, query, body } = tool.request(args || {})
-          const { status, data } = await callApi(identity, method, path, { query: clean(query), body: clean(body) })
+          const { agentName, ...toolArgs } = args || {}
+          const { method, path, query, body } = tool.request(toolArgs)
+          const { status, data } = await callApi(identity, method, path, { query: clean(query), body: clean(body), agentName })
           const text = JSON.stringify(data, null, 2)
           return status >= 400
             ? { content: [{ type: 'text', text: `Error ${status}: ${text}` }], isError: true }

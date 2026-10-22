@@ -1,5 +1,5 @@
 const prisma = require('../../lib/prisma')
-const { DEFAULT_PROMPT, DEFAULT_HANDOFF_MESSAGE, generateBotReply, buildTranscript, listEscalations } = require('../../services/whatsappBot.service')
+const { DEFAULT_PROMPT, DEFAULT_HANDOFF_MESSAGE, MAX_AGENT_WAIT_MINS, generateBotReply, buildTranscript, listEscalations } = require('../../services/whatsappBot.service')
 const botDocuments = require('../../services/whatsappBotDocument.service')
 
 /**
@@ -11,7 +11,7 @@ const botDocuments = require('../../services/whatsappBotDocument.service')
 async function getBotConfig(req, res, next) {
   try {
     const config = await prisma.whatsappBotConfig.findUnique({ where: { workspaceId: req.workspace.id } })
-    res.json(config || { enabled: false, onlyNewConversations: false, prompt: DEFAULT_PROMPT, blockedWords: [], escalationWords: [], examples: [], handoffMessage: DEFAULT_HANDOFF_MESSAGE })
+    res.json(config || { enabled: false, onlyNewConversations: false, agentWaitMins: 0, prompt: DEFAULT_PROMPT, blockedWords: [], escalationWords: [], examples: [], handoffMessage: DEFAULT_HANDOFF_MESSAGE })
   } catch (err) { next(err) }
 }
 
@@ -45,7 +45,7 @@ function sanitizeExamples(input) {
 }
 
 /**
- * PUT /api/whatsapp/bot  { enabled, onlyNewConversations?, prompt, blockedWords?, escalationWords?, examples?, handoffMessage? }
+ * PUT /api/whatsapp/bot  { enabled, onlyNewConversations?, agentWaitMins?, prompt, blockedWords?, escalationWords?, examples?, handoffMessage? }
  * Abierto a cualquier miembro del equipo comercial (ver whatsapp.routes.js,
  * salesGuard) — es un interruptor con costo operativo real (tokens de IA por
  * cada mensaje entrante mientras esté on), pero configurarlo es operativo del
@@ -53,10 +53,12 @@ function sanitizeExamples(input) {
  */
 async function saveBotConfig(req, res, next) {
   try {
-    const { enabled, onlyNewConversations, prompt, blockedWords, escalationWords, examples, handoffMessage } = req.body
+    const { enabled, onlyNewConversations, agentWaitMins, prompt, blockedWords, escalationWords, examples, handoffMessage } = req.body
     const data = {
       enabled: Boolean(enabled),
       onlyNewConversations: Boolean(onlyNewConversations),
+      // Minutos que el bot espera a que un agente de IA tome la conversación (0 = al instante)
+      agentWaitMins: Math.min(Math.max(Math.round(Number(agentWaitMins) || 0), 0), MAX_AGENT_WAIT_MINS),
       prompt: prompt?.trim() || null,
       blockedWords: sanitizeWordList(blockedWords),
       escalationWords: sanitizeWordList(escalationWords),

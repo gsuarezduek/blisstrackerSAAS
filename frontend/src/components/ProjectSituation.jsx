@@ -23,9 +23,9 @@ function whenLabel(iso) {
   return txt === 'hoy' || txt === 'ayer' ? txt : `el ${txt}`
 }
 
-function byLabel(user, agent) {
+function byLabel(user, agent, declaredAgentName) {
   if (!user && !agent) return ''
-  return ` por ${user?.name ?? 'alguien'}${agent ? ` (vía «${agentName(agent)}»)` : ''}`
+  return ` por ${user?.name ?? 'alguien'}${agent ? ` (vía «${agentName(agent, declaredAgentName)}»)` : ''}`
 }
 
 function EntryMeta({ entry }) {
@@ -34,8 +34,8 @@ function EntryMeta({ entry }) {
   return (
     <span title={createdAtTitle(entry.createdAt)}>
       {viaAgent && <Icon as={Bot} size={12} className="inline mr-1 -mt-0.5" />}
-      Creada {whenLabel(entry.createdAt)}{byLabel(entry.createdBy, entry.createdByAgent)}
-      {edited && <> · editada {whenLabel(entry.updatedAt)}{byLabel(entry.updatedBy, entry.updatedByAgent)}</>}
+      Creada {whenLabel(entry.createdAt)}{byLabel(entry.createdBy, entry.createdByAgent, entry.createdByAgentName)}
+      {edited && <> · editada {whenLabel(entry.updatedAt)}{byLabel(entry.updatedBy, entry.updatedByAgent, entry.updatedByAgentName)}</>}
     </span>
   )
 }

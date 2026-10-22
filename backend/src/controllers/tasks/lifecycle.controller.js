@@ -11,7 +11,8 @@ const { maybeAutoFinishMeeting } = require('../../lib/projectMeetingLifecycle')
 const { loadEvent } = require('../../lib/calendarEvents')
 const { startMeetingCore } = require('../calendar.controller')
 const { statusSideEffects, logEvent, loadPiece, formatPiece, emitPieceUpdated } = require('../content/_shared')
-const { taskInclude, assertNoActiveTask, handleActiveTaskConflict, requestAgentId, assertOwnAgent } = require('./_shared')
+const { taskInclude, assertNoActiveTask, handleActiveTaskConflict, requestAgentId, requestAgentName, assertOwnAgent } = require('./_shared')
+const { formatAgentName } = require('../../lib/agentTasks')
 const { sendPushToUser } = require('../../services/pushNotification.service')
 
 // Resuelve @menciones de un texto contra los miembros activos del workspace (cualquiera
@@ -65,6 +66,14 @@ async function notifyContentPieceTaskChange(task, workspaceId) {
     const fresh = await loadPiece(task.contentPiece.id, task.projectId, workspaceId)
     if (fresh) emitPieceUpdated(workspaceId, task.projectId, formatPiece(fresh))
   } catch (err) { console.error('[contenido] notifyContentPieceTaskChange error:', err.message) }
+}
+
+// Tarea de agente movida vía MCP por un agente que declaró su nombre (`agentName`):
+// queda registrado como quien la está haciendo. Varios agentes pueden compartir un
+// token; el nombre los distingue. Sin nombre declarado no se toca.
+function executorNameData(row, req) {
+  const name = row.isAgentTask ? requestAgentName(req) : null
+  return name ? { agentName: name } : {}
 }
 
 async function create(req, res, next) {
@@ -185,7 +194,14 @@ async function create(req, res, next) {
         ? await assertOwnAgent(req.body.agentId, requesterId, workspaceId)
         : createdByAgentId
     }
-    const agentFields = { isAgentTask, agentId, createdByAgentId }
+    // Nombres declarados por el agente (ver requestAgentName): quién la creó y, si la
+    // ejecuta ese mismo agente, quién la hace.
+    const declaredName = requestAgentName(req)
+    const agentFields = {
+      isAgentTask, agentId, createdByAgentId,
+      createdByAgentName: declaredName,
+      agentName: isAgentTask && agentId != null && agentId === createdByAgentId ? declaredName : null,
+    }
 
     const wdKey = { userId_workspaceId_date: { userId, workspaceId, date: today } }
     let workDay = await prisma.workDay.findUnique({ where: wdKey })
@@ -355,7 +371,7 @@ async function startTask(req, res, next) {
     const [task] = await prisma.$transaction([
       prisma.task.update({
         where: { id: taskId, userId },
-        data: { status: 'IN_PROGRESS', startedAt: now, ...(claimAgentId ? { agentId: claimAgentId } : {}) },
+        data: { status: 'IN_PROGRESS', startedAt: now, ...(claimAgentId ? { agentId: claimAgentId } : {}), ...executorNameData(existing, req) },
         include: taskInclude,
       }),
       prisma.taskSession.create({ data: { taskId, startedAt: now } }),
@@ -422,7 +438,7 @@ async function resumeTask(req, res, next) {
     const [task] = await prisma.$transaction([
       prisma.task.update({
         where: { id: taskId },
-        data: { status: 'IN_PROGRESS', pausedAt: null, pausedMinutes: { increment: addedMins } },
+        data: { status: 'IN_PROGRESS', pausedAt: null, pausedMinutes: { increment: addedMins }, ...executorNameData(current, req) },
         include: taskInclude,
       }),
       prisma.taskSession.create({ data: { taskId, startedAt: now } }),
@@ -455,7 +471,7 @@ async function completeTask(req, res, next) {
     const [task] = await prisma.$transaction([
       prisma.task.update({
         where:   { id: taskId, userId },
-        data:    { status: 'COMPLETED', completedAt: now, pausedAt: null },
+        data:    { status: 'COMPLETED', completedAt: now, pausedAt: null, ...executorNameData(existing, req) },
         include: taskInclude,
       }),
       prisma.taskSession.updateMany({ where: { taskId, endedAt: null }, data: { endedAt: now } }),
@@ -565,7 +581,7 @@ async function blockTask(req, res, next) {
     const [task] = await prisma.$transaction([
       prisma.task.update({
         where: { id: taskId, userId },
-        data: { status: 'BLOCKED', blockedReason: reason.trim(), pausedAt: now },
+        data: { status: 'BLOCKED', blockedReason: reason.trim(), pausedAt: now, ...executorNameData(existing, req) },
         include: taskInclude,
       }),
       prisma.taskSession.updateMany({ where: { taskId, endedAt: null }, data: { endedAt: now } }),
@@ -576,7 +592,7 @@ async function blockTask(req, res, next) {
     // ella) y con el mensaje autocontenido, igual que las notificaciones del cliente.
     if (task.isAgentTask) {
       const desc = task.description.length > 60 ? task.description.slice(0, 57) + '...' : task.description
-      const message = `Tu agente ${task.agent?.label ? `«${task.agent.label}» ` : ''}bloqueó "${desc}": ${reason.trim()}`
+      const message = `Tu agente ${task.agent || task.agentName ? `«${formatAgentName(task.agent, task.agentName)}» ` : ''}bloqueó "${desc}": ${reason.trim()}`
       await prisma.notification.create({
         data: { userId: task.userId, actorId: null, taskId: task.id, projectId: task.projectId, workspaceId, type: 'BLOCKED', message },
       })
@@ -731,6 +747,7 @@ async function editTask(req, res, next) {
         }
         data.isAgentTask = false
         data.agentId = null
+        data.agentName = null
       }
       const today = todayString(tz)
       const wdKey = { userId_workspaceId_date: { userId: newUserId, workspaceId, date: today } }

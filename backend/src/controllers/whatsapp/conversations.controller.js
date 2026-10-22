@@ -8,9 +8,22 @@ const objectStorage = require('../../services/objectStorage.service')
 const { validateImageUpload } = require('../../lib/imageType')
 const { validateMediaHeader } = require('../../lib/mediaType')
 const { assertConversation } = require('./_shared')
+const { requestAgentId, requestAgentName, assertOwnAgent } = require('../tasks/_shared')
+const { formatAgentName } = require('../../lib/agentTasks')
 
 const MESSAGE_PAGE_SIZE = 50
 const SESSION_WINDOW_MS = 24 * 60 * 60 * 1000
+
+const AGENT_SELECT = { select: { id: true, label: true } }
+
+// Hasta cuándo se puede mandar texto libre (ventana de 24hs de Meta desde el
+// último mensaje del contacto). null = nunca escribió o ya venció.
+function sessionExpiresAt(conversation) {
+  if (!conversation.lastInboundAt) return null
+  const expires = conversation.lastInboundAt.getTime() + SESSION_WINDOW_MS
+  return expires > Date.now() ? new Date(expires) : null
+}
+
 
 /**
  * Resuelve, para un set de contactos, el lead "más relevante" al que abrir
@@ -58,15 +71,26 @@ async function resolveLeadByContact(workspaceId, contactIds) {
  * sin el param solo se listan las NO bloqueadas (bandeja principal); con
  * `blocked=true` se listan solo las marcadas como spam (ver toggleBlock) —
  * excluyente, no aditivo.
+ *
+ * `mine=true` (agentes de IA): solo las que tiene tomadas un agente — vía MCP,
+ * ese mismo agente; desde la app, cualquiera de los agentes propios.
  */
 async function listConversations(req, res, next) {
   try {
     const q = (req.query.q || '').trim()
     const showBlocked = req.query.blocked === 'true'
+    let agentFilter = {}
+    if (req.query.mine === 'true') {
+      const agentId = requestAgentId(req)
+      agentFilter = agentId
+        ? { agentControlId: agentId }
+        : { agentControl: { userId: req.user.userId, revokedAt: null } }
+    }
     const conversations = await prisma.whatsappConversation.findMany({
       where: {
         workspaceId: req.workspace.id,
         isBlocked: showBlocked,
+        ...agentFilter,
         ...(q ? {
           OR: [
             { contactName: { contains: q, mode: 'insensitive' } },
@@ -83,6 +107,7 @@ async function listConversations(req, res, next) {
         messages: { orderBy: { id: 'desc' }, take: 1, include: { media: { select: { kind: true } } } },
         reads: { where: { userId: req.user.userId }, take: 1 },
         pinnedBy: { select: { id: true, name: true } },
+        agentControl: AGENT_SELECT,
       },
     })
 
@@ -104,6 +129,14 @@ async function listConversations(req, res, next) {
         pinnedBy: c.pinnedBy,
         isBlocked: c.isBlocked,
         blockedAt: c.blockedAt,
+        botEnabled: c.botEnabled,
+        agentControl: c.agentControl,
+        agentControlName: c.agentControlName,
+        sessionExpiresAt: sessionExpiresAt(c),
+        // El último mensaje es del contacto (sin contar reacciones): espera respuesta.
+        awaitingReply: Boolean(lastMessage && lastMessage.direction === 'in' && !lastMessage.reactionEmoji),
+        // Si el bot está esperando a que un agente la tome: cuándo respondería él.
+        botReplyDueAt: c.botReplyDueAt,
         lastMessage: lastMessage
           ? {
               content: lastMessage.content,
@@ -138,7 +171,10 @@ async function getMessages(req, res, next) {
       take: limit,
       include: {
         senderUser: { select: { id: true, name: true, avatar: true } },
-        media: true,
+        senderAgent: AGENT_SELECT,
+        // Sin los bytes (mediaData, fallback sin R2): el frontend sirve el
+        // adjunto por su URL pública (media.id) y por MCP inflarían la respuesta.
+        media: { select: { id: true, kind: true, mimeType: true, fileName: true, sizeBytes: true } },
         reactionTo: { select: { id: true, content: true, direction: true } },
       },
     })
@@ -156,7 +192,15 @@ async function getMessages(req, res, next) {
       leadId = leadByContact.get(conversation.contactId)?.id || null
     }
 
-    res.json({ conversation: { ...conversation, contact, leadId }, messages, hasMore: messages.length === limit })
+    const agentControl = conversation.agentControlId
+      ? await prisma.mcpToken.findUnique({ where: { id: conversation.agentControlId }, ...AGENT_SELECT })
+      : null
+
+    res.json({
+      conversation: { ...conversation, contact, leadId, agentControl, sessionExpiresAt: sessionExpiresAt(conversation) },
+      messages,
+      hasMore: messages.length === limit,
+    })
   } catch (err) { next(err) }
 }
 
@@ -164,6 +208,13 @@ async function getMessages(req, res, next) {
  * POST /api/whatsapp/conversations/:id/messages
  * Guardrail mínimo de la ventana de 24hs (plantillas completas = Fase 5 del
  * plan): sin mensaje entrante reciente, WhatsApp rechaza el texto libre.
+ *
+ * Vía MCP (agente IA): el mensaje queda firmado con `senderAgentId` y la
+ * conversación pasa a estar tomada por ese agente (`botEnabled:false` +
+ * `agentControlId`) — el agente tiene prioridad sobre el bot, que deja de
+ * responder ahí (si estaba generando una respuesta, su re-chequeo previo al
+ * envío lo frena). No marca leída la conversación para el dueño: que el
+ * agente haya respondido no significa que la persona la haya visto.
  */
 async function sendMessage(req, res, next) {
   try {
@@ -198,6 +249,7 @@ async function sendMessage(req, res, next) {
       return res.status(502).json({ error: `No se pudo enviar el mensaje por WhatsApp: ${detail}`, code: 'WHATSAPP_SEND_FAILED' })
     }
 
+    const agentId = requestAgentId(req)
     const message = await prisma.whatsappMessage.create({
       data: {
         workspaceId: req.workspace.id,
@@ -207,19 +259,33 @@ async function sendMessage(req, res, next) {
         waMessageId: waMessageId || `local-${Date.now()}-${Math.random().toString(36).slice(2)}`,
         senderType: 'user',
         senderUserId: req.user.userId,
+        senderAgentId: agentId,
+        senderAgentName: requestAgentName(req),
         status: 'sent',
       },
-      include: { senderUser: { select: { id: true, name: true, avatar: true } } },
+      include: { senderUser: { select: { id: true, name: true, avatar: true } }, senderAgent: AGENT_SELECT },
     })
 
-    await prisma.whatsappConversation.update({ where: { id: conversation.id }, data: { lastMessageAt: new Date() } })
-    await prisma.whatsappConversationRead.upsert({
-      where: { conversationId_userId: { conversationId: conversation.id, userId: req.user.userId } },
-      update: { lastReadMessageId: message.id, lastReadAt: new Date() },
-      create: { workspaceId: req.workspace.id, conversationId: conversation.id, userId: req.user.userId, lastReadMessageId: message.id },
+    // Ya se contestó: se cancela cualquier respuesta del bot en espera.
+    await prisma.whatsappConversation.update({
+      where: { id: conversation.id },
+      data: {
+        lastMessageAt: new Date(), botReplyDueAt: null,
+        ...(agentId ? { botEnabled: false, agentControlId: agentId, agentControlName: message.senderAgentName } : {}),
+      },
     })
+    if (!agentId) {
+      await prisma.whatsappConversationRead.upsert({
+        where: { conversationId_userId: { conversationId: conversation.id, userId: req.user.userId } },
+        update: { lastReadMessageId: message.id, lastReadAt: new Date() },
+        create: { workspaceId: req.workspace.id, conversationId: conversation.id, userId: req.user.userId, lastReadMessageId: message.id },
+      })
+    }
 
     emitTo(`workspace:${req.workspace.id}`, 'whatsapp:message', { conversationId: conversation.id, message })
+    if (agentId) {
+      emitTo(`workspace:${req.workspace.id}`, 'whatsapp:bot', { conversationId: conversation.id, botEnabled: false, agentControl: message.senderAgent, agentControlName: message.senderAgentName })
+    }
 
     // Entrada liviana en el timeline del lead (best-effort, ver notifyLeadOfMessage
     // en whatsapp.webhook.js — misma idea, dirección "out").
@@ -229,9 +295,10 @@ async function sendMessage(req, res, next) {
         select: { id: true },
       })
       if (lead) {
+        const via = agentId ? ` (vía su agente «${formatAgentName(message.senderAgent ?? { id: agentId }, message.senderAgentName)}»)` : ''
         await logLeadEvent({
           workspaceId: req.workspace.id, leadId: lead.id, userId: req.user.userId, type: 'whatsapp_message',
-          content: `respondió por WhatsApp: "${content.trim().slice(0, 120)}"`,
+          content: `respondió por WhatsApp${via}: "${content.trim().slice(0, 120)}"`,
         })
       }
     }
@@ -340,7 +407,7 @@ async function sendMedia(req, res, next) {
       include: { senderUser: { select: { id: true, name: true, avatar: true } }, media: true },
     })
 
-    await prisma.whatsappConversation.update({ where: { id: conversation.id }, data: { lastMessageAt: new Date() } })
+    await prisma.whatsappConversation.update({ where: { id: conversation.id }, data: { lastMessageAt: new Date(), botReplyDueAt: null } })
     await prisma.whatsappConversationRead.upsert({
       where: { conversationId_userId: { conversationId: conversation.id, userId: req.user.userId } },
       update: { lastReadMessageId: message.id, lastReadAt: new Date() },
@@ -507,20 +574,45 @@ async function markRead(req, res, next) {
 }
 
 /**
- * PATCH /api/whatsapp/conversations/:id/bot  { botEnabled }
+ * PATCH /api/whatsapp/conversations/:id/bot  { botEnabled, agentId? }
  * "Tomar el control" / "Devolver al bot" de una conversación puntual —
  * cualquier miembro del equipo comercial (mismo criterio que assignConversation),
  * no requiere ser admin: es una acción operativa del día a día, no una
  * configuración del workspace.
+ *
+ * Quién la atiende queda en `agentControlId`:
+ *  - Vía MCP, tomar el control la deja a nombre de ESE agente.
+ *  - Desde la app, `{ botEnabled:false, agentId }` se la asigna a uno de los
+ *    agentes propios (assertOwnAgent: nadie le asigna trabajo al agente de
+ *    otra persona) — el agente la encuentra con `?mine=true`.
+ *  - Cualquier otro cambio (una persona la toma, o se devuelve al bot) limpia
+ *    la marca.
+ * Apagar el bot cancela además su respuesta en espera (`botReplyDueAt`).
  */
 async function toggleConversationBot(req, res, next) {
   try {
     const conversation = await assertConversation(req)
+    const botEnabled = Boolean(req.body.botEnabled)
+    let agentId = requestAgentId(req)
+    // Vía MCP, con el nombre que declaró el agente; asignada desde la app, sin nombre
+    // (la persona elige el token, no uno de los agentes que lo comparten).
+    const agentControlName = agentId ? requestAgentName(req) : null
+    if (!agentId && !botEnabled && req.body.agentId != null) {
+      agentId = await assertOwnAgent(req.body.agentId, req.user.userId, req.workspace.id)
+    }
     const updated = await prisma.whatsappConversation.update({
       where: { id: conversation.id },
-      data: { botEnabled: Boolean(req.body.botEnabled) },
+      data: {
+        botEnabled,
+        agentControlId: !botEnabled && agentId ? agentId : null,
+        agentControlName: !botEnabled && agentId ? agentControlName : null,
+        ...(!botEnabled ? { botReplyDueAt: null } : {}),
+      },
+      include: { agentControl: AGENT_SELECT },
     })
-    res.json({ id: updated.id, botEnabled: updated.botEnabled })
+    const payload = { botEnabled: updated.botEnabled, agentControl: updated.agentControl, agentControlName: updated.agentControlName }
+    emitTo(`workspace:${req.workspace.id}`, 'whatsapp:bot', { conversationId: updated.id, ...payload })
+    res.json({ id: updated.id, ...payload })
   } catch (err) { next(err) }
 }
 
@@ -571,7 +663,7 @@ async function toggleBlock(req, res, next) {
     const updated = await prisma.whatsappConversation.update({
       where: { id: conversation.id },
       data: blocked
-        ? { isBlocked: true, blockedAt: new Date(), blockedById: req.user.userId, botEnabled: false }
+        ? { isBlocked: true, blockedAt: new Date(), blockedById: req.user.userId, botEnabled: false, agentControlId: null, agentControlName: null, botReplyDueAt: null }
         : { isBlocked: false, blockedAt: null, blockedById: null },
       include: { blockedBy: { select: { id: true, name: true } } },
     })

@@ -187,12 +187,20 @@ export default function WhatsappTab({ onOpenLead }) {
     function onStatus({ waMessageId, status }) {
       setMessages(prev => prev.map(m => (m.waMessageId === waMessageId ? { ...m, status } : m)))
     }
+    // Cambio del toggle bot/humano/agente hecho desde otro lado (otra persona
+    // o un agente de IA por MCP).
+    function onBot({ conversationId, botEnabled, agentControl, agentControlName }) {
+      if (conversationId !== activeIdRef.current) return
+      setActiveConversation(c => (c ? { ...c, botEnabled, agentControl: agentControl ?? null, agentControlName: agentControlName ?? null } : c))
+    }
 
     socket.on('whatsapp:message', onMessage)
     socket.on('whatsapp:status', onStatus)
+    socket.on('whatsapp:bot', onBot)
     return () => {
       socket.off('whatsapp:message', onMessage)
       socket.off('whatsapp:status', onStatus)
+      socket.off('whatsapp:bot', onBot)
     }
   }, [account, loadConversations])
 
@@ -353,8 +361,10 @@ export default function WhatsappTab({ onOpenLead }) {
                     <WhatsappBotToggle
                       conversationId={activeConversation?.id}
                       botEnabled={activeConversation?.botEnabled}
+                      agentControl={activeConversation?.agentControl}
+                      agentControlName={activeConversation?.agentControlName}
                       workspaceBotEnabled={botConfig?.enabled}
-                      onChanged={(botEnabled) => setActiveConversation(c => ({ ...c, botEnabled }))}
+                      onChanged={(botEnabled, agentControl, agentControlName) => setActiveConversation(c => ({ ...c, botEnabled, agentControl, agentControlName }))}
                     />
                   )}
                   {activeConversation && (

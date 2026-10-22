@@ -29,7 +29,7 @@ function isPresenceTask(t) {
 // Stats de los agentes de UNA persona en un período (actual vs previo, mismo criterio
 // que las de la persona: tareas completadas por fecha de completado, minutos con
 // taskMins). `tasks`: tareas de agente COMPLETADAS con completedDate ("YYYY-MM-DD"),
-// projectId, project.name y agent {id,label} (null si el token se borró).
+// projectId, project.name, agent {id,label} (null si el token se borró) y agentName.
 function computeAgentStats(tasks, { curStart, curEnd, prevStart, prevEnd }) {
   const inCur  = d => d >= curStart  && d <= curEnd
   const inPrev = d => d >= prevStart && d <= prevEnd
@@ -47,8 +47,17 @@ function computeAgentStats(tasks, { curStart, curEnd, prevStart, prevEnd }) {
   const byAgent = {}
   const byProject = {}
   for (const t of cur) {
-    const aKey = t.agent?.id ?? 0
-    byAgent[aKey] ??= { agentId: t.agent?.id ?? null, name: t.agent?.label?.trim() || (t.agent ? `Agente #${t.agent.id}` : 'Agente eliminado'), completed: 0, minutes: 0 }
+    // Un token puede ser de varios agentes que se identifican con agentName:
+    // cada combinación es una fila ("grokbot · Ventas", "grokbot · SEO").
+    const declared = t.agentName?.trim() || null
+    const aKey = `${t.agent?.id ?? 0}|${declared ?? ''}`
+    byAgent[aKey] ??= {
+      agentId: t.agent?.id ?? null,
+      agentName: declared,
+      name: t.agent ? formatAgentName(t.agent, declared) : (declared ? `Agente eliminado · ${declared}` : 'Agente eliminado'),
+      completed: 0,
+      minutes: 0,
+    }
     byAgent[aKey].completed += 1
     byAgent[aKey].minutes   += taskMins(t)
     byProject[t.projectId] ??= { projectId: t.projectId, name: t.project?.name ?? '', completed: 0, minutes: 0 }
@@ -66,4 +75,13 @@ function computeAgentStats(tasks, { curStart, curEnd, prevStart, prevEnd }) {
   }
 }
 
-module.exports = { HUMAN_TASK_WHERE, PRESENCE_WORKDAY_WHERE, isPresenceTask, computeAgentStats }
+// Nombre visible de un agente: el del token (o "Agente #id") + el que declaró el
+// propio agente vía MCP (`agentName`), si hay — ej. "grokbot · Ventas". Mismo
+// criterio que agentName() de frontend/src/hooks/useMyAgents.js.
+function formatAgentName(agent, declaredName) {
+  const base = agent ? (agent.label?.trim() || `Agente #${agent.id}`) : 'Agente'
+  const declared = typeof declaredName === 'string' ? declaredName.trim() : ''
+  return declared && declared !== base ? `${base} · ${declared}` : base
+}
+
+module.exports = { HUMAN_TASK_WHERE, PRESENCE_WORKDAY_WHERE, isPresenceTask, computeAgentStats, formatAgentName }

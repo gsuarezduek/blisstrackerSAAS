@@ -83,7 +83,7 @@ function AgentTaskRow({ task, today, onChanged, onReturned, onOpenComments }) {
           <Link to={`/my-projects/${task.project.id}`} className="font-medium text-gray-600 dark:text-gray-300 hover:text-primary-600 dark:hover:text-primary-400">
             {task.project.name}
           </Link>
-          <span>{task.agent ? agentName(task.agent) : 'Cualquiera de mis agentes'}</span>
+          <span>{task.agent ? agentName(task.agent, task.agentName) : 'Cualquiera de mis agentes'}</span>
           {scheduledLabel && <span className="text-indigo-600 dark:text-indigo-300 capitalize">Aparece el {scheduledLabel}</span>}
           {task.recurrenceId && <span className="inline-flex items-center gap-1" title="Tarea recurrente"><Icon as={Repeat} size={13} />Recurrente</span>}
           {task.createdAt && <span title={createdAtTitle(task.createdAt)}>Creada {fmtCreatedAt(task.createdAt)}</span>}

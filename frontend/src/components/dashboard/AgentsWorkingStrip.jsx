@@ -45,7 +45,7 @@ export default function AgentsWorkingStrip({ tasks, onOpenComments, onSeeAll }) 
           <li key={t.id} className="flex items-center gap-3 px-4 py-2">
             <Icon as={Bot} size={16} className="flex-shrink-0 text-sky-600 dark:text-sky-400" />
             <span className="hidden sm:inline text-xs font-semibold text-sky-800 dark:text-sky-200 flex-shrink-0 max-w-[8rem] truncate">
-              {t.agent ? agentName(t.agent) : 'Agente'}
+              {t.agent ? agentName(t.agent, t.agentName) : 'Agente'}
             </span>
             <button
               type="button"

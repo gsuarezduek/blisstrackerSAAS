@@ -37,7 +37,7 @@ function TaskLine({ task, user, onOpen, tone = 'default' }) {
           {user.name}
           {/* Tarea de agente: la ejecuta un agente de IA de esa persona, no ella. */}
           {task.isAgentTask && (
-            <span className="inline-flex items-center gap-1 ml-1.5"><Icon as={Bot} size={12} />{task.agent ? agentName(task.agent) : 'su agente'}</span>
+            <span className="inline-flex items-center gap-1 ml-1.5"><Icon as={Bot} size={12} />{task.agent ? agentName(task.agent, task.agentName) : 'su agente'}</span>
           )}
         </p>
         {tone === 'danger' && task.blockedReason && (

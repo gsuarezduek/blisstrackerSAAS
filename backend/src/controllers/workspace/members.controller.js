@@ -320,7 +320,7 @@ async function toggleMemberActive(req, res, next) {
             },
             // Las tareas de sus agentes de IA pasan a ser tareas comunes de quien las recibe:
             // los agentes (McpToken) eran de la persona desactivada y se revocan abajo.
-            data: { userId: targetId, isAgentTask: false, agentId: null },
+            data: { userId: targetId, isAgentTask: false, agentId: null, agentName: null },
           })
         }
 

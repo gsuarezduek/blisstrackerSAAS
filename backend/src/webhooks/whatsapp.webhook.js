@@ -4,7 +4,7 @@ const { emitTo } = require('../lib/socket')
 const { ACTIVE_LEAD_STATUS_KEYS } = require('../lib/salesCatalog')
 const { logLeadEvent } = require('../controllers/ventas/_shared')
 const { downloadInboundMedia } = require('../services/whatsappMedia.service')
-const { maybeRespondWithBot } = require('../services/whatsappBot.service')
+const { handleInboundForBot } = require('../services/whatsappBot.service')
 const { normalizePhone } = require('../lib/phone')
 
 /**
@@ -132,10 +132,11 @@ async function handleInboundMessage(account, event) {
   // cliente haya pedido nada), así que no dispara al bot. Fire-and-forget: la
   // llamada a Claude tarda segundos y no debe demorar el 200 al webhook
   // (Meta/Chakra reintenta agresivamente si tarda). maybeRespondWithBot ya
-  // maneja sus propios errores.
+  // maneja sus propios errores. handleInboundForBot decide si responde ya o si
+  // espera a que un agente de IA tome la conversación (agentWaitMins).
   if (!isReaction) {
     setImmediate(() => {
-      maybeRespondWithBot({ account, conversation, contact }).catch(err => {
+      handleInboundForBot({ account, conversation, contact }).catch(err => {
         console.error('[WhatsApp Bot] Error inesperado:', err.message)
       })
     })

@@ -15,7 +15,7 @@ function AgentTag({ task }) {
   if (!task.isAgentTask) return null
   return (
     <span className="inline-flex items-center gap-1 text-sky-700 dark:text-sky-300" title="La ejecuta un agente de IA de esta persona">
-      <Icon as={Bot} size={13} />{task.agent ? agentName(task.agent) : 'Agente'}
+      <Icon as={Bot} size={13} />{task.agent ? agentName(task.agent, task.agentName) : 'Agente'}
     </span>
   )
 }
@@ -188,7 +188,7 @@ export default function TareasTab({
                           {linkify(task.description)}
                         </p>
                         <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
-                          {task.isAgentTask ? `Agente de ${task.user.name.split(' ')[0]}${task.agent ? ` (${agentName(task.agent)})` : ''}` : task.user.name} · Completada {fmtDate(task.completedAt, data?.project?.timezone)}
+                          {task.isAgentTask ? `Agente de ${task.user.name.split(' ')[0]}${task.agent ? ` (${agentName(task.agent, task.agentName)})` : ''}` : task.user.name} · Completada {fmtDate(task.completedAt, data?.project?.timezone)}
                           {task.createdAt && <span title={createdAtTitle(task.createdAt)}> · Creada {fmtCreatedAt(task.createdAt)}</span>}
                         </p>
                       </div>

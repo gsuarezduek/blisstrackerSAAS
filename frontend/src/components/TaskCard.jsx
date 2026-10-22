@@ -245,7 +245,7 @@ function TaskCard({ task, onUpdate, onDelete, activeTask, backlog, future, onAdd
           )}
           {task.createdByAgent && (
             <span className="inline-flex items-center gap-1" title="La creó un agente de IA">
-              <Icon as={Bot} size={13} />{agentName(task.createdByAgent)}
+              <Icon as={Bot} size={13} />{agentName(task.createdByAgent, task.createdByAgentName)}
             </span>
           )}
           {task.createdBy && (

@@ -312,6 +312,8 @@ export default function WhatsappBotConfigModal({ config, onClose, onSaved }) {
   const [tab, setTab] = useState('personalidad')
   const [enabled, setEnabled] = useState(Boolean(config?.enabled))
   const [onlyNewConversations, setOnlyNewConversations] = useState(Boolean(config?.onlyNewConversations))
+  // Prioridad a los agentes de IA: minutos que el bot espera antes de responder (0 = al instante)
+  const [agentWaitMins, setAgentWaitMins] = useState(Number(config?.agentWaitMins) || 0)
   const [prompt, setPrompt] = useState(config?.prompt || '')
   const [blockedWords, setBlockedWords] = useState(config?.blockedWords || [])
   const [escalationWords, setEscalationWords] = useState(config?.escalationWords || [])
@@ -359,7 +361,7 @@ export default function WhatsappBotConfigModal({ config, onClose, onSaved }) {
     setSaving(true)
     setError(null)
     try {
-      const { data } = await api.put('/whatsapp/bot', { enabled, onlyNewConversations, prompt, blockedWords, escalationWords, examples, handoffMessage })
+      const { data } = await api.put('/whatsapp/bot', { enabled, onlyNewConversations, agentWaitMins, prompt, blockedWords, escalationWords, examples, handoffMessage })
       onSaved(data)
     } catch (err) {
       setError(err.response?.data?.error || 'No se pudo guardar la configuración')
@@ -453,6 +455,35 @@ export default function WhatsappBotConfigModal({ config, onClose, onSaved }) {
               </span>
             </span>
           </label>
+          <div className="flex items-start gap-2 mb-3">
+            <input
+              id="bot-agent-wait"
+              type="checkbox"
+              checked={agentWaitMins > 0}
+              onChange={e => setAgentWaitMins(e.target.checked ? 5 : 0)}
+              className="w-4 h-4 rounded mt-0.5"
+            />
+            <div className="text-sm text-gray-700 dark:text-gray-300">
+              <label htmlFor="bot-agent-wait" className="cursor-pointer">Darle prioridad a los agentes de IA</label>
+              {agentWaitMins > 0 && (
+                <span className="inline-flex items-center gap-1 ml-2">
+                  esperar
+                  <input
+                    type="number"
+                    min={1}
+                    max={60}
+                    value={agentWaitMins}
+                    onChange={e => setAgentWaitMins(Math.min(Math.max(Number(e.target.value) || 1, 1), 60))}
+                    className="w-14 px-1.5 py-0.5 text-sm rounded border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800"
+                  />
+                  min
+                </span>
+              )}
+              <span className="block text-xs text-gray-400 dark:text-gray-500 font-normal">
+                Si alguien del workspace tiene un agente de IA conectado, el bot espera antes de responder un mensaje. Si en ese rato un agente o una persona toma o contesta la conversación, el bot no responde.
+              </span>
+            </div>
+          </div>
 
           <div className="flex gap-1 -mb-px overflow-x-auto">
             {TABS.map(t => (

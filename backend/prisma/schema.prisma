@@ -834,6 +834,9 @@ model ProjectSituationEntry {
   createdByAgent   McpToken? @relation("SituationEntryCreatedByAgent", fields: [createdByAgentId], references: [id], onDelete: SetNull)
   updatedByAgentId Int?
   updatedByAgent   McpToken? @relation("SituationEntryUpdatedByAgent", fields: [updatedByAgentId], references: [id], onDelete: SetNull)
+  // nombre que declaró el agente (param `agentName` del MCP), para distinguir varios agentes que comparten un token.
+  createdByAgentName String?
+  updatedByAgentName String?
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
@@ -976,6 +979,10 @@ model Task {
   // agente o la persona. Lo setea solo el backend (claim interno del JWT de apiBridge).
   createdByAgentId      Int?
   createdByAgent        McpToken?       @relation("TaskCreatedByAgent", fields: [createdByAgentId], references: [id], onDelete: SetNull)
+  // Agentes IA: nombre que declaró el agente (param `agentName` del MCP), para distinguir varios agentes que comparten un token.
+  // agentName = el que la ejecuta (se actualiza cuando un agente la inicia/retoma/completa).
+  createdByAgentName    String?
+  agentName             String?
   createdAt             DateTime        @default(now())
   updatedAt             DateTime        @updatedAt
 
@@ -1038,6 +1045,8 @@ model TaskRecurrence {
   agent                 McpToken? @relation("RecurrenceAgent", fields: [agentId], references: [id], onDelete: SetNull)
   createdByAgentId      Int?
   createdByAgent        McpToken? @relation("RecurrenceCreatedByAgent", fields: [createdByAgentId], references: [id], onDelete: SetNull)
+  createdByAgentName    String?
+  agentName             String?
   active                Boolean   @default(true)
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
@@ -1069,6 +1078,7 @@ model TaskComment {
   // Agentes IA: lo escribió un agente (McpToken) vía MCP en nombre de userId.
   agentId   Int?
   agent     McpToken?     @relation("TaskCommentAgent", fields: [agentId], references: [id], onDelete: SetNull)
+  agentName String? // nombre que declaró el agente (param `agentName` del MCP), para distinguir varios agentes que comparten un token
   parentId  Int?
   parent    TaskComment?  @relation("CommentReplies", fields: [parentId], references: [id])
   replies   TaskComment[] @relation("CommentReplies")
@@ -4173,6 +4183,20 @@ model WhatsappConversation {
   blockedById Int?
   blockedBy   User?     @relation("WhatsappConversationBlockedBy", fields: [blockedById], references: [id], onDelete: SetNull)
 
+  // Agentes IA (MCP): qué agente (McpToken) tiene tomada la conversación. Se
+  // setea cuando un agente responde o toma el control (junto con
+  // botEnabled=false: el agente tiene prioridad sobre el bot) y se limpia en
+  // cualquier otro cambio del toggle bot/humano. Solo informativo para la UI.
+  agentControlId Int?
+  agentControl   McpToken? @relation("WhatsappConversationAgentControl", fields: [agentControlId], references: [id], onDelete: SetNull)
+  agentControlName String? // nombre que declaró el agente (param `agentName` del MCP), para distinguir varios agentes que comparten un token
+
+  // Respuesta del bot en espera (WhatsappBotConfig.agentWaitMins > 0): cuándo le
+  // toca responder si en ese rato ningún agente/persona tomó o contestó la
+  // conversación. Cada mensaje entrante la corre (agrupa ráfagas en una sola
+  // respuesta); la consume el cron de runDueBotReplies. null = nada pendiente.
+  botReplyDueAt DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -4185,6 +4209,7 @@ model WhatsappConversation {
   @@index([workspaceId, pinnedAt])
   @@index([workspaceId, isBlocked])
   @@index([contactId])
+  @@index([botReplyDueAt])
 }
 
 model WhatsappMessage {
@@ -4205,6 +4230,12 @@ model WhatsappMessage {
   senderType   String // "user" | "contact" | "bot" | "system"
   senderUserId Int?
   senderUser   User?  @relation(fields: [senderUserId], references: [id], onDelete: SetNull)
+  // Agentes IA (MCP): mensaje escrito por un agente. senderType sigue siendo
+  // "user" y senderUserId su dueño (cuenta como intervención del equipo, ver
+  // humanAlreadyReplied del bot); esto solo marca que lo escribió el agente.
+  senderAgentId Int?
+  senderAgent   McpToken? @relation("WhatsappMessageAgent", fields: [senderAgentId], references: [id], onDelete: SetNull)
+  senderAgentName String? // nombre que declaró el agente (param `agentName` del MCP), para distinguir varios agentes que comparten un token
 
   status    String   @default("sent") // sent | delivered | read | failed
   createdAt DateTime @default(now())
@@ -4301,6 +4332,12 @@ model WhatsappBotConfig {
   // sin apagar el interruptor de esa conversación — es una condición extra
   // sobre `enabled`, no un reemplazo del takeover manual.
   onlyNewConversations Boolean @default(false)
+
+  // Prioridad a los agentes de IA (MCP): si es > 0 y el workspace tiene algún
+  // agente conectado (McpToken activo), el bot espera estos minutos antes de
+  // responder un mensaje entrante — si en ese rato un agente o una persona toma
+  // o contesta la conversación, el bot no responde. 0 = responde al instante.
+  agentWaitMins Int @default(0)
 
   // Entrenamiento del bot (mejora de precisión + reglas de seguridad, ver
   // whatsappBot.service.js `generateBotReply`): `blockedWords` son palabras/frases
@@ -4532,6 +4569,8 @@ model McpToken {
   taskComments       TaskComment[]    @relation("TaskCommentAgent")
   situationEntriesCreated ProjectSituationEntry[] @relation("SituationEntryCreatedByAgent")
   situationEntriesUpdated ProjectSituationEntry[] @relation("SituationEntryUpdatedByAgent")
+  whatsappMessages   WhatsappMessage[]      @relation("WhatsappMessageAgent")
+  whatsappControls   WhatsappConversation[] @relation("WhatsappConversationAgentControl")
 
   @@index([workspaceId])
 }

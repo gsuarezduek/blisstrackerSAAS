@@ -736,7 +736,7 @@ export default function TaskCommentsModal({ task, onClose, onCommentAdded, onTas
                   <UserLink userId={c.user.id} className="text-xs font-semibold text-gray-800 dark:text-gray-200 hover:text-primary-600 dark:hover:text-primary-400">{c.user.name}</UserLink>
                   {c.agent && (
                     <span className="inline-flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400" title="Lo escribió un agente de IA en nombre de esta persona">
-                      <Icon as={Bot} size={12} />vía {agentName(c.agent)}
+                      <Icon as={Bot} size={12} />vía {agentName(c.agent, c.agentName)}
                     </span>
                   )}
                   <span className="text-xs text-gray-400 dark:text-gray-500">{timeAgo(c.createdAt)}</span>

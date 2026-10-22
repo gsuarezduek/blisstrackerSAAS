@@ -2,7 +2,8 @@ const prisma = require('../lib/prisma')
 const { resolveMentions } = require('../lib/mentions')
 const { sendPushToUser } = require('../services/pushNotification.service')
 const { isAdmin, isProjectMember } = require('../lib/projectAccess')
-const { requestAgentId } = require('./tasks/_shared')
+const { requestAgentId, requestAgentName } = require('./tasks/_shared')
+const { formatAgentName } = require('../lib/agentTasks')
 
 // Mismo criterio "equipo = etiqueta, no barrera" que el resto del modelo de acceso a
 // proyectos (ver ProjectAccess/Links/lecturas): cualquier miembro activo del workspace
@@ -59,10 +60,10 @@ async function addComment(req, res, next) {
     // Vía MCP: el comentario lo escribe el agente en nombre de su dueño (userId).
     const agentId = requestAgentId(req)
     const comment = await prisma.taskComment.create({
-      data: { taskId, userId, agentId, content: text.trim() },
+      data: { taskId, userId, agentId, agentName: requestAgentName(req), content: text.trim() },
       include: COMMENT_INCLUDE,
     })
-    const agentName = agentId ? (comment.agent?.label?.trim() || `Agente #${agentId}`) : null
+    const agentName = agentId ? formatAgentName(comment.agent ?? { id: agentId }, comment.agentName) : null
 
     const desc = task.description.length > 60 ? task.description.slice(0, 57) + '...' : task.description
 

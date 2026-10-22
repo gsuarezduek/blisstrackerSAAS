@@ -210,6 +210,7 @@ async function fetchRows(workspaceId, tz, { userId = null, period = null } = {})
         minutesOverride: true,
         project: { select: { name: true } },
         agent: { select: { id: true, label: true } },
+        agentName: true,
       },
     }),
   ])

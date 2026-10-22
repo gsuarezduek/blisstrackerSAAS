@@ -12,7 +12,7 @@
 // a mano son las reglas, permisos y límites de abajo — mismo criterio que el
 // Wiki (frontend/src/data/wikiContent.js, categoría "Agentes IA (MCP)").
 
-const INSTRUCTIONS = `Estás conectado a BlissTracker, la plataforma de gestión de una agencia (tareas, proyectos/clientes, marketing, contenido, ventas/CRM, equipo).
+const INSTRUCTIONS = `Estás conectado a BlissTracker, la plataforma de gestión de una agencia (tareas, proyectos/clientes, marketing, contenido, ventas/CRM, WhatsApp, equipo).
 
 Antes de tu primera acción en una conversación:
 1. Llamá a \`bliss_guide\` (sin argumentos) para leer qué podés y qué no podés hacer, las reglas del negocio y los flujos recomendados.
@@ -20,8 +20,9 @@ Antes de tu primera acción en una conversación:
 
 Reglas que no se negocian:
 - Actuás SIEMPRE como la persona dueña del token, con sus permisos reales: nunca más. Un 403 significa "esa persona no tiene permiso", no lo reintentes por otro camino.
-- Todo lo que creás o modificás queda registrado a nombre de esa persona y es visible para el equipo (y a veces para el cliente). Antes de borrar, enviar algo al cliente, mover el estado de un lead o generar algo que consume IA, confirmá con el usuario.
+- Todo lo que creás o modificás queda registrado a nombre de esa persona y es visible para el equipo (y a veces para el cliente). Antes de borrar, enviar algo al cliente (incluido un WhatsApp), mover el estado de un lead o generar algo que consume IA, confirmá con el usuario.
 - Los IDs se resuelven leyendo, nunca se inventan: empezá por \`list_projects\`, \`team_list\`, \`ventas_leads_list\`, etc.
+- Si sos uno de varios agentes que usan este mismo conector, pasá tu nombre en el parámetro \`agentName\` de CADA tool (siempre el mismo, ej. "Ventas"): así la persona ve qué agente hizo cada cosa.
 - Fechas en formato YYYY-MM-DD; la zona horaria es la del workspace (por defecto America/Argentina/Buenos_Aires).`
 
 // Prefijo de nombre de tool → sección de la guía. El orden define el orden de aparición.
@@ -33,6 +34,7 @@ const AREAS = [
   { key: 'seo',        label: 'SEO avanzado',           match: n => SEO_TOOLS.test(n) },
   { key: 'contenido',  label: 'Contenido',              match: n => n.startsWith('contenido_') },
   { key: 'ventas',     label: 'Ventas / CRM',           match: n => n.startsWith('ventas_') },
+  { key: 'whatsapp',   label: 'WhatsApp',               match: n => n.startsWith('whatsapp_') },
 ]
 const SEO_TOOLS = /^marketing_(cannibal|content_brief|content_gap|onpage)/
 
@@ -40,8 +42,9 @@ const SECTIONS = {
   general: `## Quién sos y cómo funcionan los permisos
 
 - Cada token pertenece a UNA persona en UN workspace. Las tools llaman a la misma API que usa la app web, así que heredan exactamente sus reglas: rol (owner/admin/member), módulos habilitados para el workspace, acceso por rol/persona a cada módulo, proyectos privados y estado de facturación.
+- **Tu nombre (\`agentName\`)**: todas las tools aceptan un parámetro opcional \`agentName\`. El conector (token) puede estar compartido por varios agentes; si es tu caso, mandá siempre tu nombre y queda registrado junto a lo que hacés: en la app se ve como "<nombre del token> · <tu nombre>" en tareas, comentarios, la Situación de la cuenta, WhatsApp y Productividad. Usá un nombre corto y estable, y no te hagas pasar por otro agente.
 - Roles: **owner/admin** ven y administran todo el workspace; **member** trabaja sobre lo suyo y sobre los proyectos (cualquier miembro ve todos los proyectos no privados y puede crear tareas en cualquiera de ellos, aunque no sea de su equipo).
-- Módulos opcionales (pueden estar apagados o restringidos por rol): Marketing, Contenido, Ventas. Si una tool de un módulo devuelve 403/404, el módulo está apagado o la persona no tiene acceso — decíselo al usuario en vez de insistir. \`whoami\` → \`moduleAccess\` te lo anticipa.
+- Módulos opcionales (pueden estar apagados o restringidos por rol): Marketing, Contenido, Ventas, WhatsApp (este último requiere además acceso a Ventas). Si una tool de un módulo devuelve 403/404, el módulo está apagado o la persona no tiene acceso — decíselo al usuario en vez de insistir. \`whoami\` → \`moduleAccess\` te lo anticipa.
 - **Proyectos privados**: el nombre lo ve todo el workspace, pero el contenido (tareas, marketing, contenido, etc.) y la creación de tareas quedan reservados a su equipo y a los admins. Si una tool sobre un proyecto devuelve 403 para alguien que no es del equipo, probablemente es privado.
 - Si el workspace tiene la facturación vencida (\`past_due\`), las escrituras pueden fallar con 402/403: solo lectura hasta que se regularice el pago.
 - Errores: las tools devuelven \`Error <status>: <json>\`. 400 = argumento inválido (leé el mensaje y corregí), 403 = sin permiso, 404 = no existe o no es visible, 409 = conflicto de estado (ej. ya hay otra tarea en curso), 429 = límite/cooldown (esperá).
@@ -130,13 +133,25 @@ Calendario de piezas de redes con aprobación del cliente.
 - Propuestas: \`ventas_lead_proposal_create\` las redacta con IA, pero **los precios los definís vos/el usuario, la IA nunca los inventa**. Pasar una propuesta a \`confirmed\` habilita su link público para el cliente.
 - **Consumen IA**: investigación (\`ventas_lead_research_run\`, async), informe de diagnóstico y propuestas (\`quality: "max"\` es más caro y lento).
 - Borrar una empresa borra en cascada sus contactos y leads. Un lead con propuestas confirmadas no se puede borrar.
-- No se puede por MCP: WhatsApp (conversaciones, bot, plantillas).`,
+- WhatsApp tiene su propia sección (\`bliss_guide\` topic "whatsapp").`,
+
+  whatsapp: `## WhatsApp (requiere acceso a Ventas + módulo WhatsApp)
+Bandeja de WhatsApp del número de la agencia, vinculada al CRM (contacto → lead).
+- **Lo que mandás lo recibe el cliente real**, a nombre de la persona dueña del token (en la app queda rotulado como escrito por su agente). Confirmá el texto con el usuario antes de mandar, salvo que te haya dado instrucciones claras de responder solo.
+- **Ventana de 24hs**: solo se puede mandar texto libre si el contacto escribió en las últimas 24hs (\`sessionExpiresAt\` no null). Fuera de la ventana hace falta una plantilla aprobada, que tiene costo: eso no está disponible por MCP — decile al usuario que la reabra desde la app.
+- **Vos tenés prioridad sobre el bot**: si el workspace tiene el bot activado, responde solo los mensajes entrantes. Para que no conteste mientras leés y redactás, llamá primero a \`whatsapp_conversation_take_control\`; mandar un mensaje también la toma. Desde ese momento el bot no responde más ahí (\`agentControl\` = vos) hasta que alguien la devuelva con \`whatsapp_conversation_return_to_bot\` (solo si el usuario lo pide).
+- **Espera del bot**: el workspace puede configurar que el bot espere unos minutos antes de responder. Mientras espera, la conversación trae \`botReplyDueAt\`: si la tomás o respondés antes de esa hora, el bot no contesta. Si te toca atender el WhatsApp, revisá seguido las que tienen \`awaitingReply: true\`.
+- **Conversaciones asignadas a vos**: tu dueño puede asignarte una conversación desde la app ("La atiende mi agente"). Las encontrás con \`whatsapp_conversations_list\` \`mine: true\` y atenderlas es tu trabajo: respondé las que tienen \`awaitingReply: true\` siguiendo lo que tu dueño te indicó. Si no te dio instrucciones de cómo responder, preguntale antes de mandar el primer mensaje.
+- Si la conversación ya la atiende una persona del equipo (\`botEnabled: false\` sin \`agentControl\`, o mensajes recientes del equipo sin \`senderAgent\`) o la tiene tomada otro agente, no te metas: avisale al usuario y respondé solo si te lo pide.
+- Flujo: \`whatsapp_conversations_list\` (\`mine: true\` para tu bandeja; si no, filtrá por \`awaitingReply\`/\`q\`) → \`whatsapp_conversation_take_control\` → \`whatsapp_conversation_messages\` → \`whatsapp_message_send\`. Con el \`leadId\` de la conversación podés seguir en Ventas (estado, notas, próximas acciones).
+- No se puede por MCP: plantillas/reabrir conversaciones vencidas, mandar imágenes o archivos, configurar el bot o las automatizaciones, marcar spam, vincular contactos.`,
 }
 
 const LIMITS = `## Lo que hoy NO está disponible por MCP
 Estos módulos existen en la app pero no tienen tools: si el usuario lo pide, explicale que tiene que hacerlo desde blisstracker.app.
 - Chat interno, Notificaciones, Calendario/reuniones, Reuniones del proyecto, Briefs, Archivos (Nube del proyecto), links y accesos/credenciales de proyectos.
-- Finanzas (facturación electrónica, ingresos/egresos), RRHH (vacaciones, legajos, beneficios), EOS, Gamification, WhatsApp.
+- Finanzas (facturación electrónica, ingresos/egresos), RRHH (vacaciones, legajos, beneficios), EOS, Gamification.
+- WhatsApp: plantillas, adjuntos, bot y automatizaciones (responder con texto dentro de la ventana de 24hs sí, ver sección WhatsApp).
 - Administración: invitar o desactivar personas, roles, preferencias, módulos, facturación/plan del workspace.
 - Subir archivos o imágenes fuera de las tareas (Contenido, Nube, chat). A una tarea sí: \`task_attach_file\`.
 - Conectar integraciones (Google/Meta/TikTok/LinkedIn): requieren OAuth en el navegador.

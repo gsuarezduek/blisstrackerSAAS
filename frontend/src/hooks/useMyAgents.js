@@ -13,9 +13,14 @@ export function invalidateMyAgents() {
 }
 
 // Nombre visible de un agente (los tokens sin label quedan como "Agente #id").
-export function agentName(agent) {
-  if (!agent) return 'tu agente'
-  return agent.label?.trim() || `Agente #${agent.id}`
+// `declaredName`: el que declaró el propio agente vía MCP (`agentName`), para
+// distinguir varios agentes que comparten un token → "grokbot · Ventas". Mismo
+// criterio que formatAgentName de backend/src/lib/agentTasks.js.
+export function agentName(agent, declaredName) {
+  const declared = typeof declaredName === 'string' ? declaredName.trim() : ''
+  if (!agent) return declared || 'tu agente'
+  const base = agent.label?.trim() || `Agente #${agent.id}`
+  return declared && declared !== base ? `${base} · ${declared}` : base
 }
 
 export default function useMyAgents() {

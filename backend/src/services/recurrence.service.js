@@ -137,6 +137,8 @@ async function spawnInstance(client, rec, scheduledFor, workDayId) {
         isAgentTask:           rec.isAgentTask ?? false,
         agentId:               rec.agentId ?? null,
         createdByAgentId:      rec.createdByAgentId ?? null,
+        agentName:             rec.agentName ?? null,
+        createdByAgentName:    rec.createdByAgentName ?? null,
       },
     })
   } catch (err) {

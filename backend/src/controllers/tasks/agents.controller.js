@@ -1,7 +1,7 @@
 const prisma = require('../../lib/prisma')
 const { todayString } = require('../../utils/dates')
 const { materializeForUser } = require('../../services/recurrence.service')
-const { taskInclude, requestAgentId, assertOwnAgent } = require('./_shared')
+const { taskInclude, requestAgentId, requestAgentName, assertOwnAgent } = require('./_shared')
 const { agentTasksQuery } = require('../workdays.controller')
 
 // Agentes IA (MCP) — ver concepto "Agentes IA" en backend/CLAUDE.md.
@@ -108,9 +108,10 @@ async function setExecutor(req, res, next) {
       const agentId = req.body.agentId != null
         ? await assertOwnAgent(req.body.agentId, userId, workspaceId)
         : requestAgentId(req)
-      data = { isAgentTask: true, agentId }
+      // Si se la queda el mismo agente que hace la request, con su nombre declarado.
+      data = { isAgentTask: true, agentId, agentName: agentId != null && agentId === requestAgentId(req) ? requestAgentName(req) : null }
     } else {
-      data = { isAgentTask: false, agentId: null }
+      data = { isAgentTask: false, agentId: null, agentName: null }
     }
 
     if (req.query.scope === 'series' && task.recurrenceId) {

@@ -196,7 +196,7 @@ describe('PATCH /api/tasks/:id/agent', () => {
       .send({ executor: 'agent' })
 
     expect(res.status).toBe(200)
-    expect(prisma.task.update).toHaveBeenCalledWith({ where: { id: 1 }, data: { isAgentTask: true, agentId: null } })
+    expect(prisma.task.update).toHaveBeenCalledWith({ where: { id: 1 }, data: { isAgentTask: true, agentId: null, agentName: null } })
   })
 
   it('delega a un agente puntual propio', async () => {
@@ -211,7 +211,7 @@ describe('PATCH /api/tasks/:id/agent', () => {
       .send({ executor: 'agent', agentId: AGENT_ID })
 
     expect(res.status).toBe(200)
-    expect(prisma.task.update).toHaveBeenCalledWith({ where: { id: 1 }, data: { isAgentTask: true, agentId: AGENT_ID } })
+    expect(prisma.task.update).toHaveBeenCalledWith({ where: { id: 1 }, data: { isAgentTask: true, agentId: AGENT_ID, agentName: null } })
   })
 
   it('devuelve la tarea a la persona', async () => {
@@ -225,7 +225,7 @@ describe('PATCH /api/tasks/:id/agent', () => {
       .send({ executor: 'user' })
 
     expect(res.status).toBe(200)
-    expect(prisma.task.update).toHaveBeenCalledWith({ where: { id: 1 }, data: { isAgentTask: false, agentId: null } })
+    expect(prisma.task.update).toHaveBeenCalledWith({ where: { id: 1 }, data: { isAgentTask: false, agentId: null, agentName: null } })
   })
 
   it('con scope=series actualiza la plantilla y las instancias abiertas', async () => {
@@ -239,10 +239,10 @@ describe('PATCH /api/tasks/:id/agent', () => {
       .send({ executor: 'agent' })
 
     expect(res.status).toBe(200)
-    expect(prisma.taskRecurrence.update).toHaveBeenCalledWith({ where: { id: 3 }, data: { isAgentTask: true, agentId: null } })
+    expect(prisma.taskRecurrence.update).toHaveBeenCalledWith({ where: { id: 3 }, data: { isAgentTask: true, agentId: null, agentName: null } })
     expect(prisma.task.updateMany).toHaveBeenCalledWith({
       where: { recurrenceId: 3, status: { in: ['PENDING', 'PAUSED', 'BLOCKED'] } },
-      data:  { isAgentTask: true, agentId: null },
+      data:  { isAgentTask: true, agentId: null, agentName: null },
     })
   })
 
@@ -577,7 +577,7 @@ describe('POST /api/tasks/:id/comments — agentes', () => {
 
     expect(res.status).toBe(201)
     expect(prisma.taskComment.create).toHaveBeenCalledWith(expect.objectContaining({
-      data: { taskId: 1, userId: 1, agentId: AGENT_ID, content: 'Avance: ya revisé las 3 landings' },
+      data: { taskId: 1, userId: 1, agentId: AGENT_ID, agentName: null, content: 'Avance: ya revisé las 3 landings' },
     }))
     expect(prisma.notification.create).toHaveBeenCalledWith({ data: expect.objectContaining({
       userId: 1, actorId: null, type: 'TASK_COMMENT', message: expect.stringContaining('Tu agente «Grok» comentó'),

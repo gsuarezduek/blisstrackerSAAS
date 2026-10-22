@@ -1,4 +1,4 @@
-const { computeAgentStats, isPresenceTask, HUMAN_TASK_WHERE, PRESENCE_WORKDAY_WHERE } = require('../../src/lib/agentTasks')
+const { computeAgentStats, isPresenceTask, formatAgentName, HUMAN_TASK_WHERE, PRESENCE_WORKDAY_WHERE } = require('../../src/lib/agentTasks')
 
 const period = { curStart: '2026-10-01', curEnd: '2026-10-31', prevStart: '2026-09-01', prevEnd: '2026-09-30' }
 const grok   = { id: 7, label: 'Grok' }
@@ -30,11 +30,25 @@ describe('computeAgentStats', () => {
       done('2026-09-04', 50, { agent: other }),
     ], period)
     expect(s.porAgente).toEqual(expect.arrayContaining([
-      { agentId: 7, name: 'Grok', completed: 1, minutes: 10 },
-      { agentId: 8, name: 'Agente #8', completed: 1, minutes: 5 },
-      { agentId: null, name: 'Agente eliminado', completed: 1, minutes: 5 },
+      { agentId: 7, agentName: null, name: 'Grok', completed: 1, minutes: 10 },
+      { agentId: 8, agentName: null, name: 'Agente #8', completed: 1, minutes: 5 },
+      { agentId: null, agentName: null, name: 'Agente eliminado', completed: 1, minutes: 5 },
     ]))
     expect(s.porProyecto[0]).toEqual({ projectId: 1, name: 'Pastiza', completed: 2, minutes: 15 })
+  })
+
+  it('separa en filas a los agentes que comparten un token por su nombre declarado', () => {
+    const s = computeAgentStats([
+      done('2026-10-02', 10, { agentName: 'Ventas' }),
+      done('2026-10-03', 20, { agentName: 'Ventas' }),
+      done('2026-10-04', 5,  { agentName: 'SEO' }),
+      done('2026-10-05', 1),
+    ], period)
+    expect(s.porAgente).toEqual([
+      { agentId: 7, agentName: 'Ventas', name: 'Grok · Ventas', completed: 2, minutes: 30 },
+      { agentId: 7, agentName: 'SEO', name: 'Grok · SEO', completed: 1, minutes: 5 },
+      { agentId: 7, agentName: null, name: 'Grok', completed: 1, minutes: 1 },
+    ])
   })
 
   it('sin tareas no tiene datos y el delta queda en 0', () => {
@@ -57,5 +71,19 @@ describe('reglas de trabajo humano y presencia', () => {
       { tasks: { none: {} } },
       { tasks: { some: { isAgentTask: false, createdByAgentId: null } } },
     ])
+  })
+})
+
+describe('formatAgentName', () => {
+  it('suma el nombre declarado al del token', () => {
+    expect(formatAgentName({ id: 7, label: 'grokbot' }, 'Ventas')).toBe('grokbot · Ventas')
+  })
+  it('sin nombre declarado (o igual al del token) queda el del token', () => {
+    expect(formatAgentName({ id: 7, label: 'grokbot' }, null)).toBe('grokbot')
+    expect(formatAgentName({ id: 7, label: 'grokbot' }, '  ')).toBe('grokbot')
+    expect(formatAgentName({ id: 7, label: 'grokbot' }, 'grokbot')).toBe('grokbot')
+  })
+  it('token sin label cae a "Agente #id"', () => {
+    expect(formatAgentName({ id: 9, label: null }, 'SEO')).toBe('Agente #9 · SEO')
   })
 })

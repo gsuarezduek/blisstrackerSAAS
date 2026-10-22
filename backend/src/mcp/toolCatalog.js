@@ -884,6 +884,51 @@ const tools = [
     request: ({ leadId, proposalId }) => ({ method: 'DELETE', path: `/ventas/leads/${leadId}/proposals/${proposalId}` }),
   },
 
+  // ── WhatsApp (requiere acceso a Ventas + módulo WhatsApp) ────────────────
+  // Solo texto libre dentro de la ventana de 24hs: sin plantillas (tienen costo
+  // real por conversación) ni adjuntos (multipart, un tool-call solo manda JSON).
+  {
+    name: 'whatsapp_conversations_list',
+    description: 'Conversaciones de WhatsApp del workspace, más reciente primero (las fijadas arriba). Cada una trae: contacto/empresa vinculados, leadId, último mensaje, `awaitingReply` (el último mensaje es del contacto: espera respuesta), `unread` (para la persona dueña del token), `sessionExpiresAt` (hasta cuándo se puede responder; null = ventana vencida, no se puede mandar texto libre), `botEnabled` (true = el bot la atiende), `botReplyDueAt` (el bot está esperando a que un agente la tome: si nadie la toma, responde él a esa hora) y `agentControl` (el agente que la tiene tomada, si hay).',
+    inputSchema: {
+      mine: z.boolean().optional().describe('true = solo las que tenés tomadas vos (incluye las que tu dueño te asignó desde la app). Es tu bandeja de trabajo.'),
+      q: z.string().optional().describe('Busca por nombre/teléfono/empresa del contacto o por el texto de cualquier mensaje'),
+      blocked: z.boolean().optional().describe('true = solo las marcadas como spam (por default se excluyen)'),
+    },
+    request: ({ mine, q, blocked }) => ({ method: 'GET', path: '/whatsapp/conversations', query: { mine: mine ? 'true' : undefined, q, blocked: blocked ? 'true' : undefined } }),
+  },
+  {
+    name: 'whatsapp_conversation_messages',
+    description: 'Mensajes de una conversación (los más nuevos, en orden cronológico) + datos de la conversación (contacto, leadId, sessionExpiresAt, botEnabled, agentControl). `direction`: "in" = el contacto, "out" = nosotros; `senderType` de los "out": "user" (el equipo; si trae `senderAgent` lo escribió un agente), "bot", "system" (automatización), "app_echo" (a mano desde el celular). Para ver más viejos, pasá `before` = id del mensaje más viejo que ya tenés.',
+    inputSchema: {
+      conversationId: z.number().int(),
+      before: z.number().int().optional(),
+      limit: z.number().int().min(1).max(100).optional().describe('Default 50'),
+    },
+    request: ({ conversationId, before, limit }) => ({ method: 'GET', path: `/whatsapp/conversations/${conversationId}/messages`, query: { before, limit } }),
+  },
+  {
+    name: 'whatsapp_conversation_take_control',
+    description: 'Toma la conversación: el bot deja de responder ahí y queda a tu nombre como agente. Usala ANTES de leer y redactar una respuesta, así el bot no contesta mientras tanto. (whatsapp_message_send también la toma sola.)',
+    inputSchema: { conversationId: z.number().int() },
+    request: ({ conversationId }) => ({ method: 'PATCH', path: `/whatsapp/conversations/${conversationId}/bot`, body: { botEnabled: false } }),
+  },
+  {
+    name: 'whatsapp_conversation_return_to_bot',
+    description: 'Devuelve la conversación al bot: vuelve a responder solo los mensajes entrantes (si el bot está activado en el workspace). Solo si el usuario lo pide.',
+    inputSchema: { conversationId: z.number().int() },
+    request: ({ conversationId }) => ({ method: 'PATCH', path: `/whatsapp/conversations/${conversationId}/bot`, body: { botEnabled: true } }),
+  },
+  {
+    name: 'whatsapp_message_send',
+    description: 'Manda un mensaje de texto al contacto por WhatsApp, a nombre de la persona dueña del token (queda rotulado como escrito por vos, su agente). LO RECIBE EL CLIENTE REAL. Solo funciona dentro de la ventana de 24hs desde el último mensaje del contacto (`sessionExpiresAt` no null); fuera de ella devuelve 400 SESSION_WINDOW_EXPIRED. También toma la conversación: el bot deja de responder ahí.',
+    inputSchema: {
+      conversationId: z.number().int(),
+      text: z.string().describe('Texto plano. WhatsApp admite *negrita*, _cursiva_ y saltos de línea.'),
+    },
+    request: ({ conversationId, text }) => ({ method: 'POST', path: `/whatsapp/conversations/${conversationId}/messages`, body: { content: text } }),
+  },
+
   // ── Equipo y Productividad ────────────────────────────────────────────────
   {
     name: 'team_list',
