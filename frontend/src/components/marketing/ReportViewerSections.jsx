@@ -9,6 +9,7 @@ import {
   BestLinkedinPost, BestFacebookPost, LinkedinAudience, CompetitorComparison,
 } from './ReportViewerParts'
 import { SectionHistory } from './ReportHistory'
+import GeoScoreChart from './GeoScoreChart'
 
 const AI_LABELS = {
   chatgpt: 'ChatGPT', gemini: 'Gemini', claude: 'Claude',
@@ -437,14 +438,7 @@ export function SeoGeoSection({ s, contextSEO, canEdit, contextEditing }) {
           {s.geo.history && s.geo.history.length >= 2 && (
             <div className="mt-5">
               <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">Evolución del score</p>
-              <LineChart
-                points={s.geo.history.map(h => ({
-                  label: new Date(h.date).toLocaleDateString('es-AR', { day: 'numeric', month: 'short' }),
-                  value: h.score,
-                }))}
-                color="#3b82f6"
-                height={70}
-              />
+              <GeoScoreChart history={s.geo.history} />
             </div>
           )}
         </SectionCard>

@@ -127,11 +127,12 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
       select:  { score: true, createdAt: true, citability: true, brandAuthority: true, eeat: true, technical: true, platforms: true, schema: true },
     }),
 
-    // Historial de scores GEO (últimos 6 audits completados, para gráfico de evolución)
+    // Historial de scores GEO (para el gráfico de evolución). El frontend lo agrupa por mes
+    // (última auditoría de cada mes, últimos 6): se traen de sobra por si hubo varias en un mes.
     prisma.geoAudit.findMany({
       where:   { projectId, workspaceId, status: 'completed' },
       orderBy: { createdAt: 'desc' },
-      take:    6,
+      take:    24,
       select:  { score: true, createdAt: true },
     }),
 
