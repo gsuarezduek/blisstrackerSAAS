@@ -21,13 +21,14 @@ Antes de tu primera acción en una conversación:
 Reglas que no se negocian:
 - Actuás SIEMPRE como la persona dueña del token, con sus permisos reales: nunca más. Un 403 significa "esa persona no tiene permiso", no lo reintentes por otro camino.
 - Todo lo que creás o modificás queda registrado a nombre de esa persona y es visible para el equipo (y a veces para el cliente). Antes de borrar, enviar algo al cliente (incluido un WhatsApp), mover el estado de un lead o generar algo que consume IA, confirmá con el usuario.
+- Tu lista de tools puede estar desactualizada: tu cliente la guarda al conectarse y BlissTracker suma tools seguido. \`bliss_tools\` muestra la lista EN VIVO; si la tool que necesitás aparece ahí pero no entre las tuyas, ejecutala con \`bliss_run\`. No digas que algo no se puede hacer sin revisar \`bliss_tools\` antes.
 - Los IDs se resuelven leyendo, nunca se inventan: empezá por \`list_projects\`, \`team_list\`, \`ventas_leads_list\`, etc.
 - Si sos uno de varios agentes que usan este mismo conector, pasá tu nombre en el parámetro \`agentName\` de CADA tool (siempre el mismo, ej. "Ventas"): así la persona ve qué agente hizo cada cosa.
 - Fechas en formato YYYY-MM-DD; la zona horaria es la del workspace (por defecto America/Argentina/Buenos_Aires).`
 
 // Prefijo de nombre de tool → sección de la guía. El orden define el orden de aparición.
 const AREAS = [
-  { key: 'general',    label: 'General',                match: n => ['bliss_guide', 'whoami', 'list_projects', 'services_list', 'project_update_services'].includes(n) || n.startsWith('project_situation_') },
+  { key: 'general',    label: 'General',                match: n => ['bliss_guide', 'bliss_tools', 'bliss_run', 'whoami', 'list_projects', 'services_list', 'project_update_services'].includes(n) || n.startsWith('project_situation_') },
   { key: 'tareas',     label: 'Tareas y jornada',       match: n => n.startsWith('task') },
   { key: 'equipo',     label: 'Equipo y productividad', match: n => n.startsWith('team_') },
   { key: 'marketing',  label: 'Marketing (métricas)',   match: n => n.startsWith('marketing_') && !SEO_TOOLS.test(n) },
@@ -48,6 +49,11 @@ const SECTIONS = {
 - **Proyectos privados**: el nombre lo ve todo el workspace, pero el contenido (tareas, marketing, contenido, etc.) y la creación de tareas quedan reservados a su equipo y a los admins. Si una tool sobre un proyecto devuelve 403 para alguien que no es del equipo, probablemente es privado.
 - Si el workspace tiene la facturación vencida (\`past_due\`), las escrituras pueden fallar con 402/403: solo lectura hasta que se regularice el pago.
 - Errores: las tools devuelven \`Error <status>: <json>\`. 400 = argumento inválido (leé el mensaje y corregí), 403 = sin permiso, 404 = no existe o no es visible, 409 = conflicto de estado (ej. ya hay otra tarea en curso), 429 = límite/cooldown (esperá).
+
+## Tools nuevas: \`bliss_tools\` y \`bliss_run\`
+- Tu cliente guarda la lista de tools cuando se configura el conector y puede no enterarse de las que se suman después. \`bliss_tools\` es la lista EN VIVO (con \`query\` filtra, con \`tool: "<nombre>"\` muestra la descripción y los parámetros).
+- Si la tool que necesitás está en \`bliss_tools\` pero no entre las tuyas, ejecutala con \`bliss_run\`: \`{ "tool": "task_comment", "args": { "taskId": 123, "text": "..." } }\`. Funciona igual que llamarla directo (mismos permisos y validaciones); un parámetro mal escrito devuelve error con los parámetros correctos.
+- Antes de decirle al usuario que algo no se puede hacer por MCP, revisá \`bliss_tools\`.
 
 ## Proyectos y servicios
 - \`list_projects\` es el punto de entrada: trae id, nombre, sitio web, servicios contratados y equipo. Casi todo lo demás necesita un \`projectId\`.
@@ -183,4 +189,4 @@ function buildGuide(tools, topic) {
 
 const GUIDE_TOPICS = ['all', ...AREAS.map(a => a.key), 'limites']
 
-module.exports = { INSTRUCTIONS, buildGuide, GUIDE_TOPICS }
+module.exports = { INSTRUCTIONS, AREAS, buildGuide, GUIDE_TOPICS }

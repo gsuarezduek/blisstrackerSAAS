@@ -5,6 +5,7 @@ const { randomUUID } = require('crypto')
 const { tools } = require('./toolCatalog')
 const { callApi } = require('./apiBridge')
 const { INSTRUCTIONS, buildGuide, GUIDE_TOPICS } = require('./guide')
+const { describeTools, prepareRun } = require('./liveTools')
 const { z } = require('zod')
 
 // Quita keys undefined antes de mandarlas como query/body — evita que axios/Express
@@ -40,27 +41,66 @@ function buildServer(identity) {
     async ({ topic } = {}) => ({ content: [{ type: 'text', text: buildGuide(tools, topic) }] })
   )
 
+  // bliss_tools + bliss_run: para clientes que tienen guardada una lista de
+  // tools vieja (ver liveTools.js).
+  server.registerTool(
+    'bliss_tools',
+    {
+      description: 'Lista EN VIVO de las tools de BlissTracker. Tu lista de tools puede estar desactualizada: consultá esta antes de decir que algo no se puede hacer. Con `tool` devuelve la descripción y los parámetros de esa tool; con `query` filtra por palabra.',
+      inputSchema: {
+        tool: z.string().optional().describe('Nombre exacto de una tool para ver su descripción y parámetros'),
+        query: z.string().optional().describe('Palabra para filtrar la lista (ej. "comentario", "whatsapp")'),
+      },
+    },
+    async ({ tool, query } = {}) => {
+      const { text, error } = describeTools(tools, { tool, query })
+      return error ? textResult(error, true) : textResult(text)
+    }
+  )
+
+  server.registerTool(
+    'bliss_run',
+    {
+      description: 'Ejecuta cualquier tool de BlissTracker por nombre, con sus parámetros en `args`. Usala para las tools que aparecen en `bliss_tools` pero no entre las tuyas (tu lista puede estar desactualizada). Mismos permisos y validaciones que llamar la tool directo.',
+      inputSchema: {
+        tool: z.string().describe('Nombre exacto de la tool (ver `bliss_tools`)'),
+        args: z.union([z.record(z.unknown()), z.string()]).optional().describe('Parámetros de la tool, como objeto (ej. { "taskId": 123, "text": "..." })'),
+        ...agentNameParam,
+      },
+    },
+    async ({ tool: name, args, agentName } = {}) => {
+      const prepared = prepareRun(tools, name, args)
+      if (prepared.error) return textResult(prepared.error, true)
+      return runTool(identity, prepared.tool, { ...prepared.args, agentName: agentName ?? prepared.agentName })
+    }
+  )
+
   for (const tool of tools) {
     server.registerTool(
       tool.name,
       { description: tool.description, inputSchema: { ...tool.inputSchema, ...agentNameParam } },
-      async (args) => {
-        try {
-          const { agentName, ...toolArgs } = args || {}
-          const { method, path, query, body } = tool.request(toolArgs)
-          const { status, data } = await callApi(identity, method, path, { query: clean(query), body: clean(body), agentName })
-          const text = JSON.stringify(data, null, 2)
-          return status >= 400
-            ? { content: [{ type: 'text', text: `Error ${status}: ${text}` }], isError: true }
-            : { content: [{ type: 'text', text }] }
-        } catch (err) {
-          return { content: [{ type: 'text', text: `Error: ${err.message}` }], isError: true }
-        }
-      }
+      async (args) => runTool(identity, tool, args)
     )
   }
 
   return server
+}
+
+function textResult(text, isError = false) {
+  return isError ? { content: [{ type: 'text', text }], isError: true } : { content: [{ type: 'text', text }] }
+}
+
+// Handler común a todas las tools del catálogo (llamadas directo o vía bliss_run).
+async function runTool(identity, tool, args) {
+  try {
+    const { agentName, ...toolArgs } = args || {}
+    const { method, path, query, body } = tool.request(toolArgs)
+    const { status, data } = await callApi(identity, method, path, { query: clean(query), body: clean(body), agentName })
+    const text = JSON.stringify(data, null, 2)
+    return status >= 400 ? textResult(`Error ${status}: ${text}`, true) : textResult(text)
+  } catch (err) {
+    return textResult(`Error: ${err.message}`, true)
+  }
 }
 
 // ── Sesiones ──────────────────────────────────────────────────────────────────
