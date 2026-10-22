@@ -670,7 +670,7 @@ export default function TaskCommentsModal({ task, onClose, onCommentAdded, onTas
                         <img
                           src={f.url}
                           alt={f.name}
-                          className="w-8 h-8 rounded object-cover border border-gray-200 dark:border-gray-600"
+                          className="w-14 h-14 rounded-lg object-cover border border-gray-200 dark:border-gray-600"
                         />
                       </button>
                     ) : (
