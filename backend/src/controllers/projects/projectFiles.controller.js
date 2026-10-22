@@ -569,12 +569,14 @@ async function purgeItem(req, res, next) {
 
 /**
  * POST /api/projects/:id/files/:itemId/public-link
- * Genera (o devuelve, si ya existe) un link público de solo lectura para una
- * CARPETA — cualquiera con el link navega/descarga su contenido y el de sus
- * subcarpetas sin loguearse, mismo criterio "no-adivinable = control de
- * acceso" que Proposal.publicToken/MonthlyReport.token. Solo aplica a
- * carpetas: idempotente, así el frontend puede llamarlo siempre al abrir el
- * modal de "Compartir" sin necesitar un GET aparte para saber si ya existía.
+ * Genera (o devuelve, si ya existe) un link público de solo lectura — para
+ * una CARPETA cualquiera con el link navega/descarga su contenido y el de sus
+ * subcarpetas; para un ARCHIVO suelto, ve/descarga solo ese archivo (sin
+ * exponer el resto del proyecto). Mismo criterio "no-adivinable = control de
+ * acceso" que Proposal.publicToken/MonthlyReport.token. Idempotente, así el
+ * frontend puede llamarlo siempre al abrir el modal de "Compartir" sin
+ * necesitar un GET aparte para saber si ya existía. Un archivo debe estar
+ * `ready` (no tiene sentido compartir uno todavía subiéndose).
  */
 async function createPublicLink(req, res, next) {
   try {
@@ -582,8 +584,13 @@ async function createPublicLink(req, res, next) {
     if (guard.error) return res.status(guard.status).json({ error: guard.error })
     const { projectId } = guard
 
-    const item = await prisma.projectFile.findFirst({ where: { id: Number(req.params.itemId), projectId, type: 'folder', deletedAt: null } })
-    if (!item) return res.status(404).json({ error: 'Carpeta no encontrada' })
+    const item = await prisma.projectFile.findFirst({
+      where: {
+        id: Number(req.params.itemId), projectId, deletedAt: null,
+        OR: [{ type: 'folder' }, { type: 'file', status: 'ready' }],
+      },
+    })
+    if (!item) return res.status(404).json({ error: 'No encontrado' })
 
     let token = item.publicToken
     if (!token) {
@@ -598,7 +605,7 @@ async function createPublicLink(req, res, next) {
  * DELETE /api/projects/:id/files/:itemId/public-link
  * Revoca el link (queda `null` — no hay historial de tokens viejos, mismo
  * criterio simple que el resto del repo). El link viejo deja de funcionar al
- * instante: publicFiles.controller.js resuelve la carpeta por el token.
+ * instante: publicFiles.controller.js resuelve la carpeta/archivo por el token.
  */
 async function revokePublicLink(req, res, next) {
   try {
@@ -606,8 +613,8 @@ async function revokePublicLink(req, res, next) {
     if (guard.error) return res.status(guard.status).json({ error: guard.error })
     const { projectId } = guard
 
-    const item = await prisma.projectFile.findFirst({ where: { id: Number(req.params.itemId), projectId, type: 'folder', deletedAt: null } })
-    if (!item) return res.status(404).json({ error: 'Carpeta no encontrada' })
+    const item = await prisma.projectFile.findFirst({ where: { id: Number(req.params.itemId), projectId, deletedAt: null } })
+    if (!item) return res.status(404).json({ error: 'No encontrado' })
 
     if (item.publicToken) {
       await prisma.projectFile.update({ where: { id: item.id }, data: { publicToken: null } })

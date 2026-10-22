@@ -1,6 +1,9 @@
 const express = require('express')
 const router = express.Router()
-const { getSharedFolder, searchSharedFolder, downloadSharedFile } = require('../controllers/publicFiles.controller')
+const {
+  getSharedFolder, searchSharedFolder, downloadSharedFile,
+  getSharedFile, downloadSharedFileByToken,
+} = require('../controllers/publicFiles.controller')
 
 // Sin auth — link público de solo lectura para compartir una carpeta de
 // Archivos (mismo criterio que /api/public/proposal/:token): quien tiene el
@@ -9,5 +12,10 @@ const { getSharedFolder, searchSharedFolder, downloadSharedFile } = require('../
 router.get('/shared-folder/:token',                  getSharedFolder)
 router.get('/shared-folder/:token/search',            searchSharedFolder)
 router.get('/shared-folder/:token/download/:fileId',  downloadSharedFile)
+
+// Mismo mecanismo, pero para compartir un ARCHIVO suelto en vez de una
+// carpeta entera — el token identifica un único ProjectFile.
+router.get('/shared-file/:token',                    getSharedFile)
+router.get('/shared-file/:token/download',           downloadSharedFileByToken)
 
 module.exports = router

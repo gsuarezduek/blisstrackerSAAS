@@ -22,10 +22,10 @@ export default function ItemCard({ item, projectId, menuOpen, onOpenMenu, onOpen
           ) : (
             <Icon as={isFolder ? Folder : iconFor(item.mimeType)} size={30} className={isFolder ? 'text-amber-500' : 'text-gray-400'} />
           )}
-          {isFolder && item.isPublic && (
+          {item.isPublic && (
             <span
               className="absolute bottom-0.5 right-0.5 text-[9px] bg-primary-600 text-white rounded-full w-4 h-4 flex items-center justify-center leading-none"
-              title="Carpeta compartida por link público"
+              title={isFolder ? 'Carpeta compartida por link público' : 'Archivo compartido por link público'}
             ><Icon as={Link2} size={10} /></span>
           )}
         </div>
@@ -80,7 +80,7 @@ export default function ItemCard({ item, projectId, menuOpen, onOpenMenu, onOpen
             )}
             <button onClick={() => { onOpenMenu(null); onRename(item) }} className="w-full text-left px-3 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200">Renombrar</button>
             <button onClick={() => { onOpenMenu(null); onMove(item) }} className="w-full text-left px-3 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200">Mover</button>
-            {isFolder && onShare && (
+            {onShare && (
               <button onClick={() => { onOpenMenu(null); onShare(item) }} className="w-full text-left px-3 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200">
                 {item.isPublic ? 'Compartido' : 'Compartir'}
               </button>

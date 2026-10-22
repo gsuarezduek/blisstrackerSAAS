@@ -156,4 +156,69 @@ async function downloadSharedFile(req, res, next) {
   } catch (err) { next(err) }
 }
 
-module.exports = { getSharedFolder, searchSharedFolder, downloadSharedFile }
+// ─── Link público de un ARCHIVO suelto (no una carpeta) ─────────────────────
+// Mismo criterio de "no-adivinable = control de acceso", pero acotado a un
+// solo ProjectFile — nunca navega a nada más del proyecto (no hay ni
+// `parentId` ni breadcrumb en la respuesta).
+
+async function resolveSharedFile(token) {
+  if (!token) return null
+  const file = await prisma.projectFile.findFirst({
+    where: { publicToken: token, type: 'file', status: 'ready', deletedAt: null },
+    include: { uploadedBy: { select: { id: true, name: true } } },
+  })
+  if (!file) return null
+  const project = await prisma.project.findUnique({
+    where: { id: file.projectId },
+    select: { name: true, filesEnabled: true, workspace: { select: { name: true, slug: true } } },
+  })
+  if (!project || project.filesEnabled === false) return null
+  return { file, projectName: project.name, workspace: project.workspace }
+}
+
+/**
+ * GET /api/public/shared-file/:token
+ * Metadata del archivo compartido (nombre, tamaño, previewable, etc. — mismo
+ * shapeItem que ve el equipo, sin exponer nada del resto del proyecto).
+ */
+async function getSharedFile(req, res, next) {
+  try {
+    const resolved = await resolveSharedFile(req.params.token)
+    if (!resolved) return res.status(404).json({ error: 'Este link no existe o fue desactivado.' })
+    res.json({
+      projectName: resolved.projectName,
+      workspace: resolved.workspace,
+      file: shapeItem(resolved.file),
+    })
+  } catch (err) { next(err) }
+}
+
+/**
+ * GET /api/public/shared-file/:token/download[?inline=1]
+ * Mismo proxy que downloadSharedFile, pero resuelto directo por el token del
+ * archivo (no hace falta un :fileId — el token YA identifica un único archivo).
+ */
+async function downloadSharedFileByToken(req, res, next) {
+  try {
+    const resolved = await resolveSharedFile(req.params.token)
+    if (!resolved) return res.status(404).json({ error: 'Este link no existe o fue desactivado.' })
+    const file = resolved.file
+    if (!file.objectKey) return res.status(404).json({ error: 'Archivo no encontrado' })
+
+    const { body, contentLength } = await objectStorage.getObjectStream(file.objectKey)
+    res.setHeader('Content-Type', file.mimeType || 'application/octet-stream')
+    if (contentLength != null) res.setHeader('Content-Length', contentLength)
+    const type = req.query.inline === '1' ? 'inline' : 'attachment'
+    res.setHeader('Content-Disposition', safeContentDisposition(file.name, { type }))
+    body.on('error', next)
+    body.pipe(res)
+  } catch (err) { next(err) }
+}
+
+module.exports = {
+  getSharedFolder,
+  searchSharedFolder,
+  downloadSharedFile,
+  getSharedFile,
+  downloadSharedFileByToken,
+}

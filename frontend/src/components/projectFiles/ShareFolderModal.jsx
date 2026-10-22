@@ -2,12 +2,15 @@ import { useState, useEffect } from 'react'
 import api from '../../api/client'
 import LoadingSpinner from '../LoadingSpinner'
 
-// "🔗 Compartir" — link público de solo lectura para una carpeta (a diferencia
-// de "🔗 Copiar enlace" de abajo, que es un deep-link interno que solo abre
-// dentro de la app logueado). Llama siempre a createPublicLink al montar: es
-// idempotente (devuelve el token existente si ya estaba compartida), así no
-// hace falta un GET aparte para saber de antemano si tenía link o no.
+// "🔗 Compartir" — link público de solo lectura, para una carpeta (comparte
+// todo su subárbol) o un archivo suelto (comparte solo ese archivo) — a
+// diferencia de "🔗 Copiar enlace" de abajo, que es un deep-link interno que
+// solo abre dentro de la app logueado. Llama siempre a createPublicLink al
+// montar: es idempotente (devuelve el token existente si ya estaba
+// compartido), así no hace falta un GET aparte para saber de antemano si
+// tenía link o no.
 export default function ShareFolderModal({ projectId, item, onClose, onChanged }) {
+  const isFolder = item.type === 'folder'
   const [token, setToken] = useState(null)
   const [loading, setLoading] = useState(true)
   const [copied, setCopied] = useState(false)
@@ -28,7 +31,7 @@ export default function ShareFolderModal({ projectId, item, onClose, onChanged }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId, item.id])
 
-  const link = token ? `${window.location.origin}/shared-folder/${token}` : ''
+  const link = token ? `${window.location.origin}/shared-${isFolder ? 'folder' : 'file'}/${token}` : ''
 
   async function handleCopy() {
     try { await navigator.clipboard.writeText(link) } catch { /* fallback: seleccionar el input */ }
@@ -53,7 +56,9 @@ export default function ShareFolderModal({ projectId, item, onClose, onChanged }
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md p-5" onClick={e => e.stopPropagation()}>
         <p className="text-sm font-bold text-gray-900 dark:text-white mb-1">Compartir "{item.name}"</p>
         <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
-          Cualquiera con este link puede ver y descargar el contenido de esta carpeta (y sus subcarpetas), sin necesidad de una cuenta.
+          {isFolder
+            ? 'Cualquiera con este link puede ver y descargar el contenido de esta carpeta (y sus subcarpetas), sin necesidad de una cuenta.'
+            : 'Cualquiera con este link puede ver y descargar este archivo, sin necesidad de una cuenta.'}
         </p>
         {loading ? (
           <LoadingSpinner className="py-4" />
