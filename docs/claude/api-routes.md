@@ -87,6 +87,10 @@ GET    /api/projects/:id/members
 GET    /api/projects/:id/tasks
 GET    /api/projects/:id/completed       # ?skip=N
 PUT    /api/projects/:id/links
+GET    /api/projects/:id/situation                   # hojas de la Situación de la cuenta, la más nueva primero (isCurrent, canDelete) — cualquier miembro del workspace
+POST   /api/projects/:id/situation                   # hoja nueva { content } (no vacía); la anterior pasa al historial
+PATCH  /api/projects/:id/situation/:entryId          # edita la hoja actual { content }; sobre una anterior → 409 (solo lectura)
+DELETE /api/projects/:id/situation/:entryId          # admin/owner o quien creó la hoja
 GET    /api/projects/:id/briefs           # lista briefs del proyecto (cualquier miembro del workspace)
 PUT    /api/projects/:id/briefs/:type     # upsert respuestas de un brief (admin/owner o miembro del proyecto)
 DELETE /api/projects/:id/briefs/:type     # elimina el brief (mismo criterio de escritura)

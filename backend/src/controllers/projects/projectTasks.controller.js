@@ -14,7 +14,7 @@ async function projectTasks(req, res, next) {
     const project = await prisma.project.findUnique({
       where: { id: projectId },
       select: {
-        id: true, name: true, createdAt: true, situation: true,
+        id: true, name: true, createdAt: true,
         timezone: true, linksEnabled: true, situationEnabled: true, briefsEnabled: true, filesEnabled: true,
         websiteUrl: true, connections: true, isPrivate: true,
         chatChannel: { select: { slug: true } },

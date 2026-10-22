@@ -26,7 +26,7 @@ Reglas que no se negocian:
 
 // Prefijo de nombre de tool → sección de la guía. El orden define el orden de aparición.
 const AREAS = [
-  { key: 'general',    label: 'General',                match: n => ['bliss_guide', 'whoami', 'list_projects', 'services_list', 'project_update_services'].includes(n) },
+  { key: 'general',    label: 'General',                match: n => ['bliss_guide', 'whoami', 'list_projects', 'services_list', 'project_update_services'].includes(n) || n.startsWith('project_situation_') },
   { key: 'tareas',     label: 'Tareas y jornada',       match: n => n.startsWith('task') },
   { key: 'equipo',     label: 'Equipo y productividad', match: n => n.startsWith('team_') },
   { key: 'marketing',  label: 'Marketing (métricas)',   match: n => n.startsWith('marketing_') && !SEO_TOOLS.test(n) },
@@ -48,7 +48,14 @@ const SECTIONS = {
 
 ## Proyectos y servicios
 - \`list_projects\` es el punto de entrada: trae id, nombre, sitio web, servicios contratados y equipo. Casi todo lo demás necesita un \`projectId\`.
-- \`project_update_services\` REEMPLAZA la lista completa de servicios (no suma). Leé los actuales primero y mandá todos. Solo admin/owner.`,
+- \`project_update_services\` REEMPLAZA la lista completa de servicios (no suma). Leé los actuales primero y mandá todos. Solo admin/owner.
+
+## Situación de la cuenta
+- Cada proyecto tiene una Situación de la cuenta hecha de **hojas** que se acumulan: la más nueva es la actual (la que el equipo ve en el Resumen del proyecto) y las anteriores quedan como historial de solo lectura.
+- \`project_situation_list\` las lee (la primera, \`isCurrent: true\`, es la actual). Leela antes de escribir.
+- \`project_situation_add\` agrega una hoja nueva cuando cambió el estado de la cuenta (ej. después de una reunión o un hito); la anterior pasa al historial. Si tiene título, ponelo como \`<h2>\` al principio.
+- \`project_situation_update\` corrige o completa la hoja ACTUAL: reemplaza el texto entero (mandá todo, no solo lo nuevo). Las hojas anteriores no se editan (409).
+- La ve y edita todo el equipo: escribí claro y sin datos sensibles (credenciales, etc.). Las hojas no se borran por MCP.`,
 
   tareas: `## Tareas y jornada
 

@@ -19,9 +19,14 @@ const MAX_WAIT_MS   = 8000 // pero nunca deja pasar más que esto sin guardar, a
 //
 // `editorKey` identifica QUÉ se está editando (id de la reunión/lead/proyecto). Solo cuando
 // cambia se resetea el draft — así un cambio de prop ajeno a una edición en curso no la interrumpe.
+//
+// Opcionales: `autoEdit` abre directo en modo edición cada vez que cambia `editorKey` (ej. una
+// hoja nueva de la Situación de la cuenta), `headerActions` suma botones al encabezado,
+// `onEditingChange(editing)` avisa al padre si se está editando y `onDone()` corre al apretar
+// "Listo" una vez que todo quedó guardado.
 export default function AutosaveNotes({
   content, onSave, label, emptyText = 'Sin información todavía.', addLabel = '+ Agregar',
-  minHeight = 140, canEdit = true, editorKey,
+  minHeight = 140, canEdit = true, editorKey, autoEdit = false, headerActions, onEditingChange, onDone,
 }) {
   const [editing,      setEditing]      = useState(false)
   const [draft,        setDraft]        = useState(content || '')
@@ -40,7 +45,7 @@ export default function AutosaveNotes({
     draftRef.current = content || ''
     savedRef.current = content || ''
     setSavedContent(content || '')
-    setEditing(false)
+    setEditing(autoEdit)
     setStatus('idle')
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editorKey])
@@ -92,6 +97,11 @@ export default function AutosaveNotes({
     doSave()
   }
 
+  useEffect(() => {
+    onEditingChange?.(editing)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editing])
+
   // Cerrar la pestaña / refrescar con cambios sin confirmar todavía → preguntar.
   useEffect(() => {
     function handleBeforeUnload(e) {
@@ -126,7 +136,10 @@ export default function AutosaveNotes({
     clearTimeout(maxTimerRef.current)
     maxTimerRef.current = null
     await doSave()
-    if (draftRef.current === savedRef.current) setEditing(false)
+    if (draftRef.current === savedRef.current) {
+      setEditing(false)
+      onDone?.()
+    }
   }
 
   const isEmpty = !savedContent || savedContent === '<p></p>'
@@ -143,13 +156,18 @@ export default function AutosaveNotes({
         {label && (
           <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide">{label}</p>
         )}
-        {canEdit && !editing && (
-          <button
-            onClick={handleEdit}
-            className="text-xs text-primary-600 dark:text-primary-400 hover:underline font-medium"
-          >
-            {isEmpty ? addLabel : 'Editar'}
-          </button>
+        {(headerActions || (canEdit && !editing)) && (
+          <div className="flex items-center gap-3 flex-shrink-0">
+            {headerActions}
+            {canEdit && !editing && (
+              <button
+                onClick={handleEdit}
+                className="text-xs text-primary-600 dark:text-primary-400 hover:underline font-medium"
+              >
+                {isEmpty ? addLabel : 'Editar'}
+              </button>
+            )}
+          </div>
         )}
         {editing && statusLabel && (
           <span className={`text-xs flex-shrink-0 ${status === 'error' ? 'text-red-500' : 'text-gray-400 dark:text-gray-500'}`}>

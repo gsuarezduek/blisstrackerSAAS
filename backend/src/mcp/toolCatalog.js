@@ -922,6 +922,33 @@ const tools = [
     },
     request: ({ projectId, serviceIds }) => ({ method: 'PUT', path: `/projects/${projectId}`, body: { serviceIds } }),
   },
+
+  // ── Situación de la cuenta (hojas acumulables por proyecto) ─────────────
+  {
+    name: 'project_situation_list',
+    description: 'Lee la Situación de la cuenta de un proyecto: las hojas, de la más nueva a la más vieja. La primera (`isCurrent: true`) es la actual — la única editable; las anteriores son historial de solo lectura. `content` es HTML.',
+    inputSchema: { ...projectIdParam },
+    request: ({ projectId }) => ({ method: 'GET', path: `/projects/${projectId}/situation` }),
+  },
+  {
+    name: 'project_situation_add',
+    description: 'Agrega una hoja NUEVA a la Situación de la cuenta: pasa a ser la actual (la que se ve en el Resumen del proyecto) y la anterior queda en el historial. Usala para un estado nuevo de la cuenta; para corregir o completar la hoja actual usá project_situation_update. `content` en HTML simple (<h2>, <p>, <ul><li>, <strong>) o texto plano (se arma en párrafos); no puede estar vacío.',
+    inputSchema: {
+      ...projectIdParam,
+      content: z.string().describe('Contenido de la hoja (HTML simple o texto plano). Un título se pone como <h2> al principio.'),
+    },
+    request: ({ projectId, content }) => ({ method: 'POST', path: `/projects/${projectId}/situation`, body: { content } }),
+  },
+  {
+    name: 'project_situation_update',
+    description: 'Reemplaza el contenido de la hoja ACTUAL de la Situación de la cuenta (no suma: mandá el texto completo — leelo antes con project_situation_list). Solo la hoja actual es editable: sobre una anterior devuelve 409.',
+    inputSchema: {
+      ...projectIdParam,
+      entryId: z.number().int().describe('ID de la hoja actual (la de isCurrent: true en project_situation_list)'),
+      content: z.string().describe('Contenido COMPLETO de la hoja (HTML simple o texto plano)'),
+    },
+    request: ({ projectId, entryId, content }) => ({ method: 'PATCH', path: `/projects/${projectId}/situation/${entryId}`, body: { content } }),
+  },
 ]
 
 module.exports = { tools }

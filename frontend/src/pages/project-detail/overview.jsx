@@ -266,7 +266,7 @@ export default function OverviewTab({ data, encodedId, authUser, onOpenComments,
       {/* Columna principal */}
       <div className="lg:col-span-2 space-y-4 min-w-0">
         {project.situationEnabled !== false && (
-          <ProjectSituation encodedProjectId={encodedId} initialContent={project.situation || ''} />
+          <ProjectSituation encodedProjectId={encodedId} />
         )}
 
         {blocked.length > 0 && (

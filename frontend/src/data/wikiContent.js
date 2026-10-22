@@ -371,7 +371,7 @@ Enlaces útiles del proyecto (drive, documentos, etc.). Cualquier miembro puede 
 
 ## Situación
 
-Notas de contexto sobre el estado del cliente/proyecto.
+Notas de contexto sobre el estado del cliente/proyecto, en el **Resumen**. Funciona por **hojas** que se van juntando: siempre ves la última y la editás con autoguardado. Con **+ Nueva hoja** arrancás una en blanco y la anterior pasa a **Hojas anteriores**, de solo lectura, así no se pierde lo que se escribió antes. Si querés un título, ponelo dentro de la hoja (por ejemplo como encabezado). Una hoja la puede borrar quien la creó o un admin.
 
 ## Briefs
 
@@ -1297,6 +1297,7 @@ Así el agente sabe sus límites desde el primer mensaje, sin que tengas que exp
 ## Lo que sí puede hacer
 
 - **Proyectos** — listar proyectos y su equipo; consultar el catálogo de servicios. Los admins pueden cambiar los servicios contratados de un proyecto.
+- **Situación de la cuenta** — leer las hojas de un proyecto, corregir o completar la hoja actual y agregar una hoja nueva (la anterior queda en el historial). Lo que escribe aparece con tu nombre y la marca "vía <agente>". No puede borrar hojas.
 - **Tareas** — ver la jornada de hoy; crear tareas (también futuras y recurrentes, y asignadas a otra persona); corregir el texto, el proyecto o la fecha de tus tareas; pasarle una tarea tuya a otra persona del equipo (le llega un aviso); iniciar, pausar, reanudar, completar, bloquear y desbloquear; corregir el tiempo de una tarea ya completada.
 - **Comentarios y adjuntos** — comentar en una tarea para dejar avances o notas sin bloquearla (el comentario aparece con tu nombre y la marca "vía <agente>", y te llega un aviso) y adjuntar archivos: informes y borradores de texto, o archivos publicados en internet como imágenes o PDFs. Quedan en la Nube del proyecto, igual que los que adjuntás vos.
 - **Tareas propias del agente** — el agente puede crear tareas que **ejecuta él mismo** (no vos): quedan en su propia lista de trabajo, puede tener varias en curso a la vez y no ocupan tu lugar de "una tarea en curso". También puede tomar las tareas que le delegues, devolvértelas y **borrar** las de su lista que todavía no completó (nunca tus tareas ni las ya completadas). Si algo lo frena, bloquea la tarea con un motivo para pedirte ayuda.

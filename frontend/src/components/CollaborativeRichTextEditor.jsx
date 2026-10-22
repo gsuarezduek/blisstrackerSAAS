@@ -3,7 +3,7 @@
  * personas escribiendo a la vez, con cursores de las demás) sobre un campo de
  * notas colaborativo del backend (ver backend/src/lib/collab/). Hermano de
  * RichTextEditor.jsx, no lo reemplaza: ese sigue siendo el editor de un solo
- * autor (Project.situation, propuestas, Visión EOS, etc.) — este es solo para
+ * autor (Situación de la cuenta, propuestas, Visión EOS, etc.) — este es solo para
  * los 3 campos con motor de colaboración: ProjectMeeting.notes, Lead.notes,
  * EOSMeeting.notes.
  *

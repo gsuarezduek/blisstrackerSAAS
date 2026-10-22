@@ -387,6 +387,8 @@ model User {
   taskRecurrences                   TaskRecurrence[]            @relation("RecurrenceAssignee")
   taskRecurrencesCreated            TaskRecurrence[]            @relation("RecurrenceCreatedBy")
   taskComments                      TaskComment[]
+  situationEntriesCreated           ProjectSituationEntry[] @relation("SituationEntryCreatedBy")
+  situationEntriesUpdated           ProjectSituationEntry[] @relation("SituationEntryUpdatedBy")
   taskFollows                       TaskFollow[]                @relation("TaskFollower")
   deletedNoticesAssigned            DeletedTaskNotice[]         @relation("DeletedNoticeAssignee")
   deletedNoticesDelegated           DeletedTaskNotice[]         @relation("DeletedNoticeCreatedBy")
@@ -606,7 +608,6 @@ model Project {
   name                String
   active              Boolean   @default(true)
   lostAt              DateTime? // se setea al pasar a inactivo (true→false), se limpia al reactivar; alimenta "Proyectos perdidos" del Scorecard EOS
-  situation           String?
   timezone            String    @default("America/Argentina/Buenos_Aires")
   linksEnabled        Boolean   @default(true)
   situationEnabled    Boolean   @default(true)
@@ -633,6 +634,7 @@ model Project {
   stars                    ProjectStar[]
   notifications            Notification[]
   links                    ProjectLink[]
+  situationEntries         ProjectSituationEntry[]
   geoAudits                GeoAudit[]
   integrations             ProjectIntegration[]
   apifyUsageLogs           ApifyUsageLog[]
@@ -812,6 +814,30 @@ model ProjectStar {
 
   @@id([projectId, userId])
   @@index([userId])
+}
+
+// Situación de la cuenta: hojas que se van acumulando por proyecto. La más nueva
+// (createdAt/id más alto) es la "actual" — la única editable; las anteriores
+// quedan como historial de solo lectura. Reemplaza al viejo Project.situation
+// (un solo campo que se pisaba). `content` es HTML del editor de texto enriquecido.
+model ProjectSituationEntry {
+  id               Int       @id @default(autoincrement())
+  projectId        Int
+  project          Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  content          String    @default("")
+  createdById      Int?
+  createdBy        User?     @relation("SituationEntryCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedById      Int?
+  updatedBy        User?     @relation("SituationEntryUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  // Agentes IA: la creó / la editó por última vez un agente (McpToken) vía MCP en nombre del usuario.
+  createdByAgentId Int?
+  createdByAgent   McpToken? @relation("SituationEntryCreatedByAgent", fields: [createdByAgentId], references: [id], onDelete: SetNull)
+  updatedByAgentId Int?
+  updatedByAgent   McpToken? @relation("SituationEntryUpdatedByAgent", fields: [updatedByAgentId], references: [id], onDelete: SetNull)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([projectId, createdAt])
 }
 
 model ProjectLink {
@@ -4504,6 +4530,8 @@ model McpToken {
   agentRecurrences   TaskRecurrence[] @relation("RecurrenceAgent")
   createdRecurrences TaskRecurrence[] @relation("RecurrenceCreatedByAgent")
   taskComments       TaskComment[]    @relation("TaskCommentAgent")
+  situationEntriesCreated ProjectSituationEntry[] @relation("SituationEntryCreatedByAgent")
+  situationEntriesUpdated ProjectSituationEntry[] @relation("SituationEntryUpdatedByAgent")
 
   @@index([workspaceId])
 }

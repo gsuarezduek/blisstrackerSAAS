@@ -44,31 +44,6 @@ async function saveLinks(req, res, next) {
   } catch (err) { next(err) }
 }
 
-async function saveSituation(req, res, next) {
-  try {
-    const workspaceId = req.workspace.id
-    const projectId = await resolveProjectId(req.params.id, workspaceId)
-    if (!projectId) return res.status(404).json({ error: 'Proyecto no encontrado' })
-    await assertToggleEnabled(projectId, 'situationEnabled', 'Situación')
-
-    // Abierto a cualquier miembro activo del workspace (resolveWorkspace ya lo validó),
-    // no solo al equipo del proyecto: la situación de la cuenta es información compartida
-    // y el editor se muestra a todos, así que rechazar acá daba un error confuso.
-
-    const { situation } = req.body
-    if (typeof situation !== 'string') {
-      return res.status(400).json({ error: 'situation debe ser un string' })
-    }
-
-    const updated = await prisma.project.update({
-      where: { id: projectId },
-      data: { situation: situation.trim() || null },
-      select: { situation: true },
-    })
-    res.json(updated)
-  } catch (err) { next(err) }
-}
-
 /**
  * PATCH /api/projects/:id/info
  * Actualiza websiteUrl y connections. Accesible por cualquier miembro del proyecto.
@@ -96,4 +71,4 @@ async function saveInfo(req, res, next) {
   } catch (err) { next(err) }
 }
 
-module.exports = { saveLinks, saveSituation, saveInfo }
+module.exports = { saveLinks, saveInfo, assertToggleEnabled }
