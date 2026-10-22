@@ -108,7 +108,8 @@ function TrackedTaskRow({ task: t, onClick, onRemove, removeTitle, isNew }) {
 // duración con estado local propio — así tipear en el input no re-renderiza todo el Dashboard.
 export const CompletedTaskRow = memo(function CompletedTaskRow({ task: t, variant, onOpenComments, onSaveDuration }) {
   const [editingDur, setEditingDur] = useState(false)
-  const [durInput, setDurInput] = useState('')
+  const [hoursInput, setHoursInput] = useState('')
+  const [minsInput, setMinsInput] = useState('')
   const cancelRef = useRef(false)
   const inputRef = useRef(null)
 
@@ -120,17 +121,26 @@ export const CompletedTaskRow = memo(function CompletedTaskRow({ task: t, varian
 
   function startEdit() {
     cancelRef.current = false
-    setDurInput(String(mins ?? 0))
+    const total = mins ?? 0
+    setHoursInput(String(Math.floor(total / 60)))
+    setMinsInput(String(total % 60))
     setEditingDur(true)
     setTimeout(() => { inputRef.current?.select() }, 0)
   }
 
   async function saveEdit() {
     if (cancelRef.current) return
-    const parsed = parseInt(durInput, 10)
+    // Campo vacío = 0; los minutos pueden pasar de 59 (90 min → 1h 30m al guardar).
+    const h = hoursInput.trim() === '' ? 0 : parseInt(hoursInput, 10)
+    const m = minsInput.trim() === '' ? 0 : parseInt(minsInput, 10)
     setEditingDur(false)
-    if (isNaN(parsed) || parsed < 0) return
-    await onSaveDuration(t.id, parsed)
+    if (isNaN(h) || isNaN(m) || h < 0 || m < 0) return
+    await onSaveDuration(t.id, h * 60 + m)
+  }
+
+  function onDurKeyDown(e) {
+    if (e.key === 'Enter')  { e.preventDefault(); saveEdit() }
+    if (e.key === 'Escape') { cancelRef.current = true; setEditingDur(false) }
   }
 
   return (
@@ -169,19 +179,31 @@ export const CompletedTaskRow = memo(function CompletedTaskRow({ task: t, varian
           {editingDur ? (
             <>
               <span className="text-xs text-gray-300 dark:text-gray-600">·</span>
-              <span className="flex items-center gap-1">
+              {/* Guarda al salir del grupo, no al pasar de horas a minutos (Tab/click). */}
+              <span
+                className="flex items-center gap-1"
+                onBlur={e => { if (!e.currentTarget.contains(e.relatedTarget)) saveEdit() }}
+              >
                 <input
                   ref={inputRef}
                   type="number"
                   min="0"
-                  value={durInput}
-                  onChange={e => setDurInput(e.target.value)}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter')  { e.preventDefault(); saveEdit() }
-                    if (e.key === 'Escape') { cancelRef.current = true; setEditingDur(false) }
-                  }}
-                  onBlur={saveEdit}
-                  className="w-14 text-xs border border-green-400 dark:border-green-600 rounded px-1.5 py-0.5 text-center focus:outline-none focus:ring-1 focus:ring-green-400 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200"
+                  aria-label="Horas"
+                  value={hoursInput}
+                  onChange={e => setHoursInput(e.target.value)}
+                  onKeyDown={onDurKeyDown}
+                  className="w-12 text-xs border border-green-400 dark:border-green-600 rounded px-1.5 py-0.5 text-center focus:outline-none focus:ring-1 focus:ring-green-400 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200"
+                />
+                <span className="text-xs text-gray-400">h</span>
+                <input
+                  type="number"
+                  min="0"
+                  aria-label="Minutos"
+                  value={minsInput}
+                  onChange={e => setMinsInput(e.target.value)}
+                  onKeyDown={onDurKeyDown}
+                  onFocus={e => e.target.select()}
+                  className="w-12 text-xs border border-green-400 dark:border-green-600 rounded px-1.5 py-0.5 text-center focus:outline-none focus:ring-1 focus:ring-green-400 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200"
                 />
                 <span className="text-xs text-gray-400">min</span>
                 <button
