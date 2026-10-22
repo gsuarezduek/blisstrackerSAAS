@@ -1,5 +1,5 @@
 const prisma = require('../lib/prisma')
-const { fetchGA4Report, fetchAiTrafficData } = require('../services/googleAnalytics.service')
+const { fetchGA4Report, fetchAiTrafficData, isGA4PermissionDenied } = require('../services/googleAnalytics.service')
 
 // Acepta 'NdaysAgo', 'today', 'yesterday' o 'YYYY-MM-DD'
 const VALID_GA4_DATE = /^(\d{4}-\d{2}-\d{2}|\d+daysAgo|today|yesterday)$/
@@ -14,6 +14,7 @@ function parseDateParam(val, fallback) {
  * También acepta ?dateRange=NdaysAgo para compatibilidad.
  */
 async function getAnalyticsData(req, res, next) {
+  let integration
   try {
     const projectId   = Number(req.params.id)
     const workspaceId = req.workspace.id
@@ -37,7 +38,7 @@ async function getAnalyticsData(req, res, next) {
     })
     if (!project) return res.status(404).json({ error: 'Proyecto no encontrado' })
 
-    const integration = await prisma.projectIntegration.findUnique({
+    integration = await prisma.projectIntegration.findUnique({
       where: { projectId_type: { projectId, type: 'google_analytics' } },
     })
 
@@ -63,6 +64,17 @@ async function getAnalyticsData(req, res, next) {
     const data = await fetchGA4Report(integration, startDate, endDate, { comparePrevious })
     res.json({ ...data, projectName: project.name, websiteUrl: project.websiteUrl })
   } catch (err) {
+    // Sin acceso a la propiedad: es un problema de configuración (Property ID o permisos
+    // en GA4), no un fallo del servidor ni un token vencido — no marcamos la integración.
+    if (isGA4PermissionDenied(err)) {
+      const propertyId = String(integration?.propertyId ?? '').replace(/^properties\//, '')
+      console.warn(`[analytics.getAnalyticsData] sin acceso a la propiedad GA4 ${propertyId} (proyecto ${req.params.id})`)
+      return res.status(400).json({
+        error: `La cuenta de Google conectada no tiene acceso a la propiedad GA4 ${propertyId}. Verificá el Property ID o pedí acceso a esa propiedad en Google Analytics.`,
+        code:  'PERMISSION_DENIED',
+        propertyId,
+      })
+    }
     console.error('[analytics.getAnalyticsData] error:', err.code ?? '', err.message)
     // Marcar como error si el token fue revocado por el usuario en Google
     if (
@@ -187,6 +199,9 @@ async function getAiTrafficData(req, res, next) {
         data:  { status: 'expired' },
       }).catch(() => {})
       return res.status(400).json({ error: 'Token expirado. Reconectá GA4.', code: 'TOKEN_EXPIRED' })
+    }
+    if (isGA4PermissionDenied(err)) {
+      return res.status(400).json({ error: 'La cuenta de Google conectada no tiene acceso a esta propiedad GA4.', code: 'PERMISSION_DENIED' })
     }
     next(err)
   }

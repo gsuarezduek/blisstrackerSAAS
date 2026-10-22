@@ -1,5 +1,5 @@
 const prisma    = require('../lib/prisma')
-const { fetchGA4Report, fetchAiTrafficData } = require('./googleAnalytics.service')
+const { fetchGA4Report, fetchAiTrafficData, isGA4PermissionDenied } = require('./googleAnalytics.service')
 const { parseAIJson }    = require('../utils/parseAIJson')
 const { logTokens }      = require('../lib/logTokens')
 const { todayString }    = require('../utils/dates')
@@ -49,7 +49,7 @@ async function saveMonthSnapshot(projectId, workspaceId, month) {
   const [data, aiTrafficRaw] = await Promise.all([
     fetchGA4Report(integration, startDate, endDate),
     fetchAiTrafficData(integration, startDate, endDate).catch(err => {
-      console.warn('[AnalyticsSnapshot] aiTraffic fetch failed (ignorado):', err.message)
+      if (!isGA4PermissionDenied(err)) console.warn('[AnalyticsSnapshot] aiTraffic fetch failed (ignorado):', err.message)
       return {}
     }),
   ])

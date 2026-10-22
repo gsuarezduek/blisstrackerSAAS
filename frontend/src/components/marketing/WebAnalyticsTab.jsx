@@ -28,6 +28,7 @@ export default function WebAnalyticsTab({ projectId, onSelectProject }) {
   const [loading,      setLoading]      = useState(false)
   const [errorStatus,   setErrorStatus]   = useState(null)
   const [error,         setError]         = useState('')
+  const [deniedPropertyId, setDeniedPropertyId] = useState('')
   const [reconnecting,  setReconnecting]  = useState(false)
   const [disconnecting, setDisconnecting] = useState(false)
   const [retryKey,      setRetryKey]      = useState(0)
@@ -132,6 +133,7 @@ export default function WebAnalyticsTab({ projectId, onSelectProject }) {
         else if (body?.status === 'no_property')                        setErrorStatus('no_property')
         else if (body?.code === 'TOKEN_EXPIRED' || body?.status === 'revoked' || body?.status === 'error') setErrorStatus('revoked')
         else if (body?.code === 'FETCH_ERROR')                          setErrorStatus('fetch_error')
+        else if (body?.code === 'PERMISSION_DENIED')                    { setErrorStatus('no_permission'); setDeniedPropertyId(body.propertyId || '') }
         else setError(body?.error || 'Error al cargar datos')
       })
       .finally(() => setLoading(false))
@@ -343,6 +345,18 @@ export default function WebAnalyticsTab({ projectId, onSelectProject }) {
           </p>
           <p className="text-xs text-amber-600 dark:text-amber-400">
             Ingresalo en <strong>Mis Proyectos → [Proyecto] → Info → Integraciones Google</strong>
+          </p>
+        </div>
+      )}
+      {errorStatus === 'no_permission' && (
+        <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-2xl p-8 text-center">
+          <div className="mb-3"><Icon as={TriangleAlert} size={28} className="inline-block text-amber-500" /></div>
+          <p className="text-sm font-semibold text-amber-800 dark:text-amber-300 mb-1">
+            Sin acceso a la propiedad de GA4{deniedPropertyId ? ` ${deniedPropertyId}` : ''}
+          </p>
+          <p className="text-xs text-amber-600 dark:text-amber-400">
+            La cuenta de Google conectada no tiene permiso sobre esa propiedad. Revisá el Property ID en{' '}
+            <strong>Mis Proyectos → [Proyecto] → Info → Integraciones Google</strong>, o pedí acceso de lectura a esa propiedad en Google Analytics.
           </p>
         </div>
       )}

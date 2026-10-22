@@ -47,6 +47,15 @@ function computePreviousPeriod(startDate, endDate) {
 }
 
 /**
+ * La cuenta de Google conectada no tiene acceso a la propiedad GA4 (gRPC 7).
+ * No es un token vencido: reconectar con la misma cuenta no lo arregla — hay que
+ * corregir el Property ID o darle acceso a esa cuenta en GA4.
+ */
+function isGA4PermissionDenied(err) {
+  return err?.code === 7 || /PERMISSION_DENIED/.test(err?.message ?? '')
+}
+
+/**
  * Calcula delta porcentual entre dos valores.
  */
 function pctDelta(curr, prev) {
@@ -129,7 +138,8 @@ async function fetchGA4Report(integration, startDate = '30daysAgo', endDate = 't
       metrics:    [{ name: 'conversions' }],
       orderBys:   [{ metric: { metricName: 'conversions' }, desc: true }],
     }).catch(err => {
-      console.warn('[GA4] conversions query failed (ignorado):', err.message)
+      // Sin permiso falla también la consulta principal y el error se reporta una vez ahí
+      if (!isGA4PermissionDenied(err)) console.warn('[GA4] conversions query failed (ignorado):', err.message)
       return [{ rows: [] }]
     }),
     // Fuentes de tráfico detalladas (source + medium)
@@ -141,7 +151,8 @@ async function fetchGA4Report(integration, startDate = '30daysAgo', endDate = 't
       orderBys:   [{ metric: { metricName: 'sessions' }, desc: true }],
       limit:      10,
     }).catch(err => {
-      console.warn('[GA4] trafficSources query failed (ignorado):', err.message)
+      // Sin permiso falla también la consulta principal y el error se reporta una vez ahí
+      if (!isGA4PermissionDenied(err)) console.warn('[GA4] trafficSources query failed (ignorado):', err.message)
       return [{ rows: [] }]
     }),
     // Desglose de todos los eventos (no solo key events) por nombre de evento
@@ -153,7 +164,8 @@ async function fetchGA4Report(integration, startDate = '30daysAgo', endDate = 't
       orderBys:   [{ metric: { metricName: 'eventCount' }, desc: true }],
       limit:      20,
     }).catch(err => {
-      console.warn('[GA4] allEvents query failed (ignorado):', err.message)
+      // Sin permiso falla también la consulta principal y el error se reporta una vez ahí
+      if (!isGA4PermissionDenied(err)) console.warn('[GA4] allEvents query failed (ignorado):', err.message)
       return [{ rows: [] }]
     }),
   ])
@@ -372,4 +384,4 @@ function invalidateCache(integrationId) {
   }
 }
 
-module.exports = { fetchGA4Report, fetchAiTrafficData, invalidateCache }
+module.exports = { fetchGA4Report, fetchAiTrafficData, invalidateCache, isGA4PermissionDenied }
