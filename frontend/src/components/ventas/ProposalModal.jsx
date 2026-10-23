@@ -6,6 +6,7 @@ import { exportProposalPdf } from './proposalPdf'
 import ProposalDocView from './ProposalDocView'
 import ProposalDocEditor from './ProposalDocEditor'
 import ProposalBriefStep, { initialBriefState, buildBriefing } from './ProposalBriefStep'
+import { syncServiceRenames, reconcileServiceNames } from './proposalServiceSync'
 
 const input = 'w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500'
 const label = 'block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1'
@@ -47,8 +48,11 @@ export default function ProposalModal({ leadId, companyName, currency: defaultCu
   const [accent, setAccent] = useState('')
   const [signatures, setSignatures] = useState([])
   const [signatureId, setSignatureId] = useState(initial?.signatureId || '')
-  const [editPlans, setEditPlans] = useState(() => Array.isArray(initial?.plans) ? initial.plans.map(p => ({ ...p })) : [])
-  const [savedSnapshot, setSavedSnapshot] = useState(() => initial ? snapshotOf(initial) : null)
+  // Si algún servicio quedó renombrado solo en el doc, se alinea el plan al abrir (sin marcarlo
+  // como cambio pendiente: se persiste con el próximo guardado).
+  const [initialPlans] = useState(() => Array.isArray(initial?.plans) ? reconcileServiceNames(initial.doc, initial.plans.map(p => ({ ...p }))) : [])
+  const [editPlans, setEditPlans] = useState(initialPlans)
+  const [savedSnapshot, setSavedSnapshot] = useState(() => initial ? snapshotOf({ ...initial, plans: initialPlans }) : null)
   const [confirmClose, setConfirmClose] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -170,6 +174,13 @@ export default function ProposalModal({ leadId, companyName, currency: defaultCu
     } finally {
       setSaving(false)
     }
+  }
+
+  // Renombrar un servicio en el editor de bloques lo renombra también en los planes (la lista de
+  // servicios y la tabla de inversión salen de ahí).
+  function handleDocChange(next) {
+    setEditPlans(ps => syncServiceRenames(doc, next, ps))
+    setDoc(next)
   }
 
   function updateEditPlan(i, field, value) {
@@ -337,7 +348,7 @@ export default function ProposalModal({ leadId, companyName, currency: defaultCu
                   </div>
                 ) : (
                   <div className="max-h-[65vh] overflow-y-auto pr-1">
-                    <ProposalDocEditor doc={doc} onChange={setDoc} />
+                    <ProposalDocEditor doc={doc} onChange={handleDocChange} />
                   </div>
                 )}
               </div>

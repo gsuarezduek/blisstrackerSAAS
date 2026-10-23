@@ -206,6 +206,8 @@ async function updateProposal(req, res, next) {
           services: Array.isArray(p?.services) ? p.services.filter(s => s && typeof s.name === 'string').map(s => ({ name: s.name, description: s.description ?? null })) : [],
         }
       })
+      // Un servicio renombrado desde el editor de bloques viaja renombrado en los planes.
+      data.services = [...new Set(data.plans.flatMap(p => p.services.map(s => s.name)))]
     }
     if (status  !== undefined) {
       if (!['draft', 'confirmed'].includes(status)) return res.status(400).json({ error: 'Estado de propuesta inválido' })
