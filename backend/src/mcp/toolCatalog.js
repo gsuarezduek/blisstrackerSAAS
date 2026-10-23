@@ -960,6 +960,18 @@ const tools = [
     },
     request: ({ conversationId, text }) => ({ method: 'POST', path: `/whatsapp/conversations/${conversationId}/messages`, body: { content: text } }),
   },
+  {
+    name: 'whatsapp_conversation_pin',
+    description: 'Fija la conversación arriba de la lista (pin compartido: lo ve todo el equipo, no es una preferencia tuya). Usala para destacar algo urgente o que necesita seguimiento.',
+    inputSchema: { conversationId: z.number().int() },
+    request: ({ conversationId }) => ({ method: 'PATCH', path: `/whatsapp/conversations/${conversationId}/pin`, body: { pinned: true } }),
+  },
+  {
+    name: 'whatsapp_conversation_unpin',
+    description: 'Le quita el pin a la conversación.',
+    inputSchema: { conversationId: z.number().int() },
+    request: ({ conversationId }) => ({ method: 'PATCH', path: `/whatsapp/conversations/${conversationId}/pin`, body: { pinned: false } }),
+  },
 
   // ── Equipo y Productividad ────────────────────────────────────────────────
   {

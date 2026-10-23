@@ -155,6 +155,7 @@ Bandeja de WhatsApp del número de la agencia, vinculada al CRM (contacto → le
 - **Conversaciones asignadas a vos**: tu dueño puede asignarte una conversación desde la app ("La atiende mi agente"). Las encontrás con \`whatsapp_conversations_list\` \`mine: true\` y atenderlas es tu trabajo: respondé las que tienen \`awaitingReply: true\` siguiendo lo que tu dueño te indicó. Si no te dio instrucciones de cómo responder, preguntale antes de mandar el primer mensaje.
 - Si la conversación ya la atiende una persona del equipo (\`botEnabled: false\` sin \`agentControl\`, o mensajes recientes del equipo sin \`senderAgent\`) o la tiene tomada otro agente, no te metas: avisale al usuario y respondé solo si te lo pide.
 - Flujo: \`whatsapp_conversations_list\` (\`mine: true\` para tu bandeja; si no, filtrá por \`awaitingReply\`/\`q\`) → \`whatsapp_conversation_take_control\` → \`whatsapp_conversation_messages\` → \`whatsapp_message_send\`. Con el \`leadId\` de la conversación podés seguir en Ventas (estado, notas, próximas acciones).
+- \`whatsapp_conversation_pin\`/\`whatsapp_conversation_unpin\` fijan/desfijan una conversación arriba de la lista (pin compartido, lo ve todo el equipo). Útil para marcar algo urgente o que necesita seguimiento del equipo.
 - No se puede por MCP: plantillas/reabrir conversaciones vencidas, mandar imágenes o archivos, configurar el bot o las automatizaciones, marcar spam, vincular contactos.`,
 }
 
