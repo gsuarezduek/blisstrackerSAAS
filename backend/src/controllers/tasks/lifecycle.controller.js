@@ -54,6 +54,19 @@ async function taskLifecycleRecipients(task, actorId) {
   return recipients
 }
 
+// Destinatarios del aviso "empezó la tarea": solo quienes la siguen (TaskFollow) y
+// quien la delegó — no todo el equipo del proyecto, que llenaría la campana con cada
+// tarea que alguien arranca. Sin duplicar, sin el actor.
+async function taskStartedRecipients(task, actorId) {
+  const followers = await prisma.taskFollow.findMany({
+    where: { taskId: task.id, userId: { not: actorId } },
+    select: { userId: true },
+  })
+  const recipients = new Set(followers.map(f => f.userId))
+  if (task.createdById && task.createdById !== actorId) recipients.add(task.createdById)
+  return recipients
+}
+
 // Si la tarea viene de "Enviar al dashboard" de una pieza de Contenido (ver
 // `taskInclude.contentPiece`), reemite la pieza actualizada por socket cada vez
 // que la tarea cambia de estado — así la Tabla/Kanban/Calendario/detalle de
@@ -386,6 +399,31 @@ async function startTask(req, res, next) {
     await prisma.financeTask.updateMany({ where: { taskId }, data: { status: 'open', doneAt: null, doneById: null } })
     await prisma.leadAction.updateMany({ where: { taskId }, data: { status: 'pending', doneAt: null, doneById: null } })
     await notifyContentPieceTaskChange(task, req.workspace.id)
+
+    // Aviso a seguidores y a quien la delegó. Solo al iniciar (no al reanudar, que
+    // avisaría en cada pausa/retomo). Las tareas de agente no avisan, igual que al completar.
+    if (!task.isAgentTask) {
+      const recipients = await taskStartedRecipients(task, userId)
+      if (recipients.size > 0) {
+        const desc = task.description.length > 60 ? task.description.slice(0, 57) + '...' : task.description
+        const message = `empezó "${desc}"`
+        await prisma.notification.createMany({
+          data: Array.from(recipients).map(uid => ({
+            userId:      uid,
+            actorId:     userId,
+            taskId:      task.id,
+            projectId:   task.projectId,
+            workspaceId,
+            type:        'STARTED',
+            message,
+          })),
+        })
+        for (const uid of recipients) {
+          sendPushToUser({ userId: uid, workspaceId, type: 'STARTED', taskId: task.id, message: `${req.user.name} ${message}` }).catch(() => {})
+        }
+      }
+    }
+
     res.json(task)
   } catch (err) {
     if (err.code === 'P2025') return res.status(404).json({ error: 'Tarea no encontrada' })

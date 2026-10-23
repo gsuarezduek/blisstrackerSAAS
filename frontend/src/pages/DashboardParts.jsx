@@ -37,6 +37,14 @@ export function loadSeguimientoSeen(userId) {
   try { return JSON.parse(localStorage.getItem(seguimientoSeenKey(userId)) || '{}') } catch { return {} }
 }
 export function seguimientoSignature(t) { return `${t.status}:${t._count?.comments ?? 0}` }
+// Cambió desde la última vez que se vio. Sin firma guardada todavía no cuenta como
+// novedad: el Dashboard guarda la firma actual la primera vez que la tarea aparece en
+// Seguimiento (recién seguida o delegada), así solo avisan los cambios posteriores.
+export function isSeguimientoNew(seen, t) {
+  if (t.__deletedNotice) return false
+  const sig = seen[t.id]
+  return sig !== undefined && sig !== seguimientoSignature(t)
+}
 
 // Fila de la sección Seguimiento (Seguidas / Delegadas). Muestra responsable, comentarios,
 // estado, y los metadatos: fecha de creación, fecha de finalización y duración.
@@ -383,17 +391,20 @@ export function SeguimientoSection({
         <div className={embedded ? 'space-y-4' : 'mt-2 space-y-4'}>
           {/* Sub-pestañas: Seguidas / Delegadas */}
           <div className="inline-flex rounded-lg border border-gray-200 dark:border-gray-700 p-0.5 bg-gray-50 dark:bg-gray-800">
-            {[['SEGUIDAS', 'Seguidas', followedTasks.length], ['DELEGADAS', 'Delegadas', delegated.length]].map(([key, label, n]) => (
+            {[['SEGUIDAS', 'Seguidas', followedTasks], ['DELEGADAS', 'Delegadas', delegated]].map(([key, label, list]) => (
               <button
                 key={key}
                 onClick={() => onChangeTab(key)}
-                className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
+                className={`inline-flex items-center gap-1 px-3 py-1 text-xs font-medium rounded-md transition-colors ${
                   seguimientoTab === key
                     ? 'bg-white dark:bg-gray-700 text-primary-600 dark:text-primary-400 shadow-sm'
                     : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
                 }`}
               >
-                {label} <span className="opacity-60">{n}</span>
+                {label} <span className="opacity-60">{list.length}</span>
+                {list.some(t => isSeguimientoNew(seguimientoSeen, t)) && (
+                  <span className="w-1.5 h-1.5 rounded-full bg-primary-500" title="Hay cambios sin ver" />
+                )}
               </button>
             ))}
           </div>
@@ -487,7 +498,7 @@ export function SeguimientoSection({
                     onClick={t.__deletedNotice ? undefined : () => onOpenTask(t)}
                     onRemove={onRemoveOne}
                     removeTitle={t.__deletedNotice ? 'Descartar aviso' : (seguimientoTab === 'SEGUIDAS' ? 'Dejar de seguir' : 'Quitar del dashboard')}
-                    isNew={!t.__deletedNotice && seguimientoSeen[t.id] !== seguimientoSignature(t)}
+                    isNew={isSeguimientoNew(seguimientoSeen, t)}
                   />
                 ))}
               </div>

@@ -27,6 +27,7 @@ const PUSH_TITLE = {
   TASK_MENTION: 'Te mencionaron',
   TASK_COMMENT: 'Nuevo comentario',
   COMPLETED:    'Tarea completada',
+  STARTED:      'Tarea en curso',
   BLOCKED:      'Tarea bloqueada',
   UNBLOCKED:    'Tarea desbloqueada',
   CHAT_MENTION: 'Chat',

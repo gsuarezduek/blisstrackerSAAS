@@ -1,7 +1,8 @@
 // Pestañas del panel "Más tarde" del Dashboard: Backlog / Seguimiento / Programadas /
 // Completadas. Reemplazan a los cuatro acordeones grises que había al final de la
 // página (todos con el mismo peso visual, todos cerrados). `alert` marca con un
-// punto rojo una pestaña que necesita atención (ej. algo delegado bloqueado).
+// punto rojo una pestaña que necesita atención (ej. algo delegado bloqueado) y
+// `badge` suma una pill destacada con texto (ej. "2 nuevas" en Seguimiento).
 export default function LaterTabs({ tabs, value, onChange }) {
   return (
     <div className="flex items-end justify-between gap-3 border-b border-gray-200 dark:border-gray-700">
@@ -25,6 +26,11 @@ export default function LaterTabs({ tabs, value, onChange }) {
               {count && (
                 <span className={`text-xs rounded-full px-1.5 py-0.5 ${active ? 'bg-primary-50 text-primary-700 dark:bg-primary-900/40 dark:text-primary-300' : 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'}`}>
                   {count}
+                </span>
+              )}
+              {t.badge && (
+                <span className="text-xs font-semibold rounded-full px-1.5 py-0.5 bg-primary-500 text-white">
+                  {t.badge}
                 </span>
               )}
               {t.alert && <span className="w-1.5 h-1.5 rounded-full bg-red-500" aria-label="Requiere atención" />}

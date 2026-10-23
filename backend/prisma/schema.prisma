@@ -1163,6 +1163,7 @@ model DeletedTaskNotice {
 
 enum NotificationType {
   COMPLETED
+  STARTED
   BLOCKED
   UNBLOCKED
   ADDED_TO_PROJECT

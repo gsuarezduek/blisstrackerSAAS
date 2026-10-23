@@ -20,7 +20,7 @@ import useMyAgents from '../hooks/useMyAgents'
 import { useAuth } from '../context/AuthContext'
 import { completedMinutes } from '../utils/format'
 import {
-  SEGUIMIENTO_STATUS_PRIORITY, seguimientoSeenKey, loadSeguimientoSeen, seguimientoSignature,
+  SEGUIMIENTO_STATUS_PRIORITY, seguimientoSeenKey, loadSeguimientoSeen, seguimientoSignature, isSeguimientoNew,
   CompletedTaskRow, DailyInsightBlock, SeguimientoSection,
 } from './DashboardParts'
 
@@ -150,21 +150,54 @@ export default function Dashboard() {
     return () => window.removeEventListener('bliss:task-created', onTaskCreated)
   }, [loadToday, user?.id])
 
+  // Seguidas + Delegadas. Si un pedido falla, esa lista queda como estaba (en vez de
+  // vaciarse en un refresco y perder las novedades). Devuelve las listas frescas (o null).
+  const loadSeguimiento = useCallback(() => Promise.all([
+    api.get('/tasks/delegated').then(r => r.data).catch(() => null),
+    api.get('/tasks/followed').then(r => r.data).catch(() => null),
+  ]).then(([del, fol]) => {
+    if (del) setDelegated(del)
+    if (fol) setFollowedTasks(fol)
+    return [del, fol]
+  }), [])
+
   const seguimientoTabInit = useRef(false)
   useEffect(() => {
-    Promise.all([
-      api.get('/tasks/delegated').then(r => r.data).catch(() => []),
-      api.get('/tasks/followed').then(r => r.data).catch(() => []),
-    ]).then(([del, fol]) => {
-      setDelegated(del)
-      setFollowedTasks(fol)
+    loadSeguimiento().then(([del, fol]) => {
       // Pestaña por defecto: Seguidas si hay alguna, si no Delegadas.
       if (!seguimientoTabInit.current) {
         seguimientoTabInit.current = true
-        if (fol.length === 0 && del.length > 0) setSeguimientoTab('DELEGADAS')
+        if (!fol?.length && del?.length > 0) setSeguimientoTab('DELEGADAS')
       }
     })
-  }, [])
+  }, [loadSeguimiento])
+
+  // Las tareas que sigo o delegué las mueven otras personas: refresco cada 60s (solo
+  // con la pestaña visible) y al volver a la pestaña, para que el aviso de "nuevas" en
+  // Seguimiento aparezca sin recargar.
+  useEffect(() => {
+    const refresh = () => {
+      if (document.visibilityState !== 'visible') return
+      loadSeguimiento()
+    }
+    const t = setInterval(refresh, 60000)
+    document.addEventListener('visibilitychange', refresh)
+    return () => { clearInterval(t); document.removeEventListener('visibilitychange', refresh) }
+  }, [loadSeguimiento])
+
+  // La primera vez que una tarea aparece en Seguimiento (recién seguida o delegada) se
+  // guarda su firma actual sin marcarla como novedad: solo avisan los cambios posteriores.
+  useEffect(() => {
+    if (!user?.id) return
+    setSeguimientoSeen(prev => {
+      const missing = [...followedTasks, ...delegated].filter(t => !t.__deletedNotice && prev[t.id] === undefined)
+      if (missing.length === 0) return prev
+      const next = { ...prev }
+      for (const t of missing) next[t.id] = seguimientoSignature(t)
+      try { localStorage.setItem(seguimientoSeenKey(user.id), JSON.stringify(next)) } catch (_) {}
+      return next
+    })
+  }, [followedTasks, delegated, user?.id])
 
   // Load AI insight once workday is available
   useEffect(() => {
@@ -404,6 +437,16 @@ export default function Dashboard() {
     [followedTasks, delegated]
   )
 
+  // Cuántas tareas de Seguimiento cambiaron (estado o comentarios) desde que las vi.
+  // Una tarea puede estar en las dos listas: se cuenta una vez.
+  const seguimientoNewCount = useMemo(() => {
+    const ids = new Set()
+    for (const t of [...followedTasks, ...delegated]) {
+      if (isSeguimientoNew(seguimientoSeen, t)) ids.add(t.id)
+    }
+    return ids.size
+  }, [followedTasks, delegated, seguimientoSeen])
+
   // Tareas de la pestaña activa, ordenadas por urgencia (bloqueadas primero) y agrupadas por proyecto
   const seguimientoByProject = useMemo(() => {
     const sorted = [...seguimientoSource].sort((a, b) =>
@@ -522,6 +565,18 @@ export default function Dashboard() {
   function handleOpenSeguimientoTask(task) {
     markSeguimientoSeen(task)
     setCommentTask(task)
+  }
+
+  // Al cerrar el detalle de una tarea de Seguimiento, refresca las listas y la marca vista
+  // con su firma fresca: lo que se vio adentro (o un comentario propio) no queda como novedad.
+  function handleCloseCommentTask() {
+    const closed = commentTask
+    setCommentTask(null)
+    if (!closed || ![...followedTasks, ...delegated].some(t => t.id === closed.id)) return
+    loadSeguimiento().then(([del, fol]) => {
+      const fresh = [...(fol ?? []), ...(del ?? [])].find(t => t.id === closed.id && !t.__deletedNotice)
+      if (fresh) markSeguimientoSeen(fresh)
+    })
   }
 
   // Inactivity detection
@@ -753,7 +808,8 @@ export default function Dashboard() {
                 ...(myAgents.length > 0 || agentTasks.length > 0
                   ? [{ key: 'agentes', label: 'Agentes', count: agentOpenCount, alert: agentBlockedCount > 0 }]
                   : []),
-                { key: 'seguimiento', label: 'Seguimiento', count: followedTasks.length + delegated.length, alert: seguimientoBlockedCount > 0 },
+                { key: 'seguimiento', label: 'Seguimiento', count: followedTasks.length + delegated.length, alert: seguimientoBlockedCount > 0,
+                  badge: seguimientoNewCount > 0 ? `${seguimientoNewCount} ${seguimientoNewCount === 1 ? 'nueva' : 'nuevas'}` : null },
                 { key: 'completadas', label: 'Completadas', count: completed.length, countLabel: completed.length ? `${completed.length} hoy` : null },
               ]}
             />
@@ -899,7 +955,7 @@ export default function Dashboard() {
       {commentTask && (
         <TaskCommentsModal
           task={commentTask}
-          onClose={() => setCommentTask(null)}
+          onClose={handleCloseCommentTask}
           onCommentAdded={count => handleCommentAdded(commentTask.id, count)}
           onTaskEdited={updated => {
             handleUpdateTask(updated)

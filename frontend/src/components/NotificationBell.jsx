@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import api from '../api/client'
 import { avatarUrl } from '../utils/avatarUrl'
 import { useAuth } from '../context/AuthContext'
-import { Lock, LockOpen, Handshake, AtSign, MessageSquare, Eye, Bell, Check, TriangleAlert, Trash2, Plus, Briefcase, CalendarDays, Smartphone, Hand, Palmtree, Trophy, Pencil, UserRound, Bot } from 'lucide-react'
+import { Lock, LockOpen, Handshake, AtSign, MessageSquare, Eye, Bell, Check, TriangleAlert, Trash2, Plus, Briefcase, CalendarDays, Smartphone, Hand, Palmtree, Trophy, Pencil, UserRound, Bot, Play } from 'lucide-react'
 import { Icon } from './ui/Icon'
 
 // Cada filtro define un predicado `match`. Un filtro `muted` no destaca: no suma al
@@ -11,6 +11,7 @@ import { Icon } from './ui/Icon'
 // "Seguidas" agrupa las completadas de tareas que el usuario sigue o delegó (relación
 // enviada por el backend) — esas SÍ destacan; el resto de completadas quedan muteadas.
 const isFollowedCompleted = n => n.type === 'COMPLETED' && (n.relation === 'followed' || n.relation === 'delegated')
+// STARTED solo se envía a seguidores y a quien delegó la tarea, así que siempre es "Seguidas".
 
 // Orden por urgencia: lo bloqueado va primero.
 // BLOCKED agrupa también UNBLOCKED (mismo hilo: se bloqueó → se resolvió) y
@@ -21,7 +22,7 @@ const FILTERS = [
   { key: 'CLIENT',       icon: Handshake, title: 'Actividad del cliente',     match: n => n.type === 'CONTENT_APPROVED' || n.type === 'CONTENT_CHANGES_REQUESTED' || n.type === 'PORTAL_CLIENT_LOGIN' },
   { key: 'TASK_MENTION', icon: AtSign, title: 'Asignaciones y menciones',  match: n => n.type === 'TASK_MENTION' || n.type === 'LEAD_ASSIGNED' || n.type === 'CHAT_MENTION' || n.type === 'CONTENT_MENTION' || n.type === 'WHATSAPP_MESSAGE' || n.type === 'CALENDAR_INVITE' },
   { key: 'TASK_COMMENT', icon: MessageSquare, title: 'Comentarios',               match: n => n.type === 'TASK_COMMENT' },
-  { key: 'FOLLOWED',     icon: Eye, title: 'Seguidas y delegadas',      match: n => isFollowedCompleted(n) || n.type === 'TASK_DELETED' },
+  { key: 'FOLLOWED',     icon: Eye, title: 'Seguidas y delegadas',      match: n => isFollowedCompleted(n) || n.type === 'STARTED' || n.type === 'TASK_DELETED' },
   { key: 'OTHER',        icon: Bell, title: 'Otras',                     match: n => ['VACATION_REQUEST', 'ADDED_TO_PROJECT', 'VACATION_REVIEWED', 'GAME_LAUNCHED', 'BENEFIT_REQUEST', 'BENEFIT_REVIEWED', 'CALENDAR_RESPONSE', 'LEGAJO_UPDATED'].includes(n.type) },
   { key: 'COMPLETED',    icon: Check, title: 'Completadas',               match: n => n.type === 'COMPLETED' && !isFollowedCompleted(n), muted: true },
 ]
@@ -242,6 +243,7 @@ export default function NotificationBell() {
                 const isBenefit        = isBenefitAction || n.type === 'BENEFIT_REVIEWED'
                 const isGameLaunched   = n.type === 'GAME_LAUNCHED'
                 const isCompleted      = n.type === 'COMPLETED'
+                const isStarted        = n.type === 'STARTED'
                 const isTaskDeleted    = n.type === 'TASK_DELETED'
                 const isAssignment     = isMention || isLeadAssigned || isChatMention || isContentMention || isWhatsappMessage
                 const isAmberFamily    = isVacation || isBenefit || isGameLaunched || isContentChanges
@@ -382,6 +384,9 @@ export default function NotificationBell() {
                         )}
                         {isGameLaunched && (
                           <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-amber-500 rounded-full flex items-center justify-center text-white text-[8px] leading-none"><Icon as={Trophy} size={9} strokeWidth={2.75} /></span>
+                        )}
+                        {isStarted && (
+                          <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-primary-500 rounded-full flex items-center justify-center text-white text-[8px] leading-none"><Icon as={Play} size={9} strokeWidth={2.75} /></span>
                         )}
                         {isCompleted && (
                           <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-gray-400 dark:bg-gray-500 rounded-full flex items-center justify-center text-white text-[8px] leading-none"><Icon as={Check} size={9} strokeWidth={2.75} /></span>
