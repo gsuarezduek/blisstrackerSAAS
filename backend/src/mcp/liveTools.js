@@ -27,11 +27,31 @@ function paramsSchema(tool) {
   return schema
 }
 
-// Tools cuyo nombre comparte algún segmento con el pedido (ej. "task_coment" →
-// task_comment, task_comments_list), para orientar al agente si le erró al nombre.
+// Distancia de edición (Levenshtein) — para ordenar las sugerencias por parecido.
+function editDistance(a, b) {
+  let prev = Array.from({ length: b.length + 1 }, (_, j) => j)
+  for (let i = 1; i <= a.length; i++) {
+    const cur = [i]
+    for (let j = 1; j <= b.length; j++) {
+      cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1))
+    }
+    prev = cur
+  }
+  return prev[b.length]
+}
+
+// Tools que comparten alguna palabra con el nombre pedido, las más parecidas
+// primero (así un typo como "task_coment" sugiere `task_comment` aunque el
+// catálogo tenga muchas otras `task*` antes).
 function suggestions(tools, name) {
-  const parts = String(name).toLowerCase().split(/[^a-z0-9]+/).filter(p => p.length >= 3)
-  return tools.map(t => t.name).filter(n => parts.some(p => n.includes(p))).slice(0, 8)
+  const query = String(name).toLowerCase()
+  const parts = query.split(/[^a-z0-9]+/).filter(p => p.length >= 3)
+  return tools.map(t => t.name)
+    .filter(n => parts.some(p => n.includes(p)))
+    .map(n => ({ n, d: editDistance(query, n) }))
+    .sort((a, b) => a.d - b.d)
+    .slice(0, 8)
+    .map(x => x.n)
 }
 
 function unknownToolText(tools, name) {

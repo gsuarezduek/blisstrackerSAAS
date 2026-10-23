@@ -44,9 +44,9 @@ const WORKSPACE_ID   = 1
 const AGENT_ID       = 7
 
 // mcpTokenId = la request viene por MCP (claim que solo firma mcp/apiBridge.js).
-function authHeader({ userId = 1, mcpTokenId } = {}) {
+function authHeader({ userId = 1, mcpTokenId, mcpAgentName } = {}) {
   const token = jwt.sign(
-    { userId, workspaceId: WORKSPACE_ID, role: 'member', isSuperAdmin: false, name: 'Test', email: 't@t.com', ...(mcpTokenId ? { mcpTokenId } : {}) },
+    { userId, workspaceId: WORKSPACE_ID, role: 'member', isSuperAdmin: false, name: 'Test', email: 't@t.com', ...(mcpTokenId ? { mcpTokenId } : {}), ...(mcpAgentName ? { mcpAgentName } : {}) },
     SECRET,
   )
   return `Bearer ${token}`
@@ -275,6 +275,73 @@ describe('PATCH /api/tasks/:id/agent', () => {
 
 // ─── Lista de trabajo del agente ──────────────────────────────────────────────
 
+describe('GET /api/tasks/agent-updates', () => {
+  const completedAt = new Date('2026-10-22T15:00:00Z')
+  function completed(overrides = {}) {
+    return makeTask({
+      id: 5, status: 'COMPLETED', userId: 2, createdByAgentId: AGENT_ID,
+      startedAt: new Date('2026-10-22T14:00:00Z'), completedAt, pausedMinutes: 15,
+      user: { id: 2, name: 'Ana' }, agent: null,
+      comments: [
+        { content: 'Enviada', createdAt: completedAt, agentId: null, user: { name: 'Ana' } },
+        { content: 'Arranco', createdAt: new Date('2026-10-22T14:00:00Z'), agentId: null, user: { name: 'Ana' } },
+      ],
+      ...overrides,
+    })
+  }
+  beforeEach(() => {
+    prisma.task.findMany.mockResolvedValue([completed()])
+    prisma.task.updateMany.mockResolvedValue({ count: 1 })
+  })
+
+  function get(path = '/api/tasks/agent-updates', auth = { mcpTokenId: AGENT_ID }) {
+    return request(app).get(path).set('Authorization', authHeader(auth)).set('X-Workspace', WORKSPACE_SLUG)
+  }
+
+  it('devuelve lo que el agente creó y alguien completó, y lo marca como visto', async () => {
+    const res = await get()
+
+    expect(res.status).toBe(200)
+    const where = prisma.task.findMany.mock.calls[0][0].where
+    expect(where).toMatchObject({ createdByAgentId: AGENT_ID, status: 'COMPLETED', createdByAgentSeenAt: null, workDay: { workspaceId: WORKSPACE_ID } })
+    expect(where).not.toHaveProperty('createdByAgentName')
+    // Lo que ejecutó él mismo no es novedad
+    expect(where.NOT).toEqual({ isAgentTask: true, agentId: AGENT_ID })
+    expect(res.body.updates).toEqual([expect.objectContaining({
+      taskId: 5,
+      completedBy: { id: 2, name: 'Ana' },
+      executedByAgent: false,
+      workedMinutes: 45,
+      // En orden cronológico
+      recentComments: [expect.objectContaining({ content: 'Arranco' }), expect.objectContaining({ content: 'Enviada', author: 'Ana', viaAgent: false })],
+    })])
+    expect(res.body.hasMore).toBe(false)
+    expect(prisma.task.updateMany).toHaveBeenCalledWith({
+      where: { id: { in: [5] }, createdByAgentSeenAt: null },
+      data: { createdByAgentSeenAt: expect.any(Date) },
+    })
+  })
+
+  it('con agentName declarado, solo lo que creó con ese nombre', async () => {
+    await get(undefined, { mcpTokenId: AGENT_ID, mcpAgentName: 'Ventas' })
+    const where = prisma.task.findMany.mock.calls[0][0].where
+    expect(where.createdByAgentName).toBe('Ventas')
+    expect(where.NOT).toEqual({ isAgentTask: true, agentId: AGENT_ID, agentName: 'Ventas' })
+  })
+
+  it('markSeen=false solo lee', async () => {
+    const res = await get('/api/tasks/agent-updates?markSeen=false')
+    expect(res.body.updates).toHaveLength(1)
+    expect(prisma.task.updateMany).not.toHaveBeenCalled()
+  })
+
+  it('desde la app (sin agente) devuelve 400', async () => {
+    const res = await get(undefined, {})
+    expect(res.status).toBe(400)
+    expect(prisma.task.findMany).not.toHaveBeenCalled()
+  })
+})
+
 describe('GET /api/tasks/agent-queue', () => {
   beforeEach(() => {
     prisma.task.findMany.mockResolvedValue([])
@@ -396,6 +463,18 @@ describe('avisos de tareas de agente', () => {
       .set('X-Workspace', WORKSPACE_SLUG)
 
     expect(prisma.notification.createMany).toHaveBeenCalled()
+  })
+
+  it('completar una tarea la deja como novedad para el agente que la creó (también si se recompleta)', async () => {
+    prisma.task.findUnique.mockResolvedValue(makeTask({ status: 'IN_PROGRESS', createdByAgentId: AGENT_ID }))
+    prisma.task.update.mockResolvedValue(makeTask({ status: 'COMPLETED', createdByAgentId: AGENT_ID }))
+
+    await request(app)
+      .patch('/api/tasks/1/complete')
+      .set('Authorization', authHeader())
+      .set('X-Workspace', WORKSPACE_SLUG)
+
+    expect(prisma.task.update.mock.calls[0][0].data).toMatchObject({ status: 'COMPLETED', createdByAgentSeenAt: null })
   })
 
   it('el bloqueo de un agente le avisa solo a su dueño, sin actor y nombrando al agente', async () => {

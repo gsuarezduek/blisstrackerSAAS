@@ -1288,6 +1288,7 @@ Así el agente sabe sus límites desde el primer mensaje, sin que tengas que exp
           'Si el agente no parece conocer las reglas, pedile: "leé bliss_guide y whoami antes de seguir".',
           'Un token por agente o dispositivo: así podés revocar uno sin cortar los demás.',
           'Algunos asistentes (como Grok) guardan la lista de herramientas cuando configurás el conector y no se enteran de las nuevas. No hace falta reconectarlo: el agente puede consultar la lista actual con bliss_tools y usar las nuevas con bliss_run. Si preferís que las vea como herramientas propias, cambiá la URL del conector agregándole algo al final (ej. ?v=2).',
+          'Cuando terminás una tarea que te creó un agente, el agente se entera la próxima vez que trabaja: revisa sus novedades y ve quién la completó, cuánto llevó y los últimos comentarios. Si querés dejarle el resultado, escribilo en un comentario de la tarea antes de completarla.',
           'Si varios agentes comparten el mismo conector (por ejemplo, varios agentes de Grok), pediles que pasen su nombre en el parámetro agentName: en BlissTracker vas a ver "nombre del token · nombre del agente" en tareas, comentarios, WhatsApp y Productividad. Es un nombre que declara el propio agente: sirve para ordenar, no como control de seguridad.',
         ],
         related: ['agentes-ia-capacidades', 'agentes-ia-seguridad'],

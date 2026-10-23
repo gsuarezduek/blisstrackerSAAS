@@ -17,6 +17,7 @@ const INSTRUCTIONS = `Estás conectado a BlissTracker, la plataforma de gestión
 Antes de tu primera acción en una conversación:
 1. Llamá a \`bliss_guide\` (sin argumentos) para leer qué podés y qué no podés hacer, las reglas del negocio y los flujos recomendados.
 2. Llamá a \`whoami\` para saber en nombre de quién actuás, si es admin y a qué módulos tiene acceso.
+3. Llamá a \`tasks_agent_updates\` para enterarte de qué tareas de las que creaste ya se completaron (no recibís avisos: te enterás revisando).
 
 Reglas que no se negocian:
 - Actuás SIEMPRE como la persona dueña del token, con sus permisos reales: nunca más. Un 403 significa "esa persona no tiene permiso", no lo reintentes por otro camino.
@@ -87,6 +88,7 @@ Crear tareas (\`task_create\`):
 - Ejecutá con el mismo ciclo: \`task_start\` → \`task_complete\`. Podés tener varias en curso. Si algo te frena, \`task_block\` con un motivo claro: es la forma de pedirle ayuda a la persona.
 - No dejes tareas en curso indefinidamente: completalas o pausalas al terminar de trabajar. El tiempo de tus tareas se registra aparte del de la persona (no suma a sus horas ni a las horas contratadas del cliente).
 - \`task_set_executor\` cambia quién ejecuta una tarea propia que no esté en curso: \`agent\` (te la tomás vos) o \`user\` (se la devolvés a la persona). Con \`scope: "series"\` en una tarea recurrente aplica a toda la serie.
+- **Novedades de lo que creaste — \`tasks_agent_updates\`**: no te llegan avisos (solo actuás cuando te invocan), así que al empezar revisá qué tareas que VOS creaste (para la persona o para otro miembro) se completaron desde la última vez: quién, cuándo, cuánto llevó y los últimos comentarios. Cada novedad aparece una sola vez. Si el resultado te sirve para seguir (ej. "ya mandé la propuesta" → cargar la próxima acción en Ventas), seguí el flujo; si no, contáselo al usuario.
 - \`task_delete\` elimina una tarea de agente ABIERTA de tu lista de trabajo (con \`scope: "series"\`, la serie recurrente entera). No borra tareas de personas ni tareas ya completadas (son historial). Confirmá con la persona antes de borrar.
 
 ## Corregir, pasar, comentar y adjuntar

@@ -352,6 +352,14 @@ const tools = [
     request: () => ({ method: 'GET', path: '/tasks/agent-queue' }),
   },
   {
+    name: 'tasks_agent_updates',
+    description: 'Tus novedades: tareas que VOS creaste (para la persona o para otro miembro) y que alguien completó desde la última vez que miraste — con quién la completó, cuándo, cuánto tiempo llevó y los últimos comentarios (muchas veces el resultado está ahí). Revisala al empezar a trabajar. Cada novedad aparece una sola vez: se marca como vista al devolverla (markSeen: false para solo mirar). Si declarás tu agentName, trae solo las que creaste con ese nombre.',
+    inputSchema: {
+      markSeen: z.boolean().optional().describe('false = solo leer, sin marcarlas como vistas (default true)'),
+    },
+    request: ({ markSeen }) => ({ method: 'GET', path: '/tasks/agent-updates', query: { markSeen: markSeen === false ? 'false' : undefined } }),
+  },
+  {
     name: 'task_set_executor',
     description: 'Cambia quién ejecuta una tarea propia que NO esté en curso ni completada: "agent" = te la tomás vos (pasa a tu lista de trabajo), "user" = se la devolvés a la persona. scope "series" en una tarea recurrente aplica a toda la serie.',
     inputSchema: {

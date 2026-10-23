@@ -265,7 +265,8 @@ async function presignFile(req, res, next) {
       where: { projectId, type: 'file', status: 'pending', createdAt: { gt: new Date(Date.now() - PENDING_MAX_AGE_MS) } },
     })
     if (pendingCount >= MAX_PENDING_PER_PROJECT) {
-      return res.status(400).json({ error: 'Hay demasiadas subidas en curso en este proyecto. Esperá a que terminen o reintentá en unos minutos.' })
+      // 429 + code: el frontend lo trata como "esperar turno" y reintenta solo.
+      return res.status(429).json({ error: 'Hay demasiadas subidas en curso en este proyecto. Esperá a que terminen o reintentá en unos minutos.', code: 'TOO_MANY_PENDING' })
     }
 
     const quotaError = await assertWithinQuota(workspaceId, declaredSize)
@@ -283,6 +284,29 @@ async function presignFile(req, res, next) {
 
     const uploadUrl = await objectStorage.presignPut(objectKey, mimeType, { expiresIn: PRESIGN_EXPIRES_IN })
     res.status(201).json({ fileId: file.id, uploadUrl, expiresIn: PRESIGN_EXPIRES_IN })
+  } catch (err) { next(err) }
+}
+
+/**
+ * DELETE /api/projects/:id/files/:fileId/pending
+ * Descarta un upload que el cliente canceló o que falló antes de confirmar —
+ * libera su lugar en MAX_PENDING_PER_PROJECT al instante en vez de esperar a
+ * que venza (PENDING_MAX_AGE_MS). Solo quien lo inició y solo si sigue pending.
+ */
+async function abortUpload(req, res, next) {
+  try {
+    const guard = await resolveFilesGuard(req)
+    if (guard.error) return res.status(guard.status).json({ error: guard.error })
+    const { projectId } = guard
+
+    const file = await prisma.projectFile.findFirst({
+      where: { id: Number(req.params.fileId), projectId, type: 'file', status: 'pending', uploadedById: req.user.userId },
+    })
+    if (!file) return res.status(404).json({ error: 'Archivo no encontrado' })
+
+    await objectStorage.deleteObject(file.objectKey)
+    await prisma.projectFile.delete({ where: { id: file.id } })
+    res.json({ deleted: true })
   } catch (err) { next(err) }
 }
 
@@ -797,6 +821,7 @@ module.exports = {
   createFolder,
   presignFile,
   confirmFile,
+  abortUpload,
   updateItem,
   deleteItem,
   listTrash,

@@ -38,16 +38,34 @@ function getImageDimensions(file) {
 
 let nextLocalId = 1
 
+// Subidas simultáneas por pestaña. Debajo del tope del backend
+// (MAX_PENDING_PER_PROJECT = 5) para dejar margen a otros usuarios del
+// proyecto; el resto espera en la cola ("En cola") y arranca solo.
+const MAX_CONCURRENT = 3
+// Si igual el backend dice que hay demasiadas en curso (otros usuarios,
+// pendientes viejos), se reintenta cada tanto en vez de marcar error.
+const RETRY_WAIT_MS = 5000
+
+const sleep = ms => new Promise(r => setTimeout(r, ms))
+
 /**
  * Orquesta presign → PUT directo a R2 → confirm para el tab Archivos. A
  * diferencia de ContentAssetUploader.jsx, acepta cualquier tipo de archivo
  * (no solo imagen/video) y no genera thumbnail de video — eso queda para una
  * iteración futura (evita el problema que tiene Contenido hoy, donde el
  * poster queda como un segundo asset "suelto" visible en la galería).
+ *
+ * Los archivos se encolan y suben de a MAX_CONCURRENT: soltar 50 archivos de
+ * golpe no choca contra el tope de subidas pendientes del backend.
  */
 export function useProjectFileUpload({ projectId, onUploaded }) {
-  const [queue, setQueue] = useState([]) // [{ id, name, progress, status, error }]
+  const [queue, setQueue] = useState([]) // [{ id, name, progress, status: queued|waiting|uploading|confirming|error, error }]
   const cancelRef = useRef(new Map()) // localId -> xhr
+  const waitingRef = useRef([])        // [{ id, file, folderId }] todavía sin arrancar
+  const activeRef = useRef(0)
+  const cancelledRef = useRef(new Set())
+  const onUploadedRef = useRef(onUploaded)
+  onUploadedRef.current = onUploaded
 
   const updateItem = useCallback((id, patch) => {
     setQueue(prev => prev.map(it => (it.id === id ? { ...it, ...patch } : it)))
@@ -57,36 +75,77 @@ export function useProjectFileUpload({ projectId, onUploaded }) {
     setQueue(prev => prev.filter(it => it.id !== id))
   }, [])
 
-  async function runUpload(item, file, folderId) {
-    let presign
-    try {
-      const { data } = await api.post(`/projects/${projectId}/files/presign`, {
-        name: file.name, mimeType: file.type || 'application/octet-stream', sizeBytes: file.size, parentId: folderId,
-      })
-      presign = data
-    } catch (err) {
-      if (err.response?.status === 503 && err.response?.data?.code === 'STORAGE_NOT_CONFIGURED') {
-        throw new Error('La subida de archivos no está disponible en este workspace todavía.')
-      }
-      throw new Error(err.response?.data?.error || 'No se pudo iniciar la subida')
-    }
+  // Libera el lugar del upload en el backend (si no, cuenta como "en curso"
+  // hasta que vence). Best-effort.
+  function abortPending(fileId) {
+    api.delete(`/projects/${projectId}/files/${fileId}/pending`).catch(() => {})
+  }
 
-    updateItem(item.id, { status: 'uploading' })
-    await uploadWithProgress(
-      presign.uploadUrl, file, file.type || 'application/octet-stream',
-      pct => updateItem(item.id, { progress: pct }),
-      xhr => cancelRef.current.set(item.id, xhr),
-    )
-    cancelRef.current.delete(item.id)
-    updateItem(item.id, { status: 'confirming' })
+  async function presign(id, file, folderId) {
+    for (;;) {
+      if (cancelledRef.current.has(id)) throw new Error('CANCELLED')
+      try {
+        const { data } = await api.post(`/projects/${projectId}/files/presign`, {
+          name: file.name, mimeType: file.type || 'application/octet-stream', sizeBytes: file.size, parentId: folderId,
+        })
+        return data
+      } catch (err) {
+        if (err.response?.status === 429 && err.response?.data?.code === 'TOO_MANY_PENDING') {
+          updateItem(id, { status: 'waiting' })
+          await sleep(RETRY_WAIT_MS)
+          continue
+        }
+        if (err.response?.status === 503 && err.response?.data?.code === 'STORAGE_NOT_CONFIGURED') {
+          throw new Error('La subida de archivos no está disponible en este workspace todavía.')
+        }
+        throw new Error(err.response?.data?.error || 'No se pudo iniciar la subida')
+      }
+    }
+  }
+
+  async function runUpload(id, file, folderId) {
+    const data = await presign(id, file, folderId)
+    if (cancelledRef.current.has(id)) { abortPending(data.fileId); throw new Error('CANCELLED') }
+
+    updateItem(id, { status: 'uploading', progress: 0 })
+    try {
+      await uploadWithProgress(
+        data.uploadUrl, file, file.type || 'application/octet-stream',
+        pct => updateItem(id, { progress: pct }),
+        xhr => cancelRef.current.set(id, xhr),
+      )
+    } catch (err) {
+      abortPending(data.fileId)
+      throw err
+    }
+    cancelRef.current.delete(id)
+    updateItem(id, { status: 'confirming' })
 
     let width = null, height = null
     if (file.type?.startsWith('image/')) {
       ;({ width, height } = await getImageDimensions(file))
     }
 
-    const { data: fileRow } = await api.post(`/projects/${projectId}/files/${presign.fileId}/confirm`, { width, height })
+    const { data: fileRow } = await api.post(`/projects/${projectId}/files/${data.fileId}/confirm`, { width, height })
     return fileRow
+  }
+
+  function pump() {
+    while (activeRef.current < MAX_CONCURRENT && waitingRef.current.length > 0) {
+      const { id, file, folderId } = waitingRef.current.shift()
+      activeRef.current++
+      runUpload(id, file, folderId)
+        .then(fileRow => { removeItem(id); onUploadedRef.current?.(fileRow) })
+        .catch(err => {
+          if (err.message === 'CANCELLED') { removeItem(id); return }
+          updateItem(id, { status: 'error', error: err.response?.data?.error || err.message || 'No se pudo subir el archivo' })
+        })
+        .finally(() => {
+          cancelledRef.current.delete(id)
+          activeRef.current--
+          pump()
+        })
+    }
   }
 
   const handleFiles = useCallback((fileList, folderId) => {
@@ -99,18 +158,24 @@ export function useProjectFileUpload({ projectId, onUploaded }) {
         continue
       }
 
-      setQueue(prev => [...prev, { id, name: file.name, progress: 0, status: 'uploading' }])
-      runUpload({ id }, file, folderId)
-        .then(fileRow => { removeItem(id); onUploaded?.(fileRow) })
-        .catch(err => {
-          if (err.message === 'CANCELLED') { removeItem(id); return }
-          updateItem(id, { status: 'error', error: err.message || 'No se pudo subir el archivo' })
-        })
+      setQueue(prev => [...prev, { id, name: file.name, progress: 0, status: 'queued' }])
+      waitingRef.current.push({ id, file, folderId })
     }
+    pump()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId])
 
   function cancel(id) {
+    const idx = waitingRef.current.findIndex(w => w.id === id)
+    if (idx !== -1) {
+      // Todavía en cola: se saca sin haber tocado el backend.
+      waitingRef.current.splice(idx, 1)
+      removeItem(id)
+      return
+    }
+    // En curso: si está subiendo se aborta el PUT; si está esperando turno
+    // del backend, el loop de presign lo ve en la próxima vuelta.
+    cancelledRef.current.add(id)
     cancelRef.current.get(id)?.abort?.()
     removeItem(id)
   }

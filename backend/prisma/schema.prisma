@@ -983,6 +983,10 @@ model Task {
   // agentName = el que la ejecuta (se actualiza cuando un agente la inicia/retoma/completa).
   createdByAgentName    String?
   agentName             String?
+  // Bandeja de novedades del agente que la creó (GET /tasks/agent-updates): cuándo se
+  // enteró de que se completó. null + COMPLETED = novedad pendiente; completarla de
+  // nuevo (tras reabrirla) la vuelve a null.
+  createdByAgentSeenAt  DateTime?
   createdAt             DateTime        @default(now())
   updatedAt             DateTime        @updatedAt
 
@@ -1008,6 +1012,7 @@ model Task {
   @@unique([recurrenceId, scheduledFor])
   @@index([userId, status])
   @@index([userId, isAgentTask, status])
+  @@index([createdByAgentId, status, createdByAgentSeenAt])
   @@index([projectId])
   @@index([workDayId])
   @@index([userId, scheduledFor])

@@ -471,7 +471,9 @@ async function completeTask(req, res, next) {
     const [task] = await prisma.$transaction([
       prisma.task.update({
         where:   { id: taskId, userId },
-        data:    { status: 'COMPLETED', completedAt: now, pausedAt: null, ...executorNameData(existing, req) },
+        // createdByAgentSeenAt: null → si la creó un agente, le queda la novedad en su
+        // bandeja (GET /tasks/agent-updates), también si se completa de nuevo.
+        data:    { status: 'COMPLETED', completedAt: now, pausedAt: null, createdByAgentSeenAt: null, ...executorNameData(existing, req) },
         include: taskInclude,
       }),
       prisma.taskSession.updateMany({ where: { taskId, endedAt: null }, data: { endedAt: now } }),

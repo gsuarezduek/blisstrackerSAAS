@@ -3,6 +3,7 @@ const { todayString } = require('../../utils/dates')
 const { materializeForUser } = require('../../services/recurrence.service')
 const { taskInclude, requestAgentId, requestAgentName, assertOwnAgent } = require('./_shared')
 const { agentTasksQuery } = require('../workdays.controller')
+const { taskMins } = require('../../lib/timeMetrics')
 
 // Agentes IA (MCP) — ver concepto "Agentes IA" en backend/CLAUDE.md.
 // Una tarea de agente (Task.isAgentTask) la EJECUTA un agente; userId sigue siendo la
@@ -80,6 +81,80 @@ async function agentQueue(req, res, next) {
   } catch (err) { next(err) }
 }
 
+// ─── GET /api/tasks/agent-updates ───────────────────────────────────────────
+// Bandeja de novedades del agente: tareas que ESTE agente creó y que alguien
+// completó desde la última vez que miró. Un agente MCP no recibe avisos push (solo
+// actúa cuando lo invocan), así que se entera revisando esto al empezar.
+// - Si el agente declaró su nombre (agentName), solo las que creó con ese nombre:
+//   varios agentes pueden compartir un token.
+// - Se excluyen las que ejecutó él mismo (ya sabe que las terminó).
+// - Por default las marca como vistas (createdByAgentSeenAt); ?markSeen=false solo lee.
+// Solo vía MCP: desde la app no hay "agente que pregunta".
+const UPDATES_LIMIT = 50
+
+async function agentUpdates(req, res, next) {
+  try {
+    const agentId = requestAgentId(req)
+    if (!agentId) return res.status(400).json({ error: 'Solo disponible para agentes conectados por MCP' })
+    const declaredName = requestAgentName(req)
+
+    const where = {
+      createdByAgentId: agentId,
+      ...(declaredName ? { createdByAgentName: declaredName } : {}),
+      status: 'COMPLETED',
+      createdByAgentSeenAt: null,
+      workDay: { workspaceId: req.workspace.id },
+      NOT: { isAgentTask: true, agentId, ...(declaredName ? { agentName: declaredName } : {}) },
+    }
+    const rows = await prisma.task.findMany({
+      where,
+      orderBy: { completedAt: 'asc' },
+      take: UPDATES_LIMIT + 1,
+      include: {
+        project: { select: { id: true, name: true } },
+        user: { select: { id: true, name: true } },
+        agent: { select: { id: true, label: true } },
+        // Lo último que se dijo en la tarea: muchas veces el resultado está ahí.
+        comments: {
+          orderBy: { createdAt: 'desc' },
+          take: 3,
+          select: { content: true, createdAt: true, agentId: true, user: { select: { name: true } } },
+        },
+      },
+    })
+    const hasMore = rows.length > UPDATES_LIMIT
+    const tasks = rows.slice(0, UPDATES_LIMIT)
+
+    if (tasks.length && req.query.markSeen !== 'false') {
+      await prisma.task.updateMany({
+        where: { id: { in: tasks.map(t => t.id) }, createdByAgentSeenAt: null },
+        data: { createdByAgentSeenAt: new Date() },
+      })
+    }
+
+    res.json({
+      updates: tasks.map(t => ({
+        taskId: t.id,
+        description: t.description,
+        project: t.project,
+        completedBy: t.isAgentTask
+          ? { agent: t.agent ? { id: t.agent.id, label: t.agent.label, agentName: t.agentName } : null, ownerId: t.user.id, ownerName: t.user.name }
+          : { id: t.user.id, name: t.user.name },
+        executedByAgent: t.isAgentTask,
+        completedAt: t.completedAt,
+        workedMinutes: taskMins(t),
+        recentComments: t.comments.reverse().map(c => ({
+          author: c.user?.name ?? null,
+          viaAgent: c.agentId != null,
+          content: c.content,
+          createdAt: c.createdAt,
+        })),
+      })),
+      hasMore,
+    })
+  } catch (err) { next(err) }
+}
+
 // ─── PATCH /api/tasks/:id/agent ─────────────────────────────────────────────
 // "Delegar a mi agente" (executor:'agent') o devolverla a la persona (executor:'user').
 // Solo sobre tareas propias, abiertas y que no estén en curso (cambiar quién la
@@ -134,4 +209,4 @@ async function setExecutor(req, res, next) {
   } catch (err) { next(err) }
 }
 
-module.exports = { agentQueue, setExecutor, ensureTodayWorkDay }
+module.exports = { agentQueue, agentUpdates, setExecutor, ensureTodayWorkDay }
