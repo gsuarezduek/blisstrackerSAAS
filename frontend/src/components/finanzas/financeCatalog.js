@@ -179,6 +179,22 @@ export function checkInvoiceLabel(check, movement) {
   return movement?.invoice?.number || check?.invoiceNumber || null
 }
 
+// Para el panel "Historial" global (Configuración) — espejo de
+// AUDIT_ENTITY_TYPES/AUDIT_ACTIONS del backend (financeCatalog.js).
+const AUDIT_ENTITY_TYPE_LABELS = {
+  account: 'Cuenta', issuer: 'Emisor', tax: 'Impuesto', category: 'Categoría', item: 'Item',
+  movement: 'Movimiento', transfer: 'Transferencia', check: 'Cheque', fundValuation: 'Valuación de fondo',
+  invoice: 'Factura', extra: 'Extra', nextAction: 'Próxima acción', task: 'Tarea', adjustment: 'Ajuste de saldo',
+}
+const AUDIT_ACTION_META = {
+  create:  { label: 'Creó', color: 'green' },
+  update:  { label: 'Editó', color: 'blue' },
+  delete:  { label: 'Eliminó', color: 'red' },
+  restore: { label: 'Restauró', color: 'amber' },
+}
+export function auditEntityTypeLabel(key) { return AUDIT_ENTITY_TYPE_LABELS[key] || key || '—' }
+export function auditActionMeta(key)      { return AUDIT_ACTION_META[key] || { label: key || '—', color: 'gray' } }
+
 // Clases Tailwind por color de badge — misma paleta que components/ventas/salesCatalog.js.
 export const STATUS_BADGE = {
   gray:   'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-200',

@@ -73,4 +73,25 @@ async function createValuation(req, res, next) {
   } catch (err) { next(err) }
 }
 
-module.exports = { listValuations, createValuation }
+// DELETE /api/finanzas/fund-valuations/:id — soft delete (reversible a mano
+// restaurando el deletedAt, no hay endpoint de restore propio porque no se
+// pidió — si hace falta restaurar una, es un update directo en DB).
+async function deleteValuation(req, res, next) {
+  try {
+    const workspaceId = req.workspace.id
+    const id = Number(req.params.id)
+    const existing = await prisma.financeFundValuation.findFirst({
+      where: { id, workspaceId, deletedAt: null }, include: { account: { select: { name: true } } },
+    })
+    if (!existing) return res.status(404).json({ error: 'Valuación no encontrada' })
+
+    await prisma.financeFundValuation.update({ where: { id }, data: { deletedAt: new Date(), deletedById: req.user.userId } })
+    await logFinanceAudit({
+      workspaceId, entityType: 'fundValuation', entityId: id, action: 'delete', userId: req.user.userId,
+      entityLabel: `valuación de "${existing.account.name}" del ${existing.date.toISOString().slice(0, 10)}`,
+    })
+    res.json({ ok: true })
+  } catch (err) { next(err) }
+}
+
+module.exports = { listValuations, createValuation, deleteValuation }

@@ -10,6 +10,7 @@ import AccountModal from './AccountModal'
 import TaxModal from './TaxModal'
 import IssuerModal from './IssuerModal'
 import ItemModal from './ItemModal'
+import FinanceAuditLogPanel from './FinanceAuditLogPanel'
 
 const input = 'border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500'
 
@@ -56,6 +57,7 @@ export default function FinanzasConfiguracion({ onBack }) {
           </div>
           <TaxesPanel taxes={taxes} onChanged={loadAll} />
           <IssuersPanel issuers={issuers} onChanged={loadAll} />
+          <FinanceAuditLogPanel />
         </div>
       )}
     </div>

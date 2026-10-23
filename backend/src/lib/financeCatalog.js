@@ -183,6 +183,9 @@ const AUDIT_ENTITY_TYPES = [
   'fundValuation', 'invoice', 'extra', 'nextAction', 'task', 'adjustment',
 ]
 
+// FinanceAuditLog.action — ver lib/financeAudit.js.
+const AUDIT_ACTIONS = ['create', 'update', 'delete', 'restore']
+
 function keysOf(list) { return list.map(x => x.key) }
 
 const ACCOUNT_TYPE_KEYS          = keysOf(ACCOUNT_TYPES)
@@ -222,6 +225,7 @@ function isValidTaskKind(key)           { return TASK_KIND_KEYS.includes(key) }
 function isValidTaskOrigin(key)         { return key == null || TASK_ORIGIN_KEYS.includes(key) }
 function isValidTaskStatus(key)         { return TASK_STATUS_KEYS.includes(key) }
 function isValidAuditEntityType(key)    { return AUDIT_ENTITY_TYPES.includes(key) }
+function isValidAuditAction(key)        { return AUDIT_ACTIONS.includes(key) }
 const INVOICE_KIND_KEYS = keysOf(INVOICE_KINDS)
 function isValidInvoiceKind(key)        { return INVOICE_KIND_KEYS.includes(key) }
 const INVOICE_IVA_MODE_KEYS = keysOf(INVOICE_IVA_MODES)
@@ -253,4 +257,5 @@ module.exports = {
   TASK_ORIGINS, TASK_ORIGIN_KEYS, isValidTaskOrigin,
   TASK_STATUSES, TASK_STATUS_KEYS, isValidTaskStatus,
   AUDIT_ENTITY_TYPES, isValidAuditEntityType,
+  AUDIT_ACTIONS, isValidAuditAction,
 }

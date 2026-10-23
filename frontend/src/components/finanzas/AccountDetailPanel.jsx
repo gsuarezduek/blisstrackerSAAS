@@ -24,6 +24,8 @@ export default function AccountDetailPanel({ account, onClose, onChanged }) {
   const [showAdjustModal, setShowAdjustModal] = useState(false)
   const [adjustmentToDelete, setAdjustmentToDelete] = useState(null)
   const [deleting, setDeleting] = useState(false)
+  const [toDeleteValuation, setToDeleteValuation] = useState(null)
+  const [deletingValuation, setDeletingValuation] = useState(false)
 
   const load = useCallback(async () => {
     const [movRes, trfRes, valRes, adjRes] = await Promise.all([
@@ -76,6 +78,18 @@ export default function AccountDetailPanel({ account, onClose, onChanged }) {
     } finally { setDeleting(false) }
   }
 
+  async function handleDeleteValuation() {
+    setDeletingValuation(true)
+    try {
+      await api.delete(`/finanzas/fund-valuations/${toDeleteValuation.id}`)
+      setToDeleteValuation(null)
+      load()
+      onChanged?.()
+    } catch (err) {
+      alert(err.response?.data?.error || 'No se pudo eliminar')
+    } finally { setDeletingValuation(false) }
+  }
+
   const KIND_META = {
     income:   { label: 'Ingreso', cls: 'text-green-600 dark:text-green-400' },
     expense:  { label: 'Egreso',  cls: 'text-red-600 dark:text-red-400' },
@@ -106,12 +120,13 @@ export default function AccountDetailPanel({ account, onClose, onChanged }) {
             <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">Historial de valuaciones</p>
             <div className="space-y-1">
               {valuations.slice(0, 5).map(v => (
-                <div key={v.id} className="flex items-center justify-between text-xs">
+                <div key={v.id} className="flex items-center justify-between gap-2 text-xs">
                   <span className="text-gray-500 dark:text-gray-400">{fmtDate(v.date)}</span>
                   <span className="text-gray-700 dark:text-gray-300">{fmtMoney(v.value, account.currency)}</span>
                   <span className={Number(v.periodResult) >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}>
                     {Number(v.periodResult) >= 0 ? '+' : ''}{fmtMoney(v.periodResult, account.currency)}
                   </span>
+                  <button onClick={() => setToDeleteValuation(v)} title="Eliminar" className="text-gray-400 hover:text-red-500 shrink-0"><Icon as={Trash2} size={12} /></button>
                 </div>
               ))}
             </div>
@@ -153,6 +168,10 @@ export default function AccountDetailPanel({ account, onClose, onChanged }) {
     )}
     <ConfirmModal open={adjustmentToDelete != null} title="Eliminar ajuste" message="El disponible de la cuenta vuelve a como estaba antes del ajuste."
       confirmLabel="Eliminar" loading={deleting} onConfirm={handleDeleteAdjustment} onCancel={() => setAdjustmentToDelete(null)} />
+
+    <ConfirmModal open={!!toDeleteValuation} title="Eliminar valuación"
+      message={toDeleteValuation ? `¿Eliminar la valuación del ${fmtDate(toDeleteValuation.date)} (${fmtMoney(toDeleteValuation.value, account.currency)})? Esta acción no se puede deshacer.` : ''}
+      loading={deletingValuation} onConfirm={handleDeleteValuation} onCancel={() => setToDeleteValuation(null)} />
     </>
   )
 }

@@ -105,6 +105,7 @@ router.patch('/checks/:id/credit',   checks.creditCheck)
 router.patch('/checks/:id/reject',   checks.rejectCheck)
 router.get('/fund-valuations',       fundValuations.listValuations)
 router.post('/fund-valuations',      fundValuations.createValuation)
+router.delete('/fund-valuations/:id', fundValuations.deleteValuation)
 // Ajustes de saldo ("Ajustar saldo" en Saldos): mueven el disponible, no son ingreso/egreso.
 router.get('/adjustments',           adjustments.listAdjustments)
 router.post('/adjustments',          adjustments.createAdjustment)
