@@ -6,6 +6,7 @@ const { tools } = require('./toolCatalog')
 const { callApi } = require('./apiBridge')
 const { INSTRUCTIONS, buildGuide, GUIDE_TOPICS } = require('./guide')
 const { describeTools, prepareRun } = require('./liveTools')
+const { maybeWorkReminder } = require('./workReminder')
 const { z } = require('zod')
 
 // Quita keys undefined antes de mandarlas como query/body — evita que axios/Express
@@ -91,13 +92,29 @@ function textResult(text, isError = false) {
 }
 
 // Handler común a todas las tools del catálogo (llamadas directo o vía bliss_run).
+// Una tool es `request(args)` (una llamada a la API) o `run(args, call)` (varias
+// encadenadas, ej. task_working_on; `call` ya lleva la identidad y el agentName).
+// Si la tool salió bien y el agente no tiene ninguna tarea en curso, se suma el
+// recordatorio de registrarla (ver workReminder.js).
 async function runTool(identity, tool, args) {
   try {
     const { agentName, ...toolArgs } = args || {}
-    const { method, path, query, body } = tool.request(toolArgs)
-    const { status, data } = await callApi(identity, method, path, { query: clean(query), body: clean(body), agentName })
+    const call = (method, path, { query, body } = {}) =>
+      callApi(identity, method, path, { query: clean(query), body: clean(body), agentName })
+    let result
+    if (tool.run) {
+      result = await tool.run(toolArgs, call)
+    } else {
+      const { method, path, query, body } = tool.request(toolArgs)
+      result = await call(method, path, { query, body })
+    }
+    const { status, data } = result
     const text = JSON.stringify(data, null, 2)
-    return status >= 400 ? textResult(`Error ${status}: ${text}`, true) : textResult(text)
+    if (status >= 400) return textResult(`Error ${status}: ${text}`, true)
+    const reminder = await maybeWorkReminder(identity, agentName)
+    return reminder
+      ? { content: [{ type: 'text', text }, { type: 'text', text: reminder }] }
+      : textResult(text)
   } catch (err) {
     return textResult(`Error: ${err.message}`, true)
   }

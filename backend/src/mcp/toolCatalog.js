@@ -352,6 +352,30 @@ const tools = [
     request: () => ({ method: 'GET', path: '/tasks/agent-queue' }),
   },
   {
+    name: 'task_working_on',
+    description: 'Registrá en un paso en qué estás trabajando AHORA: queda como tarea tuya (de agente) EN CURSO y la persona lo ve en la app. Usala apenas empezás algo. Dos formas: (1) `taskId` de una tarea ya planificada — de tu lista (`tasks_agent_queue`), del Backlog o programada para otro día de la semana: la trae a hoy si hace falta, la toma para vos y la inicia/retoma/desbloquea; también una tarea de la persona que vas a hacer vos (pasa a ser tuya, salvo que ella la tenga en curso). (2) `description` + `projectId` si es algo nuevo: crea la tarea y la inicia. Preferí siempre (1) si la tarea ya existe, para no duplicar lo planificado. Al terminar, `task_complete`.',
+    inputSchema: {
+      taskId: z.number().int().optional().describe('Tarea ya planificada que vas a hacer ahora'),
+      description: z.string().optional().describe('Si es algo nuevo: qué estás haciendo, como acción concreta ("Redactar 3 posteos de noviembre para Pastiza")'),
+      projectId: z.number().int().optional().describe('Si es algo nuevo: proyecto (ver list_projects)'),
+    },
+    run: async ({ taskId, description, projectId }, call) => {
+      if (taskId != null) {
+        const prep = await call('PATCH', `/tasks/${taskId}/working-on`)
+        if (prep.status >= 400 || prep.data.next === 'none') return prep
+        const res = await call('PATCH', `/tasks/${taskId}/${prep.data.next}`)
+        if (res.status >= 400) return res
+        return { status: res.status, data: { ...res.data, broughtToToday: prep.data.broughtToToday, tookOverFromPerson: prep.data.tookOverFromPerson } }
+      }
+      if (!description?.trim() || projectId == null) {
+        return { status: 400, data: { error: 'Pasá `taskId` (tarea ya planificada) o `description` + `projectId` (algo nuevo)' } }
+      }
+      const created = await call('POST', '/tasks', { body: { description, projectId, executor: 'agent' } })
+      if (created.status >= 400) return created
+      return call('PATCH', `/tasks/${created.data.id}/start`)
+    },
+  },
+  {
     name: 'tasks_agent_updates',
     description: 'Tus novedades: tareas que VOS creaste (para la persona o para otro miembro) y que alguien completó desde la última vez que miraste — con quién la completó, cuándo, cuánto tiempo llevó y los últimos comentarios (muchas veces el resultado está ahí). Revisala al empezar a trabajar. Cada novedad aparece una sola vez: se marca como vista al devolverla (markSeen: false para solo mirar). Si declarás tu agentName, trae solo las que creaste con ese nombre.',
     inputSchema: {

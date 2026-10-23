@@ -275,6 +275,64 @@ describe('PATCH /api/tasks/:id/agent', () => {
 
 // ─── Lista de trabajo del agente ──────────────────────────────────────────────
 
+describe('PATCH /api/tasks/:id/working-on', () => {
+  function patch(id = 1, auth = { mcpTokenId: AGENT_ID }) {
+    return request(app).patch(`/api/tasks/${id}/working-on`).set('Authorization', authHeader(auth)).set('X-Workspace', WORKSPACE_SLUG)
+  }
+  beforeEach(() => {
+    prisma.task.update.mockImplementation(({ data }) => Promise.resolve(makeTask({ isAgentTask: true, agentId: AGENT_ID, status: 'PENDING', ...data })))
+  })
+
+  it('una tarea planificada para otro día la trae a hoy, la toma para el agente y pide iniciarla', async () => {
+    prisma.task.findFirst.mockResolvedValue(makeTask({ isAgentTask: true, agentId: null, scheduledFor: '2099-01-05' }))
+
+    const res = await patch()
+
+    expect(res.status).toBe(200)
+    expect(prisma.task.update.mock.calls[0][0].data).toEqual({ isAgentTask: true, agentId: AGENT_ID, scheduledFor: null, isBacklog: false, workDayId: 10 })
+    expect(res.body).toMatchObject({ next: 'start', broughtToToday: true, tookOverFromPerson: false })
+  })
+
+  it('una tarea de la persona del Backlog pasa a ser del agente (con su nombre declarado)', async () => {
+    prisma.task.findFirst.mockResolvedValue(makeTask({ isBacklog: true, status: 'PAUSED' }))
+    prisma.task.update.mockImplementation(({ data }) => Promise.resolve(makeTask({ status: 'PAUSED', ...data })))
+
+    const res = await patch(1, { mcpTokenId: AGENT_ID, mcpAgentName: 'Ventas' })
+
+    expect(prisma.task.update.mock.calls[0][0].data).toMatchObject({ isAgentTask: true, agentId: AGENT_ID, agentName: 'Ventas', isBacklog: false })
+    expect(res.body).toMatchObject({ next: 'resume', tookOverFromPerson: true })
+  })
+
+  it('ya tomada por este agente y de hoy: no toca nada y pide iniciarla', async () => {
+    prisma.task.findFirst.mockResolvedValue(makeTask({ isAgentTask: true, agentId: AGENT_ID }))
+    prisma.task.findUnique.mockResolvedValue(makeTask({ isAgentTask: true, agentId: AGENT_ID }))
+
+    const res = await patch()
+
+    expect(prisma.task.update).not.toHaveBeenCalled()
+    expect(res.body.next).toBe('start')
+  })
+
+  it('409 si la persona la tiene en curso', async () => {
+    prisma.task.findFirst.mockResolvedValue(makeTask({ status: 'IN_PROGRESS' }))
+    expect((await patch()).status).toBe(409)
+    expect(prisma.task.update).not.toHaveBeenCalled()
+  })
+
+  it('409 si la tiene otro agente de la persona', async () => {
+    prisma.task.findFirst.mockResolvedValue(makeTask({ isAgentTask: true, agentId: 99 }))
+    expect((await patch()).status).toBe(409)
+  })
+
+  it('400 si ya está completada, 404 si no es de la persona, 400 desde la app', async () => {
+    prisma.task.findFirst.mockResolvedValue(makeTask({ status: 'COMPLETED' }))
+    expect((await patch()).status).toBe(400)
+    prisma.task.findFirst.mockResolvedValue(null)
+    expect((await patch()).status).toBe(404)
+    expect((await patch(1, {})).status).toBe(400)
+  })
+})
+
 describe('GET /api/tasks/agent-updates', () => {
   const completedAt = new Date('2026-10-22T15:00:00Z')
   function completed(overrides = {}) {

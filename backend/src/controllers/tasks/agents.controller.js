@@ -155,6 +155,64 @@ async function agentUpdates(req, res, next) {
   } catch (err) { next(err) }
 }
 
+// ─── PATCH /api/tasks/:id/working-on ────────────────────────────────────────
+// Primer paso de la tool MCP `task_working_on` con taskId ("estoy trabajando en
+// esta tarea planificada"): deja la tarea lista para arrancar, y la tool hace
+// después el paso que corresponde (start/resume/unblock) contra los endpoints de
+// siempre — así no se duplica la lógica de iniciar (sesiones, to-dos vinculados,
+// avisos). Solo vía MCP, sobre tareas de la persona dueña del agente:
+// - Planificada para otro día (scheduledFor futuro) o en el Backlog → la trae a hoy.
+// - Tarea de la persona → pasa a ser tarea de este agente (no se puede si ella la
+//   tiene en curso: está trabajando en eso).
+// - Delegada a "cualquiera de mis agentes" → queda para este agente.
+// - Ya tomada por OTRO agente del mismo dueño → 409.
+// Devuelve { task, next: 'start' | 'resume' | 'unblock' | 'none' }.
+const NEXT_STEP = { PENDING: 'start', PAUSED: 'resume', BLOCKED: 'unblock', IN_PROGRESS: 'none' }
+
+async function prepareWorkingOn(req, res, next) {
+  try {
+    const agentId = requestAgentId(req)
+    if (!agentId) return res.status(400).json({ error: 'Solo disponible para agentes conectados por MCP' })
+    const userId = req.user.userId
+    const workspaceId = req.workspace.id
+    const id = Number(req.params.id)
+
+    const task = await prisma.task.findFirst({ where: { id, userId, workDay: { workspaceId } } })
+    if (!task) return res.status(404).json({ error: 'Tarea no encontrada: tiene que ser una tarea de la persona para la que trabajás' })
+    if (task.status === 'COMPLETED') return res.status(400).json({ error: 'La tarea ya está completada' })
+    if (!task.isAgentTask && task.status === 'IN_PROGRESS') {
+      return res.status(409).json({ error: 'La persona está trabajando en esa tarea ahora: no la tomes, creá una tuya si es otra cosa' })
+    }
+    if (task.isAgentTask && task.agentId != null && task.agentId !== agentId) {
+      return res.status(409).json({ error: 'Esa tarea la tiene otro agente de la persona' })
+    }
+
+    const data = {}
+    const declaredName = requestAgentName(req)
+    if (!task.isAgentTask || task.agentId == null) Object.assign(data, { isAgentTask: true, agentId })
+    if (declaredName) data.agentName = declaredName
+
+    const today = todayString(req.workspace.timezone)
+    const planned = (task.scheduledFor && task.scheduledFor > today) || task.isBacklog
+    if (planned) {
+      const workDay = await ensureTodayWorkDay(userId, workspaceId, today)
+      if (!workDay) return res.status(500).json({ error: 'No se pudo obtener la jornada de hoy' })
+      Object.assign(data, { scheduledFor: null, isBacklog: false, workDayId: workDay.id })
+    }
+
+    const updated = Object.keys(data).length
+      ? await prisma.task.update({ where: { id }, data, include: { ...taskInclude, agent: { select: { id: true, label: true } } } })
+      : await prisma.task.findUnique({ where: { id }, include: { ...taskInclude, agent: { select: { id: true, label: true } } } })
+
+    res.json({
+      task: updated,
+      next: NEXT_STEP[updated.status] ?? 'none',
+      broughtToToday: Boolean(planned),
+      tookOverFromPerson: !task.isAgentTask,
+    })
+  } catch (err) { next(err) }
+}
+
 // ─── PATCH /api/tasks/:id/agent ─────────────────────────────────────────────
 // "Delegar a mi agente" (executor:'agent') o devolverla a la persona (executor:'user').
 // Solo sobre tareas propias, abiertas y que no estén en curso (cambiar quién la
@@ -209,4 +267,4 @@ async function setExecutor(req, res, next) {
   } catch (err) { next(err) }
 }
 
-module.exports = { agentQueue, agentUpdates, setExecutor, ensureTodayWorkDay }
+module.exports = { agentQueue, agentUpdates, prepareWorkingOn, setExecutor, ensureTodayWorkDay }

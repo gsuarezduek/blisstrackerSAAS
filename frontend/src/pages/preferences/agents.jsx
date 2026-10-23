@@ -4,6 +4,17 @@ import { invalidateMyAgents } from '../../hooks/useMyAgents'
 
 const MCP_URL = `${import.meta.env.VITE_API_URL}/api/mcp`
 
+// Cada cuánto, como mucho, se le recuerda al agente que registre en qué está
+// trabajando si no tiene ninguna tarea en curso (backend: mcp/workReminder.js).
+const REMINDER_OPTIONS = [
+  { value: 15,  label: 'cada 15 min' },
+  { value: 30,  label: 'cada 30 min' },
+  { value: 60,  label: 'cada 1 h' },
+  { value: 120, label: 'cada 2 h' },
+  { value: 240, label: 'cada 4 h' },
+  { value: 0,   label: 'nunca' },
+]
+
 function fmtDate(d) {
   return new Date(d).toLocaleDateString('es-AR', { day: 'numeric', month: 'short', year: 'numeric' })
 }
@@ -43,6 +54,7 @@ export default function AgentsTab() {
   const [revealed,   setRevealed]   = useState(null) // { token, label }
   const [error,      setError]      = useState('')
   const [revokingId, setRevokingId] = useState(null)
+  const [savingId,   setSavingId]   = useState(null)
 
   function load() {
     setLoading(true)
@@ -75,6 +87,18 @@ export default function AgentsTab() {
       load()
     } finally {
       setRevokingId(null)
+    }
+  }
+
+  async function handleReminderChange(id, workReminderMins) {
+    setSavingId(id)
+    try {
+      const { data } = await api.patch(`/mcp-tokens/${id}`, { workReminderMins })
+      setTokens(prev => prev.map(t => (t.id === id ? { ...t, workReminderMins: data.workReminderMins } : t)))
+    } catch (err) {
+      setError(err.response?.data?.error || 'No se pudo guardar el recordatorio.')
+    } finally {
+      setSavingId(null)
     }
   }
 
@@ -133,6 +157,20 @@ export default function AgentsTab() {
                   <p className="text-xs text-gray-400 dark:text-gray-500">
                     Creado {fmtDate(t.createdAt)} · Último uso: {timeAgo(t.lastUsedAt)}
                   </p>
+                  {!t.revokedAt && (
+                    <label className="flex flex-wrap items-center gap-1.5 mt-1 text-xs text-gray-500 dark:text-gray-400"
+                      title="Si el agente usa BlissTracker sin tener ninguna tarea en curso, se le recuerda que registre en qué está trabajando">
+                      Recordarle registrar lo que hace
+                      <select
+                        value={t.workReminderMins ?? 30}
+                        onChange={e => handleReminderChange(t.id, Number(e.target.value))}
+                        disabled={savingId === t.id}
+                        className="text-xs px-1.5 py-0.5 rounded-md border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 disabled:opacity-50"
+                      >
+                        {REMINDER_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                      </select>
+                    </label>
+                  )}
                 </div>
                 <div className="flex items-center gap-2 flex-shrink-0">
                   {t.revokedAt ? (

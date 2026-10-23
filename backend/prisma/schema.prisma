@@ -4572,6 +4572,10 @@ model McpToken {
   createdAt   DateTime  @default(now())
   lastUsedAt  DateTime?
   revokedAt   DateTime? // soft-revoke: no se borra la fila, se conserva el historial
+  // Cada cuántos minutos, como mucho, se le recuerda al agente (en la respuesta de
+  // una tool) que registre en qué está trabajando si no tiene ninguna tarea en
+  // curso — ver mcp/workReminder.js. 0 = nunca.
+  workReminderMins Int @default(30)
 
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)

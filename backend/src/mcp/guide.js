@@ -25,7 +25,8 @@ Reglas que no se negocian:
 - Tu lista de tools puede estar desactualizada: tu cliente la guarda al conectarse y BlissTracker suma tools seguido. \`bliss_tools\` muestra la lista EN VIVO; si la tool que necesitás aparece ahí pero no entre las tuyas, ejecutala con \`bliss_run\`. No digas que algo no se puede hacer sin revisar \`bliss_tools\` antes.
 - Los IDs se resuelven leyendo, nunca se inventan: empezá por \`list_projects\`, \`team_list\`, \`ventas_leads_list\`, etc.
 - Si sos uno de varios agentes que usan este mismo conector, pasá tu nombre en el parámetro \`agentName\` de CADA tool (siempre el mismo, ej. "Ventas"): así la persona ve qué agente hizo cada cosa.
-- Fechas en formato YYYY-MM-DD; la zona horaria es la del workspace (por defecto America/Argentina/Buenos_Aires).`
+- Fechas en formato YYYY-MM-DD; la zona horaria es la del workspace (por defecto America/Argentina/Buenos_Aires).
+- **Registrá siempre en qué estás trabajando**: apenas empezás algo, \`task_working_on\` (con el \`taskId\` si ya estaba planificado; si no, con \`description\` + \`projectId\`). Al terminar, \`task_complete\`. Si te olvidás, las respuestas de las tools te lo van a recordar.`
 
 // Prefijo de nombre de tool → sección de la guía. El orden define el orden de aparición.
 const AREAS = [
@@ -84,6 +85,8 @@ Crear tareas (\`task_create\`):
 - **\`executor\`: decidí SIEMPRE quién la va a hacer.** \`executor: "agent"\` si la vas a ejecutar VOS (el agente): queda en tu lista de trabajo, separada de las tareas de la persona, no ocupa su lugar de "1 en curso" y su tiempo no se mezcla con el de ella. \`executor: "user"\` (default) si es trabajo para la persona (o para otro miembro con \`targetUserId\`). Una tarea de agente no se puede asignar a otra persona.
 
 ## Tareas de agente (tu lista de trabajo)
+- **\`task_working_on\` — registrá lo que estás haciendo AHORA**, en un solo paso: queda como tarea tuya en curso y la persona lo ve en la app. Con \`taskId\` arranca una tarea ya planificada (de tu lista, del Backlog o programada para otro día de la semana: la trae a hoy; una tarea de la persona que vas a hacer vos pasa a ser tuya, salvo que ella la tenga en curso). Con \`description\` + \`projectId\` crea una nueva y la inicia. **Si la tarea ya estaba planificada, usá su \`taskId\`**: no dupliques lo que la persona organizó para la semana.
+- **Recordatorio**: si usás tools sin tener ninguna tarea en curso, al final de la respuesta aparece un "Recordatorio de BlissTracker" con tus tareas planificadas para hoy. Si estás trabajando en algo, registralo; si era una consulta rápida, ignoralo. La persona elige cada cuánto (Preferencias → Agentes IA).
 - \`tasks_agent_queue\`: tus tareas abiertas (las tuyas + las que la persona delegó a "cualquiera de sus agentes"). Revisala al empezar a trabajar: la persona puede delegarte tareas desde la app.
 - Ejecutá con el mismo ciclo: \`task_start\` → \`task_complete\`. Podés tener varias en curso. Si algo te frena, \`task_block\` con un motivo claro: es la forma de pedirle ayuda a la persona.
 - No dejes tareas en curso indefinidamente: completalas o pausalas al terminar de trabajar. El tiempo de tus tareas se registra aparte del de la persona (no suma a sus horas ni a las horas contratadas del cliente).
