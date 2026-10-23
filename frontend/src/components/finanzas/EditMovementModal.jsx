@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import api from '../../api/client'
 import ConfirmModal from '../ConfirmModal'
-import { ACCOUNT_APPLICATIONS } from './financeCatalog'
+import { ACCOUNT_APPLICATIONS, checkInvoiceLabel } from './financeCatalog'
 import { Avatar } from '../../pages/project-detail/ui.jsx'
 import ItemPicker from './ItemPicker'
 import TaxesBlock from './TaxesBlock'
@@ -32,6 +32,7 @@ export default function EditMovementModal({ movement, accounts, categories, item
   const [note, setNote] = useState(movement.note || '')
   const [accountApplication, setAccountApplication] = useState(movement.accountApplication || 'on_account')
   const [taxIds, setTaxIds] = useState(new Set(movement.taxes.map(t => t.taxId)))
+  const [checkInvoiceNumber, setCheckInvoiceNumber] = useState(movement.check?.invoiceNumber || '')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [confirmDelete, setConfirmDelete] = useState(false)
@@ -48,6 +49,7 @@ export default function EditMovementModal({ movement, accounts, categories, item
       const body = { date, itemId: item.id, categoryId: Number(categoryId), accountId: Number(accountId), amount: Number(amount), note: note.trim() }
       if (movement.type === 'income' && item.tracksAccount) body.accountApplication = accountApplication
       if (!isCheck) body.taxIds = [...taxIds]
+      else if (!item.tracksAccount) body.checkInvoiceNumber = checkInvoiceNumber.trim()
       await api.patch(`/finanzas/movements/${movement.id}`, body)
       onSaved()
     } catch (err) {
@@ -119,9 +121,19 @@ export default function EditMovementModal({ movement, accounts, categories, item
               </div>
 
               {isCheck ? (
-                <p className="text-xs text-gray-400 bg-gray-50 dark:bg-gray-900/40 rounded-lg p-2">
-                  Cobrado con cheque N° {movement.check.number} ({movement.check.issuingBank}) — los impuestos se cargan al acreditarlo.
-                </p>
+                <div className="space-y-2">
+                  <p className="text-xs text-gray-400 bg-gray-50 dark:bg-gray-900/40 rounded-lg p-2">
+                    Cobrado con cheque N° {movement.check.number}
+                    {item?.tracksAccount && ` · Factura: ${checkInvoiceLabel(movement.check, movement) || 'sin factura asociada'}`}
+                    {' '}— los impuestos se cargan al acreditarlo.
+                  </p>
+                  {!item?.tracksAccount && (
+                    <div>
+                      <label className={label}>Factura asociada</label>
+                      <input className={input} placeholder="N° de factura (opcional)" value={checkInvoiceNumber} onChange={e => setCheckInvoiceNumber(e.target.value)} />
+                    </div>
+                  )}
+                </div>
               ) : (
                 account && <TaxesBlock account={account} allTaxes={taxes} baseAmount={amount} selectedTaxIds={taxIds} onChange={setTaxIds} />
               )}

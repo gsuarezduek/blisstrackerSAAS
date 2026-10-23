@@ -5,7 +5,7 @@ const { normalizeCuit } = require('./_shared')
 const CUIT_RE = /^\d{2}-\d{8}-\d$/
 
 // GET /api/finanzas/padron/:cuit — Etapa 5: busca un CUIT en el padrón de
-// ARCA para precargar condición de IVA + dirección al dar de alta un
+// ARCA para precargar razón social (`name`) + condición de IVA + dirección al dar de alta un
 // cliente. Usa el ArcaClient de cualquier emisor activo del workspace (el
 // padrón es un servicio de consulta general, no depende de quién pregunta)
 // — si no hay ningún emisor configurado todavía, no hay forma de consultar.

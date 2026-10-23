@@ -151,7 +151,8 @@ export default function Finanzas() {
             ) : tab === 'clientes' ? (
               <CustomersTab accounts={accounts} categories={categories} items={items} taxes={taxes} issuers={issuers} financeIvaMode={financeIvaMode} onDataChange={loadShared} />
             ) : (
-              <PendingTab items={items} onNavigate={handleTaskNavigate} />
+              <PendingTab items={items} accounts={accounts} categories={categories} taxes={taxes} issuers={issuers}
+                onNavigate={handleTaskNavigate} onDataChange={loadShared} />
             )}
           </>
         )}

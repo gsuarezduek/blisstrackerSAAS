@@ -25,6 +25,7 @@ const tasks          = require('../controllers/finanzas/tasks.controller')
 const workspaceNote  = require('../controllers/finanzas/workspaceNote.controller')
 const aiSummary      = require('../controllers/finanzas/aiSummary.controller')
 const padron         = require('../controllers/finanzas/padron.controller')
+const adjustments    = require('../controllers/finanzas/adjustments.controller')
 
 // Todo el módulo Finanzas requiere: autenticación + workspace + acceso al
 // módulo (admin/owner o rol configurable, ver moduleAccess.js) + que el
@@ -104,6 +105,10 @@ router.patch('/checks/:id/credit',   checks.creditCheck)
 router.patch('/checks/:id/reject',   checks.rejectCheck)
 router.get('/fund-valuations',       fundValuations.listValuations)
 router.post('/fund-valuations',      fundValuations.createValuation)
+// Ajustes de saldo ("Ajustar saldo" en Saldos): mueven el disponible, no son ingreso/egreso.
+router.get('/adjustments',           adjustments.listAdjustments)
+router.post('/adjustments',          adjustments.createAdjustment)
+router.delete('/adjustments/:id',    adjustments.deleteAdjustment)
 
 // Resumen (4.3): breakdown por categoría del mes + gráfico mensual.
 router.get('/summary/breakdown',     summary.getBreakdown)
@@ -142,6 +147,8 @@ router.get('/extras',                extras.listExtras)
 router.post('/extras',               extras.createExtra)
 router.patch('/extras/:id',          extras.updateExtra)
 router.delete('/extras/:id',         extras.deleteExtra)
+router.post('/extras/:id/team-payouts',              extras.payTeam)          // "Pagar al equipo": un egreso por persona
+router.delete('/extras/:id/team-payouts/:payoutId',  extras.deleteTeamPayout)
 
 // Pendientes (4.6): tareas por reglas (motor on-demand) + nota del workspace + resumen IA.
 router.get('/tasks',                 tasks.listTasks)

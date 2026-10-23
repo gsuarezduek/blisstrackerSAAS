@@ -8,8 +8,11 @@ import ExtrasList from './ExtrasList'
 // Pestaña Pendientes (sección 4.6): resumen IA + notas arriba, tareas (por
 // reglas + manuales) y extras debajo. `onNavigate(task)` es opcional — lo usa
 // Finanzas.jsx para saltar a la pestaña relacionada con el origen de la tarea.
-export default function PendingTab({ items, onNavigate }) {
+// Las tareas de un extra ("Cobrar 1° pago…", "Pagar al equipo…") abren el
+// cobro / pago al equipo directo en ExtrasList (`extraRequest`).
+export default function PendingTab({ items, accounts, categories, taxes, issuers, onNavigate, onDataChange }) {
   const [tasks, setTasks] = useState(null)
+  const [extraRequest, setExtraRequest] = useState(null)
   // Responsables asignables: no "todo el workspace" (useMembers()) sino solo
   // quienes tienen acceso al módulo Finanzas — admin/owner + el rol
   // configurado en Preferencias → Módulos → Finanzas (ver GET /finanzas/team,
@@ -34,10 +37,12 @@ export default function PendingTab({ items, onNavigate }) {
       {tasks === null ? (
         <p className="text-sm text-gray-400 text-center py-6">Cargando…</p>
       ) : (
-        <TasksList tasks={tasks} members={members} items={items} onChanged={loadTasks} onNavigate={onNavigate} />
+        <TasksList tasks={tasks} members={members} items={items} onChanged={loadTasks} onNavigate={onNavigate}
+          onOpenExtra={(task) => setExtraRequest({ extraId: task.originId, nonce: Date.now() })} />
       )}
 
-      <ExtrasList items={items} onChanged={loadTasks} />
+      <ExtrasList items={items} accounts={accounts} categories={categories} taxes={taxes} issuers={issuers}
+        request={extraRequest} onChanged={loadTasks} onDataChange={onDataChange} />
     </div>
   )
 }

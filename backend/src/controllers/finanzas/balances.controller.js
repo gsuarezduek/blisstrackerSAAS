@@ -12,6 +12,7 @@ const { parseDate } = require('./_shared')
  * mes junto al saldo corriente de hoy.
  *
  * Disponible (3.1) = saldo_inicial + ingresos − egresos ± transferencias
+ * ± ajustes de saldo (FinanceBalanceAdjustment, con signo)
  * (excluyendo `toIsFund`/`fromIsFund`, que son fondos, no disponible), sin
  * contar movimientos de cheques todavía `pending` (al acreditar, el
  * movimiento se actualiza a la fecha/cuenta real — ver checks.controller.js
@@ -38,6 +39,7 @@ async function getBalances(req, res, next) {
         incomePeriodAgg, expensePeriodAgg, transfersInPeriodAgg, transfersOutPeriodAgg,
         allTimeIncomeAgg, allTimeExpenseAgg, allTimeTransfersInAgg, allTimeTransfersOutAgg,
         lastValuation, aportesAgg, rescatesAgg, pendingChecksAgg,
+        adjustmentsPeriodAgg, allTimeAdjustmentsAgg,
       ] = await Promise.all([
         prisma.financeMovement.aggregate({ where: { workspaceId, accountId: account.id, type: 'income', deletedAt: null, ...periodDateFilter }, _sum: { amount: true } }),
         prisma.financeMovement.aggregate({ where: { workspaceId, accountId: account.id, type: 'expense', deletedAt: null, ...periodDateFilter }, _sum: { amount: true } }),
@@ -54,6 +56,8 @@ async function getBalances(req, res, next) {
         account.hasInvestments ? prisma.financeTransfer.aggregate({ where: { workspaceId, toAccountId: account.id, toIsFund: true, deletedAt: null }, _sum: { toAmount: true } }) : null,
         account.hasInvestments ? prisma.financeTransfer.aggregate({ where: { workspaceId, fromAccountId: account.id, fromIsFund: true, deletedAt: null }, _sum: { fromAmount: true } }) : null,
         prisma.financeMovement.aggregate({ where: { workspaceId, accountId: account.id, deletedAt: null, check: { status: 'pending' } }, _sum: { amount: true }, _count: true }),
+        prisma.financeBalanceAdjustment.aggregate({ where: { workspaceId, accountId: account.id, deletedAt: null, ...periodDateFilter }, _sum: { amount: true } }),
+        prisma.financeBalanceAdjustment.aggregate({ where: { workspaceId, accountId: account.id, deletedAt: null }, _sum: { amount: true } }),
       ])
 
       const disponible = toDecimal(account.initialBalance)
@@ -61,6 +65,7 @@ async function getBalances(req, res, next) {
         .minus(toDecimal(allTimeExpenseAgg._sum.amount || 0))
         .plus(toDecimal(allTimeTransfersInAgg._sum.toAmount || 0))
         .minus(toDecimal(allTimeTransfersOutAgg._sum.fromAmount || 0))
+        .plus(toDecimal(allTimeAdjustmentsAgg._sum.amount || 0))
 
       let fondos = null
       if (account.hasInvestments) {
@@ -74,6 +79,7 @@ async function getBalances(req, res, next) {
         incomePeriod: toDecimal(incomePeriodAgg._sum.amount || 0).toString(),
         expensePeriod: toDecimal(expensePeriodAgg._sum.amount || 0).toString(),
         internalPeriod: toDecimal(transfersInPeriodAgg._sum.toAmount || 0).minus(toDecimal(transfersOutPeriodAgg._sum.fromAmount || 0)).toString(),
+        adjustmentsPeriod: toDecimal(adjustmentsPeriodAgg._sum.amount || 0).toString(),
         disponible: disponible.toString(),
         fondos: fondos != null ? fondos.toString() : null,
         pendingChecks: { amount: toDecimal(pendingChecksAgg._sum.amount || 0).toString(), count: pendingChecksAgg._count },

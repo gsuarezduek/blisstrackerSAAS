@@ -240,6 +240,8 @@ model Workspace {
   financeChecks              FinanceCheck[]
   financeTransfers           FinanceTransfer[]
   financeFundValuations      FinanceFundValuation[]
+  financeBalanceAdjustments  FinanceBalanceAdjustment[]
+  financeExtraTeamPayouts    FinanceExtraTeamPayout[]
   financeInvoices            FinanceInvoice[]
   financeAttachments         FinanceAttachment[]
   financeExtras              FinanceExtra[]
@@ -387,8 +389,8 @@ model User {
   taskRecurrences                   TaskRecurrence[]            @relation("RecurrenceAssignee")
   taskRecurrencesCreated            TaskRecurrence[]            @relation("RecurrenceCreatedBy")
   taskComments                      TaskComment[]
-  situationEntriesCreated           ProjectSituationEntry[] @relation("SituationEntryCreatedBy")
-  situationEntriesUpdated           ProjectSituationEntry[] @relation("SituationEntryUpdatedBy")
+  situationEntriesCreated           ProjectSituationEntry[]     @relation("SituationEntryCreatedBy")
+  situationEntriesUpdated           ProjectSituationEntry[]     @relation("SituationEntryUpdatedBy")
   taskFollows                       TaskFollow[]                @relation("TaskFollower")
   deletedNoticesAssigned            DeletedTaskNotice[]         @relation("DeletedNoticeAssignee")
   deletedNoticesDelegated           DeletedTaskNotice[]         @relation("DeletedNoticeCreatedBy")
@@ -484,6 +486,9 @@ model User {
   financeTransfersDeleted           FinanceTransfer[]           @relation("FinanceTransferDeletedBy")
   financeFundValuationsCreated      FinanceFundValuation[]      @relation("FinanceFundValuationCreatedBy")
   financeFundValuationsDeleted      FinanceFundValuation[]      @relation("FinanceFundValuationDeletedBy")
+  financeAdjustmentsCreated         FinanceBalanceAdjustment[]  @relation("FinanceAdjustmentCreatedBy")
+  financeAdjustmentsDeleted         FinanceBalanceAdjustment[]  @relation("FinanceAdjustmentDeletedBy")
+  financeExtraTeamPayouts           FinanceExtraTeamPayout[]    @relation("FinanceExtraTeamPayoutUser")
   financeInvoicesCreated            FinanceInvoice[]            @relation("FinanceInvoiceCreatedBy")
   financeInvoicesDeleted            FinanceInvoice[]            @relation("FinanceInvoiceDeletedBy")
   financeAttachmentsUploaded        FinanceAttachment[]         @relation("FinanceAttachmentUploadedBy")
@@ -821,24 +826,24 @@ model ProjectStar {
 // quedan como historial de solo lectura. Reemplaza al viejo Project.situation
 // (un solo campo que se pisaba). `content` es HTML del editor de texto enriquecido.
 model ProjectSituationEntry {
-  id               Int       @id @default(autoincrement())
-  projectId        Int
-  project          Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  content          String    @default("")
-  createdById      Int?
-  createdBy        User?     @relation("SituationEntryCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  updatedById      Int?
-  updatedBy        User?     @relation("SituationEntryUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  id                 Int       @id @default(autoincrement())
+  projectId          Int
+  project            Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  content            String    @default("")
+  createdById        Int?
+  createdBy          User?     @relation("SituationEntryCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedById        Int?
+  updatedBy          User?     @relation("SituationEntryUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
   // Agentes IA: la creó / la editó por última vez un agente (McpToken) vía MCP en nombre del usuario.
-  createdByAgentId Int?
-  createdByAgent   McpToken? @relation("SituationEntryCreatedByAgent", fields: [createdByAgentId], references: [id], onDelete: SetNull)
-  updatedByAgentId Int?
-  updatedByAgent   McpToken? @relation("SituationEntryUpdatedByAgent", fields: [updatedByAgentId], references: [id], onDelete: SetNull)
+  createdByAgentId   Int?
+  createdByAgent     McpToken? @relation("SituationEntryCreatedByAgent", fields: [createdByAgentId], references: [id], onDelete: SetNull)
+  updatedByAgentId   Int?
+  updatedByAgent     McpToken? @relation("SituationEntryUpdatedByAgent", fields: [updatedByAgentId], references: [id], onDelete: SetNull)
   // nombre que declaró el agente (param `agentName` del MCP), para distinguir varios agentes que comparten un token.
   createdByAgentName String?
   updatedByAgentName String?
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
   @@index([projectId, createdAt])
 }
@@ -4197,8 +4202,8 @@ model WhatsappConversation {
   // setea cuando un agente responde o toma el control (junto con
   // botEnabled=false: el agente tiene prioridad sobre el bot) y se limpia en
   // cualquier otro cambio del toggle bot/humano. Solo informativo para la UI.
-  agentControlId Int?
-  agentControl   McpToken? @relation("WhatsappConversationAgentControl", fields: [agentControlId], references: [id], onDelete: SetNull)
+  agentControlId   Int?
+  agentControl     McpToken? @relation("WhatsappConversationAgentControl", fields: [agentControlId], references: [id], onDelete: SetNull)
   agentControlName String? // nombre que declaró el agente (param `agentName` del MCP), para distinguir varios agentes que comparten un token
 
   // Respuesta del bot en espera (WhatsappBotConfig.agentWaitMins > 0): cuándo le
@@ -4237,14 +4242,14 @@ model WhatsappMessage {
   // Discriminador explícito en vez de forzar el patrón authorId?/systemType? de
   // ChatMessage: acá "quien escribió" puede ser el lead (ni User ni
   // ClientPortalContact), el equipo, el bot (Fase 4) o el sistema.
-  senderType   String // "user" | "contact" | "bot" | "system"
-  senderUserId Int?
-  senderUser   User?  @relation(fields: [senderUserId], references: [id], onDelete: SetNull)
+  senderType      String // "user" | "contact" | "bot" | "system"
+  senderUserId    Int?
+  senderUser      User?     @relation(fields: [senderUserId], references: [id], onDelete: SetNull)
   // Agentes IA (MCP): mensaje escrito por un agente. senderType sigue siendo
   // "user" y senderUserId su dueño (cuenta como intervención del equipo, ver
   // humanAlreadyReplied del bot); esto solo marca que lo escribió el agente.
-  senderAgentId Int?
-  senderAgent   McpToken? @relation("WhatsappMessageAgent", fields: [senderAgentId], references: [id], onDelete: SetNull)
+  senderAgentId   Int?
+  senderAgent     McpToken? @relation("WhatsappMessageAgent", fields: [senderAgentId], references: [id], onDelete: SetNull)
   senderAgentName String? // nombre que declaró el agente (param `agentName` del MCP), para distinguir varios agentes que comparten un token
 
   status    String   @default("sent") // sent | delivered | read | failed
@@ -4572,15 +4577,15 @@ model McpToken {
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   // Agentes IA: cada token es la identidad de un agente (su label es el nombre visible).
-  agentTasks         Task[]           @relation("TaskAgent")
-  createdTasks       Task[]           @relation("TaskCreatedByAgent")
-  agentRecurrences   TaskRecurrence[] @relation("RecurrenceAgent")
-  createdRecurrences TaskRecurrence[] @relation("RecurrenceCreatedByAgent")
-  taskComments       TaskComment[]    @relation("TaskCommentAgent")
+  agentTasks              Task[]                  @relation("TaskAgent")
+  createdTasks            Task[]                  @relation("TaskCreatedByAgent")
+  agentRecurrences        TaskRecurrence[]        @relation("RecurrenceAgent")
+  createdRecurrences      TaskRecurrence[]        @relation("RecurrenceCreatedByAgent")
+  taskComments            TaskComment[]           @relation("TaskCommentAgent")
   situationEntriesCreated ProjectSituationEntry[] @relation("SituationEntryCreatedByAgent")
   situationEntriesUpdated ProjectSituationEntry[] @relation("SituationEntryUpdatedByAgent")
-  whatsappMessages   WhatsappMessage[]      @relation("WhatsappMessageAgent")
-  whatsappControls   WhatsappConversation[] @relation("WhatsappConversationAgentControl")
+  whatsappMessages        WhatsappMessage[]       @relation("WhatsappMessageAgent")
+  whatsappControls        WhatsappConversation[]  @relation("WhatsappConversationAgentControl")
 
   @@index([workspaceId])
 }
@@ -4615,10 +4620,11 @@ model FinanceAccount {
 
   taxes          FinanceAccountTax[]
   movements      FinanceMovement[]
-  transfersFrom  FinanceTransfer[]      @relation("TransferFromAccount")
-  transfersTo    FinanceTransfer[]      @relation("TransferToAccount")
+  transfersFrom  FinanceTransfer[]          @relation("TransferFromAccount")
+  transfersTo    FinanceTransfer[]          @relation("TransferToAccount")
   fundValuations FinanceFundValuation[]
-  checksCredited FinanceCheck[]         @relation("CheckCreditedAccount")
+  adjustments    FinanceBalanceAdjustment[]
+  checksCredited FinanceCheck[]             @relation("CheckCreditedAccount")
 
   @@index([workspaceId])
   @@index([workspaceId, active])
@@ -4756,6 +4762,7 @@ model FinanceItem {
   active        Boolean         @default(true)
 
   // Solo relevantes si tracksAccount = true
+  legalName         String? // razón social — la que se imprime como receptor en la factura (fallback: name)
   contactName       String?
   phone             String?
   email             String?
@@ -4830,10 +4837,11 @@ model FinanceMovement {
   deletedById Int?
   deletedBy   User?     @relation("FinanceMovementDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
 
-  taxes           FinanceMovementTax[] @relation("MovementTaxLines")
-  generatedForTax FinanceMovementTax?  @relation("TaxGeneratedMovement")
+  taxes           FinanceMovementTax[]    @relation("MovementTaxLines")
+  generatedForTax FinanceMovementTax?     @relation("TaxGeneratedMovement")
   check           FinanceCheck?
   extraPayment    FinanceExtraPayment?
+  extraTeamPayout FinanceExtraTeamPayout?
 
   @@index([workspaceId])
   @@index([workspaceId, type, date])
@@ -4889,7 +4897,11 @@ model FinanceCheck {
   movementId              Int             @unique
   movement                FinanceMovement @relation(fields: [movementId], references: [id], onDelete: Cascade)
   number                  String
-  issuingBank             String
+  issuingBank             String? // legacy: ya no se pide (los cheques viejos lo conservan)
+  // Factura asociada para un ítem SIN cuenta corriente (texto libre). Con un
+  // cliente (tracksAccount) la factura se vincula de verdad vía
+  // FinanceMovement.invoiceId (accountApplication='invoice'), no acá.
+  invoiceNumber           String?
   estimatedCollectionDate DateTime
   status                  String          @default("pending") // pending | credited | rejected
   creditedAt              DateTime?
@@ -4958,6 +4970,31 @@ model FinanceFundValuation {
   deletedAt    DateTime?
   deletedById  Int?
   deletedBy    User?          @relation("FinanceFundValuationDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId])
+  @@index([accountId, date])
+}
+
+// Ajuste de saldo de una cuenta ("Ajustar saldo" en Saldos): el usuario carga
+// directamente el MONTO del ajuste (positivo suma, negativo resta), no el saldo
+// real. Mueve el Disponible pero NO es ingreso ni egreso: no aparece en
+// Ingresos/Egresos ni en Resumen. Soft-delete como el resto de lo transaccional.
+model FinanceBalanceAdjustment {
+  id          Int            @id @default(autoincrement())
+  workspaceId Int
+  workspace   Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  accountId   Int
+  account     FinanceAccount @relation(fields: [accountId], references: [id])
+  date        DateTime
+  amount      Decimal        @db.Decimal(20, 8) // con signo
+  note        String
+  createdById Int?
+  createdBy   User?          @relation("FinanceAdjustmentCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  deletedAt   DateTime?
+  deletedById Int?
+  deletedBy   User?          @relation("FinanceAdjustmentDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
 
   @@index([workspaceId])
   @@index([accountId, date])
@@ -5069,11 +5106,33 @@ model FinanceExtra {
   deletedById    Int?
   deletedBy      User?       @relation("FinanceExtraDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
 
-  payments FinanceExtraPayment[]
+  payments    FinanceExtraPayment[]
+  teamPayouts FinanceExtraTeamPayout[]
 
   @@index([workspaceId])
   @@index([itemId])
   @@index([workspaceId, status])
+}
+
+// Pago a una persona del equipo por su parte de un Extra ("Pagar al equipo").
+// Cada uno genera un EGRESO real (movementId) desde la cuenta elegida — el
+// monto vive en el movimiento (si se edita/borra el egreso, el pago cambia con
+// él); FinanceExtra.teamPaid se recalcula solo cuando lo pagado (egresos
+// vivos) cubre teamAmount. Ver extras.controller.js `payTeam`.
+model FinanceExtraTeamPayout {
+  id          Int             @id @default(autoincrement())
+  workspaceId Int
+  workspace   Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  extraId     Int
+  extra       FinanceExtra    @relation(fields: [extraId], references: [id], onDelete: Cascade)
+  userId      Int?
+  user        User?           @relation("FinanceExtraTeamPayoutUser", fields: [userId], references: [id], onDelete: SetNull)
+  movementId  Int             @unique
+  movement    FinanceMovement @relation(fields: [movementId], references: [id], onDelete: Cascade)
+  createdAt   DateTime        @default(now())
+
+  @@index([workspaceId])
+  @@index([extraId])
 }
 
 // Sin soft-delete propio: editar el split de un Extra reemplaza las filas sin

@@ -15,14 +15,17 @@ const MODES = [
   { id: 'transfer', label: 'Entre cuentas' },
 ]
 
-export default function LoadMovementModal({ accounts, categories, items, taxes, defaultMode = 'income', prefill, onClose, onSaved }) {
+// `prefill` (opcional) fija el item y arranca en Ingreso: { item, invoiceId? }
+// para cobrar una factura, o { item, amount, extraPaymentId } para "Registrar
+// cobro" de una cuota de un Extra (queda aplicado "A cuenta" + vinculado a la cuota).
+export default function LoadMovementModal({ accounts, categories, items, taxes, defaultMode = 'income', prefill, title, onClose, onSaved }) {
   const [mode, setMode] = useState(prefill ? 'income' : defaultMode)
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={onClose}>
       <div className="relative bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <button onClick={onClose} aria-label="Cerrar" className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">✕</button>
-        <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-4 pr-8">Nuevo movimiento</h2>
+        <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-4 pr-8">{title || 'Nuevo movimiento'}</h2>
 
         {!prefill && (
           <div className="flex gap-1 bg-gray-100 dark:bg-gray-900 rounded-xl p-1 mb-5 w-fit">
@@ -51,17 +54,17 @@ function MovementForm({ type, accounts, categories, items, taxes, prefill, onClo
   const [categoryId, setCategoryId] = useState(prefill?.item ? String(prefill.item.categoryId) : '')
   const [accountId, setAccountId] = useState('')
   const [date, setDate] = useState(today())
-  const [amount, setAmount] = useState('')
+  const [amount, setAmount] = useState(prefill?.amount != null ? String(prefill.amount) : '')
   const [note, setNote] = useState('')
   const [paymentMethod, setPaymentMethod] = useState('transfer')
   const [checkNumber, setCheckNumber] = useState('')
-  const [checkBank, setCheckBank] = useState('')
+  const [checkInvoiceNumber, setCheckInvoiceNumber] = useState('')
   const [checkDate, setCheckDate] = useState('')
   const [accountApplication, setAccountApplication] = useState(prefill?.invoiceId ? 'invoice' : 'on_account')
   const [invoiceId, setInvoiceId] = useState(prefill?.invoiceId ? String(prefill.invoiceId) : '')
   const [pendingInvoices, setPendingInvoices] = useState([])
   const [pendingExtraPayments, setPendingExtraPayments] = useState([])
-  const [extraPaymentId, setExtraPaymentId] = useState('')
+  const [extraPaymentId, setExtraPaymentId] = useState(prefill?.extraPaymentId ? String(prefill.extraPaymentId) : '')
   const [taxIds, setTaxIds] = useState(new Set())
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -69,22 +72,25 @@ function MovementForm({ type, accounts, categories, items, taxes, prefill, onClo
   const typeCategories = categories.filter(c => c.type === type && c.active)
   const account = accounts.find(a => a.id === Number(accountId)) || null
   const isCheck = isIncome && paymentMethod === 'check'
+  // Con cheque de un cliente, la aplicación a cuenta se elige dentro del bloque
+  // del cheque ("Factura asociada"), no en el selector general.
+  const checkForCustomer = isCheck && !!item?.tracksAccount
 
   useEffect(() => {
-    if (!isIncome || !item?.tracksAccount || accountApplication !== 'invoice') { setPendingInvoices([]); return }
+    if (!isIncome || !item?.tracksAccount || (accountApplication !== 'invoice' && !isCheck)) { setPendingInvoices([]); return }
     let cancelled = false
     api.get('/finanzas/invoices', { params: { itemId: item.id } }).then(res => {
       if (cancelled) return
       const pending = res.data.filter(i => i.status !== 'paid').sort((a, b) => new Date(a.issueDate) - new Date(b.issueDate))
       setPendingInvoices(pending)
-      if (!invoiceId && pending.length) {
+      if (!invoiceId && pending.length && accountApplication === 'invoice') {
         const first = prefill?.invoiceId && pending.some(p => p.id === prefill.invoiceId) ? prefill.invoiceId : pending[0].id
         setInvoiceId(String(first))
       }
     })
     return () => { cancelled = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [item?.id, accountApplication])
+  }, [item?.id, accountApplication, isCheck])
 
   // "A cuenta" con un item que tiene extras con pagos pendientes — ofrecer
   // vincular el cobro a uno puntual (opcional), mismo mecanismo que ya existe
@@ -121,7 +127,7 @@ function MovementForm({ type, accounts, categories, items, taxes, prefill, onClo
     if (!categoryId) { setError('Elegí una categoría'); return }
     if (!accountId) { setError(`Elegí ${isIncome ? 'a qué cuenta entra' : 'de qué cuenta sale'}`); return }
     if (!amount || Number(amount) <= 0) { setError('Monto inválido'); return }
-    if (isCheck && (!checkNumber.trim() || !checkBank.trim() || !checkDate)) { setError('Faltan datos del cheque'); return }
+    if (isCheck && (!checkNumber.trim() || !checkDate)) { setError('Faltan datos del cheque (número y fecha de cobro)'); return }
     if (isIncome && item.tracksAccount && accountApplication === 'invoice' && !invoiceId) { setError('Elegí a qué factura se aplica'); return }
 
     setSaving(true); setError('')
@@ -137,7 +143,7 @@ function MovementForm({ type, accounts, categories, items, taxes, prefill, onClo
           if (accountApplication === 'invoice') body.invoiceId = Number(invoiceId)
           if (accountApplication === 'on_account' && extraPaymentId) body.extraPaymentId = Number(extraPaymentId)
         }
-        if (isCheck) body.check = { number: checkNumber.trim(), issuingBank: checkBank.trim(), estimatedCollectionDate: checkDate }
+        if (isCheck) body.check = { number: checkNumber.trim(), estimatedCollectionDate: checkDate, invoiceNumber: !item.tracksAccount ? (checkInvoiceNumber.trim() || undefined) : undefined }
         else body.taxIds = [...taxIds]
       } else {
         body.taxIds = [...taxIds]
@@ -204,12 +210,40 @@ function MovementForm({ type, accounts, categories, items, taxes, prefill, onClo
       {isCheck && (
         <div className="bg-orange-50 dark:bg-orange-900/10 border border-orange-200 dark:border-orange-900/30 rounded-xl p-3 space-y-2">
           <div className="grid grid-cols-2 gap-2">
-            <input className={input} placeholder="N° de cheque" value={checkNumber} onChange={e => setCheckNumber(e.target.value)} />
-            <input className={input} placeholder="Banco emisor" value={checkBank} onChange={e => setCheckBank(e.target.value)} />
+            <div>
+              <label className={label}>N° de cheque</label>
+              <input className={input} value={checkNumber} onChange={e => setCheckNumber(e.target.value)} />
+            </div>
+            <div>
+              <label className={label}>Fecha de cobro</label>
+              <input type="date" className={input} value={checkDate} onChange={e => setCheckDate(e.target.value)} />
+            </div>
           </div>
           <div>
-            <label className={label}>Fecha de cobro</label>
-            <input type="date" className={input} value={checkDate} onChange={e => setCheckDate(e.target.value)} />
+            <label className={label}>Factura asociada</label>
+            {checkForCustomer ? (
+              <select className={input}
+                value={accountApplication === 'invoice' ? `inv:${invoiceId}` : accountApplication}
+                onChange={e => {
+                  const v = e.target.value
+                  if (v.startsWith('inv:')) { setAccountApplication('invoice'); setInvoiceId(v.slice(4)) }
+                  else { setAccountApplication(v); setInvoiceId('') }
+                }}>
+                {pendingInvoices.map(inv => (
+                  <option key={inv.id} value={`inv:${inv.id}`}>{inv.number || 'Sin número'} · pendiente {fmtMoney(Number(inv.amount) - Number(inv.collected), account?.currency)}</option>
+                ))}
+                <option value="on_account">Sin factura — queda a cuenta del cliente</option>
+                <option value="no_effect">No afecta la cuenta del cliente</option>
+              </select>
+            ) : (
+              <input className={input} placeholder="N° de factura (opcional)" value={checkInvoiceNumber} onChange={e => setCheckInvoiceNumber(e.target.value)} />
+            )}
+            {checkForCustomer && accountApplication === 'on_account' && pendingExtraPayments.length > 0 && (
+              <select className={`${input} mt-2`} value={extraPaymentId} onChange={e => setExtraPaymentId(e.target.value)}>
+                <option value="">¿Corresponde a un pago de un extra? (opcional)</option>
+                {pendingExtraPayments.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
+              </select>
+            )}
           </div>
           <p className="text-xs text-orange-700 dark:text-orange-400">Queda como cheque pendiente. Suma al banco recién cuando lo marqués como acreditado, y ahí confirmás la fecha real y los impuestos.</p>
         </div>
@@ -217,7 +251,7 @@ function MovementForm({ type, accounts, categories, items, taxes, prefill, onClo
 
       {!isCheck && account && <TaxesBlock account={account} allTaxes={taxes} baseAmount={amount} selectedTaxIds={taxIds} onChange={setTaxIds} />}
 
-      {isIncome && item?.tracksAccount && (
+      {isIncome && item?.tracksAccount && !checkForCustomer && (
         <div>
           <label className={label}>Aplicar a cuenta</label>
           <select className={input} value={accountApplication} onChange={e => { setAccountApplication(e.target.value); setInvoiceId('') }}>

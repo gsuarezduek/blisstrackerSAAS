@@ -583,3 +583,5 @@ GET    /api/feature-flags/:key                          # check flag para worksp
 ```
 
 
+
+- **Finanzas (`/api/finanzas/*`)**: listado completo en `docs/claude/finanzas.md` → "Rutas".

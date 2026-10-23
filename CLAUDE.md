@@ -23,6 +23,7 @@ Para que cada sesión de Claude Code cargue menos contexto de entrada, el detall
 | `mobile/CLAUDE.md` | App React Native (Expo): arquitectura, auth sin subdominio, push/chat/biometría. Se carga solo al trabajar en `mobile/` |
 | `docs/claude/marketing.md` | GEO/SEO, RRSS (Instagram/TikTok/LinkedIn/Facebook/YouTube), Ads, Competidores, Informes mensuales, Objetivos de marketing, Domain Rating, SERP, servicios de scraping |
 | `docs/claude/ventas.md` | CRM: Empresas/Contactos/Leads, Propuestas (documento estructurado), Pipeline Kanban, Métricas/Forecast, Recordatorios |
+| `docs/claude/finanzas.md` | Finanzas: cuentas/saldos/ajustes, movimientos/impuestos/cheques, clientes (cuenta corriente, razón social) y facturación ARCA, Extras (cobros y pagos al equipo), Pendientes, rutas |
 | `docs/claude/whatsapp.md` | Automatización de reactivación, analítica/costo, bot (entrenamiento, reglas de seguridad, base de conocimiento), bloqueo de spam, Coexistence |
 | `docs/claude/chat.md` | Chat interno: canales, menciones, pins, reacciones, reply, mensajes de sistema, tiempo real (Socket.IO) |
 | `docs/claude/contenido.md` | Calendario de contenido con aprobación del cliente (piezas, assets, workflow, notificaciones) |

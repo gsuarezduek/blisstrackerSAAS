@@ -120,7 +120,7 @@ async function deleteAccount(req, res, next) {
     const id = Number(req.params.id)
     const existing = await prisma.financeAccount.findFirst({
       where: { id, workspaceId },
-      include: { _count: { select: { movements: true, transfersFrom: true, transfersTo: true, fundValuations: true, checksCredited: true } } },
+      include: { _count: { select: { movements: true, transfersFrom: true, transfersTo: true, fundValuations: true, checksCredited: true, adjustments: true } } },
     })
     if (!existing) return res.status(404).json({ error: 'Cuenta no encontrada' })
     const used = Object.values(existing._count).some(n => n > 0)

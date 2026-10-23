@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import api from '../../api/client'
 import { fmtMoney } from '../../utils/format'
-import { checkStatusMeta } from './financeCatalog'
+import { checkStatusMeta, checkInvoiceLabel } from './financeCatalog'
 import TaxesBlock from './TaxesBlock'
 import ConfirmModal from '../ConfirmModal'
 
@@ -61,7 +61,7 @@ export default function CreditCheckModal({ check, accounts, taxes, onClose, onSa
             <p className="text-sm font-semibold text-gray-900 dark:text-white">Cheque N° {check.number}</p>
             <span className="text-[11px] bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400 rounded-full px-2 py-0.5">{status.label}</span>
           </div>
-          <p className="text-xs text-gray-500 dark:text-gray-400">{check.movement.item?.name} · {check.issuingBank}</p>
+          <p className="text-xs text-gray-500 dark:text-gray-400">{check.movement.item?.name} · Factura: {checkInvoiceLabel(check, check.movement) || 'sin factura asociada'}</p>
           <p className="text-xs text-gray-500 dark:text-gray-400">Recibido el {fmtDate(check.movement.date)} · Fecha estimada {fmtDate(check.estimatedCollectionDate)}</p>
           <p className="text-lg font-bold text-gray-900 dark:text-white mt-1">{fmtMoney(check.movement.amount, check.movement.account?.currency)}</p>
         </div>

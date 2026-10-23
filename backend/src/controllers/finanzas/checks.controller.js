@@ -5,8 +5,9 @@ const { parseDate, resolveAndApplyTaxes } = require('./_shared')
 const CHECK_INCLUDE = {
   movement: {
     include: {
-      item:    { select: { id: true, name: true } },
+      item:    { select: { id: true, name: true, tracksAccount: true } },
       account: { select: { id: true, name: true, currency: true } },
+      invoice: { select: { id: true, number: true } },
     },
   },
   creditedAccount: { select: { id: true, name: true } },

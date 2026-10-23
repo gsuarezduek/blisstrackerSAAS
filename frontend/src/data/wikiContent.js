@@ -1237,15 +1237,21 @@ Un lead en propuesta o ganado se **convierte en proyecto** con un click: queda m
 
 ## Pestañas
 
-- **Ingresos / Egresos** — movimientos con filtros, impuestos y cheques.
-- **Saldos** — por cuenta y moneda, con acreditación de cheques y movimientos de fondos.
+- **Ingresos / Egresos** — movimientos con filtros, impuestos y cheques. Un cheque lleva su **factura asociada**: la del cliente (se descuenta de su saldo) o un N° de factura libre.
+- **Saldos** — por cuenta y moneda, con acreditación de cheques y movimientos de fondos. Desde el detalle de una cuenta, **Ajustar saldo** suma o resta un monto (con su motivo) sin contarlo como ingreso ni egreso.
 - **Resumen** — la foto del período.
-- **Clientes** — cuenta corriente de cada cliente: facturas, cobros y próximas acciones.
+- **Clientes** — cuenta corriente de cada cliente (ordenados A-Z, o por saldo): razón social, facturas, cobros y próximas acciones.
 - **Pendientes** — tablero de cosas por hacer (reglas automáticas, extras y sugerencias con IA). Cada pendiente se puede asignar a un responsable y llega a su dashboard como tarea.
+
+## Extras
+
+Un extra es un trabajo adicional para un cliente, repartido entre empresa, proveedores y equipo, y cobrado en una o varias cuotas. Marcarlo **Terminado** no mueve plata: avisa en Pendientes qué cobrar. Cada cuota tiene **Registrar cobro**, donde elegís en qué banco entró. **Pagar al equipo** registra a quién se le deposita cuánto y desde qué cuenta (un egreso por persona).
+
+Los montos se muestran siempre con sus decimales, tal cual se cargaron.
 
 ## Facturación electrónica
 
-Desde Clientes se emiten **facturas electrónicas AFIP/ARCA**, con PDF oficial y QR, y también **notas de crédito y débito**. El padrón de AFIP completa los datos del cliente a partir del CUIT. "Reconciliar" compara lo emitido con lo que registró ARCA. Si faltan datos para el PDF, el formulario te avisa antes de emitir.`,
+Desde Clientes se emiten **facturas electrónicas AFIP/ARCA**, con PDF oficial y QR, y también **notas de crédito y débito**. El padrón de AFIP completa los datos del cliente a partir del CUIT (razón social, dirección y condición de IVA); la razón social es la que sale en la factura. "Reconciliar" compara lo emitido con lo que registró ARCA. Si faltan datos para el PDF, el formulario te avisa antes de emitir.`,
         tips: [
           'Completá primero la Configuración (cuentas, categorías e impuestos): el resto de las pestañas depende de ella.',
           'Elegí en Preferencias el proyecto donde se crean las tareas de Pendientes.',

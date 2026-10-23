@@ -21,7 +21,7 @@ function Row({ label, children }) {
 
 const CUIT_RE = /^\d{2}-\d{8}-\d$/
 
-// "Datos" (sección 4.5, columna lateral): botón Editar; contacto, teléfono,
+// "Datos" (sección 4.5, columna lateral): botón Editar; razón social, contacto, teléfono,
 // mail, CUIT, servicio contratado; métricas; notas con autoguardado.
 export default function CustomerInfoCard({ customer, issuers, onChanged }) {
   const [editing, setEditing] = useState(false)
@@ -41,7 +41,7 @@ export default function CustomerInfoCard({ customer, issuers, onChanged }) {
         ...f,
         address: res.data.address || f.address,
         ivaCondition: res.data.ivaCondition || f.ivaCondition,
-        contactName: f.contactName || res.data.name || '',
+        legalName: res.data.name || f.legalName,
       }))
     } catch (err) {
       setError(err.response?.data?.error || 'No se pudo consultar el padrón')
@@ -50,7 +50,7 @@ export default function CustomerInfoCard({ customer, issuers, onChanged }) {
 
   function startEdit() {
     setForm({
-      contactName: customer.contactName || '', phone: customer.phone || '', email: customer.email || '',
+      legalName: customer.legalName || '', contactName: customer.contactName || '', phone: customer.phone || '', email: customer.email || '',
       taxId: customer.taxId || '', address: customer.address || '', contractedService: customer.contractedService || '',
       ivaCondition: customer.ivaCondition || '', defaultIssuerId: customer.defaultIssuer?.id ? String(customer.defaultIssuer.id) : '',
     })
@@ -82,6 +82,7 @@ export default function CustomerInfoCard({ customer, issuers, onChanged }) {
       <div className="px-4 pb-4">
         {editing ? (
           <div className="space-y-2">
+            <input className={input} placeholder="Razón social (la que sale en la factura)" value={form.legalName} onChange={e => setForm({ ...form, legalName: e.target.value })} />
             <input className={input} placeholder="Contacto" value={form.contactName} onChange={e => setForm({ ...form, contactName: e.target.value })} />
             <input className={input} placeholder="Teléfono" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} />
             <input className={input} placeholder="Mail" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} />
@@ -107,6 +108,7 @@ export default function CustomerInfoCard({ customer, issuers, onChanged }) {
           </div>
         ) : (
           <dl>
+            <Row label="Razón social">{customer.legalName}</Row>
             <Row label="Contacto">{customer.contactName}</Row>
             <Row label="Teléfono">{customer.phone}</Row>
             <Row label="Mail">{customer.email}</Row>

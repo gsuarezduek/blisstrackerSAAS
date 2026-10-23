@@ -8,6 +8,7 @@ const ITEM_FIELD_LABELS = {
   categoryId:        { label: 'Categoría habitual' },
   tracksAccount:     { label: 'Seguimiento de cuenta', format: 'boolean' },
   active:            { label: 'Activo', format: 'boolean' },
+  legalName:         { label: 'Razón social' },
   contactName:       { label: 'Contacto' },
   phone:             { label: 'Teléfono' },
   email:             { label: 'Mail' },
@@ -86,7 +87,7 @@ async function getItem(req, res, next) {
 async function createItem(req, res, next) {
   try {
     const workspaceId = req.workspace.id
-    const { name, categoryId, tracksAccount, contactName, phone, email, taxId, address, contractedService, notes, ivaCondition, defaultIssuerId, projectId } = req.body
+    const { name, categoryId, tracksAccount, legalName, contactName, phone, email, taxId, address, contractedService, notes, ivaCondition, defaultIssuerId, projectId } = req.body
     if (!name || !name.trim()) return res.status(400).json({ error: 'Nombre requerido' })
     if (!Number.isInteger(categoryId)) return res.status(400).json({ error: 'Categoría habitual requerida' })
 
@@ -107,7 +108,7 @@ async function createItem(req, res, next) {
     const item = await prisma.financeItem.create({
       data: {
         workspaceId, name: name.trim(), categoryId, tracksAccount: !!tracksAccount,
-        contactName: trimmedOrNull(contactName), phone: trimmedOrNull(phone), email: trimmedOrNull(email),
+        legalName: trimmedOrNull(legalName), contactName: trimmedOrNull(contactName), phone: trimmedOrNull(phone), email: trimmedOrNull(email),
         taxId: trimmedOrNull(normalizedTaxId), address: trimmedOrNull(address), contractedService: trimmedOrNull(contractedService), notes: trimmedOrNull(notes),
         ivaCondition: ivaCondition || null, defaultIssuerId: defaultIssuerId ?? null,
         projectId: projectId ?? null,
@@ -130,7 +131,7 @@ async function updateItem(req, res, next) {
     })
     if (!existing) return res.status(404).json({ error: 'Item no encontrado' })
 
-    const { name, categoryId, tracksAccount, active, contactName, phone, email, taxId, address, contractedService, notes, ivaCondition, defaultIssuerId, projectId } = req.body
+    const { name, categoryId, tracksAccount, active, legalName, contactName, phone, email, taxId, address, contractedService, notes, ivaCondition, defaultIssuerId, projectId } = req.body
     const { taxId: normalizedTaxId } = validateContactFields({ email, taxId, ivaCondition })
     await validateDefaultIssuer(workspaceId, defaultIssuerId)
 
@@ -158,6 +159,7 @@ async function updateItem(req, res, next) {
       }
       data.tracksAccount = !!tracksAccount
     }
+    if (legalName         !== undefined) data.legalName         = trimmedOrNull(legalName)
     if (contactName       !== undefined) data.contactName       = trimmedOrNull(contactName)
     if (phone              !== undefined) data.phone              = trimmedOrNull(phone)
     if (email               !== undefined) data.email               = trimmedOrNull(email)

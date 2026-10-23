@@ -1,12 +1,12 @@
 // Formato de moneda del módulo Finanzas (es-AR). `amount` acepta string
 // (Decimal de Prisma serializado) o number — nunca se usa para aritmética acá,
-// solo para pintar, por eso el Number() final es seguro. ARS/USD muestran 0
-// decimales (igual que el PDF de referencia: "$ 1.234.567"); BTC muestra hasta
-// 8 recortando ceros finales ("₿ 0,0125"). No reemplaza al `fmtMoney` propio de
+// solo para pintar, por eso el Number() final es seguro. ARS/USD muestran
+// siempre 2 decimales, sin redondear a entero ("$ 1.234.567,50" / "$ 1.500,00");
+// BTC muestra hasta 8 recortando ceros finales ("₿ 0,0125"). No reemplaza al `fmtMoney` propio de
 // Ventas/Billing (formatos distintos para esos módulos), es específico de Finanzas.
 const FINANCE_CURRENCY_META = {
-  ARS: { prefix: '$ ',   decimals: 0 },
-  USD: { prefix: 'US$ ', decimals: 0 },
+  ARS: { prefix: '$ ',   decimals: 2 },
+  USD: { prefix: 'US$ ', decimals: 2 },
   BTC: { prefix: '₿ ',   decimals: 8, trim: true },
 }
 

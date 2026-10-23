@@ -79,7 +79,7 @@ function PostponeInline({ onConfirm, onCancel }) {
 // esa persona — mismo mecanismo que el to-do de Reuniones), acción
 // ("Hecho"/"Acreditado"...), Posponer, Ver›. `members` = workspace members
 // (useMembers()), para el selector de responsable.
-export default function TasksList({ tasks, members, items, onChanged, onNavigate }) {
+export default function TasksList({ tasks, members, items, onChanged, onNavigate, onOpenExtra }) {
   const [showNew, setShowNew] = useState(false)
   const [postponing, setPostponing] = useState(null)
   const [assignError, setAssignError] = useState(null) // { taskId, message }
@@ -137,7 +137,13 @@ export default function TasksList({ tasks, members, items, onChanged, onNavigate
                     {members.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
                   </select>
                 )}
-                <button onClick={() => markDone(t)} className="bg-primary-600 hover:bg-primary-700 text-white rounded-lg px-2.5 py-1 text-xs font-medium">{actionLabel(t)}</button>
+                {t.origin === 'extra' && onOpenExtra ? (
+                  <button onClick={() => onOpenExtra(t)} className="bg-primary-600 hover:bg-primary-700 text-white rounded-lg px-2.5 py-1 text-xs font-medium">
+                    {t.title.startsWith('Pagar al equipo') ? 'Pagar' : 'Registrar cobro'}
+                  </button>
+                ) : (
+                  <button onClick={() => markDone(t)} className="bg-primary-600 hover:bg-primary-700 text-white rounded-lg px-2.5 py-1 text-xs font-medium">{actionLabel(t)}</button>
+                )}
                 {postponing === t.id ? (
                   <PostponeInline onConfirm={(date) => postpone(t, date)} onCancel={() => setPostponing(null)} />
                 ) : (

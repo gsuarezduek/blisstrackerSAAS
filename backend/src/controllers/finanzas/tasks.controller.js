@@ -1,6 +1,7 @@
 const prisma = require('../../lib/prisma')
 const { logFinanceAudit } = require('../../lib/financeAudit')
 const { toDecimal } = require('../../lib/financeMoney')
+const { teamPaidAmount } = require('../../lib/financeExtras')
 const { parseDate } = require('./_shared')
 const { isValidTaskStatus } = require('../../lib/financeCatalog')
 const { syncDashboardOnResponsibleChange } = require('../../lib/financeTaskDashboard')
@@ -89,13 +90,15 @@ async function syncGeneratedTasks(workspaceId) {
   }
 
   // Regla 5: extra cobrado con equipo sin pagar.
+  // El monto es lo que falta pagar (descuenta los pagos al equipo ya registrados).
   const collectedExtras = await prisma.financeExtra.findMany({
     where: { workspaceId, deletedAt: null, status: 'collected', teamPaid: false },
-    include: { item: true },
+    include: { item: true, teamPayouts: { include: { movement: { select: { amount: true, deletedAt: true } } } } },
   })
   for (const ex of collectedExtras) {
-    if (toDecimal(ex.teamAmount).lessThanOrEqualTo(0)) continue
-    live.push({ origin: 'extra', originId: ex.id, itemId: ex.itemId, title: `Pagar al equipo: ${ex.action} de ${ex.item.name}`, amount: ex.teamAmount, date: ex.date })
+    const left = toDecimal(ex.teamAmount).minus(teamPaidAmount(ex.teamPayouts))
+    if (left.lessThanOrEqualTo(0)) continue
+    live.push({ origin: 'extra', originId: ex.id, itemId: ex.itemId, title: `Pagar al equipo: ${ex.action} de ${ex.item.name}`, amount: left.toString(), date: ex.date })
   }
 
   // Regla 6: próximas acciones vencidas.

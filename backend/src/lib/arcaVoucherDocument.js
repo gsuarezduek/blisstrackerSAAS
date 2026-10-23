@@ -66,7 +66,7 @@ async function buildInvoiceVoucherDocument(invoice, issuer, item) {
         grossIncome: issuer.grossIncome,
         activitiesStartDate: fmtDateOnly(issuer.activitiesStartDate),
       },
-      receiver: { name: item.name, address: item.address || undefined },
+      receiver: { name: item.legalName || item.name, address: item.address || undefined },
       saleConditions: 'Cuenta corriente',
     })
   } catch (err) {

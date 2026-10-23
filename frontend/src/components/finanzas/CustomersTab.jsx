@@ -11,12 +11,17 @@ function fmtDate(iso) {
   return new Date(iso).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })
 }
 
-// Pestaña Clientes (sección 4.4): tarjetas Total a cobrar/Vencido, buscador +
-// "Solo con saldo", tabla (ya ordenada por el backend: vencidos primero,
-// después por saldo). Clic en una fila → CustomerDetail.
+// Pestaña Clientes (sección 4.4): tarjetas Total a cobrar/Vencido, buscador
+// (nombre o razón social) + "Solo con saldo" + orden (A-Z por defecto, o por
+// saldo: vencidos primero — lo ordena el backend). Clic en una fila → CustomerDetail.
+const SORT_KEY = 'bliss_finanzas_customers_sort'
+function readSort() {
+  try { return localStorage.getItem(SORT_KEY) === 'balance' ? 'balance' : 'name' } catch { return 'name' }
+}
 export default function CustomersTab({ accounts, categories, items, taxes, issuers, financeIvaMode, onDataChange }) {
   const [search, setSearch] = useState('')
   const [onlyWithBalance, setOnlyWithBalance] = useState(false)
+  const [sort, setSort] = useState(readSort)
   const [customers, setCustomers] = useState(null)
   const [openId, setOpenId] = useState(null)
   const [showNew, setShowNew] = useState(false)
@@ -25,9 +30,15 @@ export default function CustomersTab({ accounts, categories, items, taxes, issue
     const params = {}
     if (search.trim()) params.search = search.trim()
     if (onlyWithBalance) params.onlyWithBalance = 'true'
+    params.sort = sort
     const res = await api.get('/finanzas/customers', { params })
     setCustomers(res.data)
-  }, [search, onlyWithBalance])
+  }, [search, onlyWithBalance, sort])
+
+  function changeSort(value) {
+    setSort(value)
+    try { localStorage.setItem(SORT_KEY, value) } catch { /* sin storage: queda en memoria */ }
+  }
 
   useEffect(() => { load() }, [load])
 
@@ -54,11 +65,15 @@ export default function CustomersTab({ accounts, categories, items, taxes, issue
         </div>
       </div>
 
-      <div className="flex items-center gap-3 mb-4">
+      <div className="flex flex-wrap items-center gap-3 mb-4">
         <input className={`${input} flex-1 max-w-xs`} placeholder="Buscar cliente…" value={search} onChange={e => setSearch(e.target.value)} />
         <label className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
           <input type="checkbox" checked={onlyWithBalance} onChange={e => setOnlyWithBalance(e.target.checked)} /> Solo con saldo
         </label>
+        <select className={`${input} py-1.5`} value={sort} onChange={e => changeSort(e.target.value)} aria-label="Ordenar clientes">
+          <option value="name">Ordenar: A-Z</option>
+          <option value="balance">Ordenar: por saldo</option>
+        </select>
         <div className="flex-1" />
         <button onClick={() => setShowNew(true)} className="bg-primary-600 hover:bg-primary-700 text-white font-medium rounded-xl px-4 py-2 text-sm">+ Nuevo cliente</button>
       </div>
@@ -80,7 +95,10 @@ export default function CustomersTab({ accounts, categories, items, taxes, issue
               const meta = customerStatusMeta(c.status)
               return (
                 <tr key={c.id} onClick={() => setOpenId(c.id)} className="border-b border-gray-50 dark:border-gray-700/50 hover:bg-gray-50 dark:hover:bg-gray-900/30 cursor-pointer">
-                  <td className="px-4 py-2.5 text-gray-900 dark:text-white font-medium">{c.name}</td>
+                  <td className="px-4 py-2.5 text-gray-900 dark:text-white font-medium">
+                    {c.name}
+                    {c.legalName && c.legalName !== c.name && <p className="text-xs text-gray-400 font-normal">{c.legalName}</p>}
+                  </td>
                   <td className="px-4 py-2.5 text-right text-gray-500 dark:text-gray-400">{fmtMoney(c.facturado, 'ARS')}</td>
                   <td className="px-4 py-2.5 text-right text-gray-500 dark:text-gray-400">{fmtMoney(c.cobrado, 'ARS')}</td>
                   <td className="px-4 py-2.5 text-right font-medium text-gray-900 dark:text-white">{fmtMoney(c.saldo, 'ARS')}</td>

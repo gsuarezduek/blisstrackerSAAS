@@ -173,6 +173,12 @@ export function customerStatusMeta(key)      { return metaOf(CUSTOMER_STATUSES, 
 export function extraStatusMeta(key)         { return metaOf(EXTRA_STATUSES, key) }
 export function taskOriginLabel(key)         { return TASK_ORIGIN_LABELS[key] || key || '—' }
 
+// Factura asociada a un cheque: la vinculada al cobro (cliente con cuenta
+// corriente, movement.invoice) o el N° tipeado a mano (item sin cuenta).
+export function checkInvoiceLabel(check, movement) {
+  return movement?.invoice?.number || check?.invoiceNumber || null
+}
+
 // Clases Tailwind por color de badge — misma paleta que components/ventas/salesCatalog.js.
 export const STATUS_BADGE = {
   gray:   'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-200',

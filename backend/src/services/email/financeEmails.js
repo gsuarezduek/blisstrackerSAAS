@@ -32,7 +32,7 @@ async function sendInvoicesEmail(to, invoices, { workspaceId, workspaceName, slu
     <tr>
       <td style="padding:6px 8px;border-bottom:1px solid #e2e8f0;font-size:14px;color:#334155;">${escHtml(inv.number)}</td>
       <td style="padding:6px 8px;border-bottom:1px solid #e2e8f0;font-size:14px;color:#334155;">${escHtml(inv.concept)}</td>
-      <td style="padding:6px 8px;border-bottom:1px solid #e2e8f0;font-size:14px;color:#334155;text-align:right;">${escHtml(inv.currency)} ${Number(inv.amount).toLocaleString('es-AR')}</td>
+      <td style="padding:6px 8px;border-bottom:1px solid #e2e8f0;font-size:14px;color:#334155;text-align:right;">${escHtml(inv.currency)} ${Number(inv.amount).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
     </tr>`).join('')
 
   const body = `

@@ -2,7 +2,8 @@ import { fmtMoney } from '../../utils/format'
 import { accountTypeLabel } from './financeCatalog'
 
 // Una tarjeta por cuenta (sección 4.2): nombre, moneda, ingresos, egresos,
-// movimientos internos, disponible, y "En fondos" solo si tiene_inversiones.
+// movimientos internos, ajustes de saldo (si hubo), disponible, y "En fondos"
+// solo si tiene_inversiones.
 // Clickeable → drill-down (AccountDetailPanel, con las transferencias).
 export default function AccountBalanceCard({ account, onClick }) {
   return (
@@ -26,6 +27,12 @@ export default function AccountBalanceCard({ account, onClick }) {
           <dt className="text-gray-400">Internos</dt>
           <dd className="text-gray-600 dark:text-gray-300">{Number(account.internalPeriod) < 0 ? '− ' : ''}{fmtMoney(Math.abs(account.internalPeriod), account.currency)}</dd>
         </div>
+        {Number(account.adjustmentsPeriod) !== 0 && (
+          <div className="flex justify-between">
+            <dt className="text-gray-400">Ajustes</dt>
+            <dd className="text-purple-600 dark:text-purple-400">{Number(account.adjustmentsPeriod) < 0 ? '− ' : '+ '}{fmtMoney(Math.abs(account.adjustmentsPeriod), account.currency)}</dd>
+          </div>
+        )}
       </dl>
 
       <div className="border-t border-gray-100 dark:border-gray-700 mt-3 pt-3 space-y-1">

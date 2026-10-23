@@ -14,6 +14,7 @@ const CUIT_RE = /^\d{2}-\d{8}-\d$/
 export default function NewCustomerModal({ categories, issuers, onClose, onCreated }) {
   const [name, setName] = useState('')
   const [categoryId, setCategoryId] = useState('')
+  const [legalName, setLegalName] = useState('')
   const [contactName, setContactName] = useState('')
   const [phone, setPhone] = useState('')
   const [email, setEmail] = useState('')
@@ -36,7 +37,7 @@ export default function NewCustomerModal({ categories, issuers, onClose, onCreat
       const res = await api.get(`/finanzas/padron/${normalized}`)
       if (res.data.address) setAddress(res.data.address)
       if (res.data.ivaCondition) setIvaCondition(res.data.ivaCondition)
-      if (res.data.name && !contactName) setContactName(res.data.name)
+      if (res.data.name) setLegalName(res.data.name)
       setLookupMsg('Datos encontrados en el padrón de ARCA.')
     } catch (err) {
       setError(err.response?.data?.error || 'No se pudo consultar el padrón')
@@ -53,7 +54,7 @@ export default function NewCustomerModal({ categories, issuers, onClose, onCreat
     try {
       const res = await api.post('/finanzas/items', {
         name: name.trim(), categoryId: Number(categoryId), tracksAccount: true,
-        contactName: contactName.trim() || undefined, phone: phone.trim() || undefined, email: email.trim() || undefined,
+        legalName: legalName.trim() || undefined, contactName: contactName.trim() || undefined, phone: phone.trim() || undefined, email: email.trim() || undefined,
         taxId: normalizedTaxId || undefined, address: address.trim() || undefined, contractedService: contractedService.trim() || undefined,
         ivaCondition: ivaCondition || null, defaultIssuerId: defaultIssuerId ? Number(defaultIssuerId) : null,
       })
@@ -73,6 +74,10 @@ export default function NewCustomerModal({ categories, issuers, onClose, onCreat
           <div>
             <label className={label}>Nombre</label>
             <input autoFocus className={input} value={name} onChange={e => setName(e.target.value)} />
+          </div>
+          <div>
+            <label className={label}>Razón social</label>
+            <input className={input} value={legalName} onChange={e => setLegalName(e.target.value)} placeholder="La que sale en la factura (se completa al buscar el CUIT)" />
           </div>
           <div>
             <label className={label}>Categoría habitual</label>

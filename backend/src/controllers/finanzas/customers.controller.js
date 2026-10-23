@@ -47,13 +47,18 @@ function summarizeCustomer(item) {
   return { invoices, facturado: facturado.toString(), cobrado: cobrado.toString(), saldo: saldo.toString(), status }
 }
 
-// GET /api/finanzas/customers?search=&onlyWithBalance=true — sección 4.4
+// GET /api/finanzas/customers?search=&onlyWithBalance=true&sort=name|balance — sección 4.4.
+// Orden por defecto alfabético (`sort=balance`: vencidos primero, después por saldo).
+// La búsqueda matchea nombre o razón social.
 async function listCustomers(req, res, next) {
   try {
     const workspaceId = req.workspace.id
-    const { search, onlyWithBalance } = req.query
+    const { search, onlyWithBalance, sort } = req.query
     const where = { workspaceId, tracksAccount: true, active: true }
-    if (search && search.trim()) where.name = { contains: search.trim(), mode: 'insensitive' }
+    if (search && search.trim()) {
+      const q = search.trim()
+      where.OR = [{ name: { contains: q, mode: 'insensitive' } }, { legalName: { contains: q, mode: 'insensitive' } }]
+    }
 
     const items = await prisma.financeItem.findMany({
       where,
@@ -73,13 +78,14 @@ async function listCustomers(req, res, next) {
       const summary = summarizeCustomer({ ...item, onAccountMovements: onAccountMap.has(item.id) ? [{ amount: onAccountMap.get(item.id) }] : [] })
       const lastInvoice = item.invoices[0] || null // ya viene ordenado desc por issueDate
       return {
-        id: item.id, name: item.name, email: item.email,
+        id: item.id, name: item.name, legalName: item.legalName, email: item.email,
         facturado: summary.facturado, cobrado: summary.cobrado, saldo: summary.saldo, status: summary.status,
         lastInvoice: lastInvoice ? { id: lastInvoice.id, number: lastInvoice.number, issueDate: lastInvoice.issueDate } : null,
       }
     })
       .filter(c => onlyWithBalance !== 'true' || Number(c.saldo) !== 0)
       .sort((a, b) => {
+        if (sort !== 'balance') return a.name.localeCompare(b.name, 'es', { sensitivity: 'base' })
         if (a.status === 'overdue' && b.status !== 'overdue') return -1
         if (b.status === 'overdue' && a.status !== 'overdue') return 1
         return Number(b.saldo) - Number(a.saldo)
@@ -138,7 +144,7 @@ async function getCustomer(req, res, next) {
 
     res.json({
       id: item.id, name: item.name, category: item.category, project: item.project,
-      contactName: item.contactName, phone: item.phone, email: item.email, taxId: item.taxId, address: item.address,
+      legalName: item.legalName, contactName: item.contactName, phone: item.phone, email: item.email, taxId: item.taxId, address: item.address,
       contractedService: item.contractedService, notes: item.notes,
       ivaCondition: item.ivaCondition, defaultIssuer: item.defaultIssuer,
       invoices: summary.invoices, facturado: summary.facturado, cobrado: summary.cobrado, saldo: summary.saldo, status: summary.status,

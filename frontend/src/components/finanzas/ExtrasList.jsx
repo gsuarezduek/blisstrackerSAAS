@@ -5,6 +5,8 @@ import api from '../../api/client'
 import { fmtMoney } from '../../utils/format'
 import { extraStatusMeta, STATUS_BADGE } from './financeCatalog'
 import ExtraModal from './ExtraModal'
+import LoadMovementModal from './LoadMovementModal'
+import TeamPayoutModal from './TeamPayoutModal'
 
 const input = 'border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 dark:text-gray-100 rounded-lg px-2.5 py-1.5 text-sm'
 const EMPTY = { from: '', to: '', itemId: '', status: '', payments: '' }
@@ -15,10 +17,16 @@ function fmtDate(iso) {
 
 // "Extras" (sección 4.6): + Agregar extra + filtros + tabla (fecha, cliente,
 // acción, pagos "X de Y", total, empresa, equipo, estado, notas). Clic en fila → editar.
-export default function ExtrasList({ items, onChanged }) {
+// "Registrar cobro" de una cuota abre la carga de ingreso ya completa;
+// "Pagar al equipo" abre TeamPayoutModal. `request` ({ extraId, nonce }) lo
+// manda Pendientes al tocar la acción de una tarea de un extra: abre el cobro
+// de la próxima cuota, o el pago al equipo si el extra ya está cobrado.
+export default function ExtrasList({ items, accounts, categories, taxes, issuers, request, onChanged, onDataChange }) {
   const [filters, setFilters] = useState(EMPTY)
   const [extras, setExtras] = useState(null)
   const [modalExtra, setModalExtra] = useState(undefined) // undefined = cerrado, null = nuevo
+  const [collecting, setCollecting] = useState(null) // { extra, payment }
+  const [payingTeam, setPayingTeam] = useState(null) // extra
 
   const customers = items.filter(i => i.tracksAccount)
 
@@ -35,6 +43,21 @@ export default function ExtrasList({ items, onChanged }) {
 
   useEffect(() => { load() }, [load])
 
+  useEffect(() => {
+    if (!request) return
+    let cancelled = false
+    api.get('/finanzas/extras').then(res => {
+      if (cancelled) return
+      const ex = res.data.find(e => e.id === request.extraId)
+      if (!ex) return
+      const nextUnpaid = ex.payments.find(p => !p.movementId)
+      if (ex.status !== 'collected' && nextUnpaid) setCollecting({ extra: ex, payment: nextUnpaid })
+      else if (ex.status === 'collected' && Number(ex.teamAmount) > Number(ex.teamPaidAmount || 0)) setPayingTeam(ex)
+      else setModalExtra(ex)
+    })
+    return () => { cancelled = true }
+  }, [request])
+
   function set(patch) { setFilters(f => ({ ...f, ...patch })) }
   const isEmpty = Object.values(filters).every(v => !v)
 
@@ -42,6 +65,22 @@ export default function ExtrasList({ items, onChanged }) {
     setModalExtra(undefined)
     load()
     onChanged?.()
+  }
+
+  function startCollect(extra, payment) {
+    setModalExtra(undefined)
+    setCollecting({ extra, payment })
+  }
+  function startPayTeam(extra) {
+    setModalExtra(undefined)
+    setPayingTeam(extra)
+  }
+  function handleMoneySaved() {
+    setCollecting(null)
+    setPayingTeam(null)
+    load()
+    onChanged?.()
+    onDataChange?.()
   }
 
   return (
@@ -102,7 +141,10 @@ export default function ExtrasList({ items, onChanged }) {
                   <td className="py-2 pr-2 text-right text-gray-900 dark:text-white">{fmtMoney(ex.total, 'ARS')}</td>
                   <td className="py-2 pr-2 text-right text-gray-500 dark:text-gray-400">{fmtMoney(ex.companyAmount, 'ARS')}</td>
                   <td className="py-2 pr-2 text-right text-gray-500 dark:text-gray-400">{fmtMoney(ex.providerAmount, 'ARS')}</td>
-                  <td className="py-2 pr-2 text-right text-gray-500 dark:text-gray-400">{fmtMoney(ex.teamAmount, 'ARS')}</td>
+                  <td className="py-2 pr-2 text-right text-gray-500 dark:text-gray-400 whitespace-nowrap">
+                    {fmtMoney(ex.teamAmount, 'ARS')}
+                    {Number(ex.teamAmount) > 0 && ex.teamPaid && <span className="block text-[10px] text-green-600 dark:text-green-400">pagado</span>}
+                  </td>
                   <td className="py-2 pr-2"><span className={`text-[11px] rounded-full px-2 py-0.5 ${STATUS_BADGE[meta.color]}`}>{meta.label}</span></td>
                   <td className="py-2 pl-2 text-gray-400 truncate max-w-[8rem]">{ex.notes}</td>
                 </tr>
@@ -113,7 +155,28 @@ export default function ExtrasList({ items, onChanged }) {
         </table>
       </div>
 
-      {modalExtra !== undefined && <ExtraModal extra={modalExtra} items={items} onClose={() => setModalExtra(undefined)} onSaved={handleSaved} />}
+      {modalExtra !== undefined && (
+        <ExtraModal extra={modalExtra} items={items} categories={categories} issuers={issuers}
+          onClose={() => setModalExtra(undefined)} onSaved={handleSaved}
+          onCollect={startCollect} onPayTeam={startPayTeam} onDataChange={onDataChange} />
+      )}
+      {collecting && (
+        <LoadMovementModal
+          accounts={accounts} categories={categories} items={items} taxes={taxes}
+          title={`Registrar cobro · ${collecting.extra.action} (pago ${collecting.payment.number} de ${collecting.extra.payments.length})`}
+          prefill={{
+            item: items.find(i => i.id === collecting.extra.itemId) || collecting.extra.item,
+            amount: collecting.payment.amount,
+            extraPaymentId: collecting.payment.id,
+          }}
+          onClose={() => setCollecting(null)}
+          onSaved={handleMoneySaved}
+        />
+      )}
+      {payingTeam && (
+        <TeamPayoutModal extra={payingTeam} accounts={accounts} categories={categories}
+          onClose={() => setPayingTeam(null)} onSaved={handleMoneySaved} />
+      )}
     </div>
   )
 }

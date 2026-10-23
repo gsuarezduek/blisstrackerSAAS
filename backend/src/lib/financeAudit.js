@@ -23,7 +23,7 @@ function fmtAuditMoney(v) {
   if (v == null) return '—'
   const n = Number(v)
   if (Number.isNaN(n)) return String(v)
-  return `$ ${n.toLocaleString('es-AR', { maximumFractionDigits: 2 })}`
+  return `$ ${n.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 
 function fmtAuditPercent(v) {

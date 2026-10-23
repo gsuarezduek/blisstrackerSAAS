@@ -3,6 +3,7 @@ const { logFinanceAudit } = require('../../lib/financeAudit')
 const { toDecimal } = require('../../lib/financeMoney')
 const { isValidMovementType, isValidPaymentMethod, isValidAccountApplication } = require('../../lib/financeCatalog')
 const { resolveAndApplyTaxes, businessError, parseDate } = require('./_shared')
+const { recomputeTeamPaid } = require('../../lib/financeExtras')
 
 const MOVEMENT_INCLUDE = {
   item:      { select: { id: true, name: true, tracksAccount: true } },
@@ -81,8 +82,11 @@ async function resolveMovementFields(workspaceId, fields, { excludeMovementId } 
     }
 
     if (paymentMethod === 'check') {
-      if (!check?.number?.trim() || !check?.issuingBank?.trim() || !check?.estimatedCollectionDate) {
-        throw businessError(400, 'Faltan datos del cheque (número, banco emisor, fecha de cobro)')
+      // Banco emisor ya no se pide (queda legacy en los cheques viejos). La
+      // factura asociada de un cliente va por accountApplication='invoice';
+      // `check.invoiceNumber` (texto libre) es solo para items sin cuenta corriente.
+      if (!check?.number?.trim() || !check?.estimatedCollectionDate) {
+        throw businessError(400, 'Faltan datos del cheque (número y fecha de cobro)')
       }
     }
   } else if (paymentMethod || accountApplication) {
@@ -169,7 +173,8 @@ async function createMovement(req, res, next) {
         // cualquier taxIds que haya llegado igual se ignora a propósito.
         await tx.financeCheck.create({
           data: {
-            workspaceId, movementId: movement.id, number: check.number.trim(), issuingBank: check.issuingBank.trim(),
+            workspaceId, movementId: movement.id, number: check.number.trim(),
+            invoiceNumber: !item.tracksAccount ? (check.invoiceNumber?.trim() || null) : null,
             estimatedCollectionDate: parseDate(check.estimatedCollectionDate) || new Date(check.estimatedCollectionDate),
           },
         })
@@ -247,7 +252,7 @@ async function updateMovement(req, res, next) {
       paymentMethod: existing.paymentMethod,
       accountApplication: body.accountApplication !== undefined ? body.accountApplication : existing.accountApplication,
       invoiceId: body.invoiceId !== undefined ? body.invoiceId : existing.invoiceId,
-      check: existing.check ? { number: existing.check.number, issuingBank: existing.check.issuingBank, estimatedCollectionDate: existing.check.estimatedCollectionDate } : undefined,
+      check: existing.check ? { number: existing.check.number, estimatedCollectionDate: existing.check.estimatedCollectionDate } : undefined,
     }
 
     const resolved = await resolveMovementFields(workspaceId, merged, { excludeMovementId: id })
@@ -270,6 +275,16 @@ async function updateMovement(req, res, next) {
           accountApplication: resolvedAccountApplication, invoiceId: resolvedInvoiceId,
         },
       })
+
+      if (hasCheck && body.checkInvoiceNumber !== undefined) {
+        await tx.financeCheck.update({
+          where: { id: existing.check.id },
+          data: { invoiceNumber: !item.tracksAccount ? (body.checkInvoiceNumber?.trim() || null) : null },
+        })
+      }
+
+      // Si es el egreso de un pago al equipo de un Extra, el monto puede haber cambiado.
+      await recomputeTeamPaid(tx, { movementId: id })
 
       if (!hasCheck) {
         await clearGeneratedTaxes(tx, id)
@@ -320,6 +335,14 @@ async function deleteMovement(req, res, next) {
       await tx.financeMovement.update({ where: { id }, data: { deletedAt: now, deletedById: req.user.userId } })
       await tx.financeMovement.updateMany({ where: { sourceMovementId: id, deletedAt: null }, data: { deletedAt: now, deletedById: req.user.userId } })
       if (existing.check) await tx.financeCheck.update({ where: { id: existing.check.id }, data: { deletedAt: now, deletedById: req.user.userId } })
+      // Si era el cobro de una cuota de un Extra, la cuota vuelve a quedar
+      // pendiente (y un extra "cobrado" vuelve a "terminado").
+      const linkedPayments = await tx.financeExtraPayment.findMany({ where: { movementId: id }, select: { id: true, extraId: true } })
+      if (linkedPayments.length) {
+        await tx.financeExtraPayment.updateMany({ where: { movementId: id }, data: { movementId: null } })
+        await tx.financeExtra.updateMany({ where: { id: { in: linkedPayments.map(p => p.extraId) }, status: 'collected' }, data: { status: 'finished' } })
+      }
+      await recomputeTeamPaid(tx, { movementId: id })
     })
 
     await logFinanceAudit({
@@ -360,6 +383,7 @@ async function restoreMovement(req, res, next) {
       await tx.financeMovement.update({ where: { id }, data: { deletedAt: null, deletedById: null } })
       await tx.financeMovement.updateMany({ where: { sourceMovementId: id }, data: { deletedAt: null, deletedById: null } })
       if (existing.check) await tx.financeCheck.update({ where: { id: existing.check.id }, data: { deletedAt: null, deletedById: null } })
+      await recomputeTeamPaid(tx, { movementId: id })
     })
 
     await logFinanceAudit({

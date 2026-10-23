@@ -3,10 +3,30 @@ const { logFinanceAudit } = require('../../lib/financeAudit')
 const { toDecimal, roundForCurrency } = require('../../lib/financeMoney')
 const { parseDate, businessError } = require('./_shared')
 const { isValidExtraStatus } = require('../../lib/financeCatalog')
+const { teamPaidAmount, recomputeTeamPaid } = require('../../lib/financeExtras')
 
 const EXTRA_INCLUDE = {
-  item: { select: { id: true, name: true } },
+  item: { select: { id: true, name: true, categoryId: true, tracksAccount: true } },
   payments: { orderBy: { number: 'asc' }, include: { movement: { select: { id: true, date: true, amount: true } } } },
+  teamPayouts: {
+    orderBy: { createdAt: 'asc' },
+    include: {
+      user: { select: { id: true, name: true, avatar: true } },
+      movement: { select: { id: true, date: true, amount: true, deletedAt: true, account: { select: { id: true, name: true, currency: true } } } },
+    },
+  },
+}
+
+// Shape de respuesta: los pagos al equipo cuyo egreso se borró no se muestran
+// (el egreso se puede restaurar desde Egresos y el pago vuelve a aparecer).
+function shapeExtra(e) {
+  return {
+    ...e,
+    teamPayouts: e.teamPayouts.filter(p => p.movement && !p.movement.deletedAt),
+    teamPaidAmount: teamPaidAmount(e.teamPayouts).toString(),
+    paidCount: e.payments.filter(p => p.movementId).length,
+    totalPayments: e.payments.length,
+  }
 }
 
 /**
@@ -46,11 +66,7 @@ async function listExtras(req, res, next) {
     if (payments === 'pending') extras = extras.filter(e => e.payments.some(p => !p.movementId))
     if (payments === 'complete') extras = extras.filter(e => e.payments.every(p => p.movementId))
 
-    res.json(extras.map(e => ({
-      ...e,
-      paidCount: e.payments.filter(p => p.movementId).length,
-      totalPayments: e.payments.length,
-    })))
+    res.json(extras.map(shapeExtra))
   } catch (err) { next(err) }
 }
 
@@ -101,7 +117,7 @@ async function createExtra(req, res, next) {
 
     await logFinanceAudit({ workspaceId, entityType: 'extra', entityId: extra.id, action: 'create', userId: req.user.userId, entityLabel: `extra "${extra.action}" de ${item.name}` })
     const full = await prisma.financeExtra.findUnique({ where: { id: extra.id }, include: EXTRA_INCLUDE })
-    res.status(201).json(full)
+    res.status(201).json(shapeExtra(full))
   } catch (err) { next(err) }
 }
 
@@ -188,11 +204,15 @@ async function updateExtra(req, res, next) {
           })
         }
       }
+
+      // Con pagos al equipo registrados, "equipo pagado" sale de lo pagado vs
+      // la parte del equipo (que puede haber cambiado recién).
+      if (amountsChanged) await recomputeTeamPaid(tx, { extraId: id })
     })
 
     await logFinanceAudit({ workspaceId, entityType: 'extra', entityId: id, action: 'update', userId: req.user.userId, entityLabel: `extra "${existing.action}" de ${existing.item.name}` })
     const full = await prisma.financeExtra.findUnique({ where: { id }, include: EXTRA_INCLUDE })
-    res.json(full)
+    res.json(shapeExtra(full))
   } catch (err) { next(err) }
 }
 
@@ -209,4 +229,117 @@ async function deleteExtra(req, res, next) {
   } catch (err) { next(err) }
 }
 
-module.exports = { listExtras, createExtra, updateExtra, deleteExtra, EXTRA_INCLUDE }
+// POST /api/finanzas/extras/:id/team-payouts — "Pagar al equipo":
+// { accountId, categoryId, date, payouts: [{ userId, amount }] }. Cada persona
+// genera un EGRESO real desde `accountId` (item = el cliente del extra, así en
+// Egresos se ve a qué cliente corresponde) + la fila FinanceExtraTeamPayout que
+// lo vincula. Lo pagado (sumando lo anterior) no puede superar la parte del equipo.
+async function payTeam(req, res, next) {
+  try {
+    const workspaceId = req.workspace.id
+    const id = Number(req.params.id)
+    const extra = await prisma.financeExtra.findFirst({ where: { id, workspaceId, deletedAt: null }, include: EXTRA_INCLUDE })
+    if (!extra) return res.status(404).json({ error: 'Extra no encontrado' })
+
+    const { accountId, categoryId, date, payouts } = req.body
+    if (!Number.isInteger(accountId)) return res.status(400).json({ error: 'Elegí de qué cuenta sale la plata' })
+    if (!Number.isInteger(categoryId)) return res.status(400).json({ error: 'Elegí una categoría de egreso' })
+    const parsedDate = parseDate(date)
+    if (!parsedDate) return res.status(400).json({ error: 'Fecha inválida' })
+    if (!Array.isArray(payouts) || payouts.length === 0) return res.status(400).json({ error: 'Agregá al menos una persona' })
+
+    const [account, category] = await Promise.all([
+      prisma.financeAccount.findFirst({ where: { id: accountId, workspaceId, active: true } }),
+      prisma.financeCategory.findFirst({ where: { id: categoryId, workspaceId } }),
+    ])
+    if (!account) return res.status(400).json({ error: 'Cuenta no encontrada' })
+    if (!category || category.type !== 'expense') return res.status(400).json({ error: 'La categoría tiene que ser de egresos' })
+
+    const rows = []
+    for (const p of payouts) {
+      if (!Number.isInteger(p?.userId)) return res.status(400).json({ error: 'Falta elegir la persona en algún pago' })
+      let amount
+      try { amount = toDecimal(p.amount) } catch { return res.status(400).json({ error: 'Monto inválido' }) }
+      if (!amount.isFinite() || amount.lessThanOrEqualTo(0)) return res.status(400).json({ error: 'Cada pago tiene que tener un monto mayor a 0' })
+      rows.push({ userId: p.userId, amount })
+    }
+    const userIds = [...new Set(rows.map(r => r.userId))]
+    const members = await prisma.workspaceMember.findMany({
+      where: { workspaceId, userId: { in: userIds }, active: true },
+      include: { user: { select: { id: true, name: true } } },
+    })
+    if (members.length !== userIds.length) return res.status(400).json({ error: 'Alguna de las personas no es miembro activo del workspace' })
+    const nameById = new Map(members.map(m => [m.userId, m.user.name]))
+
+    const newTotal = rows.reduce((s, r) => s.plus(r.amount), toDecimal(0))
+    const alreadyPaid = teamPaidAmount(extra.teamPayouts)
+    const teamAmount = toDecimal(extra.teamAmount)
+    if (alreadyPaid.plus(newTotal).greaterThan(teamAmount)) {
+      const left = teamAmount.minus(alreadyPaid)
+      return res.status(400).json({ error: `Supera lo que le corresponde al equipo — queda por pagar $ ${left.toFixed(2)}` })
+    }
+
+    const createdIds = await prisma.$transaction(async (tx) => {
+      const ids = []
+      for (const r of rows) {
+        const movement = await tx.financeMovement.create({
+          data: {
+            workspaceId, type: 'expense', date: parsedDate, itemId: extra.itemId, categoryId, accountId,
+            amount: r.amount.toString(), note: `Pago al equipo — ${nameById.get(r.userId)}: ${extra.action}`,
+            createdById: req.user.userId,
+          },
+        })
+        await tx.financeExtraTeamPayout.create({ data: { workspaceId, extraId: id, userId: r.userId, movementId: movement.id } })
+        ids.push(movement.id)
+      }
+      await recomputeTeamPaid(tx, { extraId: id })
+      return ids
+    })
+
+    for (const [i, movementId] of createdIds.entries()) {
+      await logFinanceAudit({
+        workspaceId, entityType: 'movement', entityId: movementId, action: 'create', userId: req.user.userId,
+        entityLabel: `egreso de ${extra.item.name} (pago al equipo — ${nameById.get(rows[i].userId)})`,
+      })
+    }
+    await logFinanceAudit({
+      workspaceId, entityType: 'extra', entityId: id, action: 'update', userId: req.user.userId,
+      summary: `Pagó al equipo ${rows.map(r => `${nameById.get(r.userId)} ($ ${r.amount.toFixed(2)})`).join(', ')} desde "${account.name}"`,
+    })
+
+    const full = await prisma.financeExtra.findUnique({ where: { id }, include: EXTRA_INCLUDE })
+    res.status(201).json(shapeExtra(full))
+  } catch (err) { next(err) }
+}
+
+// DELETE /api/finanzas/extras/:id/team-payouts/:payoutId — deshace un pago al
+// equipo: soft-delete de su egreso (+ impuestos hijos), igual que borrarlo desde
+// Egresos. Se puede restaurar desde ahí y el pago vuelve a contar.
+async function deleteTeamPayout(req, res, next) {
+  try {
+    const workspaceId = req.workspace.id
+    const id = Number(req.params.id)
+    const payoutId = Number(req.params.payoutId)
+    const payout = await prisma.financeExtraTeamPayout.findFirst({
+      where: { id: payoutId, extraId: id, workspaceId },
+      include: { user: { select: { name: true } }, extra: { include: { item: { select: { name: true } } } } },
+    })
+    if (!payout) return res.status(404).json({ error: 'Pago no encontrado' })
+
+    const now = new Date()
+    await prisma.$transaction(async (tx) => {
+      await tx.financeMovement.update({ where: { id: payout.movementId }, data: { deletedAt: now, deletedById: req.user.userId } })
+      await tx.financeMovement.updateMany({ where: { sourceMovementId: payout.movementId, deletedAt: null }, data: { deletedAt: now, deletedById: req.user.userId } })
+      await recomputeTeamPaid(tx, { extraId: id })
+    })
+
+    await logFinanceAudit({
+      workspaceId, entityType: 'movement', entityId: payout.movementId, action: 'delete', userId: req.user.userId,
+      entityLabel: `egreso de ${payout.extra.item.name} (pago al equipo — ${payout.user?.name || '—'})`,
+    })
+    const full = await prisma.financeExtra.findUnique({ where: { id }, include: EXTRA_INCLUDE })
+    res.json(shapeExtra(full))
+  } catch (err) { next(err) }
+}
+
+module.exports = { listExtras, createExtra, updateExtra, deleteExtra, payTeam, deleteTeamPayout, EXTRA_INCLUDE }
