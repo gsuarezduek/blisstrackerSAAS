@@ -47,6 +47,7 @@ async function buildAdsSections({ wants, warn, integrations, dateRange, workspac
     ctr:         metaAdsRaw.ctr,
     reach:       metaAdsRaw.reach,
     cpm:         metaAdsRaw.cpm,
+    websitePurchases: metaAdsRaw.websitePurchases ?? null,
     campaigns:   (metaAdsRaw.campaigns ?? []).slice(0, 5),
     // Miniaturas del creativo cacheadas (las URLs de Meta vencen)
     topAds:      await cacheImagesInArray((metaAdsRaw.topAds ?? []).slice(0, 5), 'thumbnailUrl', workspaceId),

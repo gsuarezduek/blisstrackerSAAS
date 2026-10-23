@@ -13,6 +13,7 @@ export const CATEGORIES = [
 // unit:  '' | '%' | '$' | 'pos'
 // hasTarget: si pide un número objetivo
 // rrssPlatform: si acepta una red opcional (Instagram / TikTok / LinkedIn / todas)
+// platforms: (ads) plataformas en las que existe la métrica; sin él, todas
 export const METRICS = {
   visitas:         { category: 'web',  label: 'Visitas al sitio',      unit: '',    param: null,               hasTarget: true,  help: 'Sesiones del período (Google Analytics).' },
   leads:           { category: 'web',  label: 'Leads (eventos clave)', unit: '',    param: null,               hasTarget: true,  help: 'Conversiones / eventos clave de Google Analytics.' },
@@ -34,6 +35,7 @@ export const METRICS = {
   inversion:       { category: 'ads',  label: 'Monto a invertir',      unit: '$',   param: 'platform',         hasTarget: true,  help: 'Presupuesto a invertir; el informe compara contra el gasto real.' },
   clicks:          { category: 'ads',  label: 'Clicks',                unit: '',    param: 'platform',         hasTarget: true,  help: 'Clicks objetivo de la plataforma.' },
   ctr:             { category: 'ads',  label: 'CTR',                   unit: '%',   param: 'platform',         hasTarget: true,  help: 'CTR objetivo (%) de la plataforma.' },
+  ventas_web:      { category: 'ads',  label: 'Ventas en el sitio web', unit: '',   param: 'platform',         hasTarget: true,  platforms: ['meta_ads'], help: 'Compras en el sitio web atribuidas a los anuncios (columna "Resultados" del administrador de anuncios). Requiere el píxel de Meta con el evento de compra.' },
 }
 
 export const PERIODICITIES = [
@@ -46,6 +48,12 @@ export const AD_PLATFORMS = [
   { key: 'meta_ads',   label: 'Meta Ads' },
   { key: 'google_ads', label: 'Google Ads' },
 ]
+
+// Plataformas de anuncios en las que existe una métrica.
+export function adPlatformsFor(metric) {
+  const only = METRICS[metric]?.platforms
+  return only ? AD_PLATFORMS.filter(p => only.includes(p.key)) : AD_PLATFORMS
+}
 
 export const RRSS_PLATFORMS = [
   { key: 'instagram', label: 'Instagram' },

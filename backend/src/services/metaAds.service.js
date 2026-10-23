@@ -90,6 +90,62 @@ function extractConversions(actions) {
   return { conversions: Math.round(conversions), breakdown }
 }
 
+// "Compras en el sitio web" del administrador de anuncios = el evento Purchase del píxel.
+// Se lee solo este action_type (no `purchase`/`omni_purchase`, que repiten la misma compra
+// sumando otros canales) para que el número coincida con la columna "Resultados".
+const WEBSITE_PURCHASE = 'offsite_conversion.fb_pixel_purchase'
+// Objetivos de campaña de ventas: con alguno de estos activo, 0 compras es un dato (no "no aplica").
+const SALES_OBJECTIVES = new Set(['OUTCOME_SALES', 'CONVERSIONS', 'PRODUCT_CATALOG_SALES'])
+
+const actionValue = (list, type) => {
+  const hit = Array.isArray(list) ? list.find(a => a.action_type === type) : null
+  return hit ? parseFloat(hit.value ?? 0) : null
+}
+
+/**
+ * Píxeles de Meta asociados a la cuenta publicitaria. Best-effort: null si la consulta
+ * falla (permisos), para que quien llama decida con otra señal.
+ */
+async function fetchAdAccountPixels(adAccountId, accessToken) {
+  try {
+    const { data } = await axios.get(`${FB_GRAPH}/${adAccountId}/adspixels`, {
+      params: { fields: 'id,name,last_fired_time,is_unavailable', limit: 25, access_token: accessToken },
+    })
+    return (data.data ?? []).filter(p => !p.is_unavailable)
+  } catch (err) {
+    console.warn('[MetaAds] No se pudieron leer los píxeles de la cuenta:', err.response?.data?.error?.message || err.message)
+    return null
+  }
+}
+
+/**
+ * Ventas en el sitio web (evento Purchase del píxel). Devuelve null cuando no aplica: sin
+ * píxel en la cuenta, o con píxel pero sin compras ni campañas de ventas en el período
+ * (el cliente mide otra cosa, ej. leads). Si no se pudieron leer los píxeles, la señal es
+ * que haya eventos del píxel en las acciones del período.
+ */
+function buildWebsitePurchases({ pixels, summary, campaigns, spend }) {
+  const actions   = summary.actions
+  const purchases = actionValue(actions, WEBSITE_PURCHASE)
+  const hasPixel  = pixels
+    ? pixels.length > 0
+    : Array.isArray(actions) && actions.some(a => a.action_type?.startsWith('offsite_conversion.fb_pixel_'))
+  if (!hasPixel) return null
+
+  const hasSalesCampaign = campaigns.some(c => SALES_OBJECTIVES.has(c.objective))
+  if (!purchases && !hasSalesCampaign) return null
+
+  const count = Math.round(purchases ?? 0)
+  const value = actionValue(summary.action_values, WEBSITE_PURCHASE)
+  return {
+    purchases:       count,
+    value:           value != null ? parseFloat(value.toFixed(2)) : null,
+    costPerPurchase: count > 0 ? parseFloat((spend / count).toFixed(2)) : null,
+    roas:            value != null && spend > 0 ? parseFloat((value / spend).toFixed(2)) : null,
+    pixel:           pixels?.[0] ? { id: pixels[0].id, name: pixels[0].name, lastFiredTime: pixels[0].last_fired_time ?? null } : null,
+  }
+}
+
 // Tope de anuncios por consulta en modo "todos" (para no paginar sin fin en cuentas
 // enormes). Se piden ordenados por gasto desc, así lo que queda afuera es lo que menos invirtió.
 const MAX_ADS = 500
@@ -163,11 +219,13 @@ async function fetchMetaAdsData(adAccountId, accessToken, datePreset = 'this_mon
     ? `insights.time_range(${JSON.stringify({ since: dateRange.startDate, until: dateRange.endDate })}){spend,reach,impressions,clicks,ctr,actions}`
     : `insights.date_preset(${datePreset}){spend,reach,impressions,clicks,ctr,actions}`
 
-  const [summaryRes, campaignsRes, adsRes] = await Promise.all([
-    // Métricas globales de la cuenta
+  const [summaryRes, campaignsRes, adsRes, pixels] = await Promise.all([
+    // Métricas globales de la cuenta. `use_unified_attribution_setting` aplica la ventana de
+    // atribución de cada conjunto de anuncios, igual que el administrador de anuncios.
     axios.get(`${FB_GRAPH}/${adAccountId}/insights`, {
       params: {
-        fields:       'spend,reach,impressions,clicks,ctr,cpm,cpc,actions',
+        fields:       'spend,reach,impressions,clicks,ctr,cpm,cpc,actions,action_values',
+        use_unified_attribution_setting: true,
         ...dateParam,
         access_token: accessToken,
       },
@@ -186,6 +244,7 @@ async function fetchMetaAdsData(adAccountId, accessToken, datePreset = 'this_mon
       console.warn('[MetaAds] Insights por anuncio fallaron (se omiten anuncios):', err.response?.data?.error?.message || err.message)
       return null
     }),
+    fetchAdAccountPixels(adAccountId, accessToken),
   ])
 
   const summary = summaryRes.data.data?.[0] ?? {}
@@ -244,6 +303,10 @@ async function fetchMetaAdsData(adAccountId, accessToken, datePreset = 'this_mon
     .sort((a, b) => b.reach - a.reach)
   const topAds = ads.slice(0, 10)
 
+  const websitePurchases = buildWebsitePurchases({
+    pixels, summary, campaigns, spend: parseFloat(summary.spend ?? 0),
+  })
+
   return {
     spend:             parseFloat(summary.spend       ?? 0),
     reach:             parseInt(  summary.reach       ?? 0, 10),
@@ -255,6 +318,8 @@ async function fetchMetaAdsData(adAccountId, accessToken, datePreset = 'this_mon
     conversions:       summaryConv.conversions,
     costPerConversion: summaryConv.conversions > 0 ? parseFloat((parseFloat(summary.spend ?? 0) / summaryConv.conversions).toFixed(2)) : null,
     resultsBreakdown:  summaryConv.breakdown,
+    // null = no aplica (sin píxel o sin ventas que medir); ver buildWebsitePurchases
+    websitePurchases,
     campaigns,
     ads,
     topAds,
@@ -262,4 +327,4 @@ async function fetchMetaAdsData(adAccountId, accessToken, datePreset = 'this_mon
   }
 }
 
-module.exports = { getValidFbToken, fetchMetaAdsData, extractConversions }
+module.exports = { getValidFbToken, fetchMetaAdsData, extractConversions, buildWebsitePurchases }

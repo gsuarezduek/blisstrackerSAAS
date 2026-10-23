@@ -5,8 +5,8 @@ import api from '../../api/client'
 import EmptyState from '../EmptyState'
 import HowToButton from '../HowToButton'
 import {
-  CATEGORIES, METRICS, PERIODICITIES, AD_PLATFORMS, RRSS_PLATFORMS, PLATFORM_LABEL,
-  metricsForCategory, fmtObjectiveValue, PERIODICITY_LABEL, CATEGORY_LABEL,
+  CATEGORIES, METRICS, PERIODICITIES, RRSS_PLATFORMS, PLATFORM_LABEL,
+  metricsForCategory, fmtObjectiveValue, PERIODICITY_LABEL, CATEGORY_LABEL, adPlatformsFor,
 } from './objectiveCatalog'
 
 const EMPTY_DRAFT = {
@@ -17,7 +17,10 @@ const EMPTY_DRAFT = {
 // Plataforma por defecto al elegir una métrica: ads requiere una; rrss arranca en "todas" ('').
 function defaultPlatformFor(metric, current) {
   const def = METRICS[metric]
-  if (def?.param === 'platform') return AD_PLATFORMS.some(p => p.key === current) ? current : 'meta_ads'
+  if (def?.param === 'platform') {
+    const options = adPlatformsFor(metric)
+    return options.some(p => p.key === current) ? current : options[0].key
+  }
   if (def?.rrssPlatform)         return RRSS_PLATFORMS.some(p => p.key === current) ? current : ''
   return current
 }
@@ -136,7 +139,7 @@ function ObjectiveForm({ projectId, initial, keywords, competitors, igConnection
         <div>
           <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Plataforma</label>
           <select value={draft.platform} onChange={e => set({ platform: e.target.value })} className={inputCls}>
-            {AD_PLATFORMS.map(p => <option key={p.key} value={p.key}>{p.label}</option>)}
+            {adPlatformsFor(draft.metric).map(p => <option key={p.key} value={p.key}>{p.label}</option>)}
           </select>
         </div>
       )}

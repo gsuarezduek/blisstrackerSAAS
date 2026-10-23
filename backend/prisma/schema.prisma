@@ -2255,6 +2255,11 @@ model AdsSnapshot {
   conversions Float? // conversiones totales
   avgCpc      Float? // CPC promedio
 
+  // Meta Ads: compras en el sitio web (evento Purchase del píxel). null = no aplica
+  // (sin píxel o sin ventas que medir), distinto de 0 compras.
+  websitePurchases     Int?
+  websitePurchaseValue Float?
+
   // Top campañas (JSON): [{ id, name, spend, impressions, clicks, ctr }]
   topCampaigns String @default("[]")
 

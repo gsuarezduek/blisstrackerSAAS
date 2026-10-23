@@ -743,7 +743,9 @@ export function ObjectiveCard({ obj }) {
         <p className="text-xs text-gray-400 mt-2">
           {obj.status === 'orphaned'     && 'La keyword o competidor asociado fue eliminado. Editá el objetivo.'}
           {obj.status === 'disconnected' && 'Sin datos ni conexión activa para este período.'}
-          {obj.status === 'no_data'      && 'Todavía no hay datos para comparar en este período.'}
+          {obj.status === 'no_data'      && (obj.detail?.noPixel
+            ? 'Sin ventas medidas: requiere el píxel de Meta con el evento de compra.'
+            : 'Todavía no hay datos para comparar en este período.')}
         </p>
       )}
 

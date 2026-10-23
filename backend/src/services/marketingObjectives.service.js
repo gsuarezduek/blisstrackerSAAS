@@ -371,7 +371,7 @@ async function computeCompetitor(obj, base, ctx) {
   return base
 }
 
-// Inversión / clicks / CTR de Ads (snapshots del período + live para el mes en curso).
+// Inversión / clicks / CTR / ventas web de Ads (snapshots del período + live para el mes en curso).
 async function computeAds(obj, base, def, ctx, months) {
   const { projectId, workspaceId, dataMonth, googleAds, metaAds } = ctx
   const platform = obj.platform
@@ -380,7 +380,7 @@ async function computeAds(obj, base, def, ctx, months) {
 
   const snaps = await prisma.adsSnapshot.findMany({
     where:  { projectId, workspaceId, type: platform, month: { in: months } },
-    select: { month: true, spend: true, clicks: true, ctr: true, impressions: true },
+    select: { month: true, spend: true, clicks: true, ctr: true, impressions: true, websitePurchases: true },
   })
   const byMonth = new Map(snaps.map(s => [s.month, s]))
   const live = platform === 'google_ads' ? googleAds : metaAds
@@ -394,6 +394,7 @@ async function computeAds(obj, base, def, ctx, months) {
         clicks:      live.clicks ?? null,
         ctr:         live.ctr ?? null,
         impressions: live.impressions ?? null,
+        websitePurchases: live.websitePurchases?.purchases ?? null,
       }
     }
     return null
@@ -410,7 +411,16 @@ async function computeAds(obj, base, def, ctx, months) {
   base.detail.monthsExpected = months.length
 
   let actual
-  if (obj.metric === 'inversion') {
+  if (obj.metric === 'ventas_web') {
+    // Solo cuentan los meses con el píxel midiendo compras (null = no aplica, no 0).
+    const measured = rows.filter(r => r.websitePurchases != null)
+    if (measured.length === 0) {
+      base.detail.noPixel = true
+      return base
+    }
+    base.detail.monthsWithData = measured.length
+    actual = measured.reduce((s, r) => s + r.websitePurchases, 0)
+  } else if (obj.metric === 'inversion') {
     actual = parseFloat(rows.reduce((s, r) => s + (r.spend ?? 0), 0).toFixed(2))
   } else if (obj.metric === 'clicks') {
     actual = rows.reduce((s, r) => s + (r.clicks ?? 0), 0)

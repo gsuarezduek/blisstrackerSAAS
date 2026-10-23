@@ -212,6 +212,30 @@ function MetaAds({ ads }) {
 
 // ── Componente principal ──────────────────────────────────────────────────────
 
+// Compras en el sitio web (evento Purchase del píxel): lo mismo que la columna "Resultados"
+// del administrador de anuncios en las campañas de ventas.
+function WebsitePurchases({ wp }) {
+  return (
+    <div className="space-y-2">
+      <div className="flex items-baseline gap-2 flex-wrap">
+        <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200">Ventas en el sitio web</h3>
+        <span className="text-xs text-gray-400 dark:text-gray-500">
+          {wp.pixel?.name ? `Píxel ${wp.pixel.name}` : 'Píxel de Meta'} · evento de compra
+        </span>
+      </div>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <KpiCard label="Compras" value={fmtK(wp.purchases)} sub="atribuidas a los anuncios" />
+        <KpiCard label="Costo por compra" value={wp.costPerPurchase != null ? fmtUSD(wp.costPerPurchase) : '—'} sub="gasto / compras" />
+        {wp.value != null && <KpiCard label="Valor de las compras" value={fmtUSD(wp.value)} sub="según el píxel" />}
+        {wp.roas != null && (
+          <KpiCard label="ROAS" value={`${wp.roas.toLocaleString('es-AR')}x`} sub="valor / gasto"
+            valueClass={wp.roas >= 1 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'} />
+        )}
+      </div>
+    </div>
+  )
+}
+
 export default function MetaAdsTab({ projectId, onSelectProject, projects = [] }) {
   const objectives = useObjectiveProgress(projectId).filter(o => o.category === 'ads' && o.detail?.platform === 'meta_ads')
   const [integration,    setIntegration]   = useState(null)
@@ -408,6 +432,9 @@ export default function MetaAdsTab({ projectId, onSelectProject, projects = [] }
           />
         </div>
       )}
+
+      {/* Ventas en el sitio web: solo con el píxel midiendo compras (null = no aplica) */}
+      {data?.websitePurchases && <WebsitePurchases wp={data.websitePurchases} />}
 
       {/* Objetivos de Meta Ads del proyecto */}
       <ObjectiveProgressBars objectives={objectives} title="Objetivos de Meta Ads" />

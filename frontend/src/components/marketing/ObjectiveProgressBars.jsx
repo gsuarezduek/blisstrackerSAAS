@@ -24,6 +24,7 @@ const STATUS_TEXT = {
 function rightLabel(o) {
   if (o.status === 'disconnected') return 'Sin conexión'
   if (o.status === 'orphaned')     return 'Sin referencia'
+  if (o.detail?.noPixel)           return 'Sin píxel'
   if (o.pct != null)               return `${o.pct}%`
   if (o.direction === 'info' || o.status === 'info') return o.actual == null ? 'Sin datos' : 'Informativo'
   return 'Sin datos'

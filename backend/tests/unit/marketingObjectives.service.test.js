@@ -162,6 +162,32 @@ it('ads sin snapshot ni live → disconnected', async () => {
   expect(r.status).toBe('disconnected')
 })
 
+it('ventas_web suma solo los meses con el píxel midiendo compras', async () => {
+  prisma.marketingObjective.findMany.mockResolvedValue([
+    { id: 8, projectId: 1, workspaceId: 1, category: 'ads', metric: 'ventas_web', periodicity: 'quarterly', target: 100, platform: 'meta_ads' },
+  ])
+  prisma.adsSnapshot.findMany.mockResolvedValue([
+    { month: '2026-04', spend: 300, websitePurchases: null },
+    { month: '2026-05', spend: 400, websitePurchases: 30 },
+  ])
+  const [r] = await computeObjectives({ ...CTX, metaAds: { spend: 50, websitePurchases: { purchases: 99 } } })
+  // Mayo viene del snapshot (no del live) y abril no cuenta (sin píxel)
+  expect(r.actual).toBe(30)
+  expect(r.pct).toBe(30)
+  expect(r.detail.monthsWithData).toBe(1)
+})
+
+it('ventas_web sin píxel → no_data con noPixel', async () => {
+  prisma.marketingObjective.findMany.mockResolvedValue([
+    { id: 9, projectId: 1, workspaceId: 1, category: 'ads', metric: 'ventas_web', periodicity: 'monthly', target: 10, platform: 'meta_ads' },
+  ])
+  prisma.adsSnapshot.findMany.mockResolvedValue([{ month: '2026-05', spend: 400, websitePurchases: null }])
+  const [r] = await computeObjectives(CTX)
+  expect(r.status).toBe('no_data')
+  expect(r.detail.noPixel).toBe(true)
+  expect(r.actual).toBeNull()
+})
+
 it('competidores arma head-to-head aunque vayamos perdiendo', async () => {
   prisma.marketingObjective.findMany.mockResolvedValue([
     { id: 8, projectId: 1, workspaceId: 1, category: 'rrss', metric: 'competidores', periodicity: 'monthly', target: 0, competitorId: 99, competitor: { id: 99, username: 'rival', displayName: 'Rival SA' } },

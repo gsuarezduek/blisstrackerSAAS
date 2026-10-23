@@ -9,6 +9,7 @@
 //   - aggregation : "flow" (acumula meses del período) | "stock" (último valor del período)
 //   - param       : param obligatorio extra ("trackedKeywordId" | "competitorId" | "platform" | null)
 //   - rrssPlatform: si acepta una red opcional (instagram | tiktok | linkedin); null = todas las redes
+//   - platforms   : (ads) plataformas en las que existe la métrica; sin él, todas las de AD_PLATFORMS
 
 const METRICS = {
   // WEB
@@ -35,6 +36,7 @@ const METRICS = {
   inversion:      { category: 'ads',  label: 'Monto a invertir',     unit: '$',   direction: 'info',   aggregation: 'flow',  param: 'platform' },
   clicks:         { category: 'ads',  label: 'Clicks',               unit: '',    direction: 'higher', aggregation: 'flow',  param: 'platform' },
   ctr:            { category: 'ads',  label: 'CTR',                  unit: '%',    direction: 'higher', aggregation: 'stock', param: 'platform' },
+  ventas_web:     { category: 'ads',  label: 'Ventas en el sitio web', unit: '',  direction: 'higher', aggregation: 'flow',  param: 'platform', platforms: ['meta_ads'] },
 }
 
 const CATEGORIES = ['web', 'seo', 'rrss', 'ads']

@@ -60,6 +60,7 @@ async function validatePayload(body, projectId, workspaceId) {
   // Params requeridos según métrica
   if (def.param === 'platform') {
     if (!AD_PLATFORMS.includes(body.platform)) return { error: 'Plataforma inválida (meta_ads | google_ads)' }
+    if (def.platforms && !def.platforms.includes(body.platform)) return { error: `${def.label} solo está disponible en Meta Ads` }
     data.platform = body.platform
   }
   // RRSS: plataforma opcional (instagram | tiktok | linkedin). Vacío = todas las redes.
