@@ -311,7 +311,7 @@ Analizás el contenido de una página web y devolvés un análisis estructurado 
 
 IMPORTANTE: Responde ÚNICAMENTE con JSON válido, sin texto adicional, sin markdown, sin bloques de código. Solo el objeto JSON. El JSON debe ser estrictamente válido: sin comas colgantes antes de "}" o "]", con las comillas internas de los strings escapadas (\\"), y sin saltos de línea literales dentro de un string (usá \\n si hace falta).`
 
-function buildPrompt(url, pageData, robotsData, llmsData, aiDiscovery, previousRunContext = '') {
+function buildPrompt(url, pageData, robotsData, llmsData, aiDiscovery, previousRunContext = '', project = null) {
   const blockedCitation = robotsData.citation.filter(c => c.blocked)
   const blockedTraining = robotsData.training.filter(c => c.blocked)
   const allowedCitation = robotsData.citation.filter(c => !c.blocked)
@@ -377,6 +377,11 @@ URL: ${url}
 ${pageData.isNoindex ? '⛔ NOINDEX DETECTADO: la página tiene meta robots noindex — ningún motor de búsqueda ni IA puede indexarla ni citarla. Este es el hallazgo más crítico posible.' : ''}
 ${pageData.likelySPA ? '⚠ POSIBLE SPA/CSR: el HTML inicial tiene muy poco contenido (<150 palabras, sin H1, sin schemas). El sitio podría renderizarse con JavaScript en el cliente, lo que impide que los crawlers de IA lean el contenido real.' : ''}
 ${pageData.hasDynamicReviewWidget ? `⚠ WIDGETS DINÁMICOS DE RESEÑAS DETECTADOS: ${pageData.dynamicWidgets.join(', ')}. Estas reseñas son invisibles para crawlers de IA (y para este análisis estático). Aunque el sitio SÍ tiene reseñas, no son rastreables. La recomendación correcta es complementar con Schema.org Review/AggregateRating estático, NO reportar como "ausencia de testimonios".` : ''}
+
+═══ AUTORIDAD EXTERNA (fuente de terceros, no el HTML de esta página) ═══
+${project?.domainRating != null
+  ? `Domain Rating (Ahrefs, fuerza del perfil de backlinks del dominio): ${Math.round(project.domainRating)}/100. Usalo como señal de ENTRADA para el componente brandAuthority (no es on-page): un DR alto es evidencia real de autoridad externa aunque el HTML de esta página no la muestre; un DR bajo o ausente no es automáticamente un hallazgo negativo, pero sí limita cuánto puede subir brandAuthority solo con señales on-page.`
+  : 'Domain Rating (Ahrefs) no disponible para este proyecto — no penalices brandAuthority por esta ausencia, simplemente basate en las señales on-page de esta página para ese componente.'}
 
 TÍTULO: ${pageData.title || '(sin título)'}
 META DESCRIPCIÓN: ${pageData.description || '(sin meta descripción)'}
@@ -491,11 +496,12 @@ async function runGeoAnalysis(auditId, workspaceId, projectId, url, userId) {
     // 2. Fetch todo en paralelo
     await assertPublicUrl(url)
     const origin = new URL(url).origin
-    const [html, robotsTxt, llmsData, aiDiscovery] = await Promise.all([
+    const [html, robotsTxt, llmsData, aiDiscovery, project] = await Promise.all([
       fetchPage(url),
       fetchRobotsTxt(origin),
       fetchLlmsTxt(origin),
       fetchAiDiscovery(origin),
+      prisma.project.findUnique({ where: { id: projectId }, select: { domainRating: true, domainRatingAt: true } }),
     ])
 
     // 3. Extract structured data
@@ -507,7 +513,7 @@ async function runGeoAnalysis(auditId, workspaceId, projectId, url, userId) {
     // comillas sin escapar) se reintenta UNA vez antes de marcar el audit como fallido.
     await setStep(auditId, 'Analizando con IA (esto puede tardar unos segundos)…')
     const previousRunContext = await buildPreviousRunContext(projectId, workspaceId, auditId)
-    const prompt = buildPrompt(url, pageData, robotsData, llmsData, aiDiscovery, previousRunContext)
+    const prompt = buildPrompt(url, pageData, robotsData, llmsData, aiDiscovery, previousRunContext, project)
 
     const MAX_ATTEMPTS = 2
     let result = null
