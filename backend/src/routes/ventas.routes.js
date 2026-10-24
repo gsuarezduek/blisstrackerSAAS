@@ -1,15 +1,16 @@
 const router = require('express').Router()
 const { auth } = require('../middleware/auth')
-const { resolveWorkspace, salesGuard } = require('../middleware/workspace')
+const { resolveWorkspace, salesGuard, workspaceAdminOnly } = require('../middleware/workspace')
 const { requireFeatureFlag } = require('../lib/featureFlags')
 
-const dashboard = require('../controllers/ventas/salesDashboard.controller')
-const companies = require('../controllers/ventas/companies.controller')
-const contacts  = require('../controllers/ventas/contacts.controller')
-const leads     = require('../controllers/ventas/leads.controller')
-const research  = require('../controllers/ventas/leadResearch.controller')
-const proposals = require('../controllers/ventas/proposals.controller')
-const metrics   = require('../controllers/ventas/salesMetrics.controller')
+const dashboard   = require('../controllers/ventas/salesDashboard.controller')
+const companies   = require('../controllers/ventas/companies.controller')
+const contacts    = require('../controllers/ventas/contacts.controller')
+const leads       = require('../controllers/ventas/leads.controller')
+const research    = require('../controllers/ventas/leadResearch.controller')
+const proposals   = require('../controllers/ventas/proposals.controller')
+const metrics     = require('../controllers/ventas/salesMetrics.controller')
+const leadWebhook = require('../controllers/ventas/leadWebhook.controller')
 
 // Todo el módulo Ventas requiere: autenticación + workspace + pertenecer al equipo
 // comercial (o ser admin/owner) + que el feature flag `ventas` esté habilitado
@@ -22,6 +23,11 @@ router.use(salesGuard)
 router.get('/dashboard', dashboard.getDashboard)
 router.get('/metrics',   metrics.getMetrics)
 router.get('/team',      dashboard.getTeam)
+
+// Intake público de Leads (formulario web) — gestión del token, admin-only.
+router.get('/lead-webhook',             workspaceAdminOnly, leadWebhook.getStatus)
+router.post('/lead-webhook/regenerate', workspaceAdminOnly, leadWebhook.regenerate)
+router.delete('/lead-webhook',          workspaceAdminOnly, leadWebhook.revoke)
 
 // Empresas
 router.get('/companies',        companies.listCompanies)

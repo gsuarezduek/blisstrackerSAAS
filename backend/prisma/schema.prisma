@@ -94,6 +94,12 @@ model Workspace {
   // de leads (que todavía no tienen proyecto propio). null = no se auto-crean tareas.
   salesTasksProjectId             Int?
   salesTasksProject               Project?        @relation("WorkspaceSalesTasksProject", fields: [salesTasksProjectId], references: [id], onDelete: SetNull)
+  // Token público de bajo privilegio (UUID, texto plano) que habilita el intake público
+  // de Leads desde integraciones externas (ej. WP Webhooks + Contact Form 7, ver
+  // POST /api/public/leads/:token). null = integración desactivada. Solo permite CREAR
+  // un Lead, nunca leer nada — mismo criterio que ProjectFile.publicToken/MonthlyReport.token.
+  // Excluido del `omit` de resolveWorkspace para no filtrarlo a cualquier miembro.
+  leadWebhookToken                String?         @unique
   // Proyecto donde se crean las tareas del dashboard al asignarle responsable a un
   // FinanceTask (pestaña Pendientes de Finanzas) — mismo criterio que salesTasksProjectId.
   financeTaskProjectId            Int?

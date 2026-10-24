@@ -54,6 +54,7 @@ const publicReportRoutes      = require('./routes/publicReport.routes')
 const publicFinanzasRoutes    = require('./routes/publicFinanzas.routes')
 const publicBlogRoutes        = require('./routes/publicBlog.routes')
 const publicProposalRoutes    = require('./routes/publicProposal.routes')
+const publicLeadsRoutes       = require('./routes/publicLeads.routes')
 const publicClientPortalRoutes = require('./routes/publicClientPortal.routes')
 const publicFilesRoutes        = require('./routes/publicFiles.routes')
 const publicPricingRoutes      = require('./routes/publicPricing.routes')
@@ -140,6 +141,16 @@ const contactLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
 })
+// Keyeado por token (no por IP): el abuso contra un workspace no debe afectar a
+// otros, y no penaliza tráfico legítimo multi-IP de un mismo formulario.
+const leadWebhookLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 30,
+  keyGenerator: (req) => req.params.token || ipKeyGenerator(req.ip),
+  message: { error: 'Demasiados envíos. Intentá de nuevo más tarde.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+})
 app.use('/api', globalLimiter)
 app.use('/api/auth/login', loginLimiter)
 app.use('/api/auth/google', loginLimiter)
@@ -147,6 +158,7 @@ app.use('/api/auth/forgot-password', forgotPasswordLimiter)
 app.use('/api/insights/refresh', aiLimiter)
 app.use('/api/marketing/geo/audit', aiLimiter)
 app.use('/api/landing/contact', contactLimiter)
+app.use('/api/public/leads/:token', leadWebhookLimiter)
 
 app.use('/api/auth',              authRoutes)
 app.use('/api/workspaces',        workspaceRoutes)
@@ -179,6 +191,7 @@ app.use('/api/public',           publicReportRoutes)
 app.use('/api/public',           publicFinanzasRoutes)
 app.use('/api/public',           publicBlogRoutes)
 app.use('/api/public',           publicProposalRoutes)
+app.use('/api/public',           publicLeadsRoutes)
 app.use('/api/public',           publicClientPortalRoutes)
 app.use('/api/public',           publicFilesRoutes)
 app.use('/api/public',           publicPricingRoutes)

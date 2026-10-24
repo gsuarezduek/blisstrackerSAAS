@@ -35,7 +35,7 @@ async function resolveWorkspace(req, res, next) {
     // select explícito.
     const row = await prisma.workspace.findUnique({
       where: { slug },
-      omit: { logoData: true, bannerData: true },
+      omit: { logoData: true, bannerData: true, leadWebhookToken: true },
       include: { members: { where: { userId: req.user.userId }, take: 1 } },
     })
 

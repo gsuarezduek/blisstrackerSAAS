@@ -231,6 +231,9 @@ GET    /api/chat/gifs/trending                    # proxy a Giphy trending
 GET    /api/ventas/dashboard                     # tarjetas + acciones hoy/vencidas
 GET    /api/ventas/metrics                        # forecast ponderado + win rate + embudo + ranking + orígenes
 GET    /api/ventas/team                           # responsables comerciales asignables (admins + roles con acceso al módulo)
+GET    /api/ventas/lead-webhook                   # admin: estado del intake público de Leads (token + url, o null)
+POST   /api/ventas/lead-webhook/regenerate        # admin: genera/regenera el token (invalida el anterior)
+DELETE /api/ventas/lead-webhook                   # admin: desactiva (token = null)
 GET    /api/ventas/companies                      # ?search=
 POST   /api/ventas/companies
 GET    /api/ventas/companies/:id
@@ -516,6 +519,7 @@ GET    /api/public/report-print/:printToken                 # datos del informe 
 GET    /api/public/report-banner/:token                     # imagen de portada del informe (también usada como og:image)
 GET    /api/public/logo/:slug                               # logo del workspace (usado en el hero del informe público)
 GET    /api/public/proposal/:token                          # propuesta de Ventas de solo lectura — solo si status:'confirmed' (404 code PROPOSAL_DRAFT si no)
+POST   /api/public/leads/:token                              # intake público de Leads (ej. WP Webhooks/Contact Form 7) → crea Company+Contact+Lead; honeypot `website`; rate limit por token
 
 # Portal de cliente — acceso público. request-code/verify-code/getPortalPublic
 # y el serve de asset son sin auth; el resto exige el JWT de propósito acotado
