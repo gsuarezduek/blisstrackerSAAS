@@ -38,12 +38,12 @@ function pickField(sources, aliases) {
   return ''
 }
 
-// Arma el contenido de la nota: el campo de mensaje explícito si vino, más
+// Arma el texto que siembra Lead.notes: el campo de mensaje explícito si vino, más
 // cualquier otro campo del formulario que no haya sido reconocido como
 // name/email/phone/company/message (ej. "¿Cuánto estimás invertir?" en un form de
 // CF7) — así cualquier pregunta que el workspace agregue a su formulario queda
 // igual registrada, sin tener que tocar este código de nuevo.
-function buildNoteContent(body) {
+function buildNotesSeed(body) {
   const sources = [body, body.form_submit_data]
   const lines = []
   const explicitMessage = pickField(sources, FIELD_ALIASES.message)
@@ -59,6 +59,16 @@ function buildNoteContent(body) {
     }
   }
   return lines.join('\n').slice(0, 5000)
+}
+
+// Lead.notes guarda HTML (mismo campo que edita el WYSIWYG de "Notas de reunión").
+// Como el lead recién se crea, el campo siempre está vacío acá — sembrarlo no pisa
+// ninguna nota humana. Mismo criterio que `toHtml` de projectSituation.controller.js
+// (texto plano → párrafos escapados) para que se vea igual que algo tipeado a mano.
+function textToHtml(text) {
+  if (!text) return null
+  const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  return text.split(/\n{2,}/).map(p => `<p>${esc(p.trim()).replace(/\n/g, '<br>')}</p>`).join('')
 }
 
 // POST /api/public/leads/:token
@@ -88,7 +98,7 @@ async function createPublicLead(req, res, next) {
     // — perder un contacto real por un formulario que no pide nombre es peor que
     // un Contact/Company con el email como "nombre".
     const cleanName    = (pickField(sources, FIELD_ALIASES.name) || cleanEmail || cleanPhone).slice(0, 160)
-    const cleanMessage = buildNoteContent(body)
+    const notesSeed    = buildNotesSeed(body)
 
     if (!cleanEmail && !cleanPhone) return res.status(400).json({ error: 'Indicá un email o teléfono de contacto' })
     if (!cleanName) return res.status(400).json({ error: 'El nombre es requerido' })
@@ -116,20 +126,10 @@ async function createPublicLead(req, res, next) {
           primaryContactId: contact.id,
           origin: 'sitio_web',
           createdById: null,
+          notes: textToHtml(notesSeed),
         },
       })
     })
-
-    if (cleanMessage) {
-      try {
-        await prisma.leadActivity.create({
-          data: {
-            workspaceId, leadId: lead.id, userId: null, kind: 'note',
-            content: `Mensaje del formulario:\n${cleanMessage}`,
-          },
-        })
-      } catch (err) { console.error('[ventas] publicLeadIntake note error:', err.message) }
-    }
 
     await logLeadEvent({
       workspaceId, leadId: lead.id, userId: null, type: 'lead_created',
