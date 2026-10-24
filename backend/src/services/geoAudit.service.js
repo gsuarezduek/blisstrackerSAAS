@@ -515,30 +515,39 @@ async function runGeoAnalysis(auditId, workspaceId, projectId, url, userId) {
     const previousRunContext = await buildPreviousRunContext(projectId, workspaceId, auditId)
     const prompt = buildPrompt(url, pageData, robotsData, llmsData, aiDiscovery, previousRunContext, project)
 
+    // Suficiente para 5-10 items con descripción/acción/impacto + negativeSignals sin
+    // truncar a mitad del JSON (4096 se quedaba corto y producía "Unexpected end of
+    // JSON input" — JSON incompleto, no inválido; sanitizeTrailingCommas no lo arregla).
+    const MAX_OUTPUT_TOKENS = 8192
     const MAX_ATTEMPTS = 2
     let result = null
     let totalTokens = 0
     let lastParseErr = null
+    let lastTruncated = false
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
       const message = await anthropic.messages.create({
         model:      'claude-haiku-4-5-20251001',
-        max_tokens: 4096,
+        max_tokens: MAX_OUTPUT_TOKENS,
         system:     SYSTEM_PROMPT,
         messages:   [{ role: 'user', content: prompt }],
       })
       await logTokens('geoAudit', userId, message.usage, workspaceId)
       totalTokens += (message.usage.input_tokens ?? 0) + (message.usage.output_tokens ?? 0)
+      lastTruncated = message.stop_reason === 'max_tokens'
       try {
         result = parseAuditResult(message.content[0].text)
         lastParseErr = null
         break
       } catch (err) {
         lastParseErr = err
-        console.error(`[GeoAudit] JSON inválido de la IA (intento ${attempt}/${MAX_ATTEMPTS}) en audit ${auditId}: ${err.message}`)
+        console.error(`[GeoAudit] JSON inválido de la IA (intento ${attempt}/${MAX_ATTEMPTS}) en audit ${auditId}${lastTruncated ? ' — respuesta TRUNCADA por max_tokens' : ''}: ${err.message}`)
         if (err.rawText) console.error(`[GeoAudit] Respuesta cruda (intento ${attempt}):`, err.rawText.slice(0, 2000))
       }
     }
-    if (lastParseErr) throw lastParseErr
+    if (lastParseErr) {
+      if (lastTruncated) lastParseErr.message = 'La respuesta de la IA se cortó por longitud antes de terminar. Probá analizar de nuevo.'
+      throw lastParseErr
+    }
 
     const { score, components, items, negativeSignals } = result
 
