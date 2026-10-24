@@ -4,6 +4,10 @@ import ConnectScreen, { OAuthMethod, TokenMethod, ScrapeMethod } from './network
 
 const BRAND = BRANDS.instagram
 
+// Oculto temporalmente mientras se vuelve a pedir la verificación de Meta (grabación de video de la app).
+// Volver a poner en `true` después de grabar.
+export const SCRAPE_METHOD_ENABLED = false
+
 const authUrl = projectId => () =>
   api.get('/marketing/integrations/meta/auth-url', { params: { projectId } }).then(r => r.data.url)
 
@@ -33,7 +37,7 @@ export default function ConnectPrompt({ projectId, onConnected }) {
           description: 'Instagram Business Login: directo, sin tokens.',
           body: <OAuthMethod brand={BRAND} getAuthUrl={authUrl(projectId)} onConnected={onConnected} cta="Conectar con Instagram" />,
         },
-        {
+        ...(SCRAPE_METHOD_ENABLED ? [{
           key: 'scrape', title: 'Scraping',
           description: 'Sin conexión: seguidores, publicaciones e interacciones de un perfil público.',
           body: (
@@ -42,7 +46,7 @@ export default function ConnectPrompt({ projectId, onConnected }) {
               placeholder="@usuario o https://instagram.com/usuario"
               help="Solo cuentas públicas: las privadas no se pueden analizar." />
           ),
-        },
+        }] : []),
       ]}
     />
   )

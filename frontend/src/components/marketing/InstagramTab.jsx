@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import api from '../../api/client'
 import ObjectiveProgressBars from './ObjectiveProgressBars'
 import RrssAdvisorPanel from './RrssAdvisorPanel'
-import ConnectPrompt from './InstagramConnect'
+import ConnectPrompt, { SCRAPE_METHOD_ENABLED } from './InstagramConnect'
 import { BRANDS } from './networks/brands'
 import { BrandSpinner } from './networks/ui'
 import { ExpiredNotice } from './networks/ConnectScreen'
@@ -235,7 +235,7 @@ export default function InstagramTab({ projectId, onSelectProject, projects = []
         <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-4 text-sm text-red-700 dark:text-red-300">{error}</div>
       )}
 
-      {integration?.scopes === 'scrape' && (
+      {SCRAPE_METHOD_ENABLED && integration?.scopes === 'scrape' && (
         <div className="bg-blue-50/60 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-800 rounded-xl px-4 py-3 text-xs text-blue-700 dark:text-blue-300">
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <span>Datos públicos vía scraping: seguidores, posts y engagement.</span>
