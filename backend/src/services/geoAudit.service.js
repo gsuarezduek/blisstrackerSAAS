@@ -31,22 +31,16 @@ async function fetchLlmsTxt(origin) {
   } catch { return { exists: false, content: '' } }
 }
 
+// Nota (metodología v2, 2026): se dejó de chequear /.well-known/ai.txt y
+// /ai/summary.json — no son estándares adoptados por nadie (ninguna IA los lee),
+// a diferencia de /sitemap.xml que sí es real y relevante para crawl discovery.
 async function fetchAiDiscovery(origin) {
-  const endpoints = [
-    { path: '/.well-known/ai.txt',  key: 'aiTxt'     },
-    { path: '/ai/summary.json',     key: 'aiSummary'  },
-    { path: '/sitemap.xml',         key: 'sitemap'    },
-  ]
-  const results = {}
-  await Promise.all(endpoints.map(async ({ path, key }) => {
-    try {
-      const res = await axios.get(`${origin}${path}`, { timeout: 6000 })
-      results[key] = { exists: true, status: res.status }
-    } catch {
-      results[key] = { exists: false }
-    }
-  }))
-  return results
+  try {
+    const res = await axios.get(`${origin}/sitemap.xml`, { timeout: 6000 })
+    return { sitemap: { exists: true, status: res.status } }
+  } catch {
+    return { sitemap: { exists: false } }
+  }
 }
 
 function extractPageData(html, url) {
@@ -335,7 +329,7 @@ function buildPrompt(url, pageData, robotsData, llmsData, aiDiscovery, previousR
       "title": "<título corto del problema>",
       "description": "<qué está mal y por qué importa para GEO>",
       "action": "<acción concreta a tomar para resolverlo>",
-      "impact": "<impacto esperado en visibilidad IA, usando los % de investigación si aplica>"
+      "impact": "<impacto esperado en visibilidad IA, en términos cualitativos (alto/medio/bajo + por qué) — no inventes porcentajes específicos, son señales probabilísticas, no mediciones garantizadas>"
     }
   ],
   "negativeSignals": [
@@ -347,15 +341,27 @@ function buildPrompt(url, pageData, robotsData, llmsData, aiDiscovery, previousR
 }
 
 ═══════════════════════════════════════════════════════════
-METODOLOGÍA GEO — INVESTIGACIÓN ACADÉMICA (Princeton KDD 2024)
-Las siguientes técnicas tienen impacto medido en visibilidad IA:
-• Citar fuentes externas con enlaces: +115% visibilidad
-• Estadísticas con fechas (últimos 3 años): +40% visibilidad
-• Citas de expertos con atribución: +30-40% visibilidad
-• Estructura respuesta-primero (conclusión en primeras 150 palabras): +25%
-• Párrafos autónomos de 50-150 palabras con datos concretos: +23%
-• Secciones FAQ con respuestas directas: +20-30%
-• Lenguaje fluido y natural (vs keyword stuffing): +15-20%
+METODOLOGÍA GEO (v2, actualizada 2026) — basada en investigación académica (Princeton KDD
+2024) + evidencia de comportamiento real de crawlers/motores de IA relevada en 2026.
+Las siguientes técnicas tienen asociación medida con mayor visibilidad en IA — son SEÑALES
+CON EVIDENCIA, no garantías: un sitio puede aplicarlas todas y aun así no ser citado (depende
+también de la competencia, la pregunta exacta del usuario, y señales externas al sitio que
+este análisis no puede medir). Comunicá los items como oportunidades de mejora probables, no
+como promesas de resultado.
+• Citar fuentes externas de autoridad con enlaces: asociado a mayor visibilidad
+• Estadísticas con fechas recientes (últimos 1-2 años): asociado a mayor visibilidad
+• Citas de expertos con atribución clara: asociado a mayor visibilidad
+• Estructura respuesta-primero (conclusión en las primeras 150 palabras): asociado a mayor visibilidad
+• Párrafos autónomos de 50-150 palabras con datos concretos: asociado a mayor visibilidad
+• Secciones FAQ con respuestas directas: asociado a mayor visibilidad
+• Lenguaje fluido y natural (vs keyword stuffing): asociado a mayor visibilidad
+• IMPORTANTE (hallazgo 2026): la mayoría de las citas de IA en la práctica vienen de fuentes
+  DE TERCEROS (prensa, reviews, directorios), no del sitio propio — por eso señales externas
+  como el Domain Rating (ver más abajo si está disponible) pesan en brandAuthority tanto o más
+  que el contenido on-page de esta sola página.
+• IMPORTANTE (hallazgo 2026): llms.txt y endpoints no-estándar (/.well-known/ai.txt,
+  /ai/summary.json) tienen evidencia de que los crawlers de IA reales casi nunca los leen — no
+  los trates como palancas de alto impacto.
 
 BANDAS DE SCORE:
 • 86-100: Excelente — plenamente optimizado para citación IA
@@ -393,7 +399,8 @@ SECCIÓN FAQ: ${pageData.hasFaq ? 'presente' : 'no detectada'}
 RSS/ATOM FEED: ${pageData.rssLink ? `presente (${pageData.rssLink})` : 'no detectado'}
 
 AUTORÍA: ${pageData.hasAuthor ? 'detectada (rel=author / itemprop=author / clase byline)' : 'NO detectada — ausencia de autoría reduce score E-E-A-T'}
-FECHAS DE PUBLICACIÓN: ${pageData.hasDates ? `detectadas${pageData.latestDate ? ` (más reciente: ${pageData.latestDate})` : ''}` : 'NO detectadas — sin fechas los LLMs no pueden validar frescura del contenido'}
+FECHA DE HOY (para evaluar frescura real, no solo presencia/ausencia): ${new Date().toISOString().slice(0, 10)}
+FECHAS DE PUBLICACIÓN: ${pageData.hasDates ? `detectadas${pageData.latestDate ? ` (fecha más reciente encontrada en la página: "${pageData.latestDate}" — calculá vos la antigüedad real contra la fecha de hoy de arriba; si tiene más de 12-18 meses, es una señal de contenido desactualizado aunque "tenga fecha")` : ', sin una fecha específica legible'}` : 'NO detectadas — sin fechas los LLMs no pueden validar frescura del contenido'}
 
 H1: ${pageData.h1.join(' | ') || '(sin H1)'}
 H2: ${pageData.h2.join(' | ') || '(ninguno)'}
@@ -424,19 +431,20 @@ ${blockedTraining.length ? blockedTraining.map(c => `  • ${c.name}`).join('\n'
 ═══ LLMS.TXT ═══
 ${llmsData.exists
   ? `PRESENTE ✓\nContenido:\n${llmsData.content}`
-  : 'AUSENTE — llms.txt es el estándar emergente (llmstxt.org) para que los LLMs entiendan y citen el sitio. Su ausencia es un hallazgo de alta prioridad para el componente Plataformas IA.'}
+  : 'AUSENTE — llms.txt es un estándar PROPUESTO (llmstxt.org), pero evidencia de 2026 confirma que los crawlers de IA reales (GPTBot, ClaudeBot, PerplexityBot, OAI-SearchBot) casi nunca lo leen: en una medición de 500M+ visitas de bots de IA, solo 408 pidieron ese archivo. NO lo reportes como hallazgo de alta prioridad ni como algo que mueva mucho el componente platforms — a lo sumo, si platforms queda con pocos hallazgos, mencionalo como mejora menor y de bajo esfuerzo (no "crítico" ni "alto impacto").'}
 
-═══ ENDPOINTS DE DESCUBRIMIENTO IA ═══
-/.well-known/ai.txt: ${aiDiscovery.aiTxt?.exists ? 'presente ✓' : 'ausente'}
-/ai/summary.json: ${aiDiscovery.aiSummary?.exists ? 'presente ✓' : 'ausente'}
-/sitemap.xml: ${aiDiscovery.sitemap?.exists ? 'presente ✓' : 'ausente'}
+═══ DESCUBRIMIENTO/CRAWL (sitemap) ═══
+/sitemap.xml: ${aiDiscovery.sitemap?.exists ? 'presente ✓' : 'ausente — afecta descubrimiento normal de páginas, es relevante para technical, no es una señal GEO específica de IA'}
 
-LINKS INTERNOS: ${pageData.internalLinks.length} | EXTERNOS (citas): ${pageData.externalLinks.length}
+LINKS INTERNOS: ${pageData.internalLinks.length}
+LINKS EXTERNOS (citas) — ${pageData.externalLinks.length} en total, muestra de hasta 10:
+${pageData.externalLinks.length ? pageData.externalLinks.slice(0, 10).map(u => `  • ${u}`).join('\n') : '  (ninguno)'}
+No te limites a contar estos links: evaluá si citan FUENTES DE AUTORIDAD (medios reconocidos, instituciones, papers, sitios .gov/.edu, players grandes y reconocidos del rubro) — eso es lo que la investigación confirma que aumenta citabilidad, no la cantidad cruda de links salientes. Enlazar solo a redes sociales propias, proveedores de plantillas/temas, o sitios de bajo valor no cuenta como "citar fuentes".
 ${previousRunContext}
 
 ═══ INSTRUCCIONES PARA EL ANÁLISIS ═══
 Incluí entre 5 y 10 items priorizados por impacto GEO real, ordenados de mayor a menor severidad.
-Cada item debe combinar el problema con la acción concreta y el impacto esperado (usá los % de la investigación donde aplique).
+Cada item debe combinar el problema con la acción concreta y el impacto esperado, en términos cualitativos — son señales con evidencia de asociación, no garantías de resultado, así que no inventes porcentajes exactos de mejora.
 En negativeSignals, detectá señales que REDUCEN citabilidad: lenguaje excesivamente autopromocional, contenido escaso (<300 palabras), keyword stuffing, texto oculto, ausencia de autoría, fechas desactualizadas.
 NUNCA reportes como señal negativa contenido que podría ser un widget dinámico (reseñas, mapas, chat). Si hay widgets de reseñas dinámicos detectados, reportalos como oportunidad de mejora GEO (agregar Schema.org AggregateRating/Review estático), no como "sección vacía" o "ausencia de testimonios".
 Si no detectás señales negativas, devolvé negativeSignals: [].`
@@ -560,6 +568,10 @@ async function runGeoAnalysis(auditId, workspaceId, projectId, url, userId) {
       schemasPresent,
       schemasMissing,
       meta: { title: pageData.title, description: pageData.description, h2: pageData.h2 },
+      // v1 = metodología original (llms.txt/endpoints inventados como alta prioridad, % fijos
+      // de Princeton KDD 2024); v2 = reponderada 2026 (ver METODOLOGÍA GEO en buildPrompt).
+      // Permite explicar saltos de score entre corridas que no vienen de un cambio real del sitio.
+      methodologyVersion: 2,
     })
 
     // 7. Save completed result
