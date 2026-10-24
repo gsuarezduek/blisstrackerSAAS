@@ -75,6 +75,7 @@ router.get('/geo/audits/:id',                geo.getAudit)
 router.delete('/geo/audits/:id',             geo.deleteAudit)
 router.get('/geo/audits/:id/llms-txt',       geo.generateLlmsTxt)
 router.post('/geo/audits/:id/schema',        geo.generateSchemaOrg)
+router.post('/geo/audits/:auditId/findings/:itemIndex/task', geo.linkFindingTask)
 
 // Integraciones: OAuth + gestión
 router.get('/integrations/google/auth-url',                    integrations.getAuthUrl)

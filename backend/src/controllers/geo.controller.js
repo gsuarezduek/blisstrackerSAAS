@@ -1,5 +1,6 @@
 const prisma     = require('../lib/prisma')
 const { runGeoAnalysis } = require('../services/geoAudit.service')
+const { taskInclude } = require('./tasks/_shared')
 
 const { anthropic, assertTokenBudget } = require('../lib/claude')
 const { logTokens } = require('../lib/logTokens')
@@ -109,15 +110,83 @@ async function getAudit(req, res, next) {
 
     const audit = await prisma.geoAudit.findFirst({
       where: { id, workspaceId },
-      include: { project: { select: { name: true, websiteUrl: true } } },
+      include: {
+        project: { select: { name: true, websiteUrl: true } },
+        geoFindingTasks: {
+          where: { kind: 'finding' },
+          include: { task: { include: taskInclude } },
+        },
+      },
     })
     if (!audit) return res.status(404).json({ error: 'Audit no encontrado' })
 
+    const taskByIndex = new Map(audit.geoFindingTasks.map(ft => [ft.itemIndex, ft.task]))
+    const findings = JSON.parse(audit.findings).map((item, idx) => ({
+      ...item,
+      itemIndex: idx,
+      taskId: taskByIndex.get(idx)?.id ?? null,
+      task:   taskByIndex.get(idx) ?? null,
+    }))
+
+    const { geoFindingTasks, ...auditFields } = audit
+
     res.json({
-      ...audit,
-      findings:       JSON.parse(audit.findings),
+      ...auditFields,
+      findings,
       recommendations: JSON.parse(audit.recommendations),
     })
+  } catch (err) { next(err) }
+}
+
+/**
+ * POST /api/marketing/geo/audits/:auditId/findings/:itemIndex/task
+ * Body: { taskId }
+ * Vincula una tarea YA CREADA (vía el POST /tasks normal, con todas sus
+ * validaciones de workspace/proyecto privado) a un ítem puntual del análisis
+ * GEO. No crea la tarea acá — evita reimplementar esas validaciones a mano.
+ */
+async function linkFindingTask(req, res, next) {
+  try {
+    const workspaceId = req.workspace.id
+    const auditId      = Number(req.params.auditId)
+    const itemIndex    = Number(req.params.itemIndex)
+    const { taskId }   = req.body
+
+    if (!taskId) return res.status(400).json({ error: 'taskId es requerido' })
+
+    const audit = await prisma.geoAudit.findFirst({
+      where:  { id: auditId, workspaceId },
+      select: { id: true, projectId: true, findings: true },
+    })
+    if (!audit) return res.status(404).json({ error: 'Audit no encontrado' })
+
+    const items = JSON.parse(audit.findings || '[]')
+    if (!Number.isInteger(itemIndex) || itemIndex < 0 || itemIndex >= items.length) {
+      return res.status(400).json({ error: 'itemIndex fuera de rango' })
+    }
+
+    // La tarea tiene que ser del mismo proyecto que el audit y del workspace actual —
+    // evita que se vincule una tarea ajena pasando un id cualquiera.
+    const taskRow = await prisma.task.findFirst({
+      where:   { id: Number(taskId), projectId: audit.projectId },
+      include: { workDay: { select: { workspaceId: true } } },
+    })
+    if (!taskRow || taskRow.workDay.workspaceId !== workspaceId) {
+      return res.status(404).json({ error: 'Tarea no encontrada en este proyecto' })
+    }
+
+    try {
+      const link = await prisma.geoFindingTask.create({
+        data: { workspaceId, auditId, itemIndex, taskId: taskRow.id },
+      })
+      res.status(201).json(link)
+    } catch (err) {
+      if (err.code === 'P2002') {
+        const existing = await prisma.geoFindingTask.findFirst({ where: { auditId, kind: 'finding', itemIndex } })
+        return res.status(409).json({ error: 'already_linked', taskId: existing?.taskId })
+      }
+      throw err
+    }
   } catch (err) { next(err) }
 }
 
@@ -280,4 +349,4 @@ async function deleteAudit(req, res, next) {
   } catch (err) { next(err) }
 }
 
-module.exports = { runAudit, listAudits, getAudit, generateLlmsTxt, generateSchemaOrg, deleteAudit }
+module.exports = { runAudit, listAudits, getAudit, linkFindingTask, generateLlmsTxt, generateSchemaOrg, deleteAudit }

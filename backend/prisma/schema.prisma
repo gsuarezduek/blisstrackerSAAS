@@ -136,6 +136,7 @@ model Workspace {
   benefitBankAdjustments     BenefitBankAdjustment[]
   benefitBankRequests        BenefitBankRequest[]
   geoAudits                  GeoAudit[]
+  geoFindingTasks            GeoFindingTask[]
   integrations               ProjectIntegration[]
   analyticsSnapshots         AnalyticsSnapshot[]
   analyticsInsights          AnalyticsInsight[]
@@ -1012,6 +1013,7 @@ model Task {
   meetingParticipant       ProjectMeetingParticipant? // Tarea auto-creada por una reunión de proyecto (uno a uno); su tiempo es la participación en la reunión
   calendarEventParticipant CalendarEventParticipant? // Tarea "reserva" creada al aceptar una invitación de Calendario (uno a uno)
   leadAction               LeadAction? // Próxima acción de Ventas vinculada (uno a uno); completar la tarea la resuelve y viceversa
+  geoFindingTask           GeoFindingTask? // Recomendación del análisis GEO de la que esta tarea es el seguimiento (uno a uno); el estado se lee de task.status, no se duplica
   files                    TaskFile[] // Adjuntos — archivos de la Nube del proyecto (ProjectFile) linkeados a esta tarea
   // Pieza de Contenido de la que esta tarea es UN TRAMO (no @unique del lado de
   // ContentPiece: una pieza puede tener muchas Task a lo largo de su vida, una
@@ -1517,8 +1519,34 @@ model GeoAudit {
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   project   Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
+  geoFindingTasks GeoFindingTask[]
+
   @@index([workspaceId])
   @@index([projectId])
+}
+
+// Vínculo (auditId, itemIndex) -> taskId: qué recomendación de un GeoAudit ya
+// tiene una tarea creada para atenderla. No duplica estado — el "pendiente /
+// en curso / completada" se lee en vivo de task.status. Si se borra la tarea
+// el vínculo se borra con ella (onDelete: Cascade, a diferencia del SetNull
+// que usan ProjectMeetingTodo/EOSTodo: acá no hay campo propio que limpiar,
+// el finding simplemente vuelve a no tener tarea asociada).
+model GeoFindingTask {
+  id          Int      @id @default(autoincrement())
+  workspaceId Int
+  auditId     Int
+  kind        String   @default("finding") // reservado para "negativeSignal" a futuro; no se usa aún
+  itemIndex   Int // índice dentro del array CRUDO de `GeoAudit.findings`, antes de cualquier reorden por severidad en el frontend
+  taskId      Int      @unique
+  createdAt   DateTime @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  audit     GeoAudit  @relation(fields: [auditId], references: [id], onDelete: Cascade)
+  task      Task      @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@unique([auditId, kind, itemIndex])
+  @@index([workspaceId])
+  @@index([auditId])
 }
 
 // Job de refresco masivo de fuentes de Marketing (GA4, Search Console, Domain

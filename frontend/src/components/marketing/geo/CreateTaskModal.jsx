@@ -4,7 +4,7 @@ import { useAuth } from '../../../context/AuthContext'
 import { CircleCheck } from 'lucide-react'
 import { Icon } from '../../ui/Icon'
 
-export default function CreateTaskModal({ title, projectId, projectName, onClose }) {
+export default function CreateTaskModal({ title, auditId, itemIndex, projectId, projectName, onClose, onLinked }) {
   const { user } = useAuth()
   const [description, setDescription] = useState(`GEO - ${title}`)
   const [members, setMembers]         = useState([])
@@ -28,7 +28,18 @@ export default function CreateTaskModal({ title, projectId, projectName, onClose
     try {
       const body = { description: description.trim(), projectId: String(projectId) }
       if (assigneeId && assigneeId !== String(user?.id)) body.targetUserId = assigneeId
-      await api.post('/tasks', body)
+      const { data: task } = await api.post('/tasks', body)
+
+      if (auditId != null && itemIndex != null) {
+        try {
+          await api.post(`/marketing/geo/audits/${auditId}/findings/${itemIndex}/task`, { taskId: task.id })
+          const { data: updatedAudit } = await api.get(`/marketing/geo/audits/${auditId}`)
+          onLinked?.(updatedAudit)
+        } catch {
+          // La tarea ya se creó; si el vínculo falla (ej. ya existía) no es un error visible para el usuario.
+        }
+      }
+
       setDone(true)
       setTimeout(onClose, 1200)
     } catch {

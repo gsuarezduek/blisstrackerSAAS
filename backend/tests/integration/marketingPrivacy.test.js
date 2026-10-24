@@ -90,6 +90,7 @@ describe('Marketing — gate de proyectos privados por prefijo /projects/:id', (
     prisma.geoAudit.findFirst.mockResolvedValue({
       id: 999, workspaceId: WORKSPACE_ID, status: 'done', findings: '[]', recommendations: '[]',
       project: { name: 'X', websiteUrl: null },
+      geoFindingTasks: [],
     })
 
     const res = await request(app)

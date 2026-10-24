@@ -288,9 +288,12 @@ export default function GeoTab({ projectId, projects, onSelectProject }) {
       {taskModal && selectedProject && (
         <CreateTaskModal
           title={taskModal.title}
+          auditId={taskModal.auditId}
+          itemIndex={taskModal.itemIndex}
           projectId={selectedProject.id}
           projectName={selectedProject.name}
           onClose={() => setTaskModal(null)}
+          onLinked={updated => setActive(updated)}
         />
       )}
 

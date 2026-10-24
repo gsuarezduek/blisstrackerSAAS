@@ -2,6 +2,11 @@ import AiTrafficSection from './AiTrafficSection'
 import ComponentCard from './ComponentCard'
 import { printGeoAudit } from './printGeoAudit'
 import { COMPONENTS_META, SEVERITY_LABELS, SEVERITY_COLORS, scoreRing, scoreColor, scoreLabel, fmtDate } from './geoHelpers'
+import { STATUS_LABEL, STATUS_CLASS } from '../../../utils/taskStatus'
+
+function openTask(task) {
+  window.dispatchEvent(new CustomEvent('bliss:open-task', { detail: task }))
+}
 
 // ─── Resultados de la auditoría GEO completada ────────────────────────────────
 
@@ -122,13 +127,23 @@ export default function GeoAuditResults({
                     <p className="text-xs text-gray-400 dark:text-gray-500 mt-1 italic">{f.impact}</p>
                   )}
                 </div>
-                <button
-                  onClick={() => onCreateTask({ title: f.action || f.title })}
-                  title="Crear tarea a partir de este ítem"
-                  className="flex-shrink-0 text-xs text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 border border-gray-200 dark:border-gray-600 hover:border-primary-400 rounded-lg px-2 py-0.5 transition-all"
-                >
-                  + tarea
-                </button>
+                {f.taskId ? (
+                  <button
+                    onClick={() => openTask(f.task)}
+                    title="Ver la tarea creada para este ítem"
+                    className={`flex-shrink-0 text-xs font-medium rounded-lg px-2 py-0.5 transition-all hover:opacity-80 ${STATUS_CLASS[f.task?.status] ?? STATUS_CLASS.PENDING}`}
+                  >
+                    {STATUS_LABEL[f.task?.status] ?? 'Ver tarea'}
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => onCreateTask({ title: f.action || f.title, auditId: activeAudit.id, itemIndex: f.itemIndex })}
+                    title="Crear tarea a partir de este ítem"
+                    className="flex-shrink-0 text-xs text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 border border-gray-200 dark:border-gray-600 hover:border-primary-400 rounded-lg px-2 py-0.5 transition-all"
+                  >
+                    + tarea
+                  </button>
+                )}
               </div>
             ))}
           </div>

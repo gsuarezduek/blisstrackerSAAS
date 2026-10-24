@@ -246,6 +246,63 @@ function analyzeRobots(robotsTxt) {
   return result
 }
 
+// ─── Contexto de la corrida anterior — qué recomendaciones ya tienen tarea ───
+
+const STATUS_LABELS = {
+  COMPLETED:   '[RESUELTA]',
+  IN_PROGRESS: '[EN CURSO]',
+  PAUSED:      '[EN CURSO]',
+  BLOCKED:     '[EN CURSO]',
+  PENDING:     '[PENDIENTE — ya asignada a una tarea]',
+}
+
+async function buildPreviousRunContext(projectId, workspaceId, currentAuditId) {
+  const prevAudit = await prisma.geoAudit.findFirst({
+    where:   { projectId, workspaceId, status: 'completed', id: { not: currentAuditId } },
+    orderBy: { createdAt: 'desc' },
+    select:  { id: true, createdAt: true, findings: true },
+  })
+  if (!prevAudit) return ''
+
+  const prevItems = JSON.parse(prevAudit.findings || '[]')
+  if (!prevItems.length) return ''
+
+  const links = await prisma.geoFindingTask.findMany({
+    where:   { auditId: prevAudit.id, kind: 'finding' },
+    include: { task: { select: { status: true } } },
+  })
+  const statusByIndex = new Map(links.map(l => [l.itemIndex, l.task.status]))
+
+  const lines = prevItems.map((item, idx) => {
+    const label = STATUS_LABELS[statusByIndex.get(idx)] ?? '[PENDIENTE — sin tarea creada]'
+    return `${label} ${item.title}${item.action ? ` — Acción sugerida entonces: ${item.action}` : ''}`
+  }).join('\n')
+
+  const dateStr = prevAudit.createdAt.toISOString().slice(0, 10)
+
+  return `
+
+═══════════════════════════════════════════════════════════
+CONTEXTO: RECOMENDACIONES DEL ANÁLISIS ANTERIOR (${dateStr})
+Estas son las recomendaciones de la corrida previa de este mismo sitio, con su estado
+actual según el seguimiento de tareas del equipo (RESUELTA = la tarea se completó,
+EN CURSO = hay una tarea en progreso/pausada/bloqueada, PENDIENTE = sin avance real):
+
+${lines}
+
+REGLAS para usar este contexto:
+- Si un hallazgo marcado [RESUELTA] o [EN CURSO] sigue sin corregirse en el HTML actual,
+  NO lo repitas como item nuevo igual a como estaba: reportalo como regresión o seguimiento
+  dentro de su descripción, dejando explícito que ya hay (o hubo) una tarea asociada.
+- Si un hallazgo marcado [RESUELTA] o [EN CURSO] efectivamente ya no está presente en el
+  sitio, no lo incluyas en "items" de esta corrida.
+- Los marcados [PENDIENTE — sin tarea creada] podés repetirlos como item nuevo si siguen
+  vigentes (nadie tomó acción todavía).
+- Los marcados [PENDIENTE — ya asignada a una tarea] no los repitas como item nuevo salvo
+  que el problema haya empeorado significativamente.
+═══════════════════════════════════════════════════════════`
+}
+
 // ─── Claude analysis ──────────────────────────────────────────────────────────
 
 const SYSTEM_PROMPT = `Eres un experto en GEO (Generative Engine Optimization) — la práctica de optimizar sitios web para aparecer en respuestas de motores de búsqueda con IA como ChatGPT, Perplexity, Claude, Google AI Overviews y Bing Copilot.
@@ -254,7 +311,7 @@ Analizás el contenido de una página web y devolvés un análisis estructurado 
 
 IMPORTANTE: Responde ÚNICAMENTE con JSON válido, sin texto adicional, sin markdown, sin bloques de código. Solo el objeto JSON.`
 
-function buildPrompt(url, pageData, robotsData, llmsData, aiDiscovery) {
+function buildPrompt(url, pageData, robotsData, llmsData, aiDiscovery, previousRunContext = '') {
   const blockedCitation = robotsData.citation.filter(c => c.blocked)
   const blockedTraining = robotsData.training.filter(c => c.blocked)
   const allowedCitation = robotsData.citation.filter(c => !c.blocked)
@@ -370,6 +427,7 @@ ${llmsData.exists
 /sitemap.xml: ${aiDiscovery.sitemap?.exists ? 'presente ✓' : 'ausente'}
 
 LINKS INTERNOS: ${pageData.internalLinks.length} | EXTERNOS (citas): ${pageData.externalLinks.length}
+${previousRunContext}
 
 ═══ INSTRUCCIONES PARA EL ANÁLISIS ═══
 Incluí entre 5 y 10 items priorizados por impacto GEO real, ordenados de mayor a menor severidad.
@@ -420,11 +478,12 @@ async function runGeoAnalysis(auditId, workspaceId, projectId, url, userId) {
 
     // 4. Call Claude
     await setStep(auditId, 'Analizando con IA (esto puede tardar unos segundos)…')
+    const previousRunContext = await buildPreviousRunContext(projectId, workspaceId, auditId)
     const message = await anthropic.messages.create({
       model:      'claude-haiku-4-5-20251001',
       max_tokens: 4096,
       system:     SYSTEM_PROMPT,
-      messages:   [{ role: 'user', content: buildPrompt(url, pageData, robotsData, llmsData, aiDiscovery) }],
+      messages:   [{ role: 'user', content: buildPrompt(url, pageData, robotsData, llmsData, aiDiscovery, previousRunContext) }],
     })
 
     // 5. Log tokens
