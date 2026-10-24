@@ -8,12 +8,11 @@ function hasHtmlContent(html) {
 
 // Notas de reunión del lead: WYSIWYG colaborativo en tiempo real (ver
 // CollaborativeRichTextEditor), separado del timeline de actividad
-// (LeadDetail.jsx → Historial). Colapsada por defecto (ver
-// CollapsibleSectionHeader) — abrir la sección conecta al documento vivo,
-// cerrarla la desconecta (no hay paso intermedio de "Editar": si hay permiso,
-// es edición directa).
+// (LeadDetail.jsx → Historial). Abierta por defecto (no hay paso intermedio
+// de "Editar": si hay permiso, es edición directa) — esto conecta al
+// documento vivo apenas se abre la ficha del lead; cerrarla la desconecta.
 export default function LeadNotes({ leadId, initialContent, canEdit = true }) {
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(true)
 
   return (
     <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-4">

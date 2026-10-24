@@ -64,7 +64,7 @@ export default function LeadDetail({ leadId, team, companies, onBack, onChanged 
   const [naOpen, setNaOpen] = useState(false)
   const [na, setNa] = useState({ title: '', dueAt: '', ownerId: '' })
   const [histOpen, setHistOpen] = useState(false)
-  const [timelineOpen, setTimelineOpen] = useState(false)
+  const [timelineOpen, setTimelineOpen] = useState(true)
   const [savingAction, setSavingAction] = useState(false)
   const [companyEdit, setCompanyEdit] = useState(false)
   const [contactEditModal, setContactEditModal] = useState(false)

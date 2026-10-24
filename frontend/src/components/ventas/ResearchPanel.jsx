@@ -22,7 +22,7 @@ const FIELDS = [
 ]
 
 export default function ResearchPanel({ leadId, companyName, onChanged }) {
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(true)
   const [research, setResearch] = useState(null)
   const [loading, setLoading] = useState(true)
   const [starting, setStarting] = useState(false)
@@ -157,18 +157,20 @@ export default function ResearchPanel({ leadId, companyName, onChanged }) {
         <p className="text-sm text-red-600 dark:text-red-400">Falló: {research.errorMsg || 'error desconocido'}</p>
       ) : (
         <div className="space-y-3">
-          {FIELDS.map(f => {
-            const v = research.result?.[f.key]
-            if (v == null || (Array.isArray(v) && v.length === 0) || v === '') return null
-            return (
-              <div key={f.key}>
-                <div className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-0.5">{f.label}</div>
-                {f.type === 'list'
-                  ? <ul className="list-disc list-inside text-sm text-gray-800 dark:text-gray-200 space-y-0.5">{v.map((x, i) => <li key={i}>{x}</li>)}</ul>
-                  : <p className="text-sm text-gray-800 dark:text-gray-200">{v}</p>}
-              </div>
-            )
-          })}
+          <div className="max-h-80 overflow-y-auto space-y-3 pr-1">
+            {FIELDS.map(f => {
+              const v = research.result?.[f.key]
+              if (v == null || (Array.isArray(v) && v.length === 0) || v === '') return null
+              return (
+                <div key={f.key}>
+                  <div className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-0.5">{f.label}</div>
+                  {f.type === 'list'
+                    ? <ul className="list-disc list-inside text-sm text-gray-800 dark:text-gray-200 space-y-0.5">{v.map((x, i) => <li key={i}>{x}</li>)}</ul>
+                    : <p className="text-sm text-gray-800 dark:text-gray-200">{v}</p>}
+                </div>
+              )
+            })}
+          </div>
           {research.createdBy && (
             <p className="text-xs text-gray-400 pt-1">Generado por {research.createdBy.name} · {new Date(research.updatedAt).toLocaleString('es-AR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</p>
           )}

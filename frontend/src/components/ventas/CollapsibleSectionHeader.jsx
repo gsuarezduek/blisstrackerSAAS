@@ -1,7 +1,8 @@
 // Header clickeable compartido por las secciones colapsables del Lead (Notas,
-// Investigación, Historial): arrancan cerradas (menos ruido visual en la
-// ficha) con un punto que indica si hay contenido adentro, sin tener que
-// desplegar la sección para saberlo.
+// Investigación, Historial): cada una decide su estado inicial (Notas/
+// Investigación/Historial arrancan abiertas; el sub-historial de próximas
+// acciones resueltas sigue cerrado) y muestra un punto que indica si hay
+// contenido adentro, sin tener que desplegar la sección para saberlo.
 export default function CollapsibleSectionHeader({ title, hasContent, open, onToggle, extra }) {
   return (
     <button onClick={onToggle} className="w-full flex items-center justify-between gap-2 text-left">
