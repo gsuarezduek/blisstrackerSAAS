@@ -8,7 +8,7 @@ import MyProductivity from '../components/MyProductivity'
 import api from '../api/client'
 import { useAuth } from '../context/AuthContext'
 import { fmtMins } from '../utils/format'
-import { ClipboardList, Pencil } from 'lucide-react'
+import { Bot, ClipboardList, Pencil } from 'lucide-react'
 import { Icon } from '../components/ui/Icon'
 
 export default function MyReports() {
@@ -23,6 +23,7 @@ export default function MyReports() {
   })
   const [to, setTo] = useState(() => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' }))
   const [expandedProject, setExpandedProject] = useState(null)
+  const [expandedAgentProject, setExpandedAgentProject] = useState(null)
   const [editingTask, setEditingTask] = useState(null)
 
   async function loadReport(f = from, t = to) {
@@ -41,6 +42,7 @@ export default function MyReports() {
   useEffect(() => { loadReport() }, [])
 
   const byProject = data?.byProject ?? []
+  const agentByProject = data?.agentByProject ?? []
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -140,6 +142,65 @@ export default function MyReports() {
           <div className="text-center py-16 text-gray-400">
             <p className="mb-2"><Icon as={ClipboardList} size={28} className="inline-block text-gray-300 dark:text-gray-600" /></p>
             <p>No hay tareas completadas en este período</p>
+          </div>
+        )}
+
+        {/* Tus agentes de IA — aparte, no suma a los totales de arriba (ver AgentsBlock en Productividad) */}
+        {!loading && agentByProject.length > 0 && (
+          <div className="mt-8">
+            <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-1 inline-flex items-center gap-1.5">
+              <Icon as={Bot} size={18} />Tus agentes de IA
+            </h2>
+            <p className="text-xs text-gray-400 dark:text-gray-500 mb-3">
+              {fmtMins(data.agentTotalMinutes)} registrados · {data.agentTaskCount} tarea{data.agentTaskCount !== 1 ? 's' : ''} completada{data.agentTaskCount !== 1 ? 's' : ''} · aparte, no suma al total de arriba
+            </p>
+            <div className="space-y-3">
+              {agentByProject.map(p => (
+                <div key={p.project.id} className="bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-xl overflow-hidden">
+                  <button
+                    className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                    onClick={() => setExpandedAgentProject(expandedAgentProject === p.project.id ? null : p.project.id)}
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="font-medium text-gray-800 dark:text-gray-200">{p.project.name}</span>
+                      <span className="text-xs bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 rounded px-2 py-0.5">
+                        {p.taskList.length} tarea{p.taskList.length !== 1 ? 's' : ''}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="font-bold text-gray-500 dark:text-gray-400">{fmtMins(p.minutes)}</span>
+                      <span className="text-gray-400 dark:text-gray-500 text-sm">
+                        {expandedAgentProject === p.project.id ? '▲' : '▼'}
+                      </span>
+                    </div>
+                  </button>
+
+                  {expandedAgentProject === p.project.id && (
+                    <div className="border-t dark:border-gray-700 px-4 py-3 space-y-1.5 bg-gray-50 dark:bg-gray-800/50">
+                      {p.taskList.map(task => (
+                        <button
+                          key={task.id}
+                          onClick={() => setEditingTask(task)}
+                          className="w-full flex items-start justify-between text-sm py-1.5 border-b border-gray-100 dark:border-gray-700 last:border-b-0 hover:bg-blue-50 dark:hover:bg-blue-900/10 rounded px-1 transition-colors group"
+                        >
+                          <div className="flex items-start gap-2 flex-1 min-w-0">
+                            <span className="text-green-500 mt-0.5 flex-shrink-0">✓</span>
+                            <div className="text-left min-w-0">
+                              <p className="text-gray-700 dark:text-gray-300 whitespace-pre-wrap break-words">{linkify(task.description)}</p>
+                              <p className="text-[11px] text-gray-400 dark:text-gray-500">{task.agentLabel}</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1.5 flex-shrink-0 ml-3">
+                            {task.isOverride && <span className="text-amber-500 inline-flex" title="Duración editada a mano"><Icon as={Pencil} size={11} /></span>}
+                            <span className="text-gray-500 dark:text-gray-400">{fmtMins(task.minutes)}</span>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </main>

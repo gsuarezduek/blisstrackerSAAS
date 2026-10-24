@@ -16,6 +16,7 @@ const AUTO_RANK_TITLE = {
   proyectos_nuevos:    'Cuáles',
   proyectos_perdidos:  'Cuáles',
   tareas_completadas:  'Quién completó más',
+  tareas_completadas_agentes: 'Qué agente completó más',
   propuestas_enviadas: 'Quién generó más',
   todos_completados:   'Quién completó más',
   faltas:              'Quiénes',
@@ -27,7 +28,7 @@ const AUTO_RANK_TITLE = {
 // Datos automáticos cuyo top 3 son filas de solo nombre (con valor opcional al final).
 const NAME_ROW_KEYS = new Set([
   'proyectos_nuevos', 'proyectos_perdidos', 'informes_entregados',
-  'seguidores_nuevos', 'objetivos_cumplidos',
+  'seguidores_nuevos', 'objetivos_cumplidos', 'tareas_completadas_agentes',
 ])
 
 // Mensaje cuando no hay detalle (valor presente pero lista vacía). null = no mostrar nada.
@@ -39,6 +40,7 @@ function autoEmptyHint(autoKey) {
     case 'proyectos_nuevos':    return 'Sin altas este mes'
     case 'proyectos_perdidos':  return 'Sin bajas'
     case 'tareas_completadas':  return 'Sin tareas completadas'
+    case 'tareas_completadas_agentes': return 'Sin tareas completadas por agentes'
     case 'propuestas_enviadas': return 'Sin propuestas generadas'
     case 'todos_completados':   return 'Sin to-dos completados'
     case 'faltas':              return 'Sin faltas registradas'
@@ -53,9 +55,9 @@ function autoEmptyHint(autoKey) {
 function autoRankRow(autoKey, p, i) {
   // Filas de solo nombre (proyectos / informes / objetivos / redes), con valor opcional al final.
   if (NAME_ROW_KEYS.has(autoKey)) {
-    const suffix = p.value != null
-      ? (p.value > 0 ? `+${formatVal(p.value)}` : formatVal(p.value))
-      : null
+    const suffix = p.value == null ? null
+      : autoKey === 'tareas_completadas_agentes' ? `${p.value} tarea${p.value === 1 ? '' : 's'}`
+      : p.value > 0 ? `+${formatVal(p.value)}` : formatVal(p.value)
     return (
       <li key={`${p.name}-${i}`} className="flex items-center gap-2 text-xs">
         <span className="w-4 text-center text-[11px] font-bold text-gray-400 dark:text-gray-500 tabular-nums shrink-0">{i + 1}</span>

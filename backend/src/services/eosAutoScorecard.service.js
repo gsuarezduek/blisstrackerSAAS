@@ -20,7 +20,7 @@ const { monthBounds, prevMonthStr } = require('../lib/monthUtils')
 const { EOS_AUTO_METRICS } = require('../lib/eosAutoMetricCatalog')
 const { computeObjectives } = require('./marketingObjectives.service')
 const { inArrivalWindow, laborableDays } = require('../lib/attendance')
-const { HUMAN_TASK_WHERE } = require('../lib/agentTasks')
+const { HUMAN_TASK_WHERE, formatAgentName } = require('../lib/agentTasks')
 
 // Filtro de informes "generados" (no placeholders vacíos) — espejo de GENERATED_WHERE.
 const GENERATED_REPORT_OR = [
@@ -271,6 +271,48 @@ async function computeTareasCompletadasWeekly(workspaceId, tz, offset, rangeStar
     }
     people.sort((a, b) => b.count - a.count)
     out[period] = { value: total, top3: people.slice(0, 3) }
+  }
+  return out
+}
+
+// Tareas completadas por agentes de IA por semana — espejo de computeTareasCompletadasWeekly
+// pero rankeando AGENTES en vez de personas (fila separada a propósito: no suma al ranking
+// humano). No depende del horario; agrupa por agente (token + nombre declarado vía agentName).
+async function computeTareasCompletadasAgentesWeekly(workspaceId, tz, offset, rangeStart, rangeEnd) {
+  const out = {}
+  const tasks = await prisma.task.findMany({
+    where: {
+      status: 'COMPLETED',
+      isAgentTask: true,
+      completedAt: { gte: new Date(rangeStart + 'T00:00:00' + offset), lte: new Date(rangeEnd + 'T23:59:59' + offset) },
+      workDay: { workspaceId },
+    },
+    select: { completedAt: true, agent: { select: { id: true, label: true } }, agentName: true },
+  })
+
+  const byWeek = new Map() // period -> Map<agentKey, {name, count}>
+  for (const t of tasks) {
+    const date = localDate(t.completedAt, tz)
+    if (date < rangeStart || date > rangeEnd) continue
+    const period = isoWeekPeriodOf(date)
+    if (!byWeek.has(period)) byWeek.set(period, new Map())
+    const wm = byWeek.get(period)
+    const declared = t.agentName?.trim() || null
+    const key = `${t.agent?.id ?? 0}|${declared ?? ''}`
+    const cur = wm.get(key) || { name: t.agent ? formatAgentName(t.agent, declared) : (declared ? `Agente eliminado · ${declared}` : 'Agente eliminado'), count: 0 }
+    cur.count += 1
+    wm.set(key, cur)
+  }
+
+  for (const [period, wm] of byWeek) {
+    let total = 0
+    const agents = []
+    for (const a of wm.values()) {
+      total += a.count
+      agents.push({ name: a.name, value: a.count })
+    }
+    agents.sort((a, b) => b.value - a.value)
+    out[period] = { value: total, top3: agents.slice(0, 3) }
   }
   return out
 }
@@ -648,6 +690,7 @@ async function computeAutoScorecardYear(workspaceId, tz, year, autoKeys = []) {
       if (weeklyKeys.includes('tardanzas'))         out.tardanzas         = await computeTardanzasWeekly(workspaceId, tz, offset, wStart, wEnd, ctx)
       if (weeklyKeys.includes('ocupacion'))         out.ocupacion         = await occupancyByBucket(workspaceId, tz, offset, wStart, wEnd, isoWeekPeriodOf, ctx.info)
       if (weeklyKeys.includes('tareas_completadas')) out.tareas_completadas = await computeTareasCompletadasWeekly(workspaceId, tz, offset, wStart, wEnd, ctx.info)
+      if (weeklyKeys.includes('tareas_completadas_agentes')) out.tareas_completadas_agentes = await computeTareasCompletadasAgentesWeekly(workspaceId, tz, offset, wStart, wEnd)
       if (weeklyKeys.includes('propuestas_enviadas')) out.propuestas_enviadas = await computePropuestasEnviadasWeekly(workspaceId, tz, offset, wStart, wEnd, ctx.info)
       if (weeklyKeys.includes('todos_completados'))  out.todos_completados  = await computeTodosCompletadosWeekly(workspaceId, year, ctx.info)
       if (weeklyKeys.includes('faltas'))             out.faltas             = await computeFaltasWeekly(workspaceId, tz, offset, wStart, wEnd)

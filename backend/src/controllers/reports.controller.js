@@ -1,7 +1,7 @@
 const prisma = require('../lib/prisma')
 const { getProductivityPeriod, taskMins, buildCompletedAtWhere } = require('../lib/timeMetrics')
 const { DEFAULT_TZ } = require('../utils/dates')
-const { HUMAN_TASK_WHERE } = require('../lib/agentTasks')
+const { HUMAN_TASK_WHERE, formatAgentName } = require('../lib/agentTasks')
 const {
   getWorkspaceStats, getAttendanceStats, getHoursHistory, computeBenchmark, memberStatus, median,
 } = require('../services/productivityStats.service')
@@ -153,22 +153,44 @@ async function mine(req, res, next) {
     if (!from && !to) ({ from, to } = defaultDateRange(tz))
     const completedAtRange = buildCompletedAtWhere(from, to, tz)
 
-    const tasks = await prisma.task.findMany({
-      where: {
-        userId,
-        status: 'COMPLETED',
-        startedAt: { not: null },
-        completedAt: { not: null, ...completedAtRange },
-        workDay: { workspaceId },
-        ...HUMAN_TASK_WHERE,
-      },
-      select: {
-        id: true, description: true, startedAt: true,
-        completedAt: true, pausedMinutes: true, minutesOverride: true,
-        project: { select: { id: true, name: true } },
-      },
-      orderBy: { completedAt: 'desc' },
-    })
+    // Trabajo propio y el de sus agentes de IA se traen por separado y nunca se mezclan en
+    // el mismo total — mismo criterio que el resto de Productividad/Reportes (HUMAN_TASK_WHERE).
+    const [tasks, agentTasks] = await Promise.all([
+      prisma.task.findMany({
+        where: {
+          userId,
+          status: 'COMPLETED',
+          startedAt: { not: null },
+          completedAt: { not: null, ...completedAtRange },
+          workDay: { workspaceId },
+          ...HUMAN_TASK_WHERE,
+        },
+        select: {
+          id: true, description: true, startedAt: true,
+          completedAt: true, pausedMinutes: true, minutesOverride: true,
+          project: { select: { id: true, name: true } },
+        },
+        orderBy: { completedAt: 'desc' },
+      }),
+      prisma.task.findMany({
+        where: {
+          userId,
+          status: 'COMPLETED',
+          isAgentTask: true,
+          startedAt: { not: null },
+          completedAt: { not: null, ...completedAtRange },
+          workDay: { workspaceId },
+        },
+        select: {
+          id: true, description: true, startedAt: true,
+          completedAt: true, pausedMinutes: true, minutesOverride: true,
+          project: { select: { id: true, name: true } },
+          agent: { select: { id: true, label: true } },
+          agentName: true,
+        },
+        orderBy: { completedAt: 'desc' },
+      }),
+    ])
 
     let totalMinutes = 0
     const byProject = {}
@@ -185,10 +207,29 @@ async function mine(req, res, next) {
       })
     }
 
+    let agentTotalMinutes = 0
+    const agentByProject = {}
+    for (const t of agentTasks) {
+      const mins = taskMins(t)
+      agentTotalMinutes += mins
+      const pid = t.project.id
+      if (!agentByProject[pid]) agentByProject[pid] = { project: t.project, minutes: 0, taskList: [] }
+      agentByProject[pid].minutes += mins
+      agentByProject[pid].taskList.push({
+        id: t.id, description: t.description, minutes: mins,
+        completedAt: t.completedAt,
+        isOverride: t.minutesOverride !== null && t.minutesOverride !== undefined,
+        agentLabel: formatAgentName(t.agent, t.agentName),
+      })
+    }
+
     res.json({
       totalMinutes,
       taskCount: tasks.length,
       byProject: Object.values(byProject).sort((a, b) => b.minutes - a.minutes),
+      agentTotalMinutes,
+      agentTaskCount: agentTasks.length,
+      agentByProject: Object.values(agentByProject).sort((a, b) => b.minutes - a.minutes),
     })
   } catch (err) { next(err) }
 }
@@ -252,6 +293,9 @@ async function mineProductivity(req, res, next) {
         stuckTasks: s.stuckTasks,
         hoursHistory,
       } : { completed: 0, hours: 0, tasaCompletado: 0, utilization: null, delta: { horasPct: null, tareasPct: null, tasaCompletadoPts: 0 }, stuckTasks: 0, hoursHistory },
+      // Trabajo de sus agentes de IA en el período — aparte, ya calculado por getWorkspaceStats
+      // (mismo computeAgentStats que alimenta el bloque "Sus agentes" de Productividad admin).
+      agents: s?.agents ?? null,
       benchmark: benchmark ? {
         completed: benchmark.completed,
         horas: benchmark.horas,

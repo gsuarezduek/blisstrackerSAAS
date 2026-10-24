@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import api from '../api/client'
+import AgentsBlock from './productivity/AgentsBlock'
 
 const fmtHours = h => (h >= 1 ? `${Math.round(h * 10) / 10}h` : h > 0 ? `${Math.round(h * 60)}m` : '—')
 
@@ -174,6 +175,7 @@ export default function MyProductivity() {
   const utilTeam = b?.utilizationMedian != null ? `${Math.round(b.utilizationMedian * 100)}%` : null
   const note = softNote(data)
   const ins = data.insight
+  const hasAgents = !!data.agents?.hasData
 
   return (
     <section className="mb-8 bg-white dark:bg-gray-800 rounded-xl border dark:border-gray-700 p-4 sm:p-5">
@@ -202,7 +204,9 @@ export default function MyProductivity() {
             <HoursHistorySection initialHistory={s.hoursHistory} />
           )}
 
-          {note && <p className={`text-sm leading-snug ${note.cls} ${ins ? 'mb-4' : ''}`}>{note.text}</p>}
+          {note && <p className={`text-sm leading-snug ${note.cls} ${(hasAgents || ins) ? 'mb-4' : ''}`}>{note.text}</p>}
+
+          {hasAgents && <div className="mb-4"><AgentsBlock agents={data.agents} /></div>}
 
           {ins && (ins.tendencias || ins.fortalezas || ins.areasDeAtencion) && (
             <div className="border-t border-gray-100 dark:border-gray-700 pt-3">

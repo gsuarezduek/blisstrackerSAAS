@@ -325,6 +325,21 @@ describe('computeAutoScorecardYear — semanales nuevas', () => {
     expect(wk.top3[1]).toMatchObject({ userId: 2, count: 1 })
   })
 
+  it('tareas_completadas_agentes: cuenta completadas por agente de IA, aparte del ranking de personas', async () => {
+    prisma.task.findMany.mockResolvedValue([
+      { completedAt: '2026-03-02T12:00:00-03:00', agent: { id: 1, label: 'grokbot' }, agentName: 'Ventas' },
+      { completedAt: '2026-03-03T12:00:00-03:00', agent: { id: 1, label: 'grokbot' }, agentName: 'Ventas' },
+      { completedAt: '2026-03-04T12:00:00-03:00', agent: { id: 1, label: 'grokbot' }, agentName: 'SEO' },
+      { completedAt: '2026-03-05T12:00:00-03:00', agent: null, agentName: null }, // token borrado
+    ])
+    const out = await computeAutoScorecardYear(1, TZ, 2026, ['tareas_completadas_agentes'])
+    const wk = out.tareas_completadas_agentes['2026-W10']
+    expect(wk.value).toBe(4)
+    expect(wk.top3[0]).toMatchObject({ name: 'grokbot · Ventas', value: 2 })
+    expect(wk.top3[1]).toMatchObject({ name: 'grokbot · SEO', value: 1 })
+    expect(wk.top3[2]).toMatchObject({ name: 'Agente eliminado', value: 1 })
+  })
+
   it('propuestas_enviadas: cuenta propuestas generadas por semana y rankea por autor', async () => {
     prisma.workspaceMember.findMany.mockResolvedValue([
       { userId: 1, workStartTime: null, workEndTime: null, user: { name: 'Ana Lopez', avatar: 'a.png' } },

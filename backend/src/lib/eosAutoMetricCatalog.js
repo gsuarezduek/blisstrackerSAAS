@@ -42,6 +42,14 @@ const EOS_AUTO_METRICS = {
     frequency:     'weekly',
     description:   'Tareas que el equipo completó en la semana (por fecha de completado). La tarjeta muestra el top 3 de quienes más completaron.',
   },
+  tareas_completadas_agentes: {
+    key:           'tareas_completadas_agentes',
+    name:          'Tareas completadas (agentes de IA)',
+    unit:          null,            // conteo
+    lowerIsBetter: false,           // más es mejor
+    frequency:     'weekly',
+    description:   'Tareas que completaron los agentes de IA del equipo en la semana (por fecha de completado) — aparte del ranking de personas, nunca suma a "Tareas completadas". La tarjeta muestra el top 3 de agentes que más completaron.',
+  },
   propuestas_enviadas: {
     key:           'propuestas_enviadas',
     name:          'Propuestas enviadas',
