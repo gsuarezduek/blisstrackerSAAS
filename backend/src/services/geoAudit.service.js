@@ -309,7 +309,7 @@ const SYSTEM_PROMPT = `Eres un experto en GEO (Generative Engine Optimization) �
 
 Analizás el contenido de una página web y devolvés un análisis estructurado en JSON.
 
-IMPORTANTE: Responde ÚNICAMENTE con JSON válido, sin texto adicional, sin markdown, sin bloques de código. Solo el objeto JSON.`
+IMPORTANTE: Responde ÚNICAMENTE con JSON válido, sin texto adicional, sin markdown, sin bloques de código. Solo el objeto JSON. El JSON debe ser estrictamente válido: sin comas colgantes antes de "}" o "]", con las comillas internas de los strings escapadas (\\"), y sin saltos de línea literales dentro de un string (usá \\n si hace falta).`
 
 function buildPrompt(url, pageData, robotsData, llmsData, aiDiscovery, previousRunContext = '') {
   const blockedCitation = robotsData.citation.filter(c => c.blocked)
@@ -437,6 +437,33 @@ NUNCA reportes como señal negativa contenido que podría ser un widget dinámic
 Si no detectás señales negativas, devolvé negativeSignals: [].`
 }
 
+// ─── Parseo tolerante de la respuesta de la IA ────────────────────────────────
+// Los LLM a veces devuelven JSON casi válido con errores típicos (coma colgante
+// antes de "}"/"]"). Antes de rendirse, se intenta sanear eso antes de parsear.
+
+function sanitizeTrailingCommas(raw) {
+  return raw.replace(/,(\s*[}\]])/g, '$1')
+}
+
+function parseAuditResult(rawText) {
+  const raw = rawText
+    .trim()
+    .replace(/^```(?:json)?\s*/i, '')
+    .replace(/\s*```$/, '')
+    .trim()
+  try {
+    return JSON.parse(raw)
+  } catch (err) {
+    try {
+      return JSON.parse(sanitizeTrailingCommas(raw))
+    } catch {
+      const parseErr = new Error(`No se pudo interpretar la respuesta de la IA: ${err.message}`)
+      parseErr.rawText = raw
+      throw parseErr
+    }
+  }
+}
+
 // ─── Main analysis function ───────────────────────────────────────────────────
 
 async function setStep(auditId, step) {
@@ -476,26 +503,36 @@ async function runGeoAnalysis(auditId, workspaceId, projectId, url, userId) {
     const pageData   = extractPageData(html, url)
     const robotsData = analyzeRobots(robotsTxt)
 
-    // 4. Call Claude
+    // 4-6. Call Claude y parsear — si la IA devuelve JSON inválido (comas colgantes,
+    // comillas sin escapar) se reintenta UNA vez antes de marcar el audit como fallido.
     await setStep(auditId, 'Analizando con IA (esto puede tardar unos segundos)…')
     const previousRunContext = await buildPreviousRunContext(projectId, workspaceId, auditId)
-    const message = await anthropic.messages.create({
-      model:      'claude-haiku-4-5-20251001',
-      max_tokens: 4096,
-      system:     SYSTEM_PROMPT,
-      messages:   [{ role: 'user', content: buildPrompt(url, pageData, robotsData, llmsData, aiDiscovery, previousRunContext) }],
-    })
+    const prompt = buildPrompt(url, pageData, robotsData, llmsData, aiDiscovery, previousRunContext)
 
-    // 5. Log tokens
-    await logTokens('geoAudit', userId, message.usage, workspaceId)
-
-    // 6. Parse response — strip markdown fences si Claude los agrega
-    const raw = message.content[0].text
-      .trim()
-      .replace(/^```(?:json)?\s*/i, '')
-      .replace(/\s*```$/, '')
-      .trim()
-    const result = JSON.parse(raw)
+    const MAX_ATTEMPTS = 2
+    let result = null
+    let totalTokens = 0
+    let lastParseErr = null
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      const message = await anthropic.messages.create({
+        model:      'claude-haiku-4-5-20251001',
+        max_tokens: 4096,
+        system:     SYSTEM_PROMPT,
+        messages:   [{ role: 'user', content: prompt }],
+      })
+      await logTokens('geoAudit', userId, message.usage, workspaceId)
+      totalTokens += (message.usage.input_tokens ?? 0) + (message.usage.output_tokens ?? 0)
+      try {
+        result = parseAuditResult(message.content[0].text)
+        lastParseErr = null
+        break
+      } catch (err) {
+        lastParseErr = err
+        console.error(`[GeoAudit] JSON inválido de la IA (intento ${attempt}/${MAX_ATTEMPTS}) en audit ${auditId}: ${err.message}`)
+        if (err.rawText) console.error(`[GeoAudit] Respuesta cruda (intento ${attempt}):`, err.rawText.slice(0, 2000))
+      }
+    }
+    if (lastParseErr) throw lastParseErr
 
     const { score, components, items, negativeSignals } = result
 
@@ -526,7 +563,7 @@ async function runGeoAnalysis(auditId, workspaceId, projectId, url, userId) {
         findings:        JSON.stringify(items ?? []),
         recommendations: JSON.stringify(negativeSignals ?? []),
         rawData:         enrichedRaw,
-        tokensUsed:      (message.usage.input_tokens ?? 0) + (message.usage.output_tokens ?? 0),
+        tokensUsed:      totalTokens,
         errorMsg:        null,
       },
     })
