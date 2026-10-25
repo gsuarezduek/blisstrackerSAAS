@@ -4,9 +4,7 @@ import ConnectScreen, { OAuthMethod, TokenMethod, ScrapeMethod } from './network
 
 const BRAND = BRANDS.instagram
 
-// Oculto temporalmente mientras se vuelve a pedir la verificación de Meta (grabación de video de la app).
-// Volver a poner en `true` después de grabar.
-export const SCRAPE_METHOD_ENABLED = false
+export const SCRAPE_METHOD_ENABLED = true
 
 const authUrl = projectId => () =>
   api.get('/marketing/integrations/meta/auth-url', { params: { projectId } }).then(r => r.data.url)
