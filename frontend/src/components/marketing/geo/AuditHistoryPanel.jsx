@@ -1,15 +1,29 @@
-import ScoreTimeline from './ScoreTimeline'
+import GeoScoreChart from '../GeoScoreChart'
 import { scoreColor, fmtDate } from './geoHelpers'
 
 // ─── Historial de audits ───────────────────────────────────────────────────────
+// La evolución del score reusa el mismo GeoScoreChart del informe mensual (bandas de
+// color + tooltip) en vez del sparkline propio que tenía antes — mismo componente,
+// mismo criterio visual, en vez de mantener dos gráficos de lo mismo por separado.
 
 export default function AuditHistoryPanel({ audits, loadingAudits, onSelectAudit, onDeleteAudit }) {
+  const history = audits
+    .filter(a => a.status === 'completed' && a.score != null)
+    .map(a => ({ score: a.score, date: a.createdAt }))
+
   return (
     <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-5">
       <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-4">
         Historial de análisis
       </h3>
-      <ScoreTimeline audits={audits} />
+      {history.length >= 2 && (
+        <div className="mb-5">
+          <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">
+            Evolución del score
+          </p>
+          <GeoScoreChart history={history} />
+        </div>
+      )}
       {loadingAudits ? (
         <p className="text-sm text-gray-400">Cargando…</p>
       ) : (
