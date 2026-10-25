@@ -85,8 +85,6 @@ model Workspace {
   // ausente cae al default del catálogo (backend/src/lib/moduleAccess.js). Los admins/owners
   // siempre acceden sin importar esta config. Configurable desde Preferencias.
   moduleAccess                    Json            @default("{}")
-  // Indicaciones persistentes que la IA tiene en cuenta al generar propuestas (tono, estructura, qué incluir/evitar).
-  salesProposalGuidelines         String?
   // Firmas / datos de contacto que pueden cerrar la propuesta en el PDF. JSON: [{ id, label, closing, name, role, email, phone, note, showLogo }]
   // Al generar/editar una propuesta se elige una (Proposal.signatureId).
   salesSignatures                 Json            @default("[]")
@@ -1180,6 +1178,7 @@ enum NotificationType {
   VACATION_REQUEST
   VACATION_REVIEWED
   LEAD_ASSIGNED
+  LEAD_CREATED
   GAME_LAUNCHED
   CHAT_MENTION
   CONTENT_APPROVED

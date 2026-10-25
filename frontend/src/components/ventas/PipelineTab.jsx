@@ -217,7 +217,9 @@ export default function PipelineTab({ onOpenLead }) {
                         {col.key === 'perdido' && l.lostReason && <div className="text-xs text-red-500 dark:text-red-400 truncate mt-0.5" title={l.lostReason}>{l.lostReason}</div>}
                         <div className="flex items-center justify-between mt-2">
                           <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">{l.estimatedValue ? fmtMoney(l.estimatedValue, l.currency) : ''}</span>
-                          {l.owner && <span className="text-[11px] text-gray-400 truncate max-w-[90px]" title={l.owner.name}>{l.owner.name}</span>}
+                          {l.owner
+                            ? <span className="text-[11px] text-gray-400 truncate max-w-[90px]" title={l.owner.name}>{l.owner.name}</span>
+                            : <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 shrink-0">Sin asignar</span>}
                         </div>
                       </div>
                     ))}

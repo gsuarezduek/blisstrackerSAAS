@@ -16,7 +16,7 @@ import WhatsappLeadCard from './WhatsappLeadCard'
 import LeadNotes from './LeadNotes'
 import CollapsibleSectionHeader from './CollapsibleSectionHeader'
 import { LEAD_STATUSES, originLabel, statusMeta } from './salesCatalog'
-import { Archive, ArchiveRestore, ArrowRightLeft, CalendarDays, CircleCheck, Dot, FileText, Lightbulb, Megaphone, MessageCircle, PartyPopper, Pin, Rocket, Search, Sparkles, StickyNote, UserRound, X } from 'lucide-react'
+import { Archive, ArchiveRestore, ArrowRightLeft, CalendarDays, CircleCheck, Dot, FileText, Lightbulb, Megaphone, MessageCircle, PartyPopper, Pin, Repeat, Rocket, Search, Sparkles, StickyNote, UserRound, X } from 'lucide-react'
 import { Icon } from '../ui/Icon'
 
 const input = 'w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500'
@@ -25,7 +25,7 @@ const sectionTitle = 'text-xs font-semibold text-gray-400 dark:text-gray-500 upp
 
 // Iconos por tipo de evento del timeline automático.
 const EVENT_ICON = {
-  lead_created: Sparkles, status_changed: ArrowRightLeft, owner_changed: UserRound, note_added: StickyNote,
+  lead_created: Sparkles, form_resubmitted: Repeat, status_changed: ArrowRightLeft, owner_changed: UserRound, note_added: StickyNote,
   next_action_set: Pin, next_action_added: Pin, next_action_done: CircleCheck,
   proposal_created: FileText, research_run: Search, diagnostic_report_created: Megaphone,
   converted_to_client: PartyPopper, project_created: Rocket,

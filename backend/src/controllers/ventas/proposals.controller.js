@@ -92,7 +92,7 @@ async function prepareGeneration(req) {
   await assertTokenBudget(workspaceId)
 
   const plans = await resolvePlans(rawPlans, { workspaceId, defaultCurrency: lead.currency })
-  const ws = await prisma.workspace.findUnique({ where: { id: workspaceId }, select: { companyName: true, name: true, salesProposalGuidelines: true } })
+  const ws = await prisma.workspace.findUnique({ where: { id: workspaceId }, select: { companyName: true, name: true } })
   const leadContext = await loadLeadContext(lead, workspaceId)
 
   return {
@@ -104,7 +104,6 @@ async function prepareGeneration(req) {
       contact: lead.primaryContact,
       plans,
       objectives: objectives?.trim() || '',
-      guidelines: ws?.salesProposalGuidelines || '',
       instructions: instructions?.trim() || '',
       ...leadContext,
     },

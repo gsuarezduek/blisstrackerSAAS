@@ -30,7 +30,7 @@ async function getCurrent(req, res, next) {
  */
 async function updateCurrent(req, res, next) {
   try {
-    const { name, timezone, companyName, companyDescription, industry, companyWebsite, brandColors, brandFonts, salesProposalGuidelines, salesSignatures, salesTasksProjectId, financeTaskProjectId, financeIvaMode } = req.body
+    const { name, timezone, companyName, companyDescription, industry, companyWebsite, brandColors, brandFonts, salesSignatures, salesTasksProjectId, financeTaskProjectId, financeIvaMode } = req.body
     const data = {}
     if (name) data.name = name
     if (timezone) data.timezone = timezone
@@ -40,7 +40,6 @@ async function updateCurrent(req, res, next) {
     if (companyWebsite     !== undefined) data.companyWebsite     = companyWebsite
     if (brandColors        !== undefined) data.brandColors        = JSON.stringify(brandColors)
     if (brandFonts         !== undefined) data.brandFonts         = JSON.stringify(brandFonts)
-    if (salesProposalGuidelines !== undefined) data.salesProposalGuidelines = salesProposalGuidelines?.trim() || null
     // Firmas del PDF de la propuesta: array, solo persistimos las claves conocidas (strings + showLogo bool).
     if (salesSignatures !== undefined) {
       data.salesSignatures = Array.isArray(salesSignatures)

@@ -12,7 +12,7 @@ import CompaniesTab from '../components/ventas/CompaniesTab'
 import WhatsappTab from '../components/ventas/WhatsappTab'
 import LeadDetail from '../components/ventas/LeadDetail'
 import LeadModal from '../components/ventas/LeadModal'
-import SalesTeamModal from '../components/ventas/SalesTeamModal'
+import ConfiguracionTab from '../components/ventas/ConfiguracionTab'
 import { Lock } from 'lucide-react'
 import { Icon } from '../components/ui/Icon'
 
@@ -23,6 +23,7 @@ const BASE_TABS = [
   { id: 'empresas',  label: 'Empresas' },
 ]
 const WHATSAPP_TAB = { id: 'whatsapp', label: 'WhatsApp' }
+const CONFIG_TAB = { id: 'configuracion', label: 'Configuración' }
 
 export default function Ventas() {
   const { user } = useAuth()
@@ -32,7 +33,7 @@ export default function Ventas() {
   const { enabled: whatsappEnabled } = useFeatureFlag('whatsapp')
   const [searchParams, setSearchParams] = useSearchParams()
 
-  const TABS = whatsappEnabled ? [...BASE_TABS, WHATSAPP_TAB] : BASE_TABS
+  const TABS = [...BASE_TABS, ...(whatsappEnabled ? [WHATSAPP_TAB] : []), ...(user?.isAdmin ? [CONFIG_TAB] : [])]
   const VALID = new Set(TABS.map(t => t.id))
   const tab = VALID.has(searchParams.get('tab')) ? searchParams.get('tab') : 'dashboard'
   const leadId = searchParams.get('lead') ? Number(searchParams.get('lead')) : null
@@ -40,10 +41,9 @@ export default function Ventas() {
   // Datos compartidos entre tabs/modales: equipo comercial + empresas.
   const [team, setTeam] = useState([])
   const [companies, setCompanies] = useState([])
-  const [showConfig, setShowConfig] = useState(false)
   // "+ Nuevo lead" vive acá (no en DashboardTab) para poder crear un lead desde
-  // cualquier tab, igual que "Configuración". `leadsTick` fuerza un remount del
-  // tab activo tras crear uno (Dashboard/Pipeline listan leads y recargan al montar).
+  // cualquier tab. `leadsTick` fuerza un remount del tab activo tras crear uno
+  // (Dashboard/Pipeline listan leads y recargan al montar).
   const [showNewLead, setShowNewLead] = useState(false)
   const [leadsTick, setLeadsTick] = useState(0)
 
@@ -96,9 +96,6 @@ export default function Ventas() {
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">CRM comercial · pipeline de leads, empresas y oportunidades</p>
           </div>
           <div className="flex flex-wrap gap-2 shrink-0">
-            {user?.isAdmin && (
-              <button onClick={() => setShowConfig(true)} className="border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-xl px-4 py-2 text-sm font-medium">Configuración</button>
-            )}
             <button onClick={() => setShowNewLead(true)} className="bg-primary-600 hover:bg-primary-700 text-white font-semibold rounded-xl px-4 py-2 text-sm transition-colors">+ Nuevo lead</button>
           </div>
         </div>
@@ -129,10 +126,10 @@ export default function Ventas() {
             {tab === 'metricas'  && <MetricsTab />}
             {tab === 'empresas'  && <CompaniesTab onDataChange={loadShared} focusCompanyId={searchParams.get('company')} />}
             {tab === 'whatsapp'  && whatsappEnabled && <WhatsappTab onOpenLead={openLead} />}
+            {tab === 'configuracion' && user?.isAdmin && <ConfiguracionTab onSaved={loadShared} />}
           </>
         )}
 
-        {showConfig && <SalesTeamModal onClose={() => setShowConfig(false)} onSaved={loadShared} />}
         {showNewLead && <LeadModal companies={companies} team={team} onClose={() => setShowNewLead(false)} onSaved={handleLeadCreated} />}
       </main>
     </div>

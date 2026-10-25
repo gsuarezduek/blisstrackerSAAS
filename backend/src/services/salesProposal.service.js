@@ -114,12 +114,12 @@ ${contextParts.length ? contextParts.join('\n\n') : '## Contexto\n(No hay notas 
 }
 
 function buildPrompt(ctx) {
-  const { guidelines, instructions, briefing } = ctx
+  const { instructions, briefing } = ctx
   const briefingText = briefingToPrompt(briefing)
   return `Armá la propuesta comercial para el siguiente caso.
 
 ${buildCaseBlock(ctx)}
-${guidelines ? `\n## Indicaciones de la agencia (respetalas SIEMPRE)\n${guidelines}` : ''}${instructions ? `\n\n## Instrucciones específicas para esta propuesta\n${instructions}` : ''}${briefingText ? `\n\n${briefingText}` : ''}
+${instructions ? `\n\n## Instrucciones específicas para esta propuesta\n${instructions}` : ''}${briefingText ? `\n\n${briefingText}` : ''}
 
 Devolvé solo el JSON del documento.`
 }
@@ -180,13 +180,12 @@ const BRIEF_SYSTEM_PROMPT = `Sos un estratega comercial senior de una agencia de
  * recomendadas. Devuelve { brief, usage }. El caller ya validó el presupuesto.
  */
 async function generateProposalBrief(ctx, { workspaceId, userId }) {
-  const guidelines = ctx.guidelines ? `\n\n## Indicaciones de la agencia\n${ctx.guidelines}` : ''
   const instructions = ctx.instructions ? `\n\n## Instrucciones específicas para esta propuesta\n${ctx.instructions}` : ''
   const message = await anthropic.messages.create({
     model: BRIEF_MODEL,
     max_tokens: BRIEF_MAX_TOKENS,
     system: BRIEF_SYSTEM_PROMPT,
-    messages: [{ role: 'user', content: `Revisá este caso antes de armar la propuesta.\n\n${buildCaseBlock(ctx)}${guidelines}${instructions}\n\nDevolvé solo el JSON.` }],
+    messages: [{ role: 'user', content: `Revisá este caso antes de armar la propuesta.\n\n${buildCaseBlock(ctx)}${instructions}\n\nDevolvé solo el JSON.` }],
   }, { timeout: 120_000 })
   logTokens('salesProposalBrief', userId, message.usage, workspaceId).catch(() => {})
 

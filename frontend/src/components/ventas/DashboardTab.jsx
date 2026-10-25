@@ -285,7 +285,7 @@ export default function DashboardTab({ team, onOpenLead, onDataChange }) {
                         title={l.status === 'perdido' ? l.lostReason : undefined}
                       />
                     </td>
-                    <td className="px-4 py-3 text-gray-600 dark:text-gray-300">{l.owner?.name || <span className="text-gray-400">Sin asignar</span>}</td>
+                    <td className="px-4 py-3 text-gray-600 dark:text-gray-300">{l.owner?.name || <span className="text-[11px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">Sin asignar</span>}</td>
                     <td className="px-4 py-3 text-gray-600 dark:text-gray-300">{originLabel(l.origin)}</td>
                     <td className="px-4 py-3 text-right text-gray-700 dark:text-gray-200">{fmtMoney(l.estimatedValue, l.currency)}</td>
                     <td className="px-4 py-3 text-gray-600 dark:text-gray-300">{fmtDate(l.nextContactAt)}</td>
