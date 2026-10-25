@@ -225,7 +225,7 @@ async function saveAllPreviousMonthSnapshots() {
   )
 
   const integrations = await prisma.projectIntegration.findMany({
-    where:  { type: 'google_analytics', status: 'active', propertyId: { not: null } },
+    where:  { type: 'google_analytics', status: 'active', propertyId: { not: null }, project: { active: true } },
     select: { projectId: true, workspaceId: true },
   })
 
@@ -251,7 +251,7 @@ async function saveAllPreviousMonthSnapshots() {
  */
 async function refreshAllCurrentMonthSnapshots() {
   const integrations = await prisma.projectIntegration.findMany({
-    where:  { type: 'google_analytics', status: 'active', propertyId: { not: null } },
+    where:  { type: 'google_analytics', status: 'active', propertyId: { not: null }, project: { active: true } },
     select: { projectId: true, workspaceId: true, workspace: { select: { timezone: true } } },
   })
 

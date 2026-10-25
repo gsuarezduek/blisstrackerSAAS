@@ -106,7 +106,7 @@ async function saveAllMonthlyInstagramSnapshots() {
   const { enabledWorkspaceIds } = require('../lib/featureFlags')
   const enabled = await enabledWorkspaceIds('marketing')
   const integrations = enabled.size === 0 ? [] : await prisma.projectIntegration.findMany({
-    where:  { type: 'instagram', status: 'active', workspaceId: { in: [...enabled] } },
+    where:  { type: 'instagram', status: 'active', workspaceId: { in: [...enabled] }, project: { active: true } },
     select: { projectId: true, project: { select: { workspaceId: true } } },
   })
 

@@ -125,7 +125,7 @@ async function captureStoriesForProject(projectId, workspaceId, integration) {
  */
 async function captureAllStories() {
   const integrations = await prisma.projectIntegration.findMany({
-    where: { type: 'instagram', status: 'active', NOT: { scopes: 'scrape' } },
+    where: { type: 'instagram', status: 'active', NOT: { scopes: 'scrape' }, project: { active: true } },
     include: { project: { select: { workspaceId: true, name: true } } },
   })
 

@@ -92,7 +92,7 @@ async function saveAllSearchConsoleSnapshots() {
   const targetMonth = `${prevY}-${String(prevM).padStart(2, '0')}`
 
   const integrations = await prisma.projectIntegration.findMany({
-    where:   { type: 'google_search_console', status: 'active' },
+    where:   { type: 'google_search_console', status: 'active', project: { active: true } },
     select:  { projectId: true, project: { select: { workspaceId: true } } },
   })
 

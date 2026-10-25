@@ -83,7 +83,7 @@ async function saveAllMonthlyTikTokSnapshots() {
   const month = prevMonthStr(currentMonthStr())
 
   const integrations = await prisma.projectIntegration.findMany({
-    where:  { type: 'tiktok', status: 'active' },
+    where:  { type: 'tiktok', status: 'active', project: { active: true } },
     select: { projectId: true, project: { select: { workspaceId: true } } },
   })
 

@@ -261,11 +261,11 @@ async function runWeeklyAdsAdvisor() {
 
   const [metaIntegrations, googleIntegrations] = await Promise.all([
     prisma.projectIntegration.findMany({
-      where:  { type: 'meta_ads', status: 'active', propertyId: { not: null }, workspaceId: { in: wsIds } },
+      where:  { type: 'meta_ads', status: 'active', propertyId: { not: null }, workspaceId: { in: wsIds }, project: { active: true } },
       select: { projectId: true, workspaceId: true },
     }),
     prisma.projectIntegration.findMany({
-      where:  { type: 'google_ads', status: 'active', customerId: { not: null }, workspaceId: { in: wsIds } },
+      where:  { type: 'google_ads', status: 'active', customerId: { not: null }, workspaceId: { in: wsIds }, project: { active: true } },
       select: { projectId: true, workspaceId: true },
     }),
   ])

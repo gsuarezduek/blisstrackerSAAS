@@ -191,7 +191,7 @@ async function saveAllAdsSnapshots() {
 
   // Proyectos con integración Meta Ads activa
   const metaIntegrations = enabled.size === 0 ? [] : await prisma.projectIntegration.findMany({
-    where: { type: 'meta_ads', status: 'active', workspaceId: { in: [...enabled] } },
+    where: { type: 'meta_ads', status: 'active', workspaceId: { in: [...enabled] }, project: { active: true } },
     include: { project: { select: { id: true, workspaceId: true, name: true } } },
   })
 
@@ -210,7 +210,7 @@ async function saveAllAdsSnapshots() {
 
   // Proyectos con integración Google Ads activa
   const gadsIntegrations = enabled.size === 0 ? [] : await prisma.projectIntegration.findMany({
-    where: { type: 'google_ads', status: 'active', customerId: { not: null }, workspaceId: { in: [...enabled] } },
+    where: { type: 'google_ads', status: 'active', customerId: { not: null }, workspaceId: { in: [...enabled] }, project: { active: true } },
     include: { project: { select: { id: true, workspaceId: true, name: true } } },
   })
 

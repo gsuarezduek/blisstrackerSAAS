@@ -275,7 +275,7 @@ async function runWeeklyRrssAdvisor() {
   const wsIds = [...wsById.keys()]
 
   const integrationTypes = await prisma.projectIntegration.findMany({
-    where:  { type: { in: Object.values(INTEGRATION_TYPE) }, status: 'active', workspaceId: { in: wsIds } },
+    where:  { type: { in: Object.values(INTEGRATION_TYPE) }, status: 'active', workspaceId: { in: wsIds }, project: { active: true } },
     select: { projectId: true, workspaceId: true, type: true },
   })
   const TYPE_TO_PLATFORM = Object.fromEntries(Object.entries(INTEGRATION_TYPE).map(([k, v]) => [v, k]))

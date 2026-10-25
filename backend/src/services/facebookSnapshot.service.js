@@ -78,7 +78,7 @@ async function saveAllMonthlyFacebookSnapshots() {
   const month = prevMonthStr(currentMonthStr())
 
   const integrations = await prisma.projectIntegration.findMany({
-    where:  { type: 'facebook', status: 'active', propertyId: { not: null } },
+    where:  { type: 'facebook', status: 'active', propertyId: { not: null }, project: { active: true } },
     select: { projectId: true, project: { select: { workspaceId: true } } },
   })
 

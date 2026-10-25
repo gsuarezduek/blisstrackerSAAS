@@ -73,7 +73,7 @@ async function saveAllMonthlyYouTubeSnapshots() {
   const month = prevMonthStr(currentMonthStr())
 
   const integrations = await prisma.projectIntegration.findMany({
-    where:  { type: 'google_youtube', status: 'active' },
+    where:  { type: 'google_youtube', status: 'active', project: { active: true } },
     select: { projectId: true, project: { select: { workspaceId: true } } },
   })
 
