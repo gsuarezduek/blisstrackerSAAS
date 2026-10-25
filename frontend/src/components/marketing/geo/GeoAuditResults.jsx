@@ -1,6 +1,5 @@
 import AiTrafficSection from './AiTrafficSection'
 import ComponentCard from './ComponentCard'
-import { printGeoAudit } from './printGeoAudit'
 import { COMPONENTS_META, SEVERITY_LABELS, SEVERITY_COLORS, scoreRing, scoreColor, scoreLabel, fmtDate } from './geoHelpers'
 import { STATUS_LABEL, STATUS_CLASS } from '../../../utils/taskStatus'
 
@@ -9,10 +8,12 @@ function openTask(task) {
 }
 
 // ─── Resultados de la auditoría GEO completada ────────────────────────────────
+// Los botones de Generar llms.txt / JSON-LD / Imprimir viven en la barra de
+// "Analizar" de GeoTab.jsx (misma fila, para aprovechar el espacio) — acá solo
+// queda el score y el contenido del análisis.
 
 export default function GeoAuditResults({
-  activeAudit, sortedFindings, negativeSignals, selectedProject, projectId,
-  hasLlmsFinding, schemaScoreLow, onGenerateLlmsTxt, onGenerateSchema, onCreateTask,
+  activeAudit, sortedFindings, negativeSignals, projectId, onCreateTask,
 }) {
   return (
     <>
@@ -40,32 +41,6 @@ export default function GeoAuditResults({
             </p>
           </div>
         </div>
-      </div>
-
-      {/* Herramientas de generación + impresión */}
-      <div className="flex flex-wrap gap-2">
-        {hasLlmsFinding && (
-          <button onClick={onGenerateLlmsTxt}
-            className="px-3 py-1.5 text-xs font-medium bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-700 rounded-xl hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors">
-            Generar llms.txt
-          </button>
-        )}
-        {schemaScoreLow && (
-          <button onClick={onGenerateSchema}
-            className="px-3 py-1.5 text-xs font-medium bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400 border border-purple-200 dark:border-purple-700 rounded-xl hover:bg-purple-100 dark:hover:bg-purple-900/30 transition-colors">
-            Generar JSON-LD
-          </button>
-        )}
-        <button
-          onClick={() => printGeoAudit(activeAudit, sortedFindings, negativeSignals, selectedProject?.name ?? activeAudit.url)}
-          title="Imprimir / Exportar PDF"
-          className="px-3 py-1.5 text-xs font-medium bg-gray-50 dark:bg-gray-700 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-600 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors flex items-center gap-1.5"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5">
-            <path fillRule="evenodd" d="M5 2.75C5 1.784 5.784 1 6.75 1h6.5c.966 0 1.75.784 1.75 1.75v3.552c.377.046.752.097 1.126.153A2.212 2.212 0 0 1 18 8.653v4.097A2.25 2.25 0 0 1 15.75 15h-.241l.305 1.984A1.75 1.75 0 0 1 14.084 19H5.915a1.75 1.75 0 0 1-1.73-2.016L4.49 15H4.25A2.25 2.25 0 0 1 2 12.75V8.653c0-1.082.775-2.034 1.874-2.198.374-.056.749-.107 1.126-.153V2.75Zm4.5 13.5h1l-.307-2H9.807l-.307 2Zm1.997 0h.258l.527-3.44A.75.75 0 0 0 11.54 12H8.46a.75.75 0 0 0-.743.81L8.244 16.25h.258Zm-5.99-10.337c.966-.099 1.94-.17 2.923-.213L8.25 5.25a.75.75 0 0 1 .75.75v.313l.5-.063L10 5.25a.75.75 0 0 1 .75.75v.25l.5.063V6a.75.75 0 0 1 .75-.75h.5a.75.75 0 0 1 .75.75v.245c.984.043 1.96.114 2.925.213A.75.75 0 0 0 16.5 5.5v-2.75a.25.25 0 0 0-.25-.25h-6.5a.25.25 0 0 0-.25.25V5.5a.75.75 0 0 0-.743.663Z" clipRule="evenodd" />
-          </svg>
-          Imprimir
-        </button>
       </div>
 
       {/* Tráfico desde IAs */}
