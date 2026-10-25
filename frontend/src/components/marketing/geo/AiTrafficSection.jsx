@@ -4,45 +4,66 @@ import { AI_META } from './geoHelpers'
 
 // ─── AI Traffic ───────────────────────────────────────────────────────────────
 
-// Mini gráfico de barras SVG para el histórico
-function AiBarChart({ history }) {
+// Mini gráfico de barras SVG para el histórico. `geoResolutions` (opcional) marca con un
+// punto los meses en que se completó alguna recomendación GEO — es una referencia visual
+// para leer "¿el tráfico cambió por los meses alrededor?", no una medición causal (el
+// tráfico IA es mensual y de todo el sitio, no atribuible a una recomendación puntual).
+function AiBarChart({ history, geoResolutions }) {
   if (!history?.length) return null
+
+  const resolutionsByMonth = new Map((geoResolutions ?? []).map(r => [r.month, r.items]))
 
   // Calcular totales por mes
   const months = history.map(h => {
     const total = Object.entries(h)
       .filter(([k]) => k !== 'month')
       .reduce((s, [, v]) => s + (v || 0), 0)
-    return { month: h.month, total }
+    return { month: h.month, total, resolved: resolutionsByMonth.get(h.month) }
   })
 
   const maxVal = Math.max(...months.map(m => m.total), 1)
   const W = 400
   const H = 80
   const barW = Math.max(Math.floor((W - 20) / months.length) - 4, 8)
+  const hasAnyResolution = months.some(m => m.resolved?.length)
 
   return (
-    <svg viewBox={`0 0 ${W} ${H + 20}`} className="w-full" preserveAspectRatio="none">
-      {months.map((m, i) => {
-        const x    = 10 + i * ((W - 20) / months.length)
-        const barH = Math.max(Math.round((m.total / maxVal) * H), 2)
-        const y    = H - barH
-        const label = m.month.slice(5) // "MM"
-        return (
-          <g key={m.month}>
-            <rect x={x} y={y} width={barW} height={barH} rx="2" className="fill-primary-400 dark:fill-primary-500 opacity-80" />
-            <text x={x + barW / 2} y={H + 14} textAnchor="middle" fontSize="7" className="fill-gray-400 dark:fill-gray-500">
-              {label}
-            </text>
-            {m.total > 0 && (
-              <text x={x + barW / 2} y={y - 3} textAnchor="middle" fontSize="7" className="fill-gray-500 dark:fill-gray-400">
-                {m.total}
+    <>
+      <svg viewBox={`0 0 ${W} ${H + 20}`} className="w-full" preserveAspectRatio="none">
+        {months.map((m, i) => {
+          const x    = 10 + i * ((W - 20) / months.length)
+          const barH = Math.max(Math.round((m.total / maxVal) * H), 2)
+          const y    = H - barH
+          const label = m.month.slice(5) // "MM"
+          return (
+            <g key={m.month}>
+              <rect x={x} y={y} width={barW} height={barH} rx="2" className="fill-primary-400 dark:fill-primary-500 opacity-80" />
+              <text x={x + barW / 2} y={H + 14} textAnchor="middle" fontSize="7" className="fill-gray-400 dark:fill-gray-500">
+                {label}
               </text>
-            )}
-          </g>
-        )
-      })}
-    </svg>
+              {m.total > 0 && (
+                <text x={x + barW / 2} y={y - 3} textAnchor="middle" fontSize="7" className="fill-gray-500 dark:fill-gray-400">
+                  {m.total}
+                </text>
+              )}
+              {m.resolved?.length > 0 && (
+                <g>
+                  <circle cx={x + barW / 2} cy={H + 6} r="2.5" className="fill-emerald-500">
+                    <title>{`Recomendación GEO resuelta este mes: ${m.resolved.join(', ')}`}</title>
+                  </circle>
+                </g>
+              )}
+            </g>
+          )
+        })}
+      </svg>
+      {hasAnyResolution && (
+        <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1 flex items-center gap-1">
+          <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block flex-shrink-0" />
+          mes con alguna recomendación GEO resuelta (pasá el mouse para ver cuál) — referencia para mirar el tráfico de los meses alrededor, no una medición de que esa recomendación lo haya causado
+        </p>
+      )}
+    </>
   )
 }
 
@@ -79,6 +100,7 @@ export default function AiTrafficSection({ projectId }) {
 
   const live    = data.live    ?? {}
   const history = data.history ?? []
+  const geoResolutions = data.geoResolutions ?? []
 
   // Filtrar fuentes con sesiones > 0
   const activeSources = Object.entries(live)
@@ -140,7 +162,7 @@ export default function AiTrafficSection({ projectId }) {
       {history.length >= 2 && (
         <div className="border-t border-gray-100 dark:border-gray-700 pt-3">
           <p className="text-xs text-gray-400 dark:text-gray-500 mb-2">Evolución mensual (sesiones totales desde IAs)</p>
-          <AiBarChart history={history} />
+          <AiBarChart history={history} geoResolutions={geoResolutions} />
         </div>
       )}
     </div>

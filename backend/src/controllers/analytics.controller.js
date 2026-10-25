@@ -136,8 +136,12 @@ async function getAdsData(req, res) {
  * Query: ?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD  (default: últimos 30 días)
  *
  * Devuelve:
- *   live:     { chatgpt: 45, claude: 12, ... }  — período solicitado en tiempo real
- *   history:  [{ month: "2026-04", chatgpt: 38, claude: 9, ... }]  — snapshots guardados
+ *   live:            { chatgpt: 45, claude: 12, ... }  — período solicitado en tiempo real
+ *   history:         [{ month: "2026-04", chatgpt: 38, claude: 9, ... }]  — snapshots guardados
+ *   geoResolutions:  [{ month: "2026-04", items: ["Agregar llms.txt", ...] }]  — recomendaciones
+ *                    GEO completadas ese mes (vía GeoFindingTask → Task.completedAt), para marcar
+ *                    el historial — es una correlación a simple vista, no una medición causal
+ *                    (el tráfico IA es mensual y de todo el sitio, no por recomendación).
  */
 async function getAiTrafficData(req, res, next) {
   try {
@@ -167,13 +171,17 @@ async function getAiTrafficData(req, res, next) {
       return res.status(400).json({ error: 'GA4 Property ID no configurado.', code: 'NO_PROPERTY' })
     }
 
-    // Fetch en paralelo: datos live + histórico de snapshots
-    const [live, snapshots] = await Promise.all([
+    // Fetch en paralelo: datos live + histórico de snapshots + recomendaciones GEO resueltas
+    const [live, snapshots, geoLinks] = await Promise.all([
       fetchAiTrafficData(integration, startDate, endDate),
       prisma.analyticsSnapshot.findMany({
         where:   { projectId, workspaceId },
         orderBy: { month: 'asc' },
         select:  { month: true, aiTraffic: true },
+      }),
+      prisma.geoFindingTask.findMany({
+        where:   { audit: { projectId }, task: { status: 'COMPLETED', completedAt: { not: null } } },
+        select:  { task: { select: { completedAt: true, description: true } } },
       }),
     ])
 
@@ -187,7 +195,16 @@ async function getAiTrafficData(req, res, next) {
       })
       .filter(Boolean)
 
-    res.json({ live, history, projectName: project.name })
+    // Agrupar recomendaciones GEO completadas por mes de cierre
+    const resolutionsByMonth = new Map()
+    for (const { task } of geoLinks) {
+      const month = task.completedAt.toISOString().slice(0, 7)
+      if (!resolutionsByMonth.has(month)) resolutionsByMonth.set(month, [])
+      resolutionsByMonth.get(month).push(task.description)
+    }
+    const geoResolutions = [...resolutionsByMonth.entries()].map(([month, items]) => ({ month, items }))
+
+    res.json({ live, history, projectName: project.name, geoResolutions })
   } catch (err) {
     if (
       err.code === 'TOKEN_EXPIRED' ||
