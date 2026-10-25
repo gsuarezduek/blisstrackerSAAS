@@ -4,8 +4,9 @@ import ObjectiveProgressBars from './ObjectiveProgressBars'
 import RrssAdvisorPanel from './RrssAdvisorPanel'
 import ConnectPrompt, { SCRAPE_METHOD_ENABLED } from './InstagramConnect'
 import { BRANDS } from './networks/brands'
-import { BrandSpinner } from './networks/ui'
 import { ExpiredNotice } from './networks/ConnectScreen'
+import FunLoader from './networks/FunLoader'
+import { INSTAGRAM_LOADING_MESSAGES } from './networks/loadingMessages'
 import {
   fmtNum, fmtK, engagementColor, engagementLabel, subtractDays, todayAR, monthLabel,
   LineChart, MonthNav, FOLLOWER_FILTERS, FollowersCard, KpiCard,
@@ -181,7 +182,7 @@ export default function InstagramTab({ projectId, onSelectProject, projects = []
     return <CrossProjectInstagramPanel onSelectProject={onSelectProject} />
   }
 
-  if (loading) return <BrandSpinner brand={BRANDS.instagram} />
+  if (loading) return <FunLoader messages={INSTAGRAM_LOADING_MESSAGES} />
 
   if (!integration) return <ConnectPrompt projectId={projectId} onConnected={fetchData} />
   // Vencida: aviso + los mismos métodos de conexión (se puede volver por cualquiera).

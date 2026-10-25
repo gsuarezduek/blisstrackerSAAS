@@ -78,3 +78,56 @@ describe('extractPageData — detección de schemas JSON-LD', () => {
     expect(data.schemaTypes).toEqual(['WebSite'])
   })
 })
+
+describe('extractPageData — orgFields (campos reales del Organization/LocalBusiness, para que la IA no los invente)', () => {
+  function htmlWithJsonLd(scripts) {
+    const blocks = scripts.map(s => `<script type="application/ld+json">${JSON.stringify(s)}</script>`).join('\n')
+    return `<html><head><title>Test</title>${blocks}</head><body><h1>Hola</h1></body></html>`
+  }
+
+  it('null cuando no hay ningún schema Organization/LocalBusiness', () => {
+    const html = htmlWithJsonLd([{ '@type': 'FAQPage' }])
+    expect(extractPageData(html, 'https://x.com/').orgFields).toBeNull()
+  })
+
+  it('reporta true solo en los campos que realmente están presentes (caso real: Organization completo de mdzrentacar.com)', () => {
+    const html = htmlWithJsonLd([{
+      '@context': 'https://schema.org',
+      '@graph': [{
+        '@type': ['AutoRental', 'Organization'],
+        name: 'MDZ Rent a Car',
+        logo: { '@type': 'ImageObject', url: 'https://x.com/logo.png' },
+        email: 'contacto@x.com',
+        telephone: '+54 9 261 230-6787',
+        address: { '@type': 'PostalAddress', streetAddress: 'Martín Zapata 355' },
+        sameAs: ['https://facebook.com/x', 'https://instagram.com/x'],
+        foundingDate: '2003',
+        aggregateRating: { '@type': 'AggregateRating', ratingValue: '4.5' },
+      }],
+    }])
+    expect(extractPageData(html, 'https://x.com/').orgFields).toEqual({
+      name: true, logo: true, email: true, telephone: true,
+      address: true, sameAs: true, foundingDate: true, aggregateRating: true,
+    })
+  })
+
+  it('reporta false en los campos que realmente faltan, sin inventar', () => {
+    const html = htmlWithJsonLd([{ '@type': 'Organization', name: 'Acme' }])
+    expect(extractPageData(html, 'https://x.com/').orgFields).toEqual({
+      name: true, logo: false, email: false, telephone: false,
+      address: false, sameAs: false, foundingDate: false, aggregateRating: false,
+    })
+  })
+
+  it('un sameAs vacío ([]) cuenta como ausente, no presente', () => {
+    const html = htmlWithJsonLd([{ '@type': 'Organization', name: 'Acme', sameAs: [] }])
+    expect(extractPageData(html, 'https://x.com/').orgFields.sameAs).toBe(false)
+  })
+
+  it('también reconoce LocalBusiness, no solo Organization', () => {
+    const html = htmlWithJsonLd([{ '@type': 'LocalBusiness', name: 'Acme', telephone: '123' }])
+    const fields = extractPageData(html, 'https://x.com/').orgFields
+    expect(fields.name).toBe(true)
+    expect(fields.telephone).toBe(true)
+  })
+})

@@ -90,6 +90,27 @@ function extractPageData(html, url) {
     Array.isArray(s['@type']) ? s['@type'] : (s['@type'] ? [s['@type']] : [])
   ).filter(Boolean)
 
+  // El prompt solo le pasaba a la IA la LISTA de tipos presentes (Organization, WebSite,
+  // etc.), nunca el contenido de sus campos — eso la llevaba a "adivinar" qué faltaba
+  // (logo/email/sameAs/foundingDate) en vez de leer datos reales, inventando huecos que
+  // no existían (bug real detectado en producción: mdzrentacar.com tiene los 4 campos
+  // completos y el análisis igual reportó "incompleto"). Extraemos presencia real de
+  // campos clave para que la IA solo pueda afirmar lo que efectivamente está ausente.
+  const orgLikeSchema = schemas.find(s => {
+    const types = Array.isArray(s['@type']) ? s['@type'] : [s['@type']]
+    return types.includes('Organization') || types.includes('LocalBusiness')
+  })
+  const orgFields = orgLikeSchema ? {
+    name:            !!orgLikeSchema.name,
+    logo:            !!orgLikeSchema.logo,
+    email:           !!orgLikeSchema.email,
+    telephone:       !!orgLikeSchema.telephone,
+    address:         !!orgLikeSchema.address,
+    sameAs:          Array.isArray(orgLikeSchema.sameAs) && orgLikeSchema.sameAs.length > 0,
+    foundingDate:    !!orgLikeSchema.foundingDate,
+    aggregateRating: !!orgLikeSchema.aggregateRating,
+  } : null
+
   // Dynamic widget detection — must run BEFORE removing scripts/iframes
   // These load content via JS so cheerio sees them as empty, but they ARE present
   const REVIEW_WIDGET_PATTERNS = [
@@ -187,7 +208,7 @@ function extractPageData(html, url) {
     title, description, canonical, langAttr, wordCount,
     isNoindex, isNofollow, likelySPA,
     h1, h2, h3, bodyText,
-    schemas, schemaTypes,
+    schemas, schemaTypes, orgFields,
     hasAuthor, hasDates, latestDate,
     hasDynamicReviewWidget, dynamicWidgets: [...new Set(dynamicWidgets)],
     og: { title: ogTitle, description: ogDescription, image: ogImage },
@@ -491,6 +512,10 @@ ${pageData.bodyText}
 SCHEMAS JSON-LD: ${pageData.schemas.length} detectados
 Tipos presentes: ${pageData.schemaTypes.join(', ') || 'ninguno'}
 Tipos GEO importantes ausentes: ${['Organization','WebSite','Article','FAQPage','BreadcrumbList'].filter(t => !pageData.schemaTypes.includes(t)).join(', ') || 'ninguno'}
+${pageData.orgFields
+  ? `Campos del schema Organization/LocalBusiness detectado (SOLO podés decir que un campo falta si acá dice "ausente" — no inventes otros campos faltantes, no tenés visibilidad de ningún otro):
+${Object.entries(pageData.orgFields).map(([k, v]) => `  • ${k}: ${v ? 'presente' : 'ausente'}`).join('\n')}`
+  : 'No se detectó ningún schema Organization/LocalBusiness — no afirmes nada sobre qué campos tiene o le faltan, solo que el tipo en sí está ausente.'}
 
 ═══ ACCESO DE CRAWLERS IA ═══
 ROBOTS.TXT: ${robotsData.hasRobotsTxt ? 'presente' : 'NO encontrado (todos los bots permitidos por defecto)'}
@@ -536,6 +561,7 @@ ${previousRunContext}
 Incluí entre 5 y 10 items priorizados por impacto GEO real, ordenados de mayor a menor severidad.
 Cada item debe combinar el problema con la acción concreta y el impacto esperado, en términos cualitativos — son señales con evidencia de asociación, no garantías de resultado, así que no inventes porcentajes exactos de mejora.
 Cada item de "items" debe tratar UN solo problema de UN solo componente — nunca combines en un mismo item dos causas sin relación directa entre sí (ej. Domain Rating bajo es una señal externa de brandAuthority, y un schema ausente es una señal propia de schema; aunque ambos componentes den bajo, son hallazgos independientes con acciones independientes, así que van en items separados, no fusionados en un solo título/acción).
+NUNCA afirmes que un campo específico de un schema (logoUrl, email, sameAs, foundingDate, telephone, address, etc.) está ausente salvo que la sección "Campos del schema Organization/LocalBusiness" de arriba lo diga explícitamente — no tenés visibilidad real del JSON-LD campo por campo más allá de eso, así que inventar qué "falta" ahí es un dato falso, no una inferencia razonable. Si no hay esa sección, limitate a hablar del TIPO de schema (presente/ausente), nunca de sus propiedades internas.
 En negativeSignals, detectá señales que REDUCEN citabilidad: lenguaje excesivamente autopromocional, contenido escaso (<300 palabras), keyword stuffing, texto oculto, ausencia de autoría, fechas desactualizadas.
 NUNCA reportes como señal negativa contenido que podría ser un widget dinámico (reseñas, mapas, chat). Si hay widgets de reseñas dinámicos detectados, reportalos como oportunidad de mejora GEO (agregar Schema.org AggregateRating/Review estático), no como "sección vacía" o "ausencia de testimonios".
 Si no detectás señales negativas, devolvé negativeSignals: [].`
