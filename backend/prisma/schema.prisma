@@ -135,6 +135,9 @@ model Workspace {
   benefitBankRequests        BenefitBankRequest[]
   geoAudits                  GeoAudit[]
   geoFindingTasks            GeoFindingTask[]
+  geoVisibilityPrompts       GeoVisibilityPrompt[]
+  geoVisibilityCompetitors   GeoVisibilityCompetitor[]
+  geoVisibilityRuns          GeoVisibilityRun[]
   integrations               ProjectIntegration[]
   analyticsSnapshots         AnalyticsSnapshot[]
   analyticsInsights          AnalyticsInsight[]
@@ -646,6 +649,9 @@ model Project {
   links                    ProjectLink[]
   situationEntries         ProjectSituationEntry[]
   geoAudits                GeoAudit[]
+  geoVisibilityPrompts     GeoVisibilityPrompt[]
+  geoVisibilityCompetitors GeoVisibilityCompetitor[]
+  geoVisibilityRuns        GeoVisibilityRun[]
   integrations             ProjectIntegration[]
   apifyUsageLogs           ApifyUsageLog[]
   analyticsSnapshots       AnalyticsSnapshot[]
@@ -1546,6 +1552,91 @@ model GeoFindingTask {
   @@unique([auditId, kind, itemIndex])
   @@index([workspaceId])
   @@index([auditId])
+}
+
+// ─── Visibilidad IA (#1/#5) ─────────────────────────────────────────────────
+// A diferencia de GeoAudit (on-page de un sitio), esto le pregunta a un LLM CON
+// búsqueda web real preguntas típicas del rubro del cliente y mide si su marca
+// aparece citada (y en qué posición relativa a los competidores configurados).
+// Catálogos (Prompt/Competitor) separados de las corridas (Run/Result) porque se
+// configuran pocas veces pero se corren muchas — permite ver la evolución de un
+// mismo prompt en el tiempo. V1 es manual on-demand (sin cron), con tope duro de
+// prompts/competidores activos por proyecto (ver geoVisibility.controller.js) —
+// la tool server-side de búsqueda no la factura AiTokenLog/tokenBudget.js, así
+// que el costo se controla por diseño (menos prompts posibles) en vez de por
+// presupuesto medido.
+model GeoVisibilityPrompt {
+  id          Int      @id @default(autoincrement())
+  workspaceId Int
+  projectId   Int
+  query       String
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspace Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project   Project               @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  results   GeoVisibilityResult[]
+
+  @@index([workspaceId])
+  @@index([projectId])
+}
+
+// Catálogo de competidores a detectar en las respuestas — deliberadamente
+// desacoplado de CompetitorAccount (que es específico del scraping de RRSS: un
+// @username por red, no un nombre de marca para buscar texto).
+model GeoVisibilityCompetitor {
+  id          Int      @id @default(autoincrement())
+  workspaceId Int
+  projectId   Int
+  name        String
+  domain      String?
+  createdAt   DateTime @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project   Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([projectId])
+}
+
+// Contenedor async de una corrida — mismo patrón status/errorMsg que GeoAudit/
+// OnPageAudit (progreso en vivo mientras running vía errorMsg, polling cada 3s).
+model GeoVisibilityRun {
+  id          Int      @id @default(autoincrement())
+  workspaceId Int
+  projectId   Int
+  status      String   @default("pending") // pending | running | completed | failed
+  errorMsg    String?
+  tokensUsed  Int?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspace Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project   Project               @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  results   GeoVisibilityResult[]
+
+  @@index([workspaceId])
+  @@index([projectId, createdAt])
+}
+
+// Una fila por prompt testeado dentro de una corrida.
+model GeoVisibilityResult {
+  id                   Int      @id @default(autoincrement())
+  runId                Int
+  promptId             Int
+  ownMentioned         Boolean  @default(false)
+  ownPosition          Int? // 1 = la primera marca mencionada en la respuesta, null si no apareció
+  competitorsMentioned String   @default("[]") // JSON: [{id, name, mentioned, position?}]
+  sources              String   @default("[]") // JSON: [{url, title?}] — citas/fuentes que devolvió web_search
+  rawAnswerExcerpt     String? // primeros ~500 chars de la respuesta cruda, para que el cliente pueda leer el contexto
+  createdAt            DateTime @default(now())
+
+  run    GeoVisibilityRun    @relation(fields: [runId], references: [id], onDelete: Cascade)
+  prompt GeoVisibilityPrompt @relation(fields: [promptId], references: [id], onDelete: Cascade)
+
+  @@index([runId])
+  @@index([promptId])
 }
 
 // Job de refresco masivo de fuentes de Marketing (GA4, Search Console, Domain

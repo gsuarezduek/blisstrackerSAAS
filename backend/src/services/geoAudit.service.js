@@ -4,6 +4,7 @@ const prisma    = require('../lib/prisma')
 const { logTokens } = require('../lib/logTokens')
 const { assertPublicUrl } = require('../lib/safeUrl')
 const { normalizeInternal, crawlSite } = require('../lib/siteCrawler')
+const { parseLooseJson } = require('../lib/jsonRepair')
 
 const { anthropic } = require('../lib/claude')
 
@@ -511,28 +512,7 @@ Si no detectás señales negativas, devolvé negativeSignals: [].`
 // Los LLM a veces devuelven JSON casi válido con errores típicos (coma colgante
 // antes de "}"/"]"). Antes de rendirse, se intenta sanear eso antes de parsear.
 
-function sanitizeTrailingCommas(raw) {
-  return raw.replace(/,(\s*[}\]])/g, '$1')
-}
-
-function parseAuditResult(rawText) {
-  const raw = rawText
-    .trim()
-    .replace(/^```(?:json)?\s*/i, '')
-    .replace(/\s*```$/, '')
-    .trim()
-  try {
-    return JSON.parse(raw)
-  } catch (err) {
-    try {
-      return JSON.parse(sanitizeTrailingCommas(raw))
-    } catch {
-      const parseErr = new Error(`No se pudo interpretar la respuesta de la IA: ${err.message}`)
-      parseErr.rawText = raw
-      throw parseErr
-    }
-  }
-}
+const parseAuditResult = parseLooseJson
 
 // ─── Main analysis function ───────────────────────────────────────────────────
 

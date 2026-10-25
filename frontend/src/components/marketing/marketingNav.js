@@ -20,6 +20,7 @@ export const NAV = [
         { id: 'seo',            label: 'SEO' },
         { id: 'onpage',         label: 'On-Page' },
         { id: 'canibalizacion', label: 'Canibalización' },
+        { id: 'ai-visibility',  label: 'Visibilidad IA' },
       ] },
       { id: 'keywords',  label: 'Keywords y oportunidades' },
       { id: 'contenido', label: 'Contenido SEO', views: [

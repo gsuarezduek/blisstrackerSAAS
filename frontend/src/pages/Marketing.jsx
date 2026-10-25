@@ -11,6 +11,7 @@ import SeoTab      from '../components/marketing/SeoTab'
 import KeywordsTab from '../components/marketing/KeywordsTab'
 import ContentBriefTab   from '../components/marketing/ContentBriefTab'
 import OnPageTab         from '../components/marketing/OnPageTab'
+import AiVisibilityTab   from '../components/marketing/AiVisibilityTab'
 import ContentGapTab     from '../components/marketing/ContentGapTab'
 import CanibalizacionTab from '../components/marketing/CanibalizacionTab'
 import InformesTab  from '../components/marketing/InformesTab'
@@ -155,6 +156,7 @@ export default function Marketing() {
       if (view === 'seo')            return <SeoTab            projectId={projectId} projects={projects} onSelectProject={handleProjectChange} />
       if (view === 'onpage')         return <OnPageTab         projectId={projectId} projects={projects} />
       if (view === 'canibalizacion') return <CanibalizacionTab projectId={projectId} />
+      if (view === 'ai-visibility')  return <AiVisibilityTab   projectId={projectId} projects={projects} />
       return <GeoTab projectId={projectId} projects={projects} onSelectProject={handleProjectChange} />
     }
     if (tab === 'geo-seo' && sub === 'keywords')  return <KeywordsTab projectId={projectId} projects={projects} />
