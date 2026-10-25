@@ -77,12 +77,21 @@ export default function TareasTab({
   const all = data.byUser.flatMap(u => u.tasks)
   const counts = all.reduce((acc, t) => ({ ...acc, [t.status]: (acc[t.status] || 0) + 1 }), {})
 
+  // Dentro de cada estado: primero las tareas propias de la persona, después agrupadas
+  // por agente (alfabético por nombre declarado) — así con varios agentes activos sus
+  // tareas quedan juntas en vez de intercaladas por fecha de creación.
+  const agentSortKey = t => t.isAgentTask ? (t.agent ? agentName(t.agent, t.agentName) : 'Agente') : ''
+
   const groups = data.byUser
     .map(({ user, tasks }) => ({
       user,
       tasks: tasks
         .filter(t => !statusFilter || t.status === statusFilter)
-        .sort((a, b) => STATUS_META[a.status].order - STATUS_META[b.status].order),
+        .sort((a, b) =>
+          STATUS_META[a.status].order - STATUS_META[b.status].order
+          || agentSortKey(a).localeCompare(agentSortKey(b))
+          || new Date(b.createdAt) - new Date(a.createdAt)
+        ),
     }))
     .filter(g => g.tasks.length > 0)
     .sort((a, b) => STATUS_META[a.tasks[0].status].order - STATUS_META[b.tasks[0].status].order || a.user.name.localeCompare(b.user.name))

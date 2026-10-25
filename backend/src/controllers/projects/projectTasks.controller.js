@@ -62,6 +62,7 @@ async function projectTasks(req, res, next) {
         pausedAt: task.pausedAt, pausedMinutes: task.pausedMinutes, sessions: task.sessions,
         projectId: task.projectId, _count: task._count, recurrenceId: task.recurrenceId,
         createdBy: task.createdBy?.id !== task.user.id ? task.createdBy : null,
+        isAgentTask: task.isAgentTask, agent: task.agent, agentName: task.agentName,
       })
     }
 
@@ -109,6 +110,7 @@ async function projectCompletedHistory(req, res, next) {
         id: t.id, description: t.description, completedAt: t.completedAt, user: t.user,
         startedAt: t.startedAt, pausedMinutes: t.pausedMinutes, minutesOverride: t.minutesOverride,
         _count: t._count,
+        isAgentTask: t.isAgentTask, agent: t.agent, agentName: t.agentName,
       })),
       hasMore,
     })
