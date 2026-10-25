@@ -371,7 +371,7 @@ Enlaces útiles del proyecto (drive, documentos, etc.). Cualquier miembro puede 
 
 ## Situación
 
-Notas de contexto sobre el estado del cliente/proyecto, en el **Resumen**. Funciona por **hojas** que se van juntando: siempre ves la última y la editás con autoguardado. Con **+ Nueva hoja** arrancás una en blanco y la anterior pasa a **Hojas anteriores**, de solo lectura, así no se pierde lo que se escribió antes. Si querés un título, ponelo dentro de la hoja (por ejemplo como encabezado). Una hoja la puede borrar quien la creó o un admin.
+Notas de contexto sobre el estado del cliente/proyecto, en el **Resumen**. Funciona por **hojas** que se van juntando: siempre ves la última y la editás con autoguardado. Con **+ Nueva hoja** arrancás una en blanco y la anterior queda guardada, de solo lectura — las flechas ‹ › junto a "+ Nueva hoja" navegan entre todas las hojas en el mismo lugar, así no se pierde lo que se escribió antes. Si querés un título, ponelo dentro de la hoja (por ejemplo como encabezado). Una hoja la puede borrar quien la creó o un admin.
 
 ## Briefs
 
