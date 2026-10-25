@@ -5,6 +5,7 @@ import useObjectiveProgress from './useObjectiveProgress'
 import SocialIcon from './SocialIcon'
 import { Flag, Heart, MessageCircle, X } from 'lucide-react'
 import { Icon } from '../ui/Icon'
+import LoadingSpinner from '../LoadingSpinner'
 
 // Configuración por plataforma — UI label + URL externa + accent color + handle prefix
 const PLATFORMS = {
@@ -386,7 +387,7 @@ export default function CompetitorsTab({ projectId, onSelectProject }) {
 
       {/* Lista */}
       {loading ? (
-        <div className="flex justify-center py-12"><div className={`w-6 h-6 border-2 border-t-transparent rounded-full animate-spin`} style={{ borderColor: `${cfg.sparkColor} transparent ${cfg.sparkColor} ${cfg.sparkColor}` }} /></div>
+        <div className="flex justify-center py-12"><LoadingSpinner size="lg" /></div>
       ) : visible.length === 0 ? (
         <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-10 text-center">
           <p className="text-sm text-gray-500 dark:text-gray-400">

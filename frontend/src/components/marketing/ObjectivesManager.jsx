@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Pencil, Trash2 } from 'lucide-react'
 import { Icon } from '../ui/Icon'
+import LoadingSpinner from '../LoadingSpinner'
 import api from '../../api/client'
 import EmptyState from '../EmptyState'
 import HowToButton from '../HowToButton'
@@ -272,7 +273,7 @@ export default function ObjectivesManager({ projectId, onClose }) {
 
         <div className="flex-1 overflow-y-auto space-y-2 pr-1">
           {loading ? (
-            <div className="flex justify-center py-8"><div className="w-6 h-6 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" /></div>
+            <div className="flex justify-center py-8"><LoadingSpinner size="md" /></div>
           ) : (
             <>
               {objectives.length === 0 && !showForm && (

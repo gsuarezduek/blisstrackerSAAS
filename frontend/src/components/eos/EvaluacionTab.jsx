@@ -3,6 +3,7 @@ import api from '../../api/client'
 import { avatarUrl } from '../../utils/avatarUrl'
 import { ClipboardList } from 'lucide-react'
 import { Icon } from '../ui/Icon'
+import LoadingSpinner from '../LoadingSpinner'
 
 // ─── Preguntas (espejo del backend) ──────────────────────────────────────────
 
@@ -368,7 +369,7 @@ export default function EvaluacionTab() {
   }
 
   if (loading) {
-    return <div className="flex justify-center py-16"><div className="w-5 h-5 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" /></div>
+    return <div className="flex justify-center py-16"><LoadingSpinner size="lg" /></div>
   }
 
   const { adminMembers = [], currentRound, history = [] } = state || {}

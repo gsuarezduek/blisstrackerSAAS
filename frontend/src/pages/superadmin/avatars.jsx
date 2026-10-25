@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import api from '../../api/client'
 import { avatarUrl } from '../../utils/avatarUrl'
+import LoadingSpinner from '../../components/LoadingSpinner'
 
 export function SectionAvatars() {
   const [avatars,    setAvatars]    = useState([])
@@ -113,7 +114,7 @@ export function SectionAvatars() {
   const inactive = avatars.filter(a => !a.active)
   const inUse    = avatars.filter(a => (a.usageCount ?? 0) > 0).length
 
-  if (loading) return <div className="flex justify-center py-20"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600" /></div>
+  if (loading) return <div className="flex justify-center py-20"><LoadingSpinner size="lg" /></div>
 
   return (
     <div className="space-y-6">

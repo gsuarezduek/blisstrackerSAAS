@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import api from '../../api/client'
 import { Search, Trash2 } from 'lucide-react'
 import { Icon } from '../ui/Icon'
+import LoadingSpinner from '../LoadingSpinner'
 
 const SEVERITY_COLORS = {
   Alta:  'bg-red-100   dark:bg-red-900/30   text-red-700   dark:text-red-400   border-red-200   dark:border-red-700',
@@ -311,10 +312,7 @@ export default function CanibalizacionTab({ projectId }) {
       {/* Estado running */}
       {running && !activeReport && (
         <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-xl p-5 flex items-center gap-3">
-          <svg className="animate-spin h-5 w-5 text-amber-500 flex-shrink-0" viewBox="0 0 24 24" fill="none">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
-          </svg>
+          <LoadingSpinner size="sm" className="flex-shrink-0" />
           <div>
             <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">Analizando keywords…</p>
             <p className="text-xs text-amber-600 dark:text-amber-400 mt-0.5">Consultando Google Search Console y calculando conflictos. Puede tardar algunos segundos.</p>
@@ -336,10 +334,7 @@ export default function CanibalizacionTab({ projectId }) {
       {/* Loading detalle */}
       {loadingReport && (
         <div className="flex justify-center py-10">
-          <svg className="animate-spin h-8 w-8 text-primary-500" viewBox="0 0 24 24" fill="none">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
-          </svg>
+          <LoadingSpinner size="lg" />
         </div>
       )}
 

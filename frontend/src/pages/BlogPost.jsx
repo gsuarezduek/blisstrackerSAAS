@@ -4,6 +4,7 @@ import { Helmet } from 'react-helmet-async'
 import axios from 'axios'
 import DOMPurify from 'dompurify'
 import BlissLogo from '../components/BlissLogo'
+import LoadingSpinner from '../components/LoadingSpinner'
 import '../components/situation-editor.css'
 import { FileText } from 'lucide-react'
 import { Icon } from '../components/ui/Icon'
@@ -36,7 +37,7 @@ export default function BlogPost() {
   if (loading) {
     return (
       <div className="min-h-screen bg-white flex items-center justify-center">
-        <div className="w-6 h-6 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+        <LoadingSpinner size="lg" />
       </div>
     )
   }

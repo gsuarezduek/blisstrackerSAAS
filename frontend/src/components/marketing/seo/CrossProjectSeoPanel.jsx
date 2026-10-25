@@ -3,6 +3,7 @@ import api from '../../../api/client'
 import { Search } from 'lucide-react'
 import { Icon } from '../../ui/Icon'
 import { drBand } from './seoHelpers'
+import LoadingSpinner from '../../LoadingSpinner'
 
 // Lista cross-proyecto: todos los sitios ordenados por Domain Rating (vista sin proyecto)
 export default function CrossProjectSeoPanel({ onSelectProject }) {
@@ -17,7 +18,7 @@ export default function CrossProjectSeoPanel({ onSelectProject }) {
   }, [])
 
   if (loading) return (
-    <div className="flex justify-center py-12"><div className="w-6 h-6 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" /></div>
+    <div className="flex justify-center py-12"><LoadingSpinner size="lg" /></div>
   )
   if (!data?.length) return (
     <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-10 text-center">

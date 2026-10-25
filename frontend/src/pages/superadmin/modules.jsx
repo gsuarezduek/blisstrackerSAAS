@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import api from '../../api/client'
+import LoadingSpinner from '../../components/LoadingSpinner'
 
 // Flags en stage='module': estables, forzados enabledGlobally=true en cada
 // arranque del server (ver index.js) — por eso esta pantalla es de solo
@@ -15,7 +16,7 @@ export function SectionModules() {
       .finally(() => setLoading(false))
   }, [])
 
-  if (loading) return <div className="flex justify-center py-12"><div className="w-6 h-6 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" /></div>
+  if (loading) return <div className="flex justify-center py-12"><LoadingSpinner size="lg" /></div>
 
   return (
     <div>

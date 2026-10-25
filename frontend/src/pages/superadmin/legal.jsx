@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import api from '../../api/client'
+import LoadingSpinner from '../../components/LoadingSpinner'
 
 export const LEGAL_DOCS = [
   {
@@ -54,7 +55,7 @@ export function LegalDocEditor({ docKey, publicPath, placeholder }) {
 
   if (loading) return (
     <div className="flex justify-center py-12">
-      <div className="w-5 h-5 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+      <LoadingSpinner size="md" />
     </div>
   )
 

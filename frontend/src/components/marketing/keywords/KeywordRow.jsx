@@ -4,6 +4,7 @@ import { fmtPos, fmtNum, fmtPct } from './keywordsHelpers'
 import { PositionChart } from './KeywordsUI'
 import AnalysisPanel from './AnalysisPanel'
 import SerpPanel from './SerpPanel'
+import LoadingSpinner from '../../LoadingSpinner'
 
 // ─── Fila expandible de keyword ───────────────────────────────────────────────
 
@@ -122,7 +123,7 @@ export default function KeywordRow({ kw, serpSnap, isExpanded, onToggle, onRemov
             {innerTab === 'gsc' && (
               historyLoading ? (
                 <div className="flex items-center gap-2 text-sm text-gray-400 py-4">
-                  <div className="w-4 h-4 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+                  <LoadingSpinner size="sm" />
                   Cargando historial…
                 </div>
               ) : (

@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import axios from 'axios'
 import ReportViewer from '../components/marketing/ReportViewer'
 import ReportFeedbackWidget from '../components/marketing/ReportFeedbackWidget'
+import LoadingSpinner from '../components/LoadingSpinner'
 import { FileText } from 'lucide-react'
 import { Icon } from '../components/ui/Icon'
 
@@ -65,7 +66,7 @@ export default function ReportPublic() {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
-          <div className="w-8 h-8 border-2 border-orange-500 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+          <LoadingSpinner size="lg" className="mb-3" />
           <p className="text-sm text-gray-500">Cargando informe...</p>
         </div>
       </div>

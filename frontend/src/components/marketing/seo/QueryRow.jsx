@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import api from '../../../api/client'
 import { fmtNum, fmtPos, fmtPct } from './seoHelpers'
+import LoadingSpinner from '../../LoadingSpinner'
 
 // ─── Fila de query expandible ─────────────────────────────────────────────────
 export default function QueryRow({ row, comparison, startDate, endDate, projectId }) {
@@ -50,7 +51,7 @@ export default function QueryRow({ row, comparison, startDate, endDate, projectI
         <tr className="border-b border-gray-50 dark:border-gray-700/50 bg-gray-50/50 dark:bg-gray-700/20">
           <td colSpan={5} className="px-6 py-3">
             {loading
-              ? <div className="flex items-center gap-2 text-xs text-gray-400"><div className="w-3 h-3 border-2 border-primary-400 border-t-transparent rounded-full animate-spin" />Cargando páginas…</div>
+              ? <div className="flex items-center gap-2 text-xs text-gray-400"><LoadingSpinner size="sm" />Cargando páginas…</div>
               : pages?.length > 0
               ? (
                 <table className="w-full text-xs">

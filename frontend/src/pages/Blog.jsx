@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { Helmet } from 'react-helmet-async'
 import axios from 'axios'
 import BlissLogo from '../components/BlissLogo'
+import LoadingSpinner from '../components/LoadingSpinner'
 
 const API = import.meta.env.VITE_API_URL || ''
 
@@ -58,7 +59,7 @@ export default function Blog() {
       <main className="max-w-4xl mx-auto px-4 sm:px-6 pb-24">
         {loading && (
           <div className="flex justify-center py-20">
-            <div className="w-6 h-6 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+            <LoadingSpinner size="lg" />
           </div>
         )}
 

@@ -4,6 +4,7 @@ import { fmtTokens, fmtCost } from './shared'
 import { TokenBar } from './aiTokens'
 import { SectionSettings } from './settings'
 import ConfirmModal from '../../components/ConfirmModal'
+import LoadingSpinner from '../../components/LoadingSpinner'
 import PasswordInput from '../../components/PasswordInput'
 import { Globe, Pencil, Trash2 } from 'lucide-react'
 import { Icon } from '../../components/ui/Icon'
@@ -46,7 +47,7 @@ function AccountsUsagePanel({ accounts, loading, onRefresh }) {
       </div>
       {loading ? (
         <div className="flex justify-center py-10">
-          <div className="w-5 h-5 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+          <LoadingSpinner size="md" />
         </div>
       ) : !accounts || accounts.length === 0 ? (
         <p className="text-sm text-gray-400 dark:text-gray-500 text-center py-8">Sin cuentas de Apify configuradas.</p>
@@ -182,7 +183,7 @@ function TokensPanel({ tokens, loading, onChanged }) {
 
       {loading ? (
         <div className="flex justify-center py-10">
-          <div className="w-5 h-5 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+          <LoadingSpinner size="md" />
         </div>
       ) : tokens.length === 0 ? (
         <p className="text-sm text-gray-400 dark:text-gray-500 text-center py-8">
@@ -382,7 +383,7 @@ export function SectionScraping() {
 
       {usageLoading ? (
         <div className="flex justify-center py-16">
-          <div className="w-6 h-6 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+          <LoadingSpinner size="lg" />
         </div>
       ) : !usage ? (
         <p className="text-sm text-red-500 text-center py-8">Error al cargar el consumo de Apify.</p>

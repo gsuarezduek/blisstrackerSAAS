@@ -13,6 +13,7 @@ import ScorecardTable from './datos/ScorecardTable'
 import { MetricModal, ConfirmModal, AutoMetricPicker } from './datos/MetricModals'
 import { ChartColumn } from 'lucide-react'
 import { Icon } from '../ui/Icon'
+import LoadingSpinner from '../LoadingSpinner'
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // DatosTab — componente principal
@@ -296,7 +297,7 @@ export default function DatosTab() {
   if (loading) {
     return (
       <div className="flex justify-center py-16">
-        <div className="w-5 h-5 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+        <LoadingSpinner size="lg" />
       </div>
     )
   }

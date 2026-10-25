@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import api from '../../../api/client'
 import { SerpFeatureBadge } from './KeywordsUI'
+import LoadingSpinner from '../../LoadingSpinner'
 
 // ─── Vista: SERP Overview ─────────────────────────────────────────────────────
 
@@ -19,7 +20,7 @@ export default function SerpOverview({ projectId, keywords, onAddKeyword }) {
 
   if (loading) return (
     <div className="flex justify-center py-12">
-      <div className="w-6 h-6 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+      <LoadingSpinner size="lg" />
     </div>
   )
 

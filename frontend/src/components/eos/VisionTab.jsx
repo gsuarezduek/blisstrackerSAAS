@@ -9,6 +9,7 @@ import {
   CoreValuesHelp, EnfoqueMedularHelp, TenYearHelp, MarketingHelp, ThreeYearHelp, OneYearHelp,
 } from './vision/VisionHelpContent'
 import CoreValuesSection from './vision/CoreValuesSection'
+import LoadingSpinner from '../LoadingSpinner'
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // VisionTab — componente principal
@@ -65,7 +66,7 @@ export default function VisionTab({ vtoMode = false, setVtoMode = () => {} }) {
   const oneYearGoals   = useDebouncedList( data?.oneYearGoals   ?? [], 'oneYearGoals',   saveFields)
 
   if (loading) {
-    return <div className="flex justify-center py-16"><div className="w-5 h-5 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" /></div>
+    return <div className="flex justify-center py-16"><LoadingSpinner size="lg" /></div>
   }
 
   if (vtoMode) {

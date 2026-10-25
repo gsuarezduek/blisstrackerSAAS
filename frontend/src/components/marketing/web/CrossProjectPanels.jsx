@@ -3,6 +3,7 @@ import { ChartColumn, Monitor, Smartphone, Zap } from 'lucide-react'
 import { Icon } from '../../ui/Icon'
 import api from '../../../api/client'
 import { fmtK, fmtSnapshotDate } from './webTabHelpers'
+import LoadingSpinner from '../../LoadingSpinner'
 
 export function ScoreBar({ score }) {
   const color = score >= 90 ? 'bg-emerald-500' : score >= 50 ? 'bg-amber-400' : 'bg-red-500'
@@ -43,7 +44,7 @@ export function CrossProjectAnalyticsPanel({ onSelectProject }) {
   }
 
   if (loading) return (
-    <div className="flex justify-center py-12"><div className="w-6 h-6 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" /></div>
+    <div className="flex justify-center py-12"><LoadingSpinner size="lg" /></div>
   )
   if (!data?.length) return (
     <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-10 text-center">
@@ -177,7 +178,7 @@ export function CrossProjectPerformancePanel({ onSelectProject }) {
         <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Performance por proyecto</h3>
         {strategyToggle}
       </div>
-      <div className="flex justify-center py-8"><div className="w-6 h-6 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" /></div>
+      <div className="flex justify-center py-8"><LoadingSpinner size="lg" /></div>
     </div>
   )
   if (!data?.length) return (

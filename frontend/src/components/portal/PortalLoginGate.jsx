@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import axios from 'axios'
 import { Icon, PrimaryButton, readableOn, withAlpha } from './portalUi'
+import LoadingSpinner from '../LoadingSpinner'
 
 const API = import.meta.env.VITE_API_URL || ''
 const tokenKey = (slug) => `bliss_client_token_${slug}`
@@ -146,7 +147,7 @@ export default function PortalLoginGate({ slug, brandPrimary = '#f97316', brandS
         <div className="w-full max-w-sm">
           {exchangingMagic ? (
             <div className="text-center">
-              <div className="w-8 h-8 mx-auto mb-4 border-2 border-gray-200 rounded-full animate-spin" style={{ borderTopColor: brandPrimary }} />
+              <LoadingSpinner size="md" className="mb-4" />
               <p className="text-sm text-gray-500">Abriendo tu portal…</p>
             </div>
           ) : loginStep === 'email' ? (

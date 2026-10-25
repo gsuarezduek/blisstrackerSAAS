@@ -3,6 +3,7 @@ import api from '../../../api/client'
 import PeopleAnalyzer from './PeopleAnalyzer'
 import { Inbox } from 'lucide-react'
 import { Icon } from '../../ui/Icon'
+import LoadingSpinner from '../../LoadingSpinner'
 
 // ─── Historial mensual del People Score ───────────────────────────────────────
 // Snapshot automático: cada visita al tab actualiza la captura del mes en curso, así se
@@ -32,7 +33,7 @@ function PeopleHistoryList({ snapshots, year, years, onYearChange, onSelectMonth
         )}
       </div>
       {loading ? (
-        <div className="flex justify-center py-10"><div className="w-5 h-5 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" /></div>
+        <div className="flex justify-center py-10"><LoadingSpinner size="md" /></div>
       ) : withData.length === 0 ? (
         <div className="text-center py-10 text-gray-400">
           <p className="mb-2"><Icon as={Inbox} size={28} className="inline-block text-gray-300 dark:text-gray-600" /></p>
@@ -117,7 +118,7 @@ export default function PeopleHistoryModal({ onClose }) {
               onYearChange={setYear} onSelectMonth={selectMonth} loading={loading}
             />
           ) : detailLoading || !detail ? (
-            <div className="flex justify-center py-10"><div className="w-5 h-5 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" /></div>
+            <div className="flex justify-center py-10"><LoadingSpinner size="md" /></div>
           ) : (
             <div>
               <p className="text-xs text-gray-500 dark:text-gray-400 mb-4 capitalize">

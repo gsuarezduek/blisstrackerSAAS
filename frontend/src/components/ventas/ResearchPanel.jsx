@@ -3,6 +3,7 @@ import DOMPurify from 'dompurify'
 import api from '../../api/client'
 import RichTextEditor from '../RichTextEditor'
 import CollapsibleSectionHeader from './CollapsibleSectionHeader'
+import LoadingSpinner from '../LoadingSpinner'
 import { exportProposalPdf } from './proposalPdf'
 import '../situation-editor.css'
 
@@ -150,7 +151,7 @@ export default function ResearchPanel({ leadId, companyName, onChanged }) {
         <p className="text-sm text-gray-400">Todavía no se investigó esta empresa. La IA (Claude) analiza el sitio y arma un resumen comercial con posibles necesidades y oportunidades.</p>
       ) : running ? (
         <p className="text-sm text-gray-500 dark:text-gray-400 flex items-center gap-2">
-          <span className="inline-block w-3 h-3 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+          <LoadingSpinner size="sm" />
           {research.errorMsg || 'Procesando…'}
         </p>
       ) : research.status === 'failed' ? (

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import api from '../../api/client'
 import { CalendarDays, ChartColumn, Hash, Monitor, TriangleAlert } from 'lucide-react'
 import { Icon } from '../ui/Icon'
+import LoadingSpinner from '../LoadingSpinner'
 import ObjectiveProgressBars from './ObjectiveProgressBars'
 import useObjectiveProgress from './useObjectiveProgress'
 import CreateTaskModal from './web/CreateTaskModal'
@@ -433,7 +434,7 @@ export default function WebAnalyticsTab({ projectId, onSelectProject }) {
       {/* Loading */}
       {loading && (
         <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-12 text-center">
-          <div className="inline-block w-6 h-6 border-2 border-primary-500 border-t-transparent rounded-full animate-spin mb-3" />
+          <LoadingSpinner size="lg" className="mb-3" />
           <p className="text-sm text-gray-400">Cargando datos de Google Analytics…</p>
         </div>
       )}
@@ -547,7 +548,7 @@ export default function WebAnalyticsTab({ projectId, onSelectProject }) {
 
               {insightLoading && (
                 <div className="flex items-center gap-2 text-sm text-gray-400">
-                  <div className="w-4 h-4 border-2 border-primary-400 border-t-transparent rounded-full animate-spin" />
+                  <LoadingSpinner size="sm" />
                   Generando análisis con IA…
                 </div>
               )}

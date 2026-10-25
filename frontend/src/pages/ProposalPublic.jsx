@@ -4,6 +4,7 @@ import axios from 'axios'
 import DOMPurify from 'dompurify'
 import { exportProposalPdf } from '../components/ventas/proposalPdf'
 import ProposalDocView from '../components/ventas/ProposalDocView'
+import LoadingSpinner from '../components/LoadingSpinner'
 import '../components/situation-editor.css'
 import { FileText } from 'lucide-react'
 import { Icon } from '../components/ui/Icon'
@@ -34,7 +35,7 @@ export default function ProposalPublic() {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
-          <div className="w-8 h-8 border-2 border-orange-500 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+          <LoadingSpinner size="lg" className="mb-3" />
           <p className="text-sm text-gray-500">Cargando propuesta...</p>
         </div>
       </div>

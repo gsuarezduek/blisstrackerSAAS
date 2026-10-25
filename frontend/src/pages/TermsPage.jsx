@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import api from '../api/client'
+import LoadingSpinner from '../components/LoadingSpinner'
 
 /**
  * Página pública para documentos legales.
@@ -37,7 +38,7 @@ export default function LegalPage({ docKey }) {
       <main className="max-w-3xl mx-auto px-4 py-12">
         {loading && (
           <div className="flex justify-center py-20">
-            <div className="w-6 h-6 border-2 border-orange-500 border-t-transparent rounded-full animate-spin" />
+            <LoadingSpinner size="lg" />
           </div>
         )}
 

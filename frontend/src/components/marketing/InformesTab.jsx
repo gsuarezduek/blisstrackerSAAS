@@ -9,6 +9,7 @@ import { GenerateModal, SectionsConfigModal, PublishNotifyModal } from './Inform
 import { AllReportsPanel, ClientFeedbackPanel, GenerationLogPanel } from './InformesTabPanels'
 import { FileText, TriangleAlert } from 'lucide-react'
 import { Icon } from '../ui/Icon'
+import LoadingSpinner from '../LoadingSpinner'
 
 export default function InformesTab({ projectId, onSelectProject, projects = [] }) {
   // Default: informe del mes actual (que contiene datos del mes anterior)
@@ -241,7 +242,7 @@ export default function InformesTab({ projectId, onSelectProject, projects = [] 
       {/* ── Contenido ── */}
       {loading && (
         <div className="flex justify-center py-16">
-          <div className="w-6 h-6 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+          <LoadingSpinner size="lg" />
         </div>
       )}
 

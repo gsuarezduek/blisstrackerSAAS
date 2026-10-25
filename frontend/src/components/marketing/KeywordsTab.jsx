@@ -6,6 +6,7 @@ import useObjectiveProgress from './useObjectiveProgress'
 import OportunidadesTab from './OportunidadesTab'
 import { KeyRound, Search } from 'lucide-react'
 import { Icon } from '../ui/Icon'
+import LoadingSpinner from '../LoadingSpinner'
 import { currentMonthStr, countryLabel, exportCsv } from './keywords/keywordsHelpers'
 import { CountrySelector } from './keywords/KeywordsUI'
 import KeywordRow from './keywords/KeywordRow'
@@ -128,7 +129,7 @@ export default function KeywordsTab({ projectId, projects }) {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-16">
-        <div className="w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+        <LoadingSpinner size="lg" />
       </div>
     )
   }

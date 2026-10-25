@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import api from '../../../api/client'
 import { SerpFeatureBadge } from './KeywordsUI'
+import LoadingSpinner from '../../LoadingSpinner'
 
 // ─── SerpPanel ────────────────────────────────────────────────────────────────
 
@@ -41,7 +42,7 @@ export default function SerpPanel({ projectId, kwId, onAddKeyword }) {
 
   if (loading) return (
     <div className="flex items-center gap-2 text-sm text-gray-400 py-3">
-      <div className="w-4 h-4 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+      <LoadingSpinner size="sm" />
       Consultando SerpAPI…
     </div>
   )

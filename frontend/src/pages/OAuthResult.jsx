@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import LoadingSpinner from '../components/LoadingSpinner'
 
 /**
  * Página puente para el callback OAuth de integraciones Google.
@@ -33,7 +34,7 @@ export default function OAuthResult() {
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-white dark:bg-gray-900 gap-3">
-      <div className="w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+      <LoadingSpinner size="lg" />
       <p className="text-sm text-gray-500 dark:text-gray-400">Procesando autorización…</p>
     </div>
   )

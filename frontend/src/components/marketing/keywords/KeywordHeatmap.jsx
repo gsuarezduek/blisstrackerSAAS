@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import api from '../../../api/client'
 import { heatmapColor } from './keywordsHelpers'
+import LoadingSpinner from '../../LoadingSpinner'
 
 // ─── Heatmap de keywords ──────────────────────────────────────────────────────
 
@@ -18,7 +19,7 @@ export default function KeywordHeatmap({ projectId }) {
   }, [projectId])
 
   if (loading) return (
-    <div className="flex justify-center py-12"><div className="w-6 h-6 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" /></div>
+    <div className="flex justify-center py-12"><LoadingSpinner size="lg" /></div>
   )
   if (!data?.length) return (
     <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-8 text-center text-sm text-gray-400">

@@ -2,9 +2,10 @@ import { useState, useEffect, useCallback } from 'react'
 import api from '../../api/client'
 import SocialIcon from './SocialIcon'
 import RrssAdvisorPanel from './RrssAdvisorPanel'
+import LoadingSpinner from '../LoadingSpinner'
 import { BRANDS } from './networks/brands'
 import { fmtNum, fmtK, engColor, engLabel, subtractDays, todayAR, monthLabel, FOLLOWER_FILTERS } from './networks/format'
-import { LineChart, MonthNav, KpiCard, AudienceCard, BrandSpinner } from './networks/ui'
+import { LineChart, MonthNav, KpiCard, AudienceCard } from './networks/ui'
 import ConnectScreen, { OAuthMethod, ExpiredNotice } from './networks/ConnectScreen'
 import AccountHeader from './networks/AccountHeader'
 import CrossProjectNetworkPanel from './networks/CrossProjectNetworkPanel'
@@ -58,7 +59,7 @@ function OrgPicker({ projectId, onSelected, onCancel }) {
 
   if (loading) return (
     <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-8 text-center">
-      <div className="inline-block w-6 h-6 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: `${LI_BLUE} transparent ${LI_BLUE} ${LI_BLUE}` }} />
+      <LoadingSpinner size="sm" />
       <p className="text-sm text-gray-500 dark:text-gray-400 mt-3">Buscando tus páginas de LinkedIn…</p>
     </div>
   )
@@ -322,7 +323,7 @@ export default function LinkedinTab({ projectId, onSelectProject, projects = [] 
     />
   )
 
-  if (loading) return <BrandSpinner brand={BRAND} />
+  if (loading) return <LoadingSpinner size="lg" />
 
   if (!integration) return <ConnectPrompt projectId={projectId} onConnected={fetchData} />
   if (integration.status === 'expired') return (
@@ -483,7 +484,7 @@ export default function LinkedinTab({ projectId, onSelectProject, projects = [] 
               </div>
             </div>
             {followerLoading
-              ? <div className="flex justify-center py-10"><div className="w-5 h-5 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: `${LI_BLUE} transparent ${LI_BLUE} ${LI_BLUE}` }} /></div>
+              ? <div className="flex justify-center py-10"><LoadingSpinner size="sm" /></div>
               : hasChart
                 ? <LineChart data={chartData} valueAccessor={d => d.followersCount} labelAccessor={d => snapshotFallback ? d.date?.slice(0, 7) : d.date?.slice(5)} color={LI_BLUE} formatY={v => fmtK(Math.round(v))} chartHeight={160} displayHeight={180} bare />
                 : <p className="text-sm text-gray-400 dark:text-gray-500 text-center py-8">Recopilando información, pronto vas a poder ver la evolución de seguidores.</p>

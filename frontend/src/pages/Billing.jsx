@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 import api from '../api/client'
 import { useAuth } from '../context/AuthContext'
 import Navbar from '../components/Navbar'
+import LoadingSpinner from '../components/LoadingSpinner'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -107,7 +108,7 @@ export default function Billing() {
   if (loading || syncing) {
     return (
       <div className="flex flex-col justify-center items-center min-h-screen gap-3">
-        <div className="w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+        <LoadingSpinner size="lg" />
         {syncing && <p className="text-sm text-gray-500 dark:text-gray-400">Sincronizando suscripción…</p>}
       </div>
     )

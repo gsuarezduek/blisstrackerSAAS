@@ -7,6 +7,7 @@ import { BRANDS } from './networks/brands'
 import { ExpiredNotice } from './networks/ConnectScreen'
 import FunLoader from './networks/FunLoader'
 import { INSTAGRAM_LOADING_MESSAGES } from './networks/loadingMessages'
+import LoadingSpinner from '../LoadingSpinner'
 import {
   fmtNum, fmtK, engagementColor, engagementLabel, subtractDays, todayAR, monthLabel,
   LineChart, MonthNav, FOLLOWER_FILTERS, FollowersCard, KpiCard,
@@ -436,7 +437,7 @@ export default function InstagramTab({ projectId, onSelectProject, projects = []
 
             {followerLoading ? (
               <div className="flex justify-center py-10">
-                <div className="w-5 h-5 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
+                <LoadingSpinner size="sm" />
               </div>
             ) : hasChart ? (
               <LineChart

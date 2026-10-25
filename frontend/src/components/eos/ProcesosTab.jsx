@@ -4,6 +4,7 @@ import { renderMarkdown } from '../../utils/processMarkdown'
 import { printProcess } from '../../utils/printProcess'
 import { Pencil, Workflow, X } from 'lucide-react'
 import { Icon } from '../ui/Icon'
+import LoadingSpinner from '../LoadingSpinner'
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Constantes de estado
@@ -736,7 +737,7 @@ export default function ProcesosTab() {
   }, [processes])
 
   if (loading) {
-    return <div className="flex justify-center py-16"><div className="w-5 h-5 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" /></div>
+    return <div className="flex justify-center py-16"><LoadingSpinner size="lg" /></div>
   }
 
   return (

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import api from '../../../api/client'
 import { fmtNum, countryLabel } from './keywordsHelpers'
+import LoadingSpinner from '../../LoadingSpinner'
 
 // ─── Modal "Agregar keywords" ─────────────────────────────────────────────────
 
@@ -131,7 +132,7 @@ export default function SuggestModal({ projectId, country, onClose, onAdded }) {
 
             {suggestLoad && (
               <div className="flex items-center justify-center py-6">
-                <div className="w-5 h-5 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+                <LoadingSpinner size="md" />
               </div>
             )}
 

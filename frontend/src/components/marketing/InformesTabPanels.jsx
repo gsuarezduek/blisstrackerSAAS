@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { ChartColumn, Target } from 'lucide-react'
 import { Icon } from '../ui/Icon'
+import LoadingSpinner from '../LoadingSpinner'
 import api from '../../api/client'
 import { ObjectiveCard } from './ReportViewerParts'
 import { SectionsConfigModal } from './InformesTabModals'
@@ -244,7 +245,7 @@ export function LiveObjectivesPanel({ onSelectProject, projects = [] }) {
 
       {loading ? (
         <div className="flex justify-center py-12">
-          <div className="w-6 h-6 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+          <LoadingSpinner size="lg" />
         </div>
       ) : !data?.projects?.length ? (
         <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-10 text-center">
@@ -363,7 +364,7 @@ export function ReportsHistoryPanel({ onSelectProject, projects }) {
 
       {loading ? (
         <div className="flex justify-center py-12">
-          <div className="w-6 h-6 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+          <LoadingSpinner size="lg" />
         </div>
       ) : !reports.length ? (
         <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-10 text-center">

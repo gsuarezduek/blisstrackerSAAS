@@ -6,6 +6,7 @@ import PeopleHistoryModal from './personas/PeopleHistoryModal'
 import ThreeStrikes from './personas/ThreeStrikes'
 import AccountabilityChart from './personas/AccountabilityChart'
 import { PeopleAnalyzerHelp, AccountabilityHelp } from './personas/personasHelpContent'
+import LoadingSpinner from '../LoadingSpinner'
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // PersonasTab — componente principal
@@ -81,7 +82,7 @@ export default function PersonasTab() {
   }
 
   if (loading) {
-    return <div className="flex justify-center py-16"><div className="w-5 h-5 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" /></div>
+    return <div className="flex justify-center py-16"><LoadingSpinner size="lg" /></div>
   }
 
   const { members, coreValues, ratingsMap, strikesMap, nodes } = data

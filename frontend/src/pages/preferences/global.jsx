@@ -283,7 +283,7 @@ export default function GlobalTab({ loaded }) {
 
                     {aiDetailLoading ? (
                       <div className="flex justify-center py-6">
-                        <div className="w-5 h-5 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+                        <LoadingSpinner size="sm" />
                       </div>
                     ) : !aiDetailData || aiDetailData.byService?.length === 0 ? (
                       <p className="text-sm text-gray-400 dark:text-gray-500 text-center py-6">Sin actividad para este período.</p>

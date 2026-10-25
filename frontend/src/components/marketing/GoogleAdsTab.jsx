@@ -4,9 +4,10 @@ import ObjectiveProgressBars from './ObjectiveProgressBars'
 import useObjectiveProgress from './useObjectiveProgress'
 import AdsAdvisorPanel from './AdsAdvisorPanel'
 import CrossProjectAdsPanel from './CrossProjectAdsPanel'
+import LoadingSpinner from '../LoadingSpinner'
 import { BRANDS } from './networks/brands'
 import { fmtNum, fmtK, fmtUSD, fmtPct } from './networks/format'
-import { KpiCard, BrandSpinner } from './networks/ui'
+import { KpiCard } from './networks/ui'
 import ConnectScreen, { OAuthMethod, ExpiredNotice } from './networks/ConnectScreen'
 import AccountHeader from './networks/AccountHeader'
 import AdsBrowser from './networks/AdsBrowser'
@@ -419,7 +420,7 @@ export default function GoogleAdsTab({ projectId, onSelectProject, projects = []
     )
   }
 
-  if (initLoading) return <BrandSpinner brand={BRAND} />
+  if (initLoading) return <LoadingSpinner size="lg" />
 
   // Sin integración → prompt de conexión
   if (!integration) return <ConnectPrompt projectId={projectId} onConnected={handleConnected} />

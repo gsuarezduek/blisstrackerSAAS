@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import api from '../../api/client'
 import { fmtTokens, fmtCost } from './shared'
 import { TokenBar } from './aiTokens'
+import LoadingSpinner from '../../components/LoadingSpinner'
 import { MessageCircle } from 'lucide-react'
 import { Icon } from '../../components/ui/Icon'
 
@@ -48,7 +49,7 @@ export function SectionWhatsappUsage() {
 
       {loading ? (
         <div className="flex justify-center py-16">
-          <div className="w-6 h-6 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+          <LoadingSpinner size="lg" />
         </div>
       ) : !data ? (
         <p className="text-sm text-red-500 text-center py-8">Error al cargar el uso de WhatsApp.</p>

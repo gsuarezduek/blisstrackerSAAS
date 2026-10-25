@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import api from '../../../api/client'
 import { Bot } from 'lucide-react'
 import { Icon } from '../../ui/Icon'
+import LoadingSpinner from '../../LoadingSpinner'
 
 // ─── Benchmark cross-proyecto ─────────────────────────────────────────────────
 
@@ -17,7 +18,7 @@ export default function CrossProjectPanel({ onSelectProject }) {
   }, [])
 
   if (loading) return (
-    <div className="flex justify-center py-12"><div className="w-6 h-6 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" /></div>
+    <div className="flex justify-center py-12"><LoadingSpinner size="lg" /></div>
   )
   if (!data?.length) return (
     <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-10 text-center">

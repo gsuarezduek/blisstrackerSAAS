@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import api from '../../api/client'
+import LoadingSpinner from '../../components/LoadingSpinner'
 import { X } from 'lucide-react'
 import { Icon } from '../../components/ui/Icon'
 
@@ -77,7 +78,7 @@ function HeroEditor() {
 
   if (loading) return (
     <div className="flex justify-center py-12">
-      <div className="w-5 h-5 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+      <LoadingSpinner size="md" />
     </div>
   )
   if (!form) return <p className="text-sm text-red-500">{error}</p>
@@ -313,7 +314,7 @@ function SectionsEditor() {
 
   if (loading) return (
     <div className="flex justify-center py-12">
-      <div className="w-5 h-5 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+      <LoadingSpinner size="md" />
     </div>
   )
   if (!form) return <p className="text-sm text-red-500">{error}</p>
@@ -478,7 +479,7 @@ function FaqSectionEditor() {
 
   if (loading) return (
     <div className="flex justify-center py-12">
-      <div className="w-5 h-5 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+      <LoadingSpinner size="md" />
     </div>
   )
   if (!form) return <p className="text-sm text-red-500">{error}</p>
@@ -572,7 +573,7 @@ function TestimonialsEditor() {
 
   if (loading) return (
     <div className="flex justify-center py-12">
-      <div className="w-5 h-5 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+      <LoadingSpinner size="md" />
     </div>
   )
 
@@ -766,7 +767,7 @@ function TrustedCompaniesEditor() {
 
   if (loading) return (
     <div className="flex justify-center py-12">
-      <div className="w-5 h-5 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+      <LoadingSpinner size="md" />
     </div>
   )
 

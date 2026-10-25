@@ -4,9 +4,10 @@ import ObjectiveProgressBars from './ObjectiveProgressBars'
 import useObjectiveProgress from './useObjectiveProgress'
 import AdsAdvisorPanel from './AdsAdvisorPanel'
 import CrossProjectAdsPanel from './CrossProjectAdsPanel'
+import LoadingSpinner from '../LoadingSpinner'
 import { BRANDS } from './networks/brands'
 import { fmtK, fmtUSD, fmtPct } from './networks/format'
-import { KpiCard, BrandSpinner } from './networks/ui'
+import { KpiCard } from './networks/ui'
 import ConnectScreen, { OAuthMethod, TokenMethod, ExpiredNotice } from './networks/ConnectScreen'
 import AccountHeader from './networks/AccountHeader'
 import AdsBrowser from './networks/AdsBrowser'
@@ -343,7 +344,7 @@ export default function MetaAdsTab({ projectId, onSelectProject, projects = [] }
     )
   }
 
-  if (loading && !data) return <BrandSpinner brand={BRAND} />
+  if (loading && !data) return <LoadingSpinner size="lg" />
 
   if (!integration) return <ConnectPrompt projectId={projectId} onConnected={() => fetchData()} />
   if (integration.status === 'expired') return (

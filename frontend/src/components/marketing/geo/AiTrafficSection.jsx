@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import api from '../../../api/client'
 import { AI_META } from './geoHelpers'
+import LoadingSpinner from '../../LoadingSpinner'
 
 // ─── AI Traffic ───────────────────────────────────────────────────────────────
 
@@ -181,7 +182,7 @@ export default function AiTrafficSection({ projectId }) {
   if (loading) return (
     <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-5">
       <div className="flex items-center gap-2 text-sm text-gray-400">
-        <span className="w-4 h-4 border-2 border-primary-400 border-t-transparent rounded-full animate-spin inline-block" />
+        <LoadingSpinner size="sm" />
         Cargando tráfico desde IAs…
       </div>
     </div>

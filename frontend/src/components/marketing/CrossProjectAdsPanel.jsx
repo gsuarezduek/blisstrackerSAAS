@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import api from '../../api/client'
+import LoadingSpinner from '../LoadingSpinner'
 
 // Panel cross-proyecto de inversión publicitaria, compartido por GoogleAdsTab y
 // MetaAdsTab (antes duplicado casi entero entre los dos) — se usa cuando no hay un
@@ -270,7 +271,7 @@ export default function CrossProjectAdsPanel({ type, label, activeBtnClass, spin
       </p>
 
       {loading ? (
-        <div className="flex justify-center py-12"><div className={`w-6 h-6 border-2 ${spinnerBorderClass} border-t-transparent rounded-full animate-spin`} /></div>
+        <div className="flex justify-center py-12"><LoadingSpinner size="md" /></div>
       ) : !rows.length ? (
         <div className="text-center py-10">
           <p className="text-sm text-gray-500 dark:text-gray-400">

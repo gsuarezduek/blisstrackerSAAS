@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import api from '../../../api/client'
 import CrossProjectRRSSPanel from '../CrossProjectRRSSPanel'
-import { NetworkMark, BrandSpinner } from './ui'
+import LoadingSpinner from '../../LoadingSpinner'
+import { NetworkMark } from './ui'
 import { Trash2 } from 'lucide-react'
 import { Icon } from '../../ui/Icon'
 
@@ -56,7 +57,7 @@ export default function CrossProjectNetworkPanel({ brand, network, refreshable =
     } finally { setDeleting(null) }
   }
 
-  if (data === null) return <BrandSpinner brand={brand} className="py-12" />
+  if (data === null) return <LoadingSpinner size="lg" />
 
   if (!data.length) return (
     <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-10 text-center">

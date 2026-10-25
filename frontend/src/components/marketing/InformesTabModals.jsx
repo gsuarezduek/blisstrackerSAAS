@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { CircleCheck, Send } from 'lucide-react'
 import { Icon } from '../ui/Icon'
+import LoadingSpinner from '../LoadingSpinner'
 import api from '../../api/client'
 import ProjectSearchSelect from './ProjectSearchSelect'
 import {
@@ -319,7 +320,7 @@ export function SectionsConfigModal({ projects, initialProjectId, onClose }) {
             <ProjectSearchSelect projects={projects} value={pid} onChange={setPid} placeholder="Buscar proyecto…" />
           </>
         ) : loading ? (
-          <div className="flex justify-center py-12"><div className="w-6 h-6 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" /></div>
+          <div className="flex justify-center py-12"><LoadingSpinner size="md" /></div>
         ) : error && !config ? (
           <p className="text-sm text-red-500 dark:text-red-400 py-6 text-center">{error}</p>
         ) : config ? (

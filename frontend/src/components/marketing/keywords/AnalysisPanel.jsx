@@ -1,4 +1,5 @@
 import { GeoBadge } from './KeywordsUI'
+import LoadingSpinner from '../../LoadingSpinner'
 
 // ─── Panel de análisis IA ─────────────────────────────────────────────────────
 
@@ -6,7 +7,7 @@ export default function AnalysisPanel({ analysis, loading, onGenerate, updatedAt
   if (loading) {
     return (
       <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 py-4">
-        <div className="w-4 h-4 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+        <LoadingSpinner size="sm" />
         Analizando con IA…
       </div>
     )

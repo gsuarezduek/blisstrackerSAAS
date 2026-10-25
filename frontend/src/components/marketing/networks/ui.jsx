@@ -20,15 +20,6 @@ export function NetworkMark({ brand, size = 'md', className = '' }) {
   )
 }
 
-export function BrandSpinner({ brand, className = 'py-20' }) {
-  const c = brand?.color ?? '#9ca3af'
-  return (
-    <div className={`flex items-center justify-center ${className}`} role="status" aria-label="Cargando">
-      <div className="w-6 h-6 border-2 rounded-full animate-spin" style={{ borderColor: `${c} transparent ${c} ${c}` }} />
-    </div>
-  )
-}
-
 export function LineChart({ data, valueAccessor, labelAccessor, label, color = '#a855f7', formatY = v => v, chartHeight = 90, displayHeight = 100, bare = false }) {
   if (!data || data.length < 2) return null
   const values = data.map(valueAccessor)

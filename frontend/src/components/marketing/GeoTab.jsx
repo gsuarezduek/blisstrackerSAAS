@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import api from '../../api/client'
 import SetupHintCard from '../SetupHintCard'
 import { Globe } from 'lucide-react'
+import LoadingSpinner from '../LoadingSpinner'
 import CreateTaskModal from './geo/CreateTaskModal'
 import CrossProjectPanel from './geo/CrossProjectPanel'
 import GeoAuditResults from './geo/GeoAuditResults'
@@ -247,7 +248,7 @@ export default function GeoTab({ projectId, projects, onSelectProject }) {
           {running && (
             <div className="mt-4 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-xl space-y-2">
               <div className="flex items-center gap-2 text-sm font-medium text-blue-700 dark:text-blue-400">
-                <span className="inline-block w-3 h-3 border-2 border-blue-500 border-t-transparent rounded-full animate-spin flex-shrink-0" />
+                <LoadingSpinner size="sm" className="flex-shrink-0" />
                 {activeAudit?.errorMsg || 'Iniciando análisis…'}
               </div>
               <div className="flex gap-1">

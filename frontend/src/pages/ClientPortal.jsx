@@ -10,6 +10,7 @@ import ClientTeamTab from '../components/portal/ClientTeamTab'
 import ClientFilesTab from '../components/portal/ClientFilesTab'
 import PortalFooter from '../components/portal/PortalFooter'
 import { Card, ErrorState, Icon, Segmented, SectionTitle, Skeleton, ToastProvider, readableOn } from '../components/portal/portalUi'
+import LoadingSpinner from '../components/LoadingSpinner'
 
 const API = import.meta.env.VITE_API_URL || ''
 
@@ -333,7 +334,7 @@ export default function ClientPortal() {
   if (loading) {
     return (
       <div className="min-h-screen bg-[#f7f7f8] flex items-center justify-center">
-        <div className="w-8 h-8 border-2 border-gray-200 border-t-gray-500 rounded-full animate-spin" />
+        <LoadingSpinner size="lg" />
       </div>
     )
   }
