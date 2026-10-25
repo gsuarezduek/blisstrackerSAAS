@@ -2,14 +2,17 @@
 // GEO — helpers y constantes compartidas
 // ═══════════════════════════════════════════════════════════════════════════════
 
+// `hex` es para SVG (atributo `fill`/`stroke` directo) — una clase Tailwind armada
+// dinámicamente (ej. `color.replace('bg-','fill-')`) no la detecta el scanner JIT de
+// Tailwind porque el string "fill-verde-500" nunca aparece literal en el código.
 export const AI_META = {
-  chatgpt:    { label: 'ChatGPT', color: 'bg-green-500' },
-  gemini:     { label: 'Gemini', color: 'bg-blue-500' },
-  claude:     { label: 'Claude', color: 'bg-orange-500' },
-  grok:       { label: 'Grok', color: 'bg-gray-800 dark:bg-gray-300' },
-  metaAi:     { label: 'Meta AI', color: 'bg-blue-600' },
-  perplexity: { label: 'Perplexity', color: 'bg-teal-500' },
-  copilot:    { label: 'Copilot', color: 'bg-indigo-500' },
+  chatgpt:    { label: 'ChatGPT',    color: 'bg-green-500',                      hex: '#22c55e' },
+  gemini:     { label: 'Gemini',     color: 'bg-blue-500',                       hex: '#3b82f6' },
+  claude:     { label: 'Claude',     color: 'bg-orange-500',                     hex: '#f97316' },
+  grok:       { label: 'Grok',       color: 'bg-gray-800 dark:bg-gray-300',      hex: '#1f2937' },
+  metaAi:     { label: 'Meta AI',    color: 'bg-blue-600',                       hex: '#2563eb' },
+  perplexity: { label: 'Perplexity', color: 'bg-teal-500',                       hex: '#14b8a6' },
+  copilot:    { label: 'Copilot',    color: 'bg-indigo-500',                     hex: '#6366f1' },
 }
 
 export const COMPONENTS_META = [
