@@ -61,8 +61,10 @@ ENCRYPTION_KEY=<64 chars hex — AES-256-GCM para cifrar tokens OAuth en DB>
 BACKEND_URL=http://localhost:3001
 PAGESPEED_API_KEY=<API key de Google Cloud para PageSpeed Insights>
 SERP_API_KEY=<API key de SerpAPI (serpapi.com) — snapshots SERP, features y competidores>
-META_APP_ID=<Facebook App ID — Meta for Developers>
-META_APP_SECRET=<Facebook App Secret>
+META_APP_ID=<App ID de Meta — Instagram Business Login y Facebook Pages>
+META_APP_SECRET=<App Secret de esa misma app>
+META_ADS_APP_ID=<App ID de Meta — SOLO Meta Ads, app distinta a la de arriba>
+META_ADS_APP_SECRET=<App Secret de esa app de Ads>
 TIKTOK_CLIENT_KEY=<TikTok App Key — TikTok for Developers>
 TIKTOK_CLIENT_SECRET=<TikTok App Secret>
 ```
@@ -364,7 +366,7 @@ Los workspace admins también pueden hacer **opt-out** de módulos habilitados d
 
 ### Backend (Railway)
 
-1. Variables de entorno en Railway: `DATABASE_URL`, `JWT_SECRET`, `RESEND_API_KEY`, `EMAIL_FROM`, `APP_DOMAIN`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `ANTHROPIC_API_KEY`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_ID`, `ENCRYPTION_KEY`, `BACKEND_URL`, `PAGESPEED_API_KEY`, `SERP_API_KEY`, `META_APP_ID`, `META_APP_SECRET`, `TIKTOK_CLIENT_KEY`, `TIKTOK_CLIENT_SECRET`
+1. Variables de entorno en Railway: `DATABASE_URL`, `JWT_SECRET`, `RESEND_API_KEY`, `EMAIL_FROM`, `APP_DOMAIN`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `ANTHROPIC_API_KEY`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_ID`, `ENCRYPTION_KEY`, `BACKEND_URL`, `PAGESPEED_API_KEY`, `SERP_API_KEY`, `META_APP_ID`, `META_APP_SECRET`, `META_ADS_APP_ID`, `META_ADS_APP_SECRET`, `TIKTOK_CLIENT_KEY`, `TIKTOK_CLIENT_SECRET`
 2. Railway ejecuta `npm run db:migrate` automáticamente al deployar
 3. Seed manual una vez desde Railway Shell
 

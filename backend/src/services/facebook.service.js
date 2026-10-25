@@ -5,7 +5,8 @@ const { DEFAULT_TZ } = require('../utils/dates')
  * Facebook Pages service.
  *
  * Métricas de una Página de Facebook vía Graph API (graph.facebook.com/v21.0),
- * mismo cliente de Meta que Instagram/Meta Ads (META_APP_ID/META_APP_SECRET).
+ * mismo cliente de Meta que Instagram (META_APP_ID/META_APP_SECRET) — Meta Ads
+ * usa una app de Meta distinta (META_ADS_APP_ID/META_ADS_APP_SECRET).
  *
  * Requiere un Page Access Token (se obtiene de /me/accounts o derivado de un
  * System User Token vía /{pageId}?fields=access_token). propertyId = Page ID.

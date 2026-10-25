@@ -48,9 +48,11 @@ Proyecto OAuth: el mismo que usa el login con Google (`GOOGLE_CLIENT_ID` / `GOOG
 - `https://www.googleapis.com/auth/youtube.readonly` — **scope SENSIBLE, pendiente de habilitar/verificar**. Para activar YouTube hay que: (1) habilitar **YouTube Data API v3** en el proyecto de Google Cloud, (2) agregar este scope al consent screen y enviarlo a verificación (mismo trámite que `analytics.readonly`). Mientras no esté verificado, funciona con la cuenta del desarrollador / hasta ~100 usuarios de prueba. El callback es el mismo de Google (`/api/marketing/integrations/google/callback`).
 - `https://www.googleapis.com/auth/calendar.events` — **scope SENSIBLE, pendiente de habilitar/verificar** (mismo trámite que `youtube.readonly`). Habilita **Google Calendar API** + agregar el scope al consent screen + enviarlo a verificación. Mientras no esté verificado, la conexión de Calendario solo funciona con la cuenta del desarrollador o testers agregados a mano. Callback **propio**, distinto del resto (`/api/calendar/google/callback`) porque esta es la primera integración de Google **por persona** en vez de por proyecto — ver concepto "Calendario".
 
+**Dos apps de Meta distintas, mismo backend:** Instagram Business Login + Facebook Pages usan una app (`META_APP_ID`/`META_APP_SECRET`); Meta Ads usa **otra app separada** (`META_ADS_APP_ID`/`META_ADS_APP_SECRET`) — `integrations.meta.controller.js` (`getMetaAdsAuthUrl`/`handleMetaAdsCallback`) y `metaAds.service.js` (`getValidFbToken`, refresh de token) son los únicos que leen las variables `META_ADS_*`. Hay que registrar el redirect URI de Meta Ads (`/api/marketing/integrations/meta-ads/callback`) en ESA app, no en la de Instagram.
+
 **Permisos requeridos en Meta App:**
-- Instagram Business Login: `instagram_business_basic`, `instagram_business_manage_insights` — App Review en curso
-- Facebook Login (Meta Ads): `ads_read` — requiere Business Verification + App Review. En desarrollo: usar System User Token generado desde Business Manager → Settings → System Users → Generate Token (Never expiry).
+- Instagram Business Login (app `META_APP_ID`): `instagram_business_basic`, `instagram_business_manage_insights` — App Review en curso
+- Facebook Login (Meta Ads, app `META_ADS_APP_ID`): `ads_read` — requiere Business Verification + App Review. En desarrollo: usar System User Token generado desde Business Manager → Settings → System Users → Generate Token (Never expiry).
 - Notas de implementación Instagram:
   - Usar `instagram.com/oauth/authorize` (NO `facebook.com/dialog/oauth`)
   - Token exchange: POST `api.instagram.com/oauth/access_token`

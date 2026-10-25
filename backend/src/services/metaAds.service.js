@@ -33,8 +33,8 @@ async function getValidFbToken(integration) {
   const { data } = await axios.get(`${FB_GRAPH}/oauth/access_token`, {
     params: {
       grant_type:        'fb_exchange_token',
-      client_id:         process.env.META_APP_ID,
-      client_secret:     process.env.META_APP_SECRET,
+      client_id:         process.env.META_ADS_APP_ID,
+      client_secret:     process.env.META_ADS_APP_SECRET,
       fb_exchange_token: current,
     },
   })

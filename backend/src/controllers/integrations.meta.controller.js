@@ -212,14 +212,15 @@ async function getMetaAdsAuthUrl(req, res, next) {
     )
 
     const params = new URLSearchParams({
-      client_id:     process.env.META_APP_ID,
+      client_id:     process.env.META_ADS_APP_ID,
       redirect_uri:  buildMetaAdsRedirectUri(),
       scope:         'ads_read',
       state,
       response_type: 'code',
     })
 
-    // Meta Ads usa Facebook Login — facebook.com (distinto al Instagram Business Login)
+    // Meta Ads usa Facebook Login — facebook.com (distinto al Instagram Business Login) —
+    // y es una app de Meta DISTINTA a la de Instagram (META_ADS_APP_ID/SECRET, no META_APP_ID/SECRET)
     const url = `https://www.facebook.com/dialog/oauth?${params.toString()}`
     res.json({ url })
   } catch (err) { next(err) }
@@ -273,8 +274,8 @@ async function handleMetaAdsCallback(req, res, next) {
     const tokenRes = await axios.post(
       'https://graph.facebook.com/v21.0/oauth/access_token',
       new URLSearchParams({
-        client_id:     process.env.META_APP_ID,
-        client_secret: process.env.META_APP_SECRET,
+        client_id:     process.env.META_ADS_APP_ID,
+        client_secret: process.env.META_ADS_APP_SECRET,
         grant_type:    'authorization_code',
         redirect_uri:  redirectUri,
         code,
@@ -287,8 +288,8 @@ async function handleMetaAdsCallback(req, res, next) {
     const longRes = await axios.get('https://graph.facebook.com/v21.0/oauth/access_token', {
       params: {
         grant_type:        'fb_exchange_token',
-        client_id:         process.env.META_APP_ID,
-        client_secret:     process.env.META_APP_SECRET,
+        client_id:         process.env.META_ADS_APP_ID,
+        client_secret:     process.env.META_ADS_APP_SECRET,
         fb_exchange_token: shortToken,
       },
     })
