@@ -1,6 +1,7 @@
 const prisma = require('../lib/prisma')
 const objectStorage = require('../services/objectStorage.service')
 const { safeContentDisposition } = require('../lib/contentDisposition')
+const { isDangerousMime } = require('../lib/dangerousMime')
 
 /**
  * GET /api/public/chat-attachment/:id
@@ -18,6 +19,13 @@ async function serveAttachment(req, res, next) {
       select: { fileData: true, mimeType: true, objectKey: true, fileName: true },
     })
     if (!attachment) return res.status(404).send('Not found')
+
+    // Defensa en profundidad: nunca servir un tipo que el navegador pueda
+    // ejecutar como HTML/script same-origin, aunque haya quedado guardado por un
+    // bug previo a la validación de subida (sendMessageWithMedia la bloquea de
+    // entrada). Si vive en R2 no se puede forzar el header en el redirect —
+    // en ese caso directamente no se sirve.
+    if (isDangerousMime(attachment.mimeType)) return res.status(404).send('Not found')
 
     if (attachment.objectKey) {
       // Cache moderado (1 día, no 1 año) para poder recambiar R2_PUBLIC_BASE

@@ -110,7 +110,7 @@ async function dismissDelegatedOne(req, res, next) {
     const taskId = Number(req.params.id)
 
     const { count } = await prisma.task.updateMany({
-      where: { id: taskId, createdById, userId: { not: createdById } },
+      where: { id: taskId, createdById, userId: { not: createdById }, workDay: { workspaceId: req.workspace.id } },
       data: { dismissedByCreator: true },
     })
     if (count === 0) return res.status(404).json({ error: 'Tarea no encontrada' })

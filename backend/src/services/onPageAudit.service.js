@@ -1,8 +1,7 @@
-const axios     = require('axios')
 const cheerio   = require('cheerio')
 const prisma    = require('../lib/prisma')
 const { logTokens } = require('../lib/logTokens')
-const { assertPublicUrl } = require('../lib/safeUrl')
+const { assertPublicUrl, fetchPublicUrl } = require('../lib/safeUrl')
 const { normalizeInternal, crawlSite } = require('../lib/siteCrawler')
 
 const { anthropic } = require('../lib/claude')
@@ -115,9 +114,9 @@ async function checkBrokenLinks(links) {
   const slice = links.slice(0, MAX_LINK_CHECK)
   await Promise.all(slice.map(async (url) => {
     try {
-      const res = await axios.get(url, { timeout: 8000, maxRedirects: 5, headers: { 'User-Agent': UA }, validateStatus: () => true })
+      const res = await fetchPublicUrl(url, { timeout: 8000, headers: { 'User-Agent': UA }, validateStatus: () => true })
       if (res.status >= 400) broken.push({ url, status: res.status })
-    } catch { /* error transitorio/red — no lo reportamos como roto */ }
+    } catch { /* error transitorio/red/URL no pública — no lo reportamos como roto */ }
   }))
   return broken
 }

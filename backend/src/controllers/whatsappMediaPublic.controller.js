@@ -1,6 +1,7 @@
 const prisma = require('../lib/prisma')
 const objectStorage = require('../services/objectStorage.service')
 const { safeContentDisposition } = require('../lib/contentDisposition')
+const { isDangerousMime } = require('../lib/dangerousMime')
 
 /**
  * GET /api/public/whatsapp-media/:id
@@ -17,6 +18,11 @@ async function serveMedia(req, res, next) {
       select: { mediaData: true, mimeType: true, objectKey: true, fileName: true },
     })
     if (!media) return res.status(404).send('Not found')
+
+    // Defensa en profundidad (ver chatAttachmentPublic.controller.js): un mime_type
+    // HTML/SVG no debe servirse nunca, incluso si quedó guardado por un mensaje
+    // recibido antes de validar esto en whatsappMedia.service.js/sendMedia.
+    if (isDangerousMime(media.mimeType)) return res.status(404).send('Not found')
 
     if (media.objectKey) {
       // Cache moderado (1 día, no 1 año) para poder recambiar R2_PUBLIC_BASE

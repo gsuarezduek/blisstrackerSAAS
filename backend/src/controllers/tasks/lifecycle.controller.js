@@ -343,7 +343,10 @@ async function startTask(req, res, next) {
     const userId = req.user.userId
     const workspaceId = req.workspace.id
 
-    const existing = await prisma.task.findUnique({ where: { id: Number(req.params.id) } })
+    // Scopear por workspace: evita que alguien con doble membresía (frecuente en
+    // una agencia que trabaja con varios workspaces de clientes) mute una tarea
+    // propia de OTRO workspace solo porque el id numérico coincide.
+    const existing = await prisma.task.findFirst({ where: { id: Number(req.params.id), workDay: { workspaceId } } })
     if (!existing || existing.userId !== userId) return res.status(404).json({ error: 'Tarea no encontrada' })
     if (existing.isBacklog) return res.status(400).json({ error: 'Agregá la tarea al día primero para iniciarla.' })
     if (existing.status !== 'PENDING') return res.status(400).json({ error: 'Solo se puede iniciar una tarea pendiente.' })
@@ -434,8 +437,9 @@ async function startTask(req, res, next) {
 async function pauseTask(req, res, next) {
   try {
     const userId = req.user.userId
+    const workspaceId = req.workspace.id
     const taskId = Number(req.params.id)
-    const existing = await prisma.task.findUnique({ where: { id: taskId } })
+    const existing = await prisma.task.findFirst({ where: { id: taskId, workDay: { workspaceId } } })
     if (!existing || existing.userId !== userId) return res.status(404).json({ error: 'Tarea no encontrada' })
     if (existing.status !== 'IN_PROGRESS') return res.status(400).json({ error: 'Solo se puede pausar una tarea en curso.' })
 
@@ -459,8 +463,9 @@ async function pauseTask(req, res, next) {
 async function resumeTask(req, res, next) {
   try {
     const userId = req.user.userId
+    const workspaceId = req.workspace.id
 
-    const current = await prisma.task.findUnique({ where: { id: Number(req.params.id) } })
+    const current = await prisma.task.findFirst({ where: { id: Number(req.params.id), workDay: { workspaceId } } })
     if (!current || current.userId !== userId) {
       return res.status(404).json({ error: 'Tarea no encontrada' })
     }
@@ -501,7 +506,7 @@ async function completeTask(req, res, next) {
     const userId = req.user.userId
     const workspaceId = req.workspace.id
     const taskId = Number(req.params.id)
-    const existing = await prisma.task.findUnique({ where: { id: taskId } })
+    const existing = await prisma.task.findFirst({ where: { id: taskId, workDay: { workspaceId } } })
     if (!existing || existing.userId !== userId) return res.status(404).json({ error: 'Tarea no encontrada' })
     if (existing.status !== 'IN_PROGRESS') return res.status(400).json({ error: 'Solo se puede completar una tarea en curso.' })
 
@@ -613,7 +618,7 @@ async function blockTask(req, res, next) {
     const { reason } = req.body
     if (!reason?.trim()) return res.status(400).json({ error: 'La razón del bloqueo es requerida' })
     const taskId = Number(req.params.id)
-    const existing = await prisma.task.findUnique({ where: { id: taskId } })
+    const existing = await prisma.task.findFirst({ where: { id: taskId, workDay: { workspaceId } } })
     if (!existing || existing.userId !== userId) return res.status(404).json({ error: 'Tarea no encontrada' })
     if (existing.status !== 'IN_PROGRESS') return res.status(400).json({ error: 'Solo se puede bloquear una tarea en curso.' })
 
@@ -676,7 +681,7 @@ async function unblockTask(req, res, next) {
     const userId = req.user.userId
     const workspaceId = req.workspace.id
 
-    const current = await prisma.task.findUnique({ where: { id: Number(req.params.id) } })
+    const current = await prisma.task.findFirst({ where: { id: Number(req.params.id), workDay: { workspaceId } } })
     if (!current || current.userId !== userId) {
       return res.status(404).json({ error: 'Tarea no encontrada' })
     }

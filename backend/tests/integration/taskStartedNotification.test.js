@@ -67,7 +67,7 @@ beforeEach(() => {
 
 describe('PATCH /api/tasks/:id/start — aviso STARTED', () => {
   it('avisa a los seguidores y a quien la delegó, sin duplicar ni avisar al equipo del proyecto', async () => {
-    prisma.task.findUnique.mockResolvedValue(makeTask({ createdById: 8 }))
+    prisma.task.findFirst.mockResolvedValueOnce(makeTask({ createdById: 8 }))
     prisma.task.update.mockResolvedValue(makeTask({ status: 'IN_PROGRESS', createdById: 8 }))
     prisma.taskFollow.findMany.mockResolvedValue([{ userId: 5 }, { userId: 8 }])
 
@@ -87,7 +87,7 @@ describe('PATCH /api/tasks/:id/start — aviso STARTED', () => {
   })
 
   it('no avisa si nadie la sigue ni la delegó otra persona', async () => {
-    prisma.task.findUnique.mockResolvedValue(makeTask({ createdById: 1 }))
+    prisma.task.findFirst.mockResolvedValueOnce(makeTask({ createdById: 1 }))
     prisma.task.update.mockResolvedValue(makeTask({ status: 'IN_PROGRESS', createdById: 1 }))
     prisma.taskFollow.findMany.mockResolvedValue([])
 
@@ -98,7 +98,7 @@ describe('PATCH /api/tasks/:id/start — aviso STARTED', () => {
   })
 
   it('una tarea de agente no avisa', async () => {
-    prisma.task.findUnique.mockResolvedValue(makeTask({ isAgentTask: true, createdById: 8 }))
+    prisma.task.findFirst.mockResolvedValueOnce(makeTask({ isAgentTask: true, createdById: 8 }))
     prisma.task.update.mockResolvedValue(makeTask({ status: 'IN_PROGRESS', isAgentTask: true, createdById: 8 }))
     prisma.taskFollow.findMany.mockResolvedValue([{ userId: 5 }])
 

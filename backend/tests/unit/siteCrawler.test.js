@@ -1,5 +1,12 @@
 jest.mock('axios')
 const axios = require('axios')
+// crawlSite usa fetchPublicUrl (lib/safeUrl.js) en vez de axios.get directo —
+// valida SSRF (DNS real) en cada redirect, algo fuera del alcance de este test
+// (que cubre la mecánica de recorrido BFS). Se mockea para que delegue 1:1 en
+// el axios.get ya mockeado, preservando los asserts existentes sobre axios.get.
+jest.mock('../../src/lib/safeUrl', () => ({
+  fetchPublicUrl: jest.fn((url, opts) => require('axios').get(url, opts)),
+}))
 const { normalizeInternal, crawlSite } = require('../../src/lib/siteCrawler')
 
 describe('normalizeInternal', () => {

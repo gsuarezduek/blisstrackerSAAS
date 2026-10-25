@@ -9,6 +9,7 @@
 const prisma = require('../lib/prisma')
 const objectStorage = require('../services/objectStorage.service')
 const { safeContentDisposition } = require('../lib/contentDisposition')
+const { isDangerousMime } = require('../lib/dangerousMime')
 const { shapeItem, buildPath } = require('./projects/projectFiles.controller')
 
 async function resolveSharedRoot(token) {
@@ -149,7 +150,11 @@ async function downloadSharedFile(req, res, next) {
     const { body, contentLength } = await objectStorage.getObjectStream(file.objectKey)
     res.setHeader('Content-Type', file.mimeType || 'application/octet-stream')
     if (contentLength != null) res.setHeader('Content-Length', contentLength)
-    const type = req.query.inline === '1' ? 'inline' : 'attachment'
+    // Defensa en profundidad: nunca servir inline un tipo que el navegador pueda
+    // ejecutar como HTML/script, sin importar `?inline=1` — cubre tanto un bug
+    // futuro en la validación de subida como cualquier fila ya guardada antes de
+    // este chequeo.
+    const type = (req.query.inline === '1' && !isDangerousMime(file.mimeType)) ? 'inline' : 'attachment'
     res.setHeader('Content-Disposition', safeContentDisposition(file.name, { type }))
     body.on('error', next)
     body.pipe(res)
@@ -208,7 +213,8 @@ async function downloadSharedFileByToken(req, res, next) {
     const { body, contentLength } = await objectStorage.getObjectStream(file.objectKey)
     res.setHeader('Content-Type', file.mimeType || 'application/octet-stream')
     if (contentLength != null) res.setHeader('Content-Length', contentLength)
-    const type = req.query.inline === '1' ? 'inline' : 'attachment'
+    // Mismo refuerzo que downloadSharedFile: ignora `?inline=1` para tipos peligrosos.
+    const type = (req.query.inline === '1' && !isDangerousMime(file.mimeType)) ? 'inline' : 'attachment'
     res.setHeader('Content-Disposition', safeContentDisposition(file.name, { type }))
     body.on('error', next)
     body.pipe(res)

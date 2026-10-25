@@ -10,6 +10,7 @@ const { sendPushToUser } = require('../services/pushNotification.service')
 const objectStorage = require('../services/objectStorage.service')
 const { validateImageUpload } = require('../lib/imageType')
 const { getEffectiveCategoryLimitMb } = require('../lib/storageBudget')
+const { isDangerousMime } = require('../lib/dangerousMime')
 
 const MESSAGE_PAGE_SIZE = 50
 
@@ -494,6 +495,11 @@ async function sendMessageWithMedia(req, res, next) {
       const check = validateImageUpload(req.file.buffer, ATTACHMENT_IMAGE_MIMES)
       if (!check.ok) return res.status(400).json({ error: check.error })
       mimeType = check.mimeType
+    } else if (isDangerousMime(mimeType)) {
+      // 'document' no se valida por magic bytes (ver comentario de resolveAttachmentKind),
+      // pero un tipo HTML/SVG declarado se serviría same-origin desde
+      // chatAttachmentPublic.controller.js — eso sí hay que bloquearlo siempre.
+      return res.status(400).json({ error: 'Este tipo de archivo no está permitido.' })
     }
 
     const quotaError = await assertAttachmentQuota(workspaceId, req.file.buffer.length)

@@ -1,8 +1,7 @@
-const axios     = require('axios')
 const cheerio   = require('cheerio')
 const prisma    = require('../lib/prisma')
 const { logTokens } = require('../lib/logTokens')
-const { assertPublicUrl } = require('../lib/safeUrl')
+const { assertPublicUrl, fetchPublicUrl } = require('../lib/safeUrl')
 const { normalizeInternal, crawlSite } = require('../lib/siteCrawler')
 const { parseLooseJson } = require('../lib/jsonRepair')
 
@@ -11,24 +10,23 @@ const { anthropic } = require('../lib/claude')
 // ─── Fetch helpers ────────────────────────────────────────────────────────────
 
 async function fetchPage(url) {
-  const res = await axios.get(url, {
+  const res = await fetchPublicUrl(url, {
     timeout: 15000,
     headers: { 'User-Agent': 'BlissTrackerBot/1.0 (+https://blisstracker.app)' },
-    maxRedirects: 5,
   })
   return res.data
 }
 
 async function fetchRobotsTxt(origin) {
   try {
-    const res = await axios.get(`${origin}/robots.txt`, { timeout: 8000 })
+    const res = await fetchPublicUrl(`${origin}/robots.txt`, { timeout: 8000 })
     return res.data
   } catch { return '' }
 }
 
 async function fetchLlmsTxt(origin) {
   try {
-    const res = await axios.get(`${origin}/llms.txt`, { timeout: 8000 })
+    const res = await fetchPublicUrl(`${origin}/llms.txt`, { timeout: 8000 })
     return { exists: true, content: res.data?.slice(0, 3000) ?? '' }
   } catch { return { exists: false, content: '' } }
 }
@@ -38,7 +36,7 @@ async function fetchLlmsTxt(origin) {
 // a diferencia de /sitemap.xml que sí es real y relevante para crawl discovery.
 async function fetchAiDiscovery(origin) {
   try {
-    const res = await axios.get(`${origin}/sitemap.xml`, { timeout: 6000 })
+    const res = await fetchPublicUrl(`${origin}/sitemap.xml`, { timeout: 6000 })
     return { sitemap: { exists: true, status: res.status } }
   } catch {
     return { sitemap: { exists: false } }
@@ -534,7 +532,7 @@ async function runGeoAnalysis(auditId, workspaceId, projectId, url, userId, { ma
     // Verificar presupuesto mensual antes de llamar a Claude
     const { hasTokenBudget } = require('../lib/tokenBudget')
     if (!(await hasTokenBudget(workspaceId))) {
-      await prisma.geoAudit.update({ where: { id: auditId }, data: { status: 'error', errorMsg: 'Límite mensual de tokens de IA alcanzado.' } })
+      await prisma.geoAudit.update({ where: { id: auditId }, data: { status: 'failed', errorMsg: 'Límite mensual de tokens de IA alcanzado.' } })
       return
     }
 

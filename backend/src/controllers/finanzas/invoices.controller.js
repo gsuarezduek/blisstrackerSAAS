@@ -14,9 +14,9 @@ const { getIssuedVoucher } = require('../../lib/arcaVoucherDocument')
 const { renderInvoicePdf } = require('./invoicePrint.controller')
 const { isValidArcaVatRate } = require('../../lib/financeCatalog')
 const { parseDate, computeInvoiceStatus, businessError } = require('./_shared')
+const { isDangerousMime } = require('../../lib/dangerousMime')
 
 const MAX_FILE_BYTES = 20 * 1024 * 1024 // 20MB — comprobantes/facturas, no media pesado
-const DENIED_MIME = ['text/html', 'application/xhtml+xml', 'image/svg+xml']
 const PRESIGN_EXPIRES_IN = 900
 const MAX_ZIP_ENTRIES = 200
 const INVOICE_FIELD_LABELS = {
@@ -501,7 +501,7 @@ async function presignAttachment(req, res, next) {
     const name = (req.body?.name || '').trim().slice(0, 200)
     if (!name) return res.status(400).json({ error: 'Nombre de archivo requerido' })
     const mimeType = typeof req.body?.mimeType === 'string' && req.body.mimeType.trim() ? req.body.mimeType.trim() : 'application/octet-stream'
-    if (DENIED_MIME.includes(mimeType)) return res.status(400).json({ error: 'Este tipo de archivo no está permitido.' })
+    if (isDangerousMime(mimeType)) return res.status(400).json({ error: 'Este tipo de archivo no está permitido.' })
     const declaredSize = Number(req.body?.sizeBytes)
     if (!Number.isInteger(declaredSize) || declaredSize <= 0) return res.status(400).json({ error: 'sizeBytes inválido' })
     if (declaredSize > MAX_FILE_BYTES) return res.status(413).json({ error: `El archivo supera el máximo permitido (${Math.round(MAX_FILE_BYTES / (1024 * 1024))}MB).` })
@@ -540,7 +540,7 @@ async function confirmAttachment(req, res, next) {
 
     const headerBuf = await objectStorage.getObjectHead(attachment.objectKey, 32)
     const mimeType = detectImageType(headerBuf) || (detectDocumentType(headerBuf) === 'pdf' ? 'application/pdf' : null) || attachment.mimeType
-    if (DENIED_MIME.includes(mimeType)) return reject(400, 'Este tipo de archivo no está permitido.')
+    if (isDangerousMime(mimeType)) return reject(400, 'Este tipo de archivo no está permitido.')
 
     const updated = await prisma.financeAttachment.update({
       where: { id: attachment.id },

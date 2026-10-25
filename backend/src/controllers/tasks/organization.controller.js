@@ -8,7 +8,7 @@ async function starTask(req, res, next) {
     const workspaceId = req.workspace.id
     const id = Number(req.params.id)
 
-    const task = await prisma.task.findUnique({ where: { id }, include: { workDay: true } })
+    const task = await prisma.task.findFirst({ where: { id, workDay: { workspaceId } }, include: { workDay: true } })
     if (!task || task.userId !== userId) return res.status(404).json({ error: 'Tarea no encontrada' })
 
     const currentLevel = task.starred || 0
@@ -65,7 +65,7 @@ async function addToToday(req, res, next) {
     const tz = req.workspace.timezone
     const taskId = Number(req.params.id)
 
-    const task = await prisma.task.findUnique({ where: { id: taskId }, include: { workDay: true } })
+    const task = await prisma.task.findFirst({ where: { id: taskId, workDay: { workspaceId } }, include: { workDay: true } })
     if (!task || task.userId !== userId) return res.status(404).json({ error: 'Tarea no encontrada' })
     if (task.status === 'COMPLETED') return res.status(400).json({ error: 'No podés mover al día una tarea completada.' })
 
@@ -123,7 +123,7 @@ async function bringToToday(req, res, next) {
     const tz = req.workspace.timezone
     const taskId = Number(req.params.id)
 
-    const task = await prisma.task.findUnique({ where: { id: taskId } })
+    const task = await prisma.task.findFirst({ where: { id: taskId, workDay: { workspaceId } } })
     if (!task || task.userId !== userId) return res.status(404).json({ error: 'Tarea no encontrada' })
     if (!task.scheduledFor) return res.status(400).json({ error: 'La tarea no es futura.' })
 
@@ -155,9 +155,10 @@ async function bringToToday(req, res, next) {
 async function moveToBacklog(req, res, next) {
   try {
     const userId = req.user.userId
+    const workspaceId = req.workspace.id
     const taskId = Number(req.params.id)
 
-    const task = await prisma.task.findUnique({ where: { id: taskId } })
+    const task = await prisma.task.findFirst({ where: { id: taskId, workDay: { workspaceId } } })
     if (!task || task.userId !== userId) return res.status(404).json({ error: 'Tarea no encontrada' })
     if (task.status !== 'PENDING') return res.status(400).json({ error: 'Solo las tareas pendientes pueden ir al Backlog. Una tarea pausada o bloqueada ya está empezada.' })
 

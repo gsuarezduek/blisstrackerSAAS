@@ -18,8 +18,9 @@ const { detectDocumentType } = require('../../lib/documentType')
 const { findOrCreateFolder } = require('../../lib/projectFileTree')
 const { monthLabel } = require('../../lib/monthUtils')
 const { todayString } = require('../../utils/dates')
+const { isDangerousMime } = require('../../lib/dangerousMime')
 const {
-  sanitizeName, shapeItem, MAX_FILE_BYTES, DENIED_MIME, assertWithinQuota, PRESIGN_EXPIRES_IN,
+  sanitizeName, shapeItem, MAX_FILE_BYTES, assertWithinQuota, PRESIGN_EXPIRES_IN,
 } = require('../projects/projectFiles.controller')
 
 const PENDING_MAX_AGE_MS = 60 * 60 * 1000
@@ -109,7 +110,7 @@ async function presignAttachment(req, res, next) {
 
     const mimeType = typeof req.body?.mimeType === 'string' && req.body.mimeType.trim()
       ? req.body.mimeType.trim() : 'application/octet-stream'
-    if (DENIED_MIME.includes(mimeType)) return res.status(400).json({ error: 'Este tipo de archivo no está permitido.' })
+    if (isDangerousMime(mimeType)) return res.status(400).json({ error: 'Este tipo de archivo no está permitido.' })
 
     const declaredSize = Number(req.body?.sizeBytes)
     if (!Number.isInteger(declaredSize) || declaredSize <= 0) return res.status(400).json({ error: 'sizeBytes inválido' })
@@ -182,7 +183,7 @@ async function confirmAttachment(req, res, next) {
     const headerBuf = await objectStorage.getObjectHead(file.objectKey, 32)
     mimeType = detectImageType(headerBuf) || detectVideoType(headerBuf)
       || (detectDocumentType(headerBuf) === 'pdf' ? 'application/pdf' : null) || mimeType
-    if (DENIED_MIME.includes(mimeType)) return reject(400, 'Este tipo de archivo no está permitido.')
+    if (isDangerousMime(mimeType)) return reject(400, 'Este tipo de archivo no está permitido.')
 
     const [updated] = await prisma.$transaction([
       prisma.projectFile.update({
@@ -296,7 +297,7 @@ async function directAttachment(req, res, next) {
       || (detectDocumentType(headerBuf) === 'pdf' ? 'application/pdf' : null)
       || declared || (sourceType !== 'application/octet-stream' ? sourceType : null)
       || MIME_BY_EXT[ext] || (content ? 'text/plain' : 'application/octet-stream')
-    if (DENIED_MIME.includes(mimeType)) return res.status(400).json({ error: 'Este tipo de archivo no está permitido.' })
+    if (isDangerousMime(mimeType)) return res.status(400).json({ error: 'Este tipo de archivo no está permitido.' })
 
     const linkedCount = await prisma.taskFile.count({ where: { taskId, file: { status: 'ready', deletedAt: null } } })
     if (linkedCount >= MAX_ATTACHMENTS_PER_TASK) {

@@ -150,7 +150,7 @@ describe('POST /api/tasks — agentes', () => {
 
 describe('PATCH /api/tasks/:id/start — agentes', () => {
   it('una tarea de agente arranca aunque la persona tenga otra en curso, y la toma el agente que llama', async () => {
-    prisma.task.findUnique.mockResolvedValue(makeTask({ isAgentTask: true, agentId: null }))
+    prisma.task.findFirst.mockResolvedValueOnce(makeTask({ isAgentTask: true, agentId: null }))
     prisma.task.update.mockResolvedValue(makeTask({ status: 'IN_PROGRESS', isAgentTask: true, agentId: AGENT_ID }))
 
     const res = await request(app)
@@ -159,14 +159,16 @@ describe('PATCH /api/tasks/:id/start — agentes', () => {
       .set('X-Workspace', WORKSPACE_SLUG)
 
     expect(res.status).toBe(200)
-    expect(prisma.task.findFirst).not.toHaveBeenCalled() // no corre assertNoActiveTask
+    // Un solo findFirst (la resolución de la tarea, ahora scopeada por workspace) —
+    // no corre assertNoActiveTask, que agregaría una segunda llamada.
+    expect(prisma.task.findFirst).toHaveBeenCalledTimes(1)
     expect(prisma.task.update).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({ status: 'IN_PROGRESS', agentId: AGENT_ID }),
     }))
   })
 
   it('una tarea humana sigue respetando la regla (409 si hay otra humana en curso)', async () => {
-    prisma.task.findUnique.mockResolvedValue(makeTask())
+    prisma.task.findFirst.mockResolvedValueOnce(makeTask())
     prisma.task.findFirst.mockResolvedValue({ id: 2, workDay: { workspaceId: WORKSPACE_ID } })
 
     const res = await request(app)
@@ -498,7 +500,7 @@ describe('avisos de tareas de agente', () => {
   })
 
   it('completar una tarea de agente no notifica a nadie', async () => {
-    prisma.task.findUnique.mockResolvedValue(makeTask({ status: 'IN_PROGRESS', isAgentTask: true, agentId: AGENT_ID }))
+    prisma.task.findFirst.mockResolvedValueOnce(makeTask({ status: 'IN_PROGRESS', isAgentTask: true, agentId: AGENT_ID }))
     prisma.task.update.mockResolvedValue(makeTask({ status: 'COMPLETED', isAgentTask: true, agentId: AGENT_ID }))
 
     const res = await request(app)
@@ -512,7 +514,7 @@ describe('avisos de tareas de agente', () => {
   })
 
   it('completar una tarea humana sigue notificando al equipo', async () => {
-    prisma.task.findUnique.mockResolvedValue(makeTask({ status: 'IN_PROGRESS' }))
+    prisma.task.findFirst.mockResolvedValueOnce(makeTask({ status: 'IN_PROGRESS' }))
     prisma.task.update.mockResolvedValue(makeTask({ status: 'COMPLETED' }))
 
     await request(app)
@@ -524,7 +526,7 @@ describe('avisos de tareas de agente', () => {
   })
 
   it('completar una tarea la deja como novedad para el agente que la creó (también si se recompleta)', async () => {
-    prisma.task.findUnique.mockResolvedValue(makeTask({ status: 'IN_PROGRESS', createdByAgentId: AGENT_ID }))
+    prisma.task.findFirst.mockResolvedValueOnce(makeTask({ status: 'IN_PROGRESS', createdByAgentId: AGENT_ID }))
     prisma.task.update.mockResolvedValue(makeTask({ status: 'COMPLETED', createdByAgentId: AGENT_ID }))
 
     await request(app)
@@ -536,7 +538,7 @@ describe('avisos de tareas de agente', () => {
   })
 
   it('el bloqueo de un agente le avisa solo a su dueño, sin actor y nombrando al agente', async () => {
-    prisma.task.findUnique.mockResolvedValue(makeTask({ status: 'IN_PROGRESS', isAgentTask: true, agentId: AGENT_ID }))
+    prisma.task.findFirst.mockResolvedValueOnce(makeTask({ status: 'IN_PROGRESS', isAgentTask: true, agentId: AGENT_ID }))
     prisma.task.update.mockResolvedValue(makeTask({ status: 'BLOCKED', isAgentTask: true, agentId: AGENT_ID, agent: { id: AGENT_ID, label: 'Grok' } }))
 
     const res = await request(app)

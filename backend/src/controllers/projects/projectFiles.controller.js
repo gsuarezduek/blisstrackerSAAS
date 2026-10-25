@@ -18,9 +18,13 @@ const { detectVideoType } = require('../../lib/mediaType')
 const { detectDocumentType } = require('../../lib/documentType')
 const { safeContentDisposition } = require('../../lib/contentDisposition')
 const { resolveProjectId } = require('./_shared')
+const { DANGEROUS_MIME_TYPES, isDangerousMime } = require('../../lib/dangerousMime')
 
 const MAX_FILE_BYTES = 500 * 1024 * 1024 // 500MB — un solo PUT sin reintento parcial; más grande necesitaría multiparte
-const DENIED_MIME = ['text/html', 'application/xhtml+xml', 'image/svg+xml']
+// Alias histórico: mantenido para los callers que ya lo importan (ver abajo).
+// El chequeo real SIEMPRE debe ir por isDangerousMime() — comparar contra este
+// array a mano es case-sensitive y se evade con "TEXT/HTML"/"Image/Svg+Xml".
+const DENIED_MIME = DANGEROUS_MIME_TYPES
 const PRESIGN_EXPIRES_IN = 900 // 15 min (más margen que Contenido: archivos más pesados)
 const PENDING_MAX_AGE_MS = 60 * 60 * 1000
 const MAX_PENDING_PER_PROJECT = 5
@@ -247,7 +251,7 @@ async function presignFile(req, res, next) {
 
     const mimeType = typeof req.body?.mimeType === 'string' && req.body.mimeType.trim()
       ? req.body.mimeType.trim() : 'application/octet-stream'
-    if (DENIED_MIME.includes(mimeType)) return res.status(400).json({ error: 'Este tipo de archivo no está permitido.' })
+    if (isDangerousMime(mimeType)) return res.status(400).json({ error: 'Este tipo de archivo no está permitido.' })
 
     const declaredSize = Number(req.body?.sizeBytes)
     if (!Number.isInteger(declaredSize) || declaredSize <= 0) return res.status(400).json({ error: 'sizeBytes inválido' })
@@ -350,7 +354,7 @@ async function confirmFile(req, res, next) {
     // navegadores/OS mandan application/octet-stream para ciertos PDFs).
     mimeType = detectImageType(headerBuf) || detectVideoType(headerBuf)
       || (detectDocumentType(headerBuf) === 'pdf' ? 'application/pdf' : null) || mimeType
-    if (DENIED_MIME.includes(mimeType)) return reject(400, 'Este tipo de archivo no está permitido.')
+    if (isDangerousMime(mimeType)) return reject(400, 'Este tipo de archivo no está permitido.')
 
     let posterKey = null
     if (req.body?.posterFileId) {

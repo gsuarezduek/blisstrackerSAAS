@@ -1,4 +1,4 @@
-const axios = require('axios')
+const { fetchPublicUrl } = require('./safeUrl')
 
 // Crawler BFS acotado, compartido por GEO (geoAudit.service.js) y On-Page
 // (onPageAudit.service.js) — antes eran dos copias independientes que terminaban
@@ -47,7 +47,9 @@ async function crawlSite({ seedUrl, extraSeeds = [], maxPages, extract, timeout 
     if (!next || visited.has(next)) continue
     visited.add(next)
     try {
-      const res = await axios.get(next, { timeout, maxRedirects: 5, headers: { 'User-Agent': UA }, validateStatus: s => s < 400 })
+      // fetchPublicUrl (no axios.get con maxRedirects) — revalida cada salto de
+      // redirect contra assertPublicUrl, no solo la URL semilla (SSRF por redirect).
+      const res = await fetchPublicUrl(next, { timeout, headers: { 'User-Agent': UA }, validateStatus: s => s < 400 })
       const data = extract(res.data, next, origin)
       pages.push(data)
       for (const link of data.internalLinks || []) {

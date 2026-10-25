@@ -53,7 +53,7 @@ describe('PATCH /api/tasks/:id/move-to-backlog', () => {
   beforeEach(() => { jest.clearAllMocks(); mockWorkspace() })
 
   it('mueve una tarea PENDING al backlog', async () => {
-    prisma.task.findUnique.mockResolvedValue(makeTask({ status: 'PENDING' }))
+    prisma.task.findFirst.mockResolvedValue(makeTask({ status: 'PENDING' }))
     prisma.task.update.mockResolvedValue(makeTask({ isBacklog: true }))
 
     const res = await request(app)
@@ -68,7 +68,7 @@ describe('PATCH /api/tasks/:id/move-to-backlog', () => {
   })
 
   it('retorna 400 si la tarea está PAUSED (ya empezada)', async () => {
-    prisma.task.findUnique.mockResolvedValue(makeTask({ status: 'PAUSED' }))
+    prisma.task.findFirst.mockResolvedValue(makeTask({ status: 'PAUSED' }))
 
     const res = await request(app)
       .patch('/api/tasks/1/move-to-backlog')
@@ -80,7 +80,7 @@ describe('PATCH /api/tasks/:id/move-to-backlog', () => {
   })
 
   it('retorna 400 si la tarea está BLOCKED (ya empezada)', async () => {
-    prisma.task.findUnique.mockResolvedValue(makeTask({ status: 'BLOCKED' }))
+    prisma.task.findFirst.mockResolvedValue(makeTask({ status: 'BLOCKED' }))
 
     const res = await request(app)
       .patch('/api/tasks/1/move-to-backlog')
@@ -92,7 +92,7 @@ describe('PATCH /api/tasks/:id/move-to-backlog', () => {
   })
 
   it('retorna 400 si la tarea está IN_PROGRESS', async () => {
-    prisma.task.findUnique.mockResolvedValue(makeTask({ status: 'IN_PROGRESS' }))
+    prisma.task.findFirst.mockResolvedValue(makeTask({ status: 'IN_PROGRESS' }))
 
     const res = await request(app)
       .patch('/api/tasks/1/move-to-backlog')
@@ -104,7 +104,7 @@ describe('PATCH /api/tasks/:id/move-to-backlog', () => {
   })
 
   it('retorna 400 si la tarea está COMPLETED', async () => {
-    prisma.task.findUnique.mockResolvedValue(makeTask({ status: 'COMPLETED' }))
+    prisma.task.findFirst.mockResolvedValue(makeTask({ status: 'COMPLETED' }))
 
     const res = await request(app)
       .patch('/api/tasks/1/move-to-backlog')
@@ -116,7 +116,7 @@ describe('PATCH /api/tasks/:id/move-to-backlog', () => {
   })
 
   it('retorna 404 si la tarea no existe', async () => {
-    prisma.task.findUnique.mockResolvedValue(null)
+    prisma.task.findFirst.mockResolvedValue(null)
 
     const res = await request(app)
       .patch('/api/tasks/1/move-to-backlog')
@@ -127,7 +127,7 @@ describe('PATCH /api/tasks/:id/move-to-backlog', () => {
   })
 
   it('retorna 404 si la tarea pertenece a otro usuario', async () => {
-    prisma.task.findUnique.mockResolvedValue(makeTask({ userId: 99 }))
+    prisma.task.findFirst.mockResolvedValue(makeTask({ userId: 99 }))
 
     const res = await request(app)
       .patch('/api/tasks/1/move-to-backlog')
@@ -152,7 +152,7 @@ describe('PATCH /api/tasks/:id/add-to-today', () => {
   beforeEach(() => { jest.clearAllMocks(); mockWorkspace() })
 
   it('mueve una tarea de backlog al día de hoy', async () => {
-    prisma.task.findUnique.mockResolvedValue(makeTask({ isBacklog: true, workDay: { date: TODAY } }))
+    prisma.task.findFirst.mockResolvedValue(makeTask({ isBacklog: true, workDay: { date: TODAY } }))
     prisma.workDay.findUnique.mockResolvedValue(workDayToday)
     prisma.task.update.mockResolvedValue(makeTask({ isBacklog: false, workDayId: 10 }))
 
@@ -168,7 +168,7 @@ describe('PATCH /api/tasks/:id/add-to-today', () => {
   })
 
   it('crea la jornada si no existe', async () => {
-    prisma.task.findUnique.mockResolvedValue(makeTask({ isBacklog: true, workDay: { date: '2026-04-04' } }))
+    prisma.task.findFirst.mockResolvedValue(makeTask({ isBacklog: true, workDay: { date: '2026-04-04' } }))
     prisma.workDay.findUnique.mockResolvedValue(null)
     prisma.workDay.create.mockResolvedValue(workDayToday)
     prisma.task.update.mockResolvedValue(makeTask({ isBacklog: false, workDayId: 10 }))
@@ -183,7 +183,7 @@ describe('PATCH /api/tasks/:id/add-to-today', () => {
   })
 
   it('retorna 400 si la tarea está COMPLETED', async () => {
-    prisma.task.findUnique.mockResolvedValue(makeTask({ status: 'COMPLETED', workDay: { date: TODAY } }))
+    prisma.task.findFirst.mockResolvedValue(makeTask({ status: 'COMPLETED', workDay: { date: TODAY } }))
 
     const res = await request(app)
       .patch('/api/tasks/1/add-to-today')
@@ -195,7 +195,7 @@ describe('PATCH /api/tasks/:id/add-to-today', () => {
   })
 
   it('retorna 404 si la tarea no existe', async () => {
-    prisma.task.findUnique.mockResolvedValue(null)
+    prisma.task.findFirst.mockResolvedValue(null)
 
     const res = await request(app)
       .patch('/api/tasks/1/add-to-today')
@@ -218,7 +218,7 @@ describe('PATCH /api/tasks/:id/start — bloqueado en backlog', () => {
 
   it('retorna 400 si la tarea está en el backlog', async () => {
     prisma.task.findFirst.mockResolvedValue(null)  // assertNoActiveTask: sin tarea activa
-    prisma.task.findUnique.mockResolvedValue(makeTask({ isBacklog: true }))
+    prisma.task.findFirst.mockResolvedValue(makeTask({ isBacklog: true }))
 
     const res = await request(app)
       .patch('/api/tasks/1/start')

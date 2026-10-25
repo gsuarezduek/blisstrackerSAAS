@@ -6,9 +6,9 @@ jest.mock('../../src/lib/prisma', () => ({
     findUnique: jest.fn(),
   },
   task: {
-    findUnique: jest.fn(),
-    count:      jest.fn(),
-    update:     jest.fn(),
+    findFirst: jest.fn(),
+    count:     jest.fn(),
+    update:    jest.fn(),
   },
   workDay: {
     findUnique: jest.fn(),
@@ -60,7 +60,7 @@ describe('PATCH /api/tasks/:id/star — ciclo de estrellas', () => {
   })
 
   it('0 → 1 cuando no hay otras tareas destacadas', async () => {
-    prisma.task.findUnique.mockResolvedValue(makeTask({ starred: 0 }))
+    prisma.task.findFirst.mockResolvedValue(makeTask({ starred: 0 }))
     prisma.task.count.mockResolvedValue(0)
     prisma.task.update.mockResolvedValue(makeTask({ starred: 1 }))
 
@@ -74,7 +74,7 @@ describe('PATCH /api/tasks/:id/star — ciclo de estrellas', () => {
   })
 
   it('1 → 2 sin consultar el límite (ya está destacada)', async () => {
-    prisma.task.findUnique.mockResolvedValue(makeTask({ starred: 1 }))
+    prisma.task.findFirst.mockResolvedValue(makeTask({ starred: 1 }))
     prisma.task.update.mockResolvedValue(makeTask({ starred: 2 }))
 
     const res = await request(app)
@@ -87,7 +87,7 @@ describe('PATCH /api/tasks/:id/star — ciclo de estrellas', () => {
   })
 
   it('2 → 3', async () => {
-    prisma.task.findUnique.mockResolvedValue(makeTask({ starred: 2 }))
+    prisma.task.findFirst.mockResolvedValue(makeTask({ starred: 2 }))
     prisma.task.update.mockResolvedValue(makeTask({ starred: 3 }))
 
     const res = await request(app)
@@ -100,7 +100,7 @@ describe('PATCH /api/tasks/:id/star — ciclo de estrellas', () => {
   })
 
   it('3 → 0 (quita la estrella)', async () => {
-    prisma.task.findUnique.mockResolvedValue(makeTask({ starred: 3 }))
+    prisma.task.findFirst.mockResolvedValue(makeTask({ starred: 3 }))
     prisma.task.update.mockResolvedValue(makeTask({ starred: 0 }))
 
     const res = await request(app)
@@ -113,7 +113,7 @@ describe('PATCH /api/tasks/:id/star — ciclo de estrellas', () => {
   })
 
   it('3 → 0 re-aloja una pendiente arrastrada de un día previo en la jornada de hoy', async () => {
-    prisma.task.findUnique.mockResolvedValue(makeTask({ starred: 3, status: 'PENDING', isBacklog: false, workDay: { id: 50, date: '2000-01-01' } }))
+    prisma.task.findFirst.mockResolvedValue(makeTask({ starred: 3, status: 'PENDING', isBacklog: false, workDay: { id: 50, date: '2000-01-01' } }))
     prisma.workDay.findUnique.mockResolvedValue({ id: 77 }) // jornada de hoy ya existente
     prisma.task.update.mockResolvedValue(makeTask({ starred: 0 }))
 
@@ -130,7 +130,7 @@ describe('PATCH /api/tasks/:id/star — ciclo de estrellas', () => {
 
   it('3 → 0 NO re-aloja si la tarea ya es de hoy (mismo workDay, sin fecha previa)', async () => {
     // workDay.date >= hoy → no entra al re-alojo; solo cambia la estrella.
-    prisma.task.findUnique.mockResolvedValue(makeTask({ starred: 3, status: 'PENDING', isBacklog: false, workDay: { id: 77, date: '2999-01-01' } }))
+    prisma.task.findFirst.mockResolvedValue(makeTask({ starred: 3, status: 'PENDING', isBacklog: false, workDay: { id: 77, date: '2999-01-01' } }))
     prisma.task.update.mockResolvedValue(makeTask({ starred: 0 }))
 
     const res = await request(app)
@@ -146,7 +146,7 @@ describe('PATCH /api/tasks/:id/star — ciclo de estrellas', () => {
   })
 
   it('retorna 409 si ya hay 3 tareas destacadas y se intenta agregar otra', async () => {
-    prisma.task.findUnique.mockResolvedValue(makeTask({ starred: 0 }))
+    prisma.task.findFirst.mockResolvedValue(makeTask({ starred: 0 }))
     prisma.task.count.mockResolvedValue(3)
 
     const res = await request(app)
@@ -158,7 +158,7 @@ describe('PATCH /api/tasks/:id/star — ciclo de estrellas', () => {
   })
 
   it('retorna 404 si la tarea no existe', async () => {
-    prisma.task.findUnique.mockResolvedValue(null)
+    prisma.task.findFirst.mockResolvedValue(null)
 
     const res = await request(app)
       .patch('/api/tasks/1/star')
@@ -169,7 +169,7 @@ describe('PATCH /api/tasks/:id/star — ciclo de estrellas', () => {
   })
 
   it('retorna 404 si la tarea pertenece a otro usuario', async () => {
-    prisma.task.findUnique.mockResolvedValue(makeTask({ userId: 99 }))
+    prisma.task.findFirst.mockResolvedValue(makeTask({ userId: 99 }))
 
     const res = await request(app)
       .patch('/api/tasks/1/star')

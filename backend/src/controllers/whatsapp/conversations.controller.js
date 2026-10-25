@@ -7,6 +7,7 @@ const { logLeadEvent } = require('../ventas/_shared')
 const objectStorage = require('../../services/objectStorage.service')
 const { validateImageUpload } = require('../../lib/imageType')
 const { validateMediaHeader } = require('../../lib/mediaType')
+const { isDangerousMime } = require('../../lib/dangerousMime')
 const { assertConversation } = require('./_shared')
 const { requestAgentId, requestAgentName, assertOwnAgent } = require('../tasks/_shared')
 const { formatAgentName } = require('../../lib/agentTasks')
@@ -359,6 +360,11 @@ async function sendMedia(req, res, next) {
       const check = validateMediaHeader(req.file.buffer, 'video', ['video/mp4', 'video/quicktime', 'video/webm'])
       if (!check.ok) return res.status(400).json({ error: check.error })
       mimeType = check.mimeType
+    } else if (isDangerousMime(mimeType)) {
+      // document/audio no se validan por magic bytes, pero este archivo también
+      // queda guardado en WhatsappMedia y se sirve same-origin sin auth desde
+      // whatsappMediaPublic.controller.js — un tipo HTML/SVG ahí es XSS.
+      return res.status(400).json({ error: 'Este tipo de archivo no está permitido.' })
     }
 
     const provider = getProvider(account.provider)

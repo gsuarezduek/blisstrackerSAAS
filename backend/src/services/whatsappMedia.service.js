@@ -2,6 +2,7 @@ const { getProvider, decryptAccount } = require('../lib/whatsappProvider')
 const objectStorage = require('./objectStorage.service')
 const { validateImageUpload } = require('../lib/imageType')
 const { validateMediaHeader } = require('../lib/mediaType')
+const { isDangerousMime } = require('../lib/dangerousMime')
 
 // Topes reales de la WhatsApp Cloud API (lo que Meta ya aceptó del lado del
 // remitente) — los usamos también como techo propio, no tiene sentido guardar
@@ -28,6 +29,12 @@ const MAX_BYTES = {
  * Audio y documentos confían en el mime_type que devuelve la propia API —
  * a diferencia de un upload arbitrario (ContentAsset), este archivo ya fue
  * aceptado y entregado por WhatsApp, no es input directo de un usuario nuestro.
+ * Igual, ese mime_type lo elige en última instancia quien le escribió al
+ * número de WhatsApp — un tercero externo sin ninguna cuenta ni autenticación
+ * contra BlissTracker — y whatsappMediaPublic.controller.js sirve el adjunto
+ * SIN auth. Por eso, aunque no se verifiquen los bytes de audio/documento, sí
+ * se descarta cualquier mime_type que el navegador pueda ejecutar como HTML/
+ * script (text/html, svg, etc.) — ver lib/dangerousMime.js.
  */
 async function downloadInboundMedia({ account, mediaId, kind, mimeType }) {
   try {
@@ -46,6 +53,7 @@ async function downloadInboundMedia({ account, mediaId, kind, mimeType }) {
       const check = validateMediaHeader(buffer, 'video', ['video/mp4', 'video/quicktime', 'video/webm'])
       if (check.ok) finalMime = check.mimeType
     }
+    if (isDangerousMime(finalMime)) return null
 
     if (objectStorage.isConfigured()) {
       const { key, size } = await objectStorage.putObject(buffer, finalMime, { prefix: `whatsapp/${account.workspaceId}` })

@@ -1,23 +1,22 @@
-const axios   = require('axios')
 const cheerio = require('cheerio')
 const prisma  = require('../lib/prisma')
 const { anthropic } = require('../lib/claude')
 const { logTokens } = require('../lib/logTokens')
 const { hasTokenBudget } = require('../lib/tokenBudget')
-const { assertPublicUrl } = require('../lib/safeUrl')
+const { fetchPublicUrl } = require('../lib/safeUrl')
 
 const MODEL = 'claude-haiku-4-5-20251001'
 
 // Descarga el sitio de la empresa (best-effort) y extrae texto plano acotado para
 // darle contexto real a la IA. Si no hay sitio o falla, la IA trabaja solo con el nombre.
+// fetchPublicUrl valida que la URL (y cada redirect que devuelva) resuelva a una IP
+// pública — evita SSRF hacia la red interna vía un sitio que redirige puertas adentro.
 async function fetchSiteText(website) {
   if (!website) return ''
   const url = website.startsWith('http') ? website : `https://${website}`
   try {
-    await assertPublicUrl(url)
-    const res = await axios.get(url, {
+    const res = await fetchPublicUrl(url, {
       timeout: 15000,
-      maxRedirects: 5,
       headers: { 'User-Agent': 'BlissTrackerBot/1.0 (+https://blisstracker.app)' },
     })
     const $ = cheerio.load(res.data)
