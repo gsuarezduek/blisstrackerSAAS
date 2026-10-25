@@ -3,32 +3,13 @@ const cheerio   = require('cheerio')
 const prisma    = require('../lib/prisma')
 const { logTokens } = require('../lib/logTokens')
 const { assertPublicUrl } = require('../lib/safeUrl')
+const { normalizeInternal, crawlSite } = require('../lib/siteCrawler')
 
 const { anthropic } = require('../lib/claude')
 
 const MAX_PAGES      = 15   // páginas a crawlear como máximo
 const MAX_LINK_CHECK = 25   // enlaces internos a chequear por roto (además de las páginas crawleadas)
 const UA = 'BlissTrackerBot/1.0 (+https://blisstracker.app)'
-
-// ─── Helpers de URL ────────────────────────────────────────────────────────────
-
-// Normaliza un href a URL absoluta del mismo origen; devuelve null si es externo/invalido.
-function normalizeInternal(href, base, origin) {
-  if (!href) return null
-  const h = href.trim()
-  if (!h || h.startsWith('#') || h.startsWith('mailto:') || h.startsWith('tel:') || h.startsWith('javascript:')) return null
-  let u
-  try { u = new URL(h, base) } catch { return null }
-  if (u.origin !== origin) return null
-  if (!/^https?:$/.test(u.protocol)) return null
-  // Ignorar assets no-HTML por extensión
-  if (/\.(pdf|jpg|jpeg|png|gif|webp|svg|zip|mp4|mp3|css|js|xml|json)$/i.test(u.pathname)) return null
-  u.hash = ''
-  u.search = ''
-  let s = u.href
-  if (s.endsWith('/') && u.pathname !== '/') s = s.slice(0, -1)
-  return s
-}
 
 // ─── Extracción on-page de una página ──────────────────────────────────────────
 
@@ -200,26 +181,13 @@ async function runOnPageAnalysis(auditId, workspaceId, projectId, seedUrl, userI
       }
     } catch {}
 
-    // ── Crawl BFS acotado ──
-    const visited = new Set()
-    const queue   = [normalizeInternal(seedUrl, seedUrl, origin) || seedUrl, ...priorityUrls]
-    const pages   = []
-
-    while (queue.length && pages.length < MAX_PAGES) {
-      const next = queue.shift()
-      if (!next || visited.has(next)) continue
-      visited.add(next)
-      try {
-        const res = await axios.get(next, { timeout: 15000, maxRedirects: 5, headers: { 'User-Agent': UA }, validateStatus: s => s < 400 })
-        const data = extractOnPage(res.data, next, origin)
-        pages.push(data)
-        for (const link of data.internalLinks) {
-          if (!visited.has(link) && queue.length < MAX_PAGES * 3) queue.push(link)
-        }
-      } catch (err) {
-        pages.push({ url: next, error: true, status: err.response?.status || 0, title: '', internalLinks: [] })
-      }
-    }
+    // ── Crawl BFS acotado (mecánica compartida con GEO, ver lib/siteCrawler.js) ──
+    const pages = await crawlSite({
+      seedUrl,
+      extraSeeds: priorityUrls,
+      maxPages:   MAX_PAGES,
+      extract:    extractOnPage,
+    })
 
     if (pages.length === 0) throw new Error('No se pudo rastrear ninguna página del sitio.')
 

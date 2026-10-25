@@ -3,6 +3,7 @@ const cheerio   = require('cheerio')
 const prisma    = require('../lib/prisma')
 const { logTokens } = require('../lib/logTokens')
 const { assertPublicUrl } = require('../lib/safeUrl')
+const { normalizeInternal, crawlSite } = require('../lib/siteCrawler')
 
 const { anthropic } = require('../lib/claude')
 
@@ -164,6 +165,48 @@ function extractPageData(html, url) {
   }
 }
 
+// ─── Multi-página (#4/#9) — home + páginas donde suele vivir el NAP ───────────
+// Un BFS genérico no garantiza tocar "Contacto" dentro de pocas páginas (el home
+// casi nunca tiene NAP), así que se priorizan patrones de URL típicos por sobre el
+// orden de descubrimiento.
+const NAP_PAGE_PATTERN = /\/(contact|contacto|about|about-us|sobre-nosotros|nosotros|quienes-somos|ubicacion|location|donde-estamos)\/?$/i
+
+// A partir de los internalLinks ya extraídos del home, devuelve hasta `max` URLs
+// candidatas para crawlear, con las que matchean patrones de NAP primero.
+function pickExtraSeeds(homeInternalLinks, seedUrl, origin, max) {
+  const normalized = homeInternalLinks
+    .map(u => normalizeInternal(u, seedUrl, origin))
+    .filter(Boolean)
+  const priority = normalized.filter(u => NAP_PAGE_PATTERN.test(new URL(u).pathname))
+  const rest     = normalized.filter(u => !priority.includes(u))
+  return [...new Set([...priority, ...rest])].slice(0, max)
+}
+
+// Extrae name/telephone/address de los schemas Organization/LocalBusiness de cada
+// página crawleada — texto crudo, sin normalizar: dejamos que la propia IA juzgue
+// consistencia (comparar direcciones a mano es frágil, "Av. Corrientes 1234" vs
+// "Avenida Corrientes 1234, CABA" son el mismo lugar escrito distinto).
+function extractNapSignals(pages) {
+  const rows = []
+  for (const p of pages) {
+    if (p.error) continue
+    for (const s of p.schemas ?? []) {
+      const types = Array.isArray(s['@type']) ? s['@type'] : [s['@type']]
+      if (!types.includes('Organization') && !types.includes('LocalBusiness')) continue
+      const addr = s.address
+      rows.push({
+        url:       p.url,
+        name:      s.name ?? null,
+        telephone: s.telephone ?? null,
+        address:   typeof addr === 'string'
+          ? addr
+          : addr ? [addr.streetAddress, addr.addressLocality, addr.addressRegion, addr.postalCode].filter(Boolean).join(', ') : null,
+      })
+    }
+  }
+  return rows
+}
+
 // ─── Robots analysis — distingue bots de citación vs entrenamiento ────────────
 
 function analyzeRobots(robotsTxt) {
@@ -305,7 +348,7 @@ Analizás el contenido de una página web y devolvés un análisis estructurado 
 
 IMPORTANTE: Responde ÚNICAMENTE con JSON válido, sin texto adicional, sin markdown, sin bloques de código. Solo el objeto JSON. El JSON debe ser estrictamente válido: sin comas colgantes antes de "}" o "]", con las comillas internas de los strings escapadas (\\"), y sin saltos de línea literales dentro de un string (usá \\n si hace falta).`
 
-function buildPrompt(url, pageData, robotsData, llmsData, aiDiscovery, previousRunContext = '', project = null) {
+function buildPrompt(url, pageData, robotsData, llmsData, aiDiscovery, previousRunContext = '', project = null, extraPages = [], napRows = []) {
   const blockedCitation = robotsData.citation.filter(c => c.blocked)
   const blockedTraining = robotsData.training.filter(c => c.blocked)
   const allowedCitation = robotsData.citation.filter(c => !c.blocked)
@@ -440,6 +483,20 @@ LINKS INTERNOS: ${pageData.internalLinks.length}
 LINKS EXTERNOS (citas) — ${pageData.externalLinks.length} en total, muestra de hasta 10:
 ${pageData.externalLinks.length ? pageData.externalLinks.slice(0, 10).map(u => `  • ${u}`).join('\n') : '  (ninguno)'}
 No te limites a contar estos links: evaluá si citan FUENTES DE AUTORIDAD (medios reconocidos, instituciones, papers, sitios .gov/.edu, players grandes y reconocidos del rubro) — eso es lo que la investigación confirma que aumenta citabilidad, no la cantidad cruda de links salientes. Enlazar solo a redes sociales propias, proveedores de plantillas/temas, o sitios de bajo valor no cuenta como "citar fuentes".
+
+${extraPages.length ? `═══ OTRAS PÁGINAS DEL SITIO (además del home de arriba) ═══
+Se rastrearon ${extraPages.length} página(s) más, priorizando las que suelen tener datos de contacto/empresa:
+${extraPages.map(p => p.error
+  ? `  • ${p.url} — no se pudo cargar (HTTP ${p.status || '?'})`
+  : `  • ${p.url} — título: "${p.title || '(sin título)'}" | ${p.wordCount} palabras | schemas: ${p.schemaTypes.join(', ') || 'ninguno'}${p.isNoindex ? ' | ⛔ NOINDEX' : ''}`
+).join('\n')}
+
+CONSISTENCIA DE ENTIDAD (NAP — nombre/dirección/teléfono, schema Organization/LocalBusiness) encontrada en el home + estas páginas:
+${napRows.length
+  ? napRows.map(r => `  • ${r.url} → nombre: "${r.name ?? '(sin dato)'}" | teléfono: "${r.telephone ?? '(sin dato)'}" | dirección: "${r.address ?? '(sin dato)'}"`).join('\n')
+  : '  Ningún schema Organization/LocalBusiness con estos datos encontrado en ninguna de las páginas rastreadas.'}
+Si hay más de una fila y los datos difieren entre páginas (nombre, teléfono o dirección distintos, más allá de formato), reportalo como hallazgo de inconsistencia de entidad (afecta eeat/brandAuthority) — pero si son el mismo dato escrito distinto (ej. "Av. Corrientes 1234" vs "Avenida Corrientes 1234, CABA"), NO lo reportes como inconsistencia.
+` : ''}
 ${previousRunContext}
 
 ═══ INSTRUCCIONES PARA EL ANÁLISIS ═══
@@ -486,7 +543,7 @@ async function setStep(auditId, step) {
   }).catch(err => console.error('[GeoAudit] Error al actualizar paso:', err.message))
 }
 
-async function runGeoAnalysis(auditId, workspaceId, projectId, url, userId) {
+async function runGeoAnalysis(auditId, workspaceId, projectId, url, userId, { maxExtraPages = 3 } = {}) {
   try {
     // 1. Mark as running
     await prisma.geoAudit.update({
@@ -517,11 +574,34 @@ async function runGeoAnalysis(auditId, workspaceId, projectId, url, userId) {
     const pageData   = extractPageData(html, url)
     const robotsData = analyzeRobots(robotsTxt)
 
+    // 3b. Crawlear páginas extra (#4/#9) — home + hasta `maxExtraPages` priorizando
+    // patrones de NAP (Contacto/Nosotros). Best-effort: un fallo acá no debe tirar
+    // abajo todo el audit, el análisis sigue con solo el home si hace falta.
+    let extraPages = []
+    if (maxExtraPages > 0) {
+      await setStep(auditId, 'Rastreando otras páginas del sitio…')
+      try {
+        const seeds = pickExtraSeeds(pageData.internalLinks, url, origin, maxExtraPages)
+        if (seeds.length) {
+          const crawled = await crawlSite({
+            seedUrl:    seeds[0],
+            extraSeeds: seeds.slice(1),
+            maxPages:   seeds.length,
+            extract:    extractPageData,
+          })
+          extraPages = crawled.filter(p => p.url !== url) // por si el home se coló entre los links
+        }
+      } catch (err) {
+        console.error(`[GeoAudit] Crawl multi-página falló (audit ${auditId}), se sigue solo con el home:`, err.message)
+      }
+    }
+    const napRows = extractNapSignals([{ ...pageData, url }, ...extraPages])
+
     // 4-6. Call Claude y parsear — si la IA devuelve JSON inválido (comas colgantes,
     // comillas sin escapar) se reintenta UNA vez antes de marcar el audit como fallido.
     await setStep(auditId, 'Analizando con IA (esto puede tardar unos segundos)…')
     const previousRunContext = await buildPreviousRunContext(projectId, workspaceId, auditId)
-    const prompt = buildPrompt(url, pageData, robotsData, llmsData, aiDiscovery, previousRunContext, project)
+    const prompt = buildPrompt(url, pageData, robotsData, llmsData, aiDiscovery, previousRunContext, project, extraPages, napRows)
 
     // Suficiente para 5-10 items con descripción/acción/impacto + negativeSignals sin
     // truncar a mitad del JSON (4096 se quedaba corto y producía "Unexpected end of
@@ -572,6 +652,11 @@ async function runGeoAnalysis(auditId, workspaceId, projectId, url, userId) {
       // de Princeton KDD 2024); v2 = reponderada 2026 (ver METODOLOGÍA GEO en buildPrompt).
       // Permite explicar saltos de score entre corridas que no vienen de un cambio real del sitio.
       methodologyVersion: 2,
+      // Multi-página (#4/#9): schemasPresent/schemasMissing de arriba siguen siendo SOLO del
+      // home a propósito (generateLlmsTxt/generateSchemaOrg asumen esa página semilla) — esto
+      // es aparte, el agregado de todas las páginas rastreadas.
+      pagesCrawled: 1 + extraPages.length,
+      schemasPresentAnyPage: [...new Set([...schemasPresent, ...extraPages.flatMap(p => p.schemaTypes ?? [])])],
     })
 
     // 7. Save completed result
@@ -640,8 +725,11 @@ async function runAllMonthlyGeoAudits() {
         },
       })
 
-      // Llamada directa (con await) en lugar de setImmediate — el cron espera
-      await runGeoAnalysis(audit.id, project.workspaceId, project.id, url, null)
+      // Llamada directa (con await) en lugar de setImmediate — el cron espera.
+      // maxExtraPages más chico que el default on-demand (3): esto corre secuencial,
+      // primero en MONTHLY_CHAIN, con una sola ventana de 6hs compartida con otros 15
+      // jobs — cada página extra por proyecto suma tiempo a esa cadena completa.
+      await runGeoAnalysis(audit.id, project.workspaceId, project.id, url, null, { maxExtraPages: 1 })
       done++
     } catch (err) {
       console.error(`[GeoAudit] Error en proyecto ${project.id}:`, err.message)
