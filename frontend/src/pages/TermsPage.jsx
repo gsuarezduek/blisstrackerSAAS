@@ -65,6 +65,15 @@ export default function LegalPage({ docKey }) {
             ) : (
               <p className="text-gray-500 italic">Este documento aún no tiene contenido.</p>
             )}
+
+            {docKey === 'privacy_policy' && (
+              <p className="text-sm text-gray-400 mt-10 pt-6 border-t border-gray-800">
+                ¿Querés eliminar tus datos?{' '}
+                <Link to="/eliminar-datos" className="text-orange-400 hover:text-orange-300 underline">
+                  Mirá cómo solicitarlo
+                </Link>.
+              </p>
+            )}
           </>
         )}
       </main>

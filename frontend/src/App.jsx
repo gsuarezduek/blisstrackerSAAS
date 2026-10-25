@@ -105,6 +105,7 @@ const Contenido        = lazyWithReload(() => import('./pages/Contenido'))
 const Calendario       = lazyWithReload(() => import('./pages/Calendario'))
 const Finanzas         = lazyWithReload(() => import('./pages/Finanzas'))
 const LegalPage        = lazyWithReload(() => import('./pages/TermsPage'))
+const DataDeletion     = lazyWithReload(() => import('./pages/DataDeletion'))
 const ReportOrClientPortal = lazyWithReload(() => import('./pages/ReportOrClientPortal'))
 const ReportPrint      = lazyWithReload(() => import('./pages/ReportPrint'))
 const FacturaPrint     = lazyWithReload(() => import('./pages/FacturaPrint'))
@@ -210,6 +211,7 @@ export default function App() {
           <Route path="/blog/:slug"   element={<BlogPost />} />
           <Route path="/condiciones"  element={<LegalPage docKey="terms_of_service" />} />
           <Route path="/privacidad"   element={<LegalPage docKey="privacy_policy"   />} />
+          <Route path="/eliminar-datos" element={<DataDeletion />} />
           <Route path="/join"     element={<JoinWorkspace />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/reset-password" element={<ResetPassword />} />
