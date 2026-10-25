@@ -130,10 +130,24 @@ async function getAudit(req, res, next) {
 
     const { geoFindingTasks, ...auditFields } = audit
 
+    // Transparencia (#4): cuántas páginas analizó esta corrida, para que no quede
+    // "a ciegas" si rastreó solo el home o también Contacto/Sobre Nosotros/etc.
+    // llmsTxtExists: señal real para el botón "Generar llms.txt" del frontend, en vez
+    // de buscar la palabra "llms" en el texto de los findings (ver geoAudit.service.js).
+    let pagesCrawled = null
+    let llmsTxtExists = null
+    try {
+      const raw = JSON.parse(audit.rawData || '{}')
+      pagesCrawled  = raw.pagesCrawled ?? null
+      llmsTxtExists = raw.llmsTxtExists ?? null
+    } catch { /* ignore */ }
+
     res.json({
       ...auditFields,
       findings,
       recommendations: JSON.parse(audit.recommendations),
+      pagesCrawled,
+      llmsTxtExists,
     })
   } catch (err) { next(err) }
 }

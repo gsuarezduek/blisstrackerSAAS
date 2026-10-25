@@ -149,4 +149,44 @@ describe('GET /api/marketing/geo/audits/:id — findings anotados con la tarea v
     expect(res.body.findings[0]).toMatchObject({ itemIndex: 0, taskId: 55, task: { id: 55, status: 'IN_PROGRESS' } })
     expect(res.body.findings[1]).toMatchObject({ itemIndex: 1, taskId: null, task: null })
   })
+
+  it('expone pagesCrawled y llmsTxtExists parseados de rawData — señal real para el botón "Generar llms.txt", no texto de los findings', async () => {
+    mockWorkspace()
+    prisma.geoAudit.findFirst.mockResolvedValue({
+      id: AUDIT_ID, workspaceId: WORKSPACE_ID, projectId: PROJECT_ID, status: 'completed',
+      findings: '[]', recommendations: '[]',
+      rawData: JSON.stringify({ pagesCrawled: 3, llmsTxtExists: true }),
+      project: { name: 'Proyecto X', websiteUrl: 'https://x.com' },
+      geoFindingTasks: [],
+    })
+
+    const res = await request(app)
+      .get(`/api/marketing/geo/audits/${AUDIT_ID}`)
+      .set('Authorization', authHeader())
+      .set('X-Workspace', WORKSPACE_SLUG)
+
+    expect(res.status).toBe(200)
+    expect(res.body.pagesCrawled).toBe(3)
+    expect(res.body.llmsTxtExists).toBe(true)
+  })
+
+  it('rawData ausente o corrupto no rompe la respuesta — pagesCrawled/llmsTxtExists quedan null', async () => {
+    mockWorkspace()
+    prisma.geoAudit.findFirst.mockResolvedValue({
+      id: AUDIT_ID, workspaceId: WORKSPACE_ID, projectId: PROJECT_ID, status: 'completed',
+      findings: '[]', recommendations: '[]',
+      rawData: null,
+      project: { name: 'Proyecto X', websiteUrl: 'https://x.com' },
+      geoFindingTasks: [],
+    })
+
+    const res = await request(app)
+      .get(`/api/marketing/geo/audits/${AUDIT_ID}`)
+      .set('Authorization', authHeader())
+      .set('X-Workspace', WORKSPACE_SLUG)
+
+    expect(res.status).toBe(200)
+    expect(res.body.pagesCrawled).toBeNull()
+    expect(res.body.llmsTxtExists).toBeNull()
+  })
 })

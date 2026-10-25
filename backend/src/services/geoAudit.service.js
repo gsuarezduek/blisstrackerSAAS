@@ -43,6 +43,25 @@ async function fetchAiDiscovery(origin) {
   }
 }
 
+// Los plugins de SEO más comunes en WordPress (Yoast, RankMath, All in One SEO)
+// emiten UN SOLO <script type="application/ld+json"> con `{"@context":...,
+// "@graph":[ {...}, {...} ]}` en vez de un bloque por entidad — cada elemento de
+// `@graph` es su propio schema (Organization, WebSite, Person, etc.) con su propio
+// `@type`, pero el objeto contenedor no tiene `@type` propio. Sin desarmar esto,
+// `schemas.flatMap(s => s['@type'])` nunca ve esos tipos y el análisis reporta
+// "ausente" un schema que en realidad está completo — bug real detectado en
+// producción (mdzrentacar.com: Organization/WebSite/Person/AggregateRating
+// presentes y completos, reportados como ausentes).
+function flattenJsonLd(parsed) {
+  const items = Array.isArray(parsed) ? parsed : [parsed]
+  const out = []
+  for (const item of items) {
+    if (item && Array.isArray(item['@graph'])) out.push(...item['@graph'])
+    else if (item) out.push(item)
+  }
+  return out
+}
+
 function extractPageData(html, url) {
   const $ = cheerio.load(html)
   const origin = new URL(url).origin
@@ -64,7 +83,7 @@ function extractPageData(html, url) {
   // JSON-LD schemas — must extract BEFORE removing script tags
   const schemas = []
   $('script[type="application/ld+json"]').each((_, el) => {
-    try { schemas.push(JSON.parse($(el).html())) } catch {}
+    try { schemas.push(...flattenJsonLd(JSON.parse($(el).html()))) } catch {}
   })
   // Handle both "@type": "X" and "@type": ["X", "Y"]
   const schemaTypes = schemas.flatMap(s =>
@@ -112,6 +131,33 @@ function extractPageData(html, url) {
   // SPA/CSR detection: if raw HTML has barely any text, the site likely renders via JS
   const likelySPA = wordCount < 150 && h1.length === 0 && schemas.length === 0
 
+  // Enlaces — ANTES de remover nav/footer/header: "Contacto"/"Sobre nosotros" casi
+  // siempre se linkean solo desde el menú o el pie, nunca desde el cuerpo del
+  // artículo. Extraerlos después de la limpieza (como antes) los hacía invisibles
+  // para pickExtraSeeds/NAP_PAGE_PATTERN — bug real detectado en producción
+  // (mdzrentacar.com: "Contacto" solo vive en <header>/<nav>/<footer>, nunca se
+  // rastreaba como página extra aunque matcheaba el patrón NAP).
+  const externalLinks = []
+  const internalLinks = []
+  $('a[href]').each((_, el) => {
+    const href = $(el).attr('href')
+    if (!href || href.startsWith('#') || href.startsWith('mailto:')) return
+    try {
+      const abs = new URL(href, origin)
+      if (abs.href.startsWith(origin)) {
+        // Sin query/hash: variantes como "?view=cardetails&carid=1..28" del mismo
+        // listado de autos son la MISMA página en 28 versiones — sin esto, llenaban
+        // el cupo de 20 e invisibilizaban páginas realmente distintas (ej.
+        // "sobre-nosotros") — bug real detectado en producción (mdzrentacar.com).
+        abs.search = ''
+        abs.hash = ''
+        internalLinks.push(abs.href)
+      } else {
+        externalLinks.push(abs.href)
+      }
+    } catch {}
+  })
+
   $('script, style, nav, footer, header, aside, noscript').remove()
   const bodyText = $('body').text().replace(/\s+/g, ' ').trim().slice(0, 4000)
 
@@ -137,19 +183,6 @@ function extractPageData(html, url) {
   // Statistics detection
   const statsMatches = (bodyText.match(/\d+[\.,]?\d*\s*(%|€|\$|mil\b|millones|billion|million|usuarios|clientes|clients)/gi) ?? []).length
 
-  // External citations
-  const externalLinks = []
-  const internalLinks = []
-  $('a[href]').each((_, el) => {
-    const href = $(el).attr('href')
-    if (!href || href.startsWith('#') || href.startsWith('mailto:')) return
-    try {
-      const abs = new URL(href, origin).href
-      if (abs.startsWith(origin)) internalLinks.push(abs)
-      else externalLinks.push(abs)
-    } catch {}
-  })
-
   return {
     title, description, canonical, langAttr, wordCount,
     isNoindex, isNofollow, likelySPA,
@@ -173,9 +206,10 @@ const NAP_PAGE_PATTERN = /\/(contact|contacto|about|about-us|sobre-nosotros|noso
 // A partir de los internalLinks ya extraídos del home, devuelve hasta `max` URLs
 // candidatas para crawlear, con las que matchean patrones de NAP primero.
 function pickExtraSeeds(homeInternalLinks, seedUrl, origin, max) {
+  const normalizedSeed = normalizeInternal(seedUrl, seedUrl, origin) || seedUrl
   const normalized = homeInternalLinks
     .map(u => normalizeInternal(u, seedUrl, origin))
-    .filter(Boolean)
+    .filter(u => u && u !== normalizedSeed) // el home ya es la semilla principal, no gastar un slot repitiéndolo
   const priority = normalized.filter(u => NAP_PAGE_PATTERN.test(new URL(u).pathname))
   const rest     = normalized.filter(u => !priority.includes(u))
   return [...new Set([...priority, ...rest])].slice(0, max)
@@ -501,6 +535,7 @@ ${previousRunContext}
 ═══ INSTRUCCIONES PARA EL ANÁLISIS ═══
 Incluí entre 5 y 10 items priorizados por impacto GEO real, ordenados de mayor a menor severidad.
 Cada item debe combinar el problema con la acción concreta y el impacto esperado, en términos cualitativos — son señales con evidencia de asociación, no garantías de resultado, así que no inventes porcentajes exactos de mejora.
+Cada item de "items" debe tratar UN solo problema de UN solo componente — nunca combines en un mismo item dos causas sin relación directa entre sí (ej. Domain Rating bajo es una señal externa de brandAuthority, y un schema ausente es una señal propia de schema; aunque ambos componentes den bajo, son hallazgos independientes con acciones independientes, así que van en items separados, no fusionados en un solo título/acción).
 En negativeSignals, detectá señales que REDUCEN citabilidad: lenguaje excesivamente autopromocional, contenido escaso (<300 palabras), keyword stuffing, texto oculto, ausencia de autoría, fechas desactualizadas.
 NUNCA reportes como señal negativa contenido que podría ser un widget dinámico (reseñas, mapas, chat). Si hay widgets de reseñas dinámicos detectados, reportalos como oportunidad de mejora GEO (agregar Schema.org AggregateRating/Review estático), no como "sección vacía" o "ausencia de testimonios".
 Si no detectás señales negativas, devolvé negativeSignals: [].`
@@ -635,6 +670,11 @@ async function runGeoAnalysis(auditId, workspaceId, projectId, url, userId, { ma
       // es aparte, el agregado de todas las páginas rastreadas.
       pagesCrawled: 1 + extraPages.length,
       schemasPresentAnyPage: [...new Set([...schemasPresent, ...extraPages.flatMap(p => p.schemaTypes ?? [])])],
+      // El frontend mostraba el botón "Generar llms.txt" buscando la palabra "llms" en
+      // cualquier finding — pero desde la metodología v2 la IA puede mencionar llms.txt
+      // aunque YA exista (de baja prioridad, ver sección LLMS.TXT del prompt), disparando
+      // el botón igual. Señal real en vez de texto: si ya existe, no hay nada que generar.
+      llmsTxtExists: llmsData.exists,
     })
 
     // 7. Save completed result
@@ -717,4 +757,4 @@ async function runAllMonthlyGeoAudits() {
   console.log(`[GeoAudit] ${done}/${projects.length} audits completados.`)
 }
 
-module.exports = { runGeoAnalysis, runAllMonthlyGeoAudits }
+module.exports = { runGeoAnalysis, runAllMonthlyGeoAudits, flattenJsonLd, extractPageData, pickExtraSeeds }

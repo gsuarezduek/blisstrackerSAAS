@@ -163,9 +163,12 @@ export default function GeoTab({ projectId, projects, onSelectProject }) {
   const sortedFindings = [...items].sort((a, b) => (SEVERITY_ORDER[a.severity] ?? 9) - (SEVERITY_ORDER[b.severity] ?? 9))
 
   const noUrl = selectedProject && !selectedProject.websiteUrl
-  const hasLlmsFinding  = sortedFindings.some(f =>
-    f.title?.toLowerCase().includes('llms') || f.description?.toLowerCase().includes('llms')
-  )
+  // Antes buscaba la palabra "llms" en cualquier finding — pero la IA puede mencionar
+  // llms.txt aunque YA exista (mención de baja prioridad, metodología v2), lo que
+  // mostraba el botón igual. `llmsTxtExists` es la señal real: solo mostrarlo si
+  // efectivamente no hay nada generado todavía (null = audit viejo sin este campo,
+  // se trata como "no sabemos" → no se muestra, evita falsos positivos).
+  const hasLlmsFinding  = activeAudit?.llmsTxtExists === false
   const schemaScoreLow  = activeAudit?.schema != null && activeAudit.schema < 70
 
   return (

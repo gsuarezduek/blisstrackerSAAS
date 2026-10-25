@@ -32,6 +32,7 @@ export default function GeoAuditResults({
             </h2>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
               Analizado el {fmtDate(activeAudit.createdAt)}
+              {activeAudit.pagesCrawled ? ` · ${activeAudit.pagesCrawled} página${activeAudit.pagesCrawled === 1 ? '' : 's'} analizada${activeAudit.pagesCrawled === 1 ? '' : 's'}` : ''}
               {activeAudit.tokensUsed ? ` · ${activeAudit.tokensUsed.toLocaleString()} tokens` : ''}
             </p>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
