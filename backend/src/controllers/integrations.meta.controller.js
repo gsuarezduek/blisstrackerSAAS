@@ -1,8 +1,23 @@
 const FormData         = require('form-data')
 const axios            = require('axios')
 const jwt              = require('jsonwebtoken')
+const crypto           = require('crypto')
 const prisma           = require('../lib/prisma')
 const { encrypt }      = require('../lib/encryption')
+
+// Conexiones OAuth de Meta Ads que encontraron más de una cuenta publicitaria y
+// están esperando que el usuario elija cuál conectar (ver handleMetaAdsCallback).
+// En memoria, como los Maps de cooldown/caché de instagram.controller.js — asume
+// una sola instancia del backend. pendingId → { projectId, workspaceId, userId,
+// accessToken (ya cifrado), expiresAt, accounts, createdAt }.
+const pendingMetaAdsConnections = new Map()
+const PENDING_META_ADS_TTL_MS = 10 * 60 * 1000
+setInterval(() => {
+  const cutoff = Date.now() - PENDING_META_ADS_TTL_MS
+  for (const [id, entry] of pendingMetaAdsConnections) {
+    if (entry.createdAt < cutoff) pendingMetaAdsConnections.delete(id)
+  }
+}, 5 * 60 * 1000)
 
 /**
  * Trae TODAS las ad accounts accesibles por un token, siguiendo la paginación
@@ -299,18 +314,33 @@ async function handleMetaAdsCallback(req, res, next) {
 
     // 3. Obtener cuentas publicitarias del usuario (todas las páginas)
     const accounts = await fetchAllAdAccounts(longToken, 'id,name,account_status')
-    // account_status 1 = ACTIVE
-    const activeAccount = accounts.find(a => a.account_status === 1) ?? accounts[0]
 
-    if (!activeAccount) {
+    if (accounts.length === 0) {
       console.error(`[MetaAdsOAuth] El token no devolvió ninguna ad account · ${accounts.length} cuentas recibidas`)
       return res.redirect(
         `${frontendBase}/oauth-result?error=${encodeURIComponent('No se encontró ninguna cuenta publicitaria de Meta')}`
       )
     }
 
-    const adAccountId = activeAccount.id   // ya incluye el prefijo "act_"
-    const accountName = activeAccount.name
+    // Con más de una cuenta accesible, NO elegimos sola (antes se agarraba la
+    // primera ACTIVE, que no siempre era la que el usuario quería) — guardamos el
+    // token en memoria y le mostramos un selector antes de guardar la integración.
+    if (accounts.length > 1) {
+      const pendingId = crypto.randomBytes(16).toString('hex')
+      pendingMetaAdsConnections.set(pendingId, {
+        projectId, workspaceId, userId,
+        accessToken: encrypt(longToken), expiresAt,
+        accounts: accounts
+          .map(a => ({ id: a.id, name: a.name, accountStatus: a.account_status ?? null }))
+          .sort((a, b) => (a.accountStatus === 1 ? 0 : 1) - (b.accountStatus === 1 ? 0 : 1)),
+        createdAt: Date.now(),
+      })
+      console.log(`[MetaAdsOAuth] ${accounts.length} cuentas encontradas para proyecto ${projectId} · esperando selección (pendingId=${pendingId})`)
+      return res.redirect(`${frontendBase}/oauth-result?pending=true&type=meta_ads&pendingId=${pendingId}`)
+    }
+
+    const adAccountId = accounts[0].id   // ya incluye el prefijo "act_"
+    const accountName = accounts[0].name
 
     // 4. Upsert en ProjectIntegration
     await prisma.projectIntegration.upsert({
@@ -645,6 +675,63 @@ async function connectMetaAdsToken(req, res, next) {
   } catch (err) { next(err) }
 }
 
+/**
+ * GET /api/marketing/projects/:id/integrations/meta-ads/pending/:pendingId
+ * Cuentas candidatas de una conexión OAuth de Meta Ads que encontró más de una
+ * ad account y está esperando que el usuario elija (ver handleMetaAdsCallback).
+ */
+async function getMetaAdsPendingAccounts(req, res) {
+  const projectId = Number(req.params.id)
+  const { pendingId } = req.params
+  const pending = pendingMetaAdsConnections.get(pendingId)
+  if (!pending || pending.projectId !== projectId || pending.workspaceId !== req.workspace.id) {
+    return res.status(404).json({ error: 'No encontramos esa solicitud de conexión. Volvé a intentar el login con Facebook.' })
+  }
+  res.json({ accounts: pending.accounts })
+}
+
+/**
+ * POST /api/marketing/projects/:id/integrations/meta-ads/connect-pending
+ * Body: { pendingId, adAccountId }
+ * Termina una conexión OAuth de Meta Ads que había quedado esperando que el
+ * usuario elija la cuenta publicitaria.
+ */
+async function connectMetaAdsPending(req, res, next) {
+  try {
+    const projectId = Number(req.params.id)
+    const { pendingId, adAccountId } = req.body
+    if (!pendingId || !adAccountId) return res.status(400).json({ error: 'pendingId y adAccountId son requeridos' })
+
+    const pending = pendingMetaAdsConnections.get(pendingId)
+    if (!pending || pending.projectId !== projectId || pending.workspaceId !== req.workspace.id) {
+      return res.status(404).json({ error: 'No encontramos esa solicitud de conexión. Volvé a intentar el login con Facebook.' })
+    }
+
+    const chosen = pending.accounts.find(a => a.id === adAccountId)
+    if (!chosen) return res.status(400).json({ error: 'La cuenta elegida no está entre las encontradas.' })
+
+    await prisma.projectIntegration.upsert({
+      where:  { projectId_type: { projectId, type: 'meta_ads' } },
+      update: {
+        workspaceId: req.workspace.id, status: 'active', propertyId: chosen.id,
+        accessToken: pending.accessToken, refreshToken: null,
+        expiresAt: pending.expiresAt, scopes: 'ads_read',
+        connectedById: req.user.userId, connectedAt: new Date(),
+      },
+      create: {
+        projectId, workspaceId: req.workspace.id, type: 'meta_ads', status: 'active',
+        propertyId: chosen.id, accessToken: pending.accessToken, refreshToken: null,
+        expiresAt: pending.expiresAt, scopes: 'ads_read',
+        connectedById: req.user.userId, connectedAt: new Date(),
+      },
+    })
+
+    pendingMetaAdsConnections.delete(pendingId)
+    console.log(`[MetaAdsOAuth] Meta Ads conectado (selección manual): proyecto ${projectId}, cuenta ${chosen.id} (${chosen.name})`)
+    res.json({ ok: true, adAccountId: chosen.id, accountName: chosen.name })
+  } catch (err) { next(err) }
+}
+
 // ── Facebook Pages (Facebook Login + páginas) ─────────────────────────────────
 
 function buildFacebookRedirectUri() {
@@ -926,4 +1013,4 @@ async function connectFacebookToken(req, res, next) {
   } catch (err) { next(err) }
 }
 
-module.exports = { getMetaAuthUrl, handleMetaCallback, getMetaAdsAuthUrl, handleMetaAdsCallback, connectInstagramToken, connectMetaAdsToken, getFacebookAuthUrl, handleFacebookCallback, connectFacebookToken }
+module.exports = { getMetaAuthUrl, handleMetaCallback, getMetaAdsAuthUrl, handleMetaAdsCallback, connectInstagramToken, connectMetaAdsToken, getMetaAdsPendingAccounts, connectMetaAdsPending, getFacebookAuthUrl, handleFacebookCallback, connectFacebookToken }

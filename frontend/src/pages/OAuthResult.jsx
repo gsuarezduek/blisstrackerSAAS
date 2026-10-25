@@ -10,14 +10,18 @@ export default function OAuthResult() {
   const [searchParams] = useSearchParams()
 
   useEffect(() => {
-    const success = searchParams.get('success') === 'true'
-    const error   = searchParams.get('error')
-    const type    = searchParams.get('type')
+    const success   = searchParams.get('success') === 'true'
+    const error     = searchParams.get('error')
+    const type      = searchParams.get('type')
+    const pending   = searchParams.get('pending') === 'true'
+    const pendingId = searchParams.get('pendingId')
 
-    // Escribir resultado — el padre (ProjectInfoTab) hace polling cada 600ms
+    // Escribir resultado — el padre (ProjectInfoTab/useOAuthPopup) hace polling cada 600ms.
+    // `pending`: el backend encontró varias cuentas (hoy solo Meta Ads) y necesita que
+    // el usuario elija una antes de guardar la conexión — no es éxito ni error todavía.
     try {
       localStorage.setItem('__ga_oauth_result', JSON.stringify({
-        success, error, integrationType: type, ts: Date.now(),
+        success, error, integrationType: type, pending, pendingId, ts: Date.now(),
       }))
     } catch { /* localStorage no disponible */ }
 

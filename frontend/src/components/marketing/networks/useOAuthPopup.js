@@ -14,8 +14,11 @@ const TIMEOUT_MS = 5 * 60 * 1000
  * @param {string} label                      nombre de la red, para los errores
  * @param {() => void} onConnected
  * @param {string} [closedMessage]            error a mostrar si cierran el popup sin terminar
+ * @param {(pendingId: string) => void} [onPending]  el backend encontró varias
+ *   cuentas y necesita que el usuario elija una antes de guardar la conexión
+ *   (hoy solo Meta Ads) — si no se pasa, ese caso se trata como error genérico.
  */
-export default function useOAuthPopup({ getAuthUrl, integrationType, label, onConnected, closedMessage = null, width = 560, height = 680 }) {
+export default function useOAuthPopup({ getAuthUrl, integrationType, label, onConnected, closedMessage = null, onPending = null, width = 560, height = 680 }) {
   const [loading, setLoading] = useState(false)
   const [error,   setError]   = useState(null)
   const timer = useRef(null)
@@ -39,8 +42,15 @@ export default function useOAuthPopup({ getAuthUrl, integrationType, label, onCo
             const result = JSON.parse(raw)
             localStorage.removeItem(RESULT_KEY)
             stop(); setLoading(false)
-            if (result.success && result.integrationType === integrationType) onConnected?.()
-            else setError(result.error || `No se pudo conectar ${label}.`)
+            if (result.integrationType !== integrationType) {
+              setError(result.error || `No se pudo conectar ${label}.`)
+            } else if (result.pending && result.pendingId && onPending) {
+              onPending(result.pendingId)
+            } else if (result.success) {
+              onConnected?.()
+            } else {
+              setError(result.error || `No se pudo conectar ${label}.`)
+            }
             return
           }
         } catch { /* resultado ilegible: seguimos esperando */ }
@@ -56,7 +66,7 @@ export default function useOAuthPopup({ getAuthUrl, integrationType, label, onCo
       setLoading(false)
       setError(err.response?.data?.error || 'No se pudo iniciar la conexión.')
     }
-  }, [getAuthUrl, integrationType, label, onConnected, closedMessage, width, height])
+  }, [getAuthUrl, integrationType, label, onConnected, closedMessage, onPending, width, height])
 
   return { start, loading, error, setError }
 }

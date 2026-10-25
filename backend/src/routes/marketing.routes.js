@@ -85,6 +85,8 @@ router.get('/integrations/meta-ads/auth-url',                  metaIntegrations.
 router.post('/projects/:id/integrations/instagram/connect-token',  metaIntegrations.connectInstagramToken)
 router.post('/projects/:id/integrations/instagram/connect-scrape', instagram.connectScrape)
 router.post('/projects/:id/integrations/meta-ads/connect-token',   metaIntegrations.connectMetaAdsToken)
+router.get('/projects/:id/integrations/meta-ads/pending/:pendingId', metaIntegrations.getMetaAdsPendingAccounts)
+router.post('/projects/:id/integrations/meta-ads/connect-pending', metaIntegrations.connectMetaAdsPending)
 router.post('/projects/:id/integrations/connect-existing',    integrations.connectExisting)
 router.get('/projects/:id/integrations',                      integrations.listIntegrations)
 router.patch('/projects/:id/integrations/:type',              integrations.updateIntegration)

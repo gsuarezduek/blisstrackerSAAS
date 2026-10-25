@@ -99,11 +99,58 @@ export function TextField({ textarea = false, className = '', ...props }) {
 /**
  * Cuerpo de un método OAuth: un texto opcional + botón que abre el popup.
  * `getAuthUrl` devuelve la URL de autorización (cada red tiene su endpoint).
+ *
+ * `pendingAccounts` (opcional, hoy solo lo usa Meta Ads): si el backend encuentra
+ * varias cuentas tras el login, en vez de guardar sola devuelve un `pendingId` —
+ * `{ list(pendingId) => Promise<accounts[]>, finalize(pendingId, accountId) => Promise<void> }`
+ * resuelve el selector y termina la conexión con la cuenta elegida.
  */
-export function OAuthMethod({ brand, getAuthUrl, onConnected, cta, closedMessage, note }) {
+export function OAuthMethod({ brand, getAuthUrl, onConnected, cta, closedMessage, note, pendingAccounts }) {
+  const [accounts,   setAccounts]   = useState(null)
+  const [pendingId,  setPendingId]  = useState(null)
+  const [loadingAccounts, setLoadingAccounts] = useState(false)
+  const [finalizing, setFinalizing] = useState(false)
+  const [pickerError, setPickerError] = useState(null)
+
+  async function handlePending(id) {
+    setPendingId(id)
+    if (!pendingAccounts) { setPickerError('No se pudo completar la conexión.'); return }
+    setLoadingAccounts(true); setPickerError(null)
+    try {
+      const list = await pendingAccounts.list(id)
+      setAccounts(list)
+    } catch (err) {
+      setPickerError(err.response?.data?.error || 'No se pudieron traer las cuentas encontradas.')
+    } finally { setLoadingAccounts(false) }
+  }
+
+  async function pick(accountId) {
+    setFinalizing(true); setPickerError(null)
+    try {
+      await pendingAccounts.finalize(pendingId, accountId)
+      onConnected?.()
+    } catch (err) {
+      setPickerError(err.response?.data?.error || 'No se pudo conectar esa cuenta.')
+    } finally { setFinalizing(false) }
+  }
+
   const { start, loading, error } = useOAuthPopup({
     getAuthUrl, integrationType: brand.integrationType, label: brand.label, onConnected, closedMessage,
+    onPending: pendingAccounts ? handlePending : null,
   })
+
+  if (pendingId) return (
+    <div className="space-y-2">
+      {loadingAccounts && <p className="text-xs text-gray-500 dark:text-gray-400">Buscando tus cuentas publicitarias…</p>}
+      {accounts && (
+        <AccountPicker accounts={accounts} onPick={pick} busy={finalizing} backLabel="← Cancelar"
+          renderSub={a => a.id}
+          onBack={() => { setPendingId(null); setAccounts(null); setPickerError(null) }} />
+      )}
+      <FormError>{pickerError}</FormError>
+    </div>
+  )
+
   return (
     <div className="space-y-2">
       {note && <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">{note}</p>}
@@ -117,7 +164,7 @@ export function OAuthMethod({ brand, getAuthUrl, onConnected, cta, closedMessage
  * Selector de cuenta para los flujos de token que encuentran varias cuentas
  * (páginas de Facebook, cuentas de Instagram, cuentas publicitarias de Meta).
  */
-export function AccountPicker({ accounts, onPick, onBack, busy, renderSub }) {
+export function AccountPicker({ accounts, onPick, onBack, busy, renderSub, backLabel = '← Usar otro token' }) {
   return (
     <div className="space-y-2">
       <p className="text-xs font-semibold text-gray-600 dark:text-gray-300">Encontramos {accounts.length} cuentas. Elegí cuál conectar a este proyecto:</p>
@@ -139,7 +186,7 @@ export function AccountPicker({ accounts, onPick, onBack, busy, renderSub }) {
           )
         })}
       </div>
-      <button type="button" onClick={onBack} className="text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 underline underline-offset-2">← Usar otro token</button>
+      <button type="button" onClick={onBack} className="text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 underline underline-offset-2">{backLabel}</button>
     </div>
   )
 }

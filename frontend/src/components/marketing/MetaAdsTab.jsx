@@ -37,7 +37,13 @@ function ConnectPrompt({ projectId, onConnected }) {
         {
           key: 'official', title: 'Conexión oficial',
           description: 'Iniciá sesión con Facebook. Necesitás acceso a una cuenta publicitaria activa.',
-          body: <OAuthMethod brand={BRAND} getAuthUrl={authUrl(projectId)} onConnected={onConnected} cta="Conectar con Facebook" closedMessage={CLOSED_MSG} />,
+          body: (
+            <OAuthMethod brand={BRAND} getAuthUrl={authUrl(projectId)} onConnected={onConnected} cta="Conectar con Facebook" closedMessage={CLOSED_MSG}
+              pendingAccounts={{
+                list:     pendingId => api.get(`/marketing/projects/${projectId}/integrations/meta-ads/pending/${pendingId}`).then(r => r.data.accounts),
+                finalize: (pendingId, adAccountId) => api.post(`/marketing/projects/${projectId}/integrations/meta-ads/connect-pending`, { pendingId, adAccountId }),
+              }} />
+          ),
         },
         {
           key: 'token', title: 'Token de Business Manager',
