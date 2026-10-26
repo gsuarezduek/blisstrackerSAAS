@@ -43,6 +43,44 @@ async function fetchAiDiscovery(origin) {
   }
 }
 
+// Descubrimiento de un post de blog real vía sitemap — caso real detectado en
+// producción (mdzrentacar.com): el blog ("Guía") SÍ está linkeado desde el menú
+// principal, pero como hub/listado (sin autoría propia); los posts individuales
+// con autoría real (byline, schema Person) están un nivel más abajo, y
+// pickExtraSeeds solo mira los internalLinks del HOME (1 hop) — así que un post
+// nunca entra como semilla aunque el sitio tenga blog activo. Yoast/RankMath/
+// AIOSEO generan sitemaps por tipo de contenido (post-sitemap.xml) listados desde
+// un sitemap índice y ordenados por fecha de publicación (más reciente primero) —
+// forma barata y genérica de encontrar un post real sin depender de cuántos hops
+// hace falta para llegar desde el home.
+async function fetchRecentBlogPostUrl(origin) {
+  try {
+    const res = await fetchPublicUrl(`${origin}/sitemap.xml`, {
+      timeout: 6000,
+      validateStatus: s => s >= 200 && s < 300,
+    })
+    const $ = cheerio.load(res.data, { xmlMode: true })
+    const sitemapLocs = $('sitemap > loc').map((_, el) => $(el).text()).get()
+    const postSitemapUrl = sitemapLocs.find(u => /post-sitemap/i.test(u))
+
+    if (!postSitemapUrl) {
+      // Sin sitemap índice (sitio sin separar por tipo de contenido): usar las
+      // URLs del propio sitemap, descartando las que claramente no son posts.
+      const flatLocs = $('url > loc').map((_, el) => $(el).text()).get()
+      return flatLocs.find(u => !/\/(category|tag|page|author|wp-content)\//i.test(u)) ?? null
+    }
+
+    const postRes = await fetchPublicUrl(postSitemapUrl, {
+      timeout: 6000,
+      validateStatus: s => s >= 200 && s < 300,
+    })
+    const $$ = cheerio.load(postRes.data, { xmlMode: true })
+    return $$('url > loc').first().text() || null
+  } catch {
+    return null
+  }
+}
+
 // Los plugins de SEO más comunes en WordPress (Yoast, RankMath, All in One SEO)
 // emiten UN SOLO <script type="application/ld+json"> con `{"@context":...,
 // "@graph":[ {...}, {...} ]}` en vez de un bloque por entidad — cada elemento de
@@ -495,7 +533,7 @@ ESTADÍSTICAS/DATOS detectados: ${pageData.statsMatches} ocurrencias
 SECCIÓN FAQ: ${pageData.hasFaq ? 'presente' : 'no detectada'}
 RSS/ATOM FEED: ${pageData.rssLink ? `presente (${pageData.rssLink})` : 'no detectado'}
 
-AUTORÍA: ${pageData.hasAuthor ? 'detectada (rel=author / itemprop=author / clase byline)' : 'NO detectada — ausencia de autoría reduce score E-E-A-T'}
+AUTORÍA: ${(pageData.hasAuthor || extraPages.some(p => p.hasAuthor)) ? 'detectada (rel=author / itemprop=author / clase byline, en el home o en otra página rastreada)' : 'NO detectada en ninguna de las páginas rastreadas — ausencia de autoría reduce score E-E-A-T'}
 FECHA DE HOY (para evaluar frescura real, no solo presencia/ausencia): ${new Date().toISOString().slice(0, 10)}
 FECHAS DE PUBLICACIÓN: ${pageData.hasDates ? `detectadas${pageData.latestDate ? ` (fecha más reciente encontrada en la página: "${pageData.latestDate}" — calculá vos la antigüedad real contra la fecha de hoy de arriba; si tiene más de 12-18 meses, es una señal de contenido desactualizado aunque "tenga fecha")` : ', sin una fecha específica legible'}` : 'NO detectadas — sin fechas los LLMs no pueden validar frescura del contenido'}
 
@@ -621,6 +659,14 @@ async function runGeoAnalysis(auditId, workspaceId, projectId, url, userId, { ma
       await setStep(auditId, 'Rastreando otras páginas del sitio…')
       try {
         const seeds = pickExtraSeeds(pageData.internalLinks, url, origin, maxExtraPages)
+        // Si queda lugar, sumar 1 post de blog real por sitemap (ver
+        // fetchRecentBlogPostUrl) — las páginas NAP siguen teniendo prioridad,
+        // esto solo ocupa un slot que de otra forma quedaría vacío o con una
+        // página "rest" menos relevante.
+        if (seeds.length < maxExtraPages) {
+          const blogPost = await fetchRecentBlogPostUrl(origin)
+          if (blogPost && blogPost !== url && !seeds.includes(blogPost)) seeds.push(blogPost)
+        }
         if (seeds.length) {
           const crawled = await crawlSite({
             seedUrl:    seeds[0],
@@ -783,4 +829,4 @@ async function runAllMonthlyGeoAudits() {
   console.log(`[GeoAudit] ${done}/${projects.length} audits completados.`)
 }
 
-module.exports = { runGeoAnalysis, runAllMonthlyGeoAudits, flattenJsonLd, extractPageData, pickExtraSeeds }
+module.exports = { runGeoAnalysis, runAllMonthlyGeoAudits, flattenJsonLd, extractPageData, pickExtraSeeds, fetchRecentBlogPostUrl, buildPrompt }

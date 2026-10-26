@@ -1,4 +1,4 @@
-const { flattenJsonLd, extractPageData } = require('../../src/services/geoAudit.service')
+const { flattenJsonLd, extractPageData, buildPrompt } = require('../../src/services/geoAudit.service')
 
 describe('flattenJsonLd', () => {
   it('un objeto plano (sin @graph) se devuelve tal cual, envuelto en array', () => {
@@ -129,5 +129,33 @@ describe('extractPageData — orgFields (campos reales del Organization/LocalBus
     const fields = extractPageData(html, 'https://x.com/').orgFields
     expect(fields.name).toBe(true)
     expect(fields.telephone).toBe(true)
+  })
+})
+
+describe('buildPrompt — AUTORÍA se agrega entre el home y las páginas extra (caso real: mdzrentacar.com)', () => {
+  const NO_AUTHOR_HTML = '<html><head><title>Home</title></head><body><h1>Hola</h1></body></html>'
+  const AUTHOR_HTML = '<html><head><title>Post</title></head><body><h1>Post</h1><span class="byline">Por Gastón</span></body></html>'
+  const robotsData = { citation: [], training: [] }
+  const llmsData = { exists: false, content: '' }
+  const aiDiscovery = { sitemap: { exists: true, status: 200 } }
+
+  it('el home sin autoría pero una página extra CON autoría: el prompt dice "detectada"', () => {
+    const home = extractPageData(NO_AUTHOR_HTML, 'https://x.com/')
+    const post = extractPageData(AUTHOR_HTML, 'https://x.com/post-real/')
+    const prompt = buildPrompt('https://x.com/', home, robotsData, llmsData, aiDiscovery, '', null, [post], [])
+    expect(prompt).toMatch(/AUTORÍA: detectada/)
+  })
+
+  it('ni el home ni las páginas extra tienen autoría: el prompt dice "NO detectada"', () => {
+    const home = extractPageData(NO_AUTHOR_HTML, 'https://x.com/')
+    const otherPage = extractPageData(NO_AUTHOR_HTML, 'https://x.com/otra/')
+    const prompt = buildPrompt('https://x.com/', home, robotsData, llmsData, aiDiscovery, '', null, [otherPage], [])
+    expect(prompt).toMatch(/AUTORÍA: NO detectada/)
+  })
+
+  it('sin páginas extra, usa solo el dato del home (comportamiento previo intacto)', () => {
+    const home = extractPageData(AUTHOR_HTML, 'https://x.com/')
+    const prompt = buildPrompt('https://x.com/', home, robotsData, llmsData, aiDiscovery, '', null, [], [])
+    expect(prompt).toMatch(/AUTORÍA: detectada/)
   })
 })
