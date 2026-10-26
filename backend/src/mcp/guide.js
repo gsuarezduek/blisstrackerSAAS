@@ -39,7 +39,7 @@ const AREAS = [
   { key: 'ventas',     label: 'Ventas / CRM',           match: n => n.startsWith('ventas_') },
   { key: 'whatsapp',   label: 'WhatsApp',               match: n => n.startsWith('whatsapp_') },
 ]
-const SEO_TOOLS = /^marketing_(cannibal|content_brief|content_gap|onpage)/
+const SEO_TOOLS = /^marketing_(cannibal|content_brief|content_gap|onpage|pagespeed|visibility|seo_action_plan)/
 
 const SECTIONS = {
   general: `## Quién sos y cómo funcionan los permisos
@@ -110,19 +110,23 @@ Lo que NO se puede hacer por MCP con tareas: borrar tareas de personas (solo las
 - No se puede por MCP: invitar/desactivar personas, cambiar roles, aprobar vacaciones ni editar legajos.`,
 
   marketing: `## Marketing (requiere módulo Marketing + acceso)
-- Lecturas por proyecto: salud (\`marketing_health_score\`), GA4, Search Console, Domain Rating, keywords, oportunidades SEO, las 5 redes (Instagram, TikTok, YouTube, LinkedIn, Facebook), Meta Ads, Google Ads, competidores, objetivos, informes mensuales y auditorías GEO.
+- Lecturas por proyecto: salud (\`marketing_health_score\`), GA4, Search Console (+ drill-down por query, snapshot mensual, sugerencias IA), Domain Rating, keywords (+ sugerencias, histórico/heatmap, SERP, análisis IA), oportunidades SEO + plan de acción, las 5 redes (Instagram, TikTok, YouTube, LinkedIn, Facebook), Meta Ads, Google Ads, competidores, objetivos, informes mensuales y auditorías GEO (+ llms.txt, schema JSON-LD, vincular hallazgo a tarea).
 - Si una fuente no está conectada en el proyecto, la tool devuelve vacío o un error de "sin conexión": no es un fallo tuyo. Las conexiones (OAuth de Google/Meta/etc.) se hacen SOLO desde la app.
-- Escrituras: \`marketing_add_keyword\`, \`marketing_add_competitor\`, \`marketing_geo_audit_run\`, \`marketing_report_regenerate\`, \`marketing_refresh_run\`.
-- **Consumen IA o APIs pagas** (confirmá antes): \`marketing_geo_audit_run\`, \`marketing_report_regenerate\`, \`marketing_refresh_run\`. Varias tienen cooldown (429).
+- Keywords: \`marketing_add_keyword\` agrega, \`marketing_remove_keyword\` saca de seguimiento (no hay "editar": borrar + agregar de nuevo). \`marketing_keyword_suggest\` propone queries de Search Console que todavía no se siguen.
+- Otras escrituras: \`marketing_add_competitor\`, \`marketing_geo_audit_run\` (+ \`_delete\`/\`_llms_txt\`/\`_schema\`/\`_link_task\`), \`marketing_domain_rating_refresh\`, \`marketing_seo_snapshot_save\`, \`marketing_report_regenerate\`, \`marketing_refresh_run\`.
+- **Consumen IA o APIs pagas** (confirmá antes): \`marketing_geo_audit_run\`, \`marketing_geo_audit_llms_txt\`, \`marketing_geo_audit_schema\`, \`marketing_seo_ai_insights_run\`, \`marketing_keyword_analysis_run\`, \`marketing_report_regenerate\`, \`marketing_refresh_run\`. Varias tienen cooldown (429).
 - **Asíncronas**: las que dicen "Async" devuelven un id — consultá el estado con la tool \`*_get\`/\`*_status\` correspondiente, esperando entre consultas (no hagas polling agresivo).
 - Informes: el informe mensual se arma con snapshots que se toman el día 1° de cada mes. Regenerarlo no cambia los datos históricos, rehace el análisis IA.`,
 
   seo: `## SEO avanzado (dentro de Marketing)
-Cuatro herramientas con el mismo patrón run → list → get → delete:
+Varias herramientas con el mismo patrón run → list → get → delete:
 - Canibalización (\`marketing_cannibal_*\`): páginas propias que compiten por la misma keyword (usa Search Console).
 - Content Brief (\`marketing_content_brief_*\`): brief con IA para una keyword vs el top 10 de Google.
 - On-Page Audit (\`marketing_onpage_audit_*\`): crawler de hasta 15 páginas. Async: hacé polling con \`marketing_onpage_audit_get\` mientras \`status=running\`.
 - Content Gap (\`marketing_content_gap_*\`): temas que faltan vs el top 4 del SERP. Async.
+- PageSpeed (\`marketing_pagespeed_*\`): Core Web Vitals. Async. Consume cuota real de la API de Google — no lo repitas sin necesidad.
+- GEO Visibility (\`marketing_visibility_*\`): monitoreo de menciones de marca en respuestas de IA. Primero cargá preguntas (\`_prompt_add\`, máx 5 activas) y competidores (\`_competitor_add\`, máx 4) con las tools de catálogo; \`_run\` corre el chequeo contra un modelo con web search — es la más cara de todo Marketing, confirmá siempre antes de correrla. Async: pollea con \`_run_get\`.
+- \`marketing_seo_action_plan\`: agrega hallazgos de GEO/Canibalización/PageSpeed/oportunidades en un plan único priorizado.
 Todas las \`*_run\` consumen IA/APIs pagas: confirmá antes de dispararlas.`,
 
   contenido: `## Contenido (requiere módulo Contenido + acceso)

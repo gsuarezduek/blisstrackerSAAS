@@ -82,10 +82,55 @@ const tools = [
     }),
   },
   {
+    name: 'marketing_search_console_query_pages',
+    description: 'Para una query puntual de Search Console, qué páginas del sitio rankearon por ella (drill-down).',
+    inputSchema: {
+      ...projectIdParam,
+      query: z.string().describe('La query exacta de Search Console a desglosar'),
+      startDate: z.string().optional().describe('YYYY-MM-DD, default últimos 28 días'),
+      endDate:   z.string().optional().describe('YYYY-MM-DD'),
+    },
+    request: ({ projectId, query, startDate, endDate }) => ({
+      method: 'GET',
+      path: `/marketing/projects/${projectId}/search-console/query-pages`,
+      query: { query, startDate, endDate },
+    }),
+  },
+  {
+    name: 'marketing_seo_snapshot_get',
+    description: 'Snapshot mensual de Search Console ya guardado (dispositivos/países/top queries/top páginas) para un mes puntual.',
+    inputSchema: { ...projectIdParam, month: z.string().describe('YYYY-MM') },
+    request: ({ projectId, month }) => ({ method: 'GET', path: `/marketing/projects/${projectId}/seo/snapshot/${month}` }),
+  },
+  {
+    name: 'marketing_seo_snapshot_save',
+    description: 'Guarda (o regenera) el snapshot mensual de Search Console de un mes puntual — normalmente lo hace el cron de los lunes, esto lo fuerza al momento. Requiere Search Console conectado.',
+    inputSchema: { ...projectIdParam, month: z.string().describe('YYYY-MM') },
+    request: ({ projectId, month }) => ({ method: 'POST', path: `/marketing/projects/${projectId}/seo/snapshots`, body: { month } }),
+  },
+  {
+    name: 'marketing_seo_ai_insights_get',
+    description: 'Últimas sugerencias IA generadas sobre los datos de Search Console de un proyecto (o insight null si nunca se generaron), con fecha de generación y cooldown restante.',
+    inputSchema: { ...projectIdParam },
+    request: ({ projectId }) => ({ method: 'GET', path: `/marketing/projects/${projectId}/seo/ai-insights` }),
+  },
+  {
+    name: 'marketing_seo_ai_insights_run',
+    description: 'Genera (o regenera) sugerencias IA sobre los datos de Search Console de los últimos 30 días. Consume presupuesto de tokens del workspace; tiene cooldown configurable (429 con waitMins si se pide muy seguido). Requiere Search Console conectado.',
+    inputSchema: { ...projectIdParam },
+    request: ({ projectId }) => ({ method: 'POST', path: `/marketing/projects/${projectId}/seo/ai-insights` }),
+  },
+  {
     name: 'marketing_domain_rating',
     description: 'Domain Rating (autoridad de dominio, Ahrefs) cacheado del proyecto.',
     inputSchema: { ...projectIdParam },
     request: ({ projectId }) => ({ method: 'GET', path: `/marketing/projects/${projectId}/domain-rating` }),
+  },
+  {
+    name: 'marketing_domain_rating_refresh',
+    description: 'Fuerza una actualización del Domain Rating (Ahrefs, endpoint gratuito) de un proyecto. Requiere websiteUrl configurado.',
+    inputSchema: { ...projectIdParam },
+    request: ({ projectId }) => ({ method: 'POST', path: `/marketing/projects/${projectId}/domain-rating/refresh` }),
   },
   {
     name: 'marketing_keywords',
@@ -94,10 +139,70 @@ const tools = [
     request: ({ projectId, country }) => ({ method: 'GET', path: `/marketing/projects/${projectId}/keywords`, query: { country } }),
   },
   {
+    name: 'marketing_keyword_suggest',
+    description: 'Sugiere keywords para empezar a trackear: top 25 queries del mes en Search Console, marcando cuáles ya están trackeadas. Requiere Search Console conectado.',
+    inputSchema: { ...projectIdParam, country: z.string().optional() },
+    request: ({ projectId, country }) => ({ method: 'GET', path: `/marketing/projects/${projectId}/keywords/suggest`, query: { country } }),
+  },
+  {
+    name: 'marketing_keyword_heatmap',
+    description: 'Historial completo de posición mes a mes de todas las keywords trackeadas de un proyecto (todo el histórico guardado, sin recortar).',
+    inputSchema: { ...projectIdParam },
+    request: ({ projectId }) => ({ method: 'GET', path: `/marketing/projects/${projectId}/keywords/heatmap` }),
+  },
+  {
+    name: 'marketing_keyword_history_batch',
+    description: 'Historial de posición/clicks/impresiones de todas las keywords trackeadas, de a N meses (para graficar evolución).',
+    inputSchema: { ...projectIdParam, months: z.number().int().optional().describe('Default 6, tope 12') },
+    request: ({ projectId, months }) => ({ method: 'GET', path: `/marketing/projects/${projectId}/keywords/history-batch`, query: { months } }),
+  },
+  {
+    name: 'marketing_keyword_history',
+    description: 'Historial completo de ranking de UNA keyword trackeada, más su análisis IA si ya se generó.',
+    inputSchema: { ...projectIdParam, kwId: z.number().int().describe('ID de la keyword trackeada, ver marketing_keywords') },
+    request: ({ projectId, kwId }) => ({ method: 'GET', path: `/marketing/projects/${projectId}/keywords/${kwId}/history` }),
+  },
+  {
+    name: 'marketing_keyword_analysis_run',
+    description: 'Genera (o regenera) el análisis IA de una keyword trackeada. Cooldown de 1h (429 con waitMins si se pide antes).',
+    inputSchema: { ...projectIdParam, kwId: z.number().int() },
+    request: ({ projectId, kwId }) => ({ method: 'POST', path: `/marketing/projects/${projectId}/keywords/${kwId}/analysis` }),
+  },
+  {
+    name: 'marketing_keyword_serp_get',
+    description: 'Snapshot SERP más reciente de una keyword (posición, features, competidores, "People Also Ask", "Related Searches"). Si tiene más de 24hs, dispara una captura nueva automáticamente. Requiere SERP_API_KEY configurado en el servidor.',
+    inputSchema: { ...projectIdParam, kwId: z.number().int() },
+    request: ({ projectId, kwId }) => ({ method: 'GET', path: `/marketing/projects/${projectId}/keywords/${kwId}/serp` }),
+  },
+  {
+    name: 'marketing_keyword_serp_refresh',
+    description: 'Fuerza una nueva captura SERP de una keyword aunque la última sea reciente. Cooldown de 15 min (429 con waitMins si se pide antes). Requiere SERP_API_KEY configurado.',
+    inputSchema: { ...projectIdParam, kwId: z.number().int() },
+    request: ({ projectId, kwId }) => ({ method: 'POST', path: `/marketing/projects/${projectId}/keywords/${kwId}/serp/refresh` }),
+  },
+  {
+    name: 'marketing_keyword_serp_batch',
+    description: 'Último snapshot SERP (posición, features, competidores) de TODAS las keywords trackeadas de un proyecto en una sola consulta (últimos 7 días).',
+    inputSchema: { ...projectIdParam },
+    request: ({ projectId }) => ({ method: 'GET', path: `/marketing/projects/${projectId}/keywords/serp-batch` }),
+  },
+  {
+    name: 'marketing_remove_keyword',
+    description: 'Deja de trackear una keyword (borra el TrackedKeyword y su historial de ranking). No hay endpoint de "editar": para cambiar el texto de una keyword hay que borrar esta con esta tool y agregar una nueva con marketing_add_keyword.',
+    inputSchema: { ...projectIdParam, kwId: z.number().int().describe('ID de la keyword trackeada, ver marketing_keywords') },
+    request: ({ projectId, kwId }) => ({ method: 'DELETE', path: `/marketing/projects/${projectId}/keywords/${kwId}` }),
+  },
+  {
     name: 'marketing_seo_opportunities',
     description: 'Oportunidades SEO en vivo: keywords en "striking distance", páginas en decadencia y de bajo CTR.',
     inputSchema: { ...projectIdParam },
     request: ({ projectId }) => ({ method: 'GET', path: `/marketing/projects/${projectId}/seo/opportunities` }),
+  },
+  {
+    name: 'marketing_seo_action_plan',
+    description: 'Plan de acción SEO: agrega hallazgos de GEO audit + Canibalización + PageSpeed + oportunidades en un solo listado priorizado, cruzado con las keywords objetivo/URLs prioritarias del brief seo_sem.',
+    inputSchema: { ...projectIdParam },
+    request: ({ projectId }) => ({ method: 'GET', path: `/marketing/projects/${projectId}/seo/action-plan` }),
   },
   ...NETWORKS.map(network => ({
     name: `marketing_${network}`,
@@ -152,6 +257,38 @@ const tools = [
     description: 'Detalle completo de una auditoría GEO: score, 6 componentes, hallazgos.',
     inputSchema: { auditId: z.number().int() },
     request: ({ auditId }) => ({ method: 'GET', path: `/marketing/geo/audits/${auditId}` }),
+  },
+  {
+    name: 'marketing_geo_audit_delete',
+    description: 'Elimina una auditoría GEO.',
+    inputSchema: { auditId: z.number().int() },
+    request: ({ auditId }) => ({ method: 'DELETE', path: `/marketing/geo/audits/${auditId}` }),
+  },
+  {
+    name: 'marketing_geo_audit_llms_txt',
+    description: 'Genera un archivo llms.txt estándar a partir de una auditoría GEO ya completada. Consume presupuesto de tokens del workspace.',
+    inputSchema: { auditId: z.number().int() },
+    request: ({ auditId }) => ({ method: 'GET', path: `/marketing/geo/audits/${auditId}/llms-txt` }),
+  },
+  {
+    name: 'marketing_geo_audit_schema',
+    description: 'Genera JSON-LD de Schema.org sugerido para los tipos de schema que la auditoría GEO detectó como faltantes. El resultado queda cacheado en la auditoría — llamadas repetidas no vuelven a consumir tokens.',
+    inputSchema: { auditId: z.number().int() },
+    request: ({ auditId }) => ({ method: 'POST', path: `/marketing/geo/audits/${auditId}/schema` }),
+  },
+  {
+    name: 'marketing_geo_audit_link_task',
+    description: 'Vincula una tarea YA CREADA (con task_create, en el mismo proyecto de la auditoría) a un hallazgo puntual de una auditoría GEO, por su índice en la lista de findings.',
+    inputSchema: {
+      auditId: z.number().int(),
+      itemIndex: z.number().int().describe('Índice del hallazgo dentro de los findings de la auditoría (ver marketing_geo_audit_get)'),
+      taskId: z.number().int().describe('ID de una tarea ya creada en el proyecto de la auditoría'),
+    },
+    request: ({ auditId, itemIndex, taskId }) => ({
+      method: 'POST',
+      path: `/marketing/geo/audits/${auditId}/findings/${itemIndex}/task`,
+      body: { taskId },
+    }),
   },
 
   // ── SEO: Canibalización, Content Brief, On-Page Audit, Content Gap ────────
@@ -252,6 +389,105 @@ const tools = [
     description: 'Elimina un análisis de Content Gap.',
     inputSchema: { ...projectIdParam, gapId: z.number().int() },
     request: ({ projectId, gapId }) => ({ method: 'DELETE', path: `/marketing/projects/${projectId}/content-gaps/${gapId}` }),
+  },
+
+  // ── PageSpeed Insights ───────────────────────────────────────────────────
+  {
+    name: 'marketing_pagespeed_run',
+    description: 'Dispara un análisis de PageSpeed Insights (Core Web Vitals) del sitio del proyecto. Consume cuota real de la API de Google — no lo repitas sin necesidad. Async: devuelve un resultId para consultar con marketing_pagespeed_get. Requiere websiteUrl configurado.',
+    inputSchema: { ...projectIdParam, strategy: z.enum(['mobile', 'desktop']).optional().describe('Default mobile') },
+    request: ({ projectId, strategy }) => ({ method: 'POST', path: `/marketing/projects/${projectId}/pagespeed`, body: { strategy } }),
+  },
+  {
+    name: 'marketing_pagespeed_list',
+    description: 'Lista los análisis de PageSpeed ya corridos y terminados (sin el detalle completo de métricas — para eso usar marketing_pagespeed_get).',
+    inputSchema: { ...projectIdParam, strategy: z.enum(['mobile', 'desktop']).optional(), limit: z.number().int().optional().describe('Default 10, tope 20') },
+    request: ({ projectId, strategy, limit }) => ({ method: 'GET', path: `/marketing/projects/${projectId}/pagespeed`, query: { strategy, limit } }),
+  },
+  {
+    name: 'marketing_pagespeed_get',
+    description: 'Detalle completo de un resultado de PageSpeed: score, métricas, oportunidades y diagnósticos. Útil para hacer polling mientras status=running.',
+    inputSchema: { ...projectIdParam, resultId: z.number().int() },
+    request: ({ projectId, resultId }) => ({ method: 'GET', path: `/marketing/projects/${projectId}/pagespeed/${resultId}` }),
+  },
+
+  // ── GEO Visibility: monitoreo de menciones de marca en IA ─────────────────
+  // Catálogo de preguntas + competidores a buscar, y runs que las corren contra
+  // un modelo de IA con web search (más caro que el resto de GEO).
+  {
+    name: 'marketing_visibility_prompts_list',
+    description: 'Lista las preguntas configuradas para chequear visibilidad de marca en IA (GEO Visibility) de un proyecto.',
+    inputSchema: { ...projectIdParam },
+    request: ({ projectId }) => ({ method: 'GET', path: `/marketing/projects/${projectId}/visibility/prompts` }),
+  },
+  {
+    name: 'marketing_visibility_prompt_add',
+    description: 'Agrega una pregunta a chequear en GEO Visibility (máx 5 preguntas activas por proyecto).',
+    inputSchema: { ...projectIdParam, query: z.string().describe('La pregunta, máx 300 caracteres') },
+    request: ({ projectId, query }) => ({ method: 'POST', path: `/marketing/projects/${projectId}/visibility/prompts`, body: { query } }),
+  },
+  {
+    name: 'marketing_visibility_prompt_update',
+    description: 'Edita el texto o activa/desactiva una pregunta de GEO Visibility. Reactivarla vuelve a chequear el tope de 5 preguntas activas.',
+    inputSchema: {
+      ...projectIdParam,
+      promptId: z.number().int(),
+      query: z.string().optional(),
+      active: z.boolean().optional(),
+    },
+    request: ({ projectId, promptId, query, active }) => ({
+      method: 'PATCH',
+      path: `/marketing/projects/${projectId}/visibility/prompts/${promptId}`,
+      body: { query, active },
+    }),
+  },
+  {
+    name: 'marketing_visibility_prompt_delete',
+    description: 'Elimina una pregunta de GEO Visibility.',
+    inputSchema: { ...projectIdParam, promptId: z.number().int() },
+    request: ({ projectId, promptId }) => ({ method: 'DELETE', path: `/marketing/projects/${projectId}/visibility/prompts/${promptId}` }),
+  },
+  {
+    name: 'marketing_visibility_competitors_list',
+    description: 'Lista los competidores a detectar en las respuestas de IA (GEO Visibility) de un proyecto.',
+    inputSchema: { ...projectIdParam },
+    request: ({ projectId }) => ({ method: 'GET', path: `/marketing/projects/${projectId}/visibility/competitors` }),
+  },
+  {
+    name: 'marketing_visibility_competitor_add',
+    description: 'Agrega un competidor a detectar en GEO Visibility (máx 4 por proyecto).',
+    inputSchema: { ...projectIdParam, name: z.string().describe('Nombre, máx 120 caracteres'), domain: z.string().optional() },
+    request: ({ projectId, name, domain }) => ({ method: 'POST', path: `/marketing/projects/${projectId}/visibility/competitors`, body: { name, domain } }),
+  },
+  {
+    name: 'marketing_visibility_competitor_delete',
+    description: 'Elimina un competidor de GEO Visibility.',
+    inputSchema: { ...projectIdParam, competitorId: z.number().int() },
+    request: ({ projectId, competitorId }) => ({ method: 'DELETE', path: `/marketing/projects/${projectId}/visibility/competitors/${competitorId}` }),
+  },
+  {
+    name: 'marketing_visibility_run',
+    description: 'Corre un chequeo de GEO Visibility: le hace cada pregunta activa a un modelo de IA con web search y detecta si menciona la marca y a los competidores configurados. Más caro que el resto de GEO (usa búsqueda web) — confirmá antes de correrlo. Requiere al menos 1 pregunta activa. Async: devuelve un runId para consultar con marketing_visibility_run_get.',
+    inputSchema: { ...projectIdParam },
+    request: ({ projectId }) => ({ method: 'POST', path: `/marketing/projects/${projectId}/visibility/runs` }),
+  },
+  {
+    name: 'marketing_visibility_runs_list',
+    description: 'Lista los runs de GEO Visibility ya corridos de un proyecto.',
+    inputSchema: { ...projectIdParam, limit: z.number().int().optional().describe('Default 10, tope 50') },
+    request: ({ projectId, limit }) => ({ method: 'GET', path: `/marketing/projects/${projectId}/visibility/runs`, query: { limit } }),
+  },
+  {
+    name: 'marketing_visibility_run_get',
+    description: 'Detalle de un run de GEO Visibility: resultado por pregunta, si mencionó la marca, qué competidores mencionó y fuentes citadas. Útil para hacer polling mientras status=pending.',
+    inputSchema: { ...projectIdParam, runId: z.number().int() },
+    request: ({ projectId, runId }) => ({ method: 'GET', path: `/marketing/projects/${projectId}/visibility/runs/${runId}` }),
+  },
+  {
+    name: 'marketing_visibility_run_delete',
+    description: 'Elimina un run de GEO Visibility.',
+    inputSchema: { ...projectIdParam, runId: z.number().int() },
+    request: ({ projectId, runId }) => ({ method: 'DELETE', path: `/marketing/projects/${projectId}/visibility/runs/${runId}` }),
   },
 
   // ── Marketing: escritura ─────────────────────────────────────────────────
