@@ -25,9 +25,23 @@ const hocuspocus = new Hocuspocus({
   // Se dispara antes de crear/cargar el documento. `documentName` es el docKey
   // ("meeting:<id>" / "lead:<id>" / "eosMeeting:<week>"). Lanzar acá rechaza la
   // conexión — nadie sin permiso llega a ver el texto en vivo.
+  //
+  // El contexto tiene que viajar por el valor de RETORNO de este hook —
+  // @hocuspocus/server lo fusiona a `hookPayload.context` leyendo lo que el
+  // hook devuelve, no lo que mute sobre `data`. Asignar `data.context = ...`
+  // sin `return` (como estaba antes) es un no-op para el resto de la conexión:
+  // `onLoadDocument`/`onStoreDocument` recibían `context.workspaceId`
+  // `undefined` siempre. Para `meeting`/`lead` eso pasaba desapercibido
+  // (Prisma trata `workspaceId: undefined` como campo omitido en un `where`
+  // simple — igual filtraba bien por `id`, que ya es único); para
+  // `eosMeeting`/`scorecardNote`, que usan una unique key compuesta
+  // `workspaceId_week`, Prisma exige el valor y tira
+  // "Argument `workspaceId` is missing." — el crash real en `onLoadDocument`.
   async onAuthenticate(data) {
     try {
-      data.context = await resolveDocAccess(data.documentName, data.token)
+      const context = await resolveDocAccess(data.documentName, data.token)
+      data.context = context
+      return context
     } catch (err) {
       // El catch de @hocuspocus/server que envuelve este hook construye el
       // mensaje para el cliente con `error.reason` (no `error.message`) — un
