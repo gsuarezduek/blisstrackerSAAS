@@ -63,6 +63,10 @@ export default function CollaborativeRichTextEditor({
   const { user } = useAuth()
   const [status, setStatus] = useState('connecting')
   const [peers, setPeers] = useState([])
+  // Motivo real mandado por docAccess.js (ver hocuspocusServer.js) — sin esto
+  // solo se sabía que algo fue rechazado, nunca por qué (rol, flag deshabilitado,
+  // recurso no encontrado, etc.).
+  const [deniedReason, setDeniedReason] = useState(null)
 
   // Lazy init: crea la conexión una sola vez, de forma sincrónica en el primer
   // render (no en un efecto) — así `provider` ya está listo cuando useEditor
@@ -72,7 +76,10 @@ export default function CollaborativeRichTextEditor({
     let p
     p = createCollabProvider(docKey, {
       onStatus: ({ status: s }) => setStatus(s),
-      onAuthenticationFailed: () => setStatus('denied'),
+      onAuthenticationFailed: ({ reason } = {}) => {
+        setDeniedReason(reason && reason !== 'permission-denied' ? reason : null)
+        setStatus('denied')
+      },
       onAwarenessUpdate: () => setPeers(peersFromAwareness(p)),
     })
     return p
@@ -122,7 +129,7 @@ export default function CollaborativeRichTextEditor({
               : status === 'denied' ? 'text-red-500'
               : 'text-gray-400 dark:text-gray-500'
           }`}>
-            {STATUS_LABEL[status] ?? status}
+            {status === 'denied' && deniedReason ? deniedReason : STATUS_LABEL[status] ?? status}
           </span>
         </div>
         <Toolbar editor={editor} />

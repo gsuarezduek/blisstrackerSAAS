@@ -26,7 +26,18 @@ const hocuspocus = new Hocuspocus({
   // ("meeting:<id>" / "lead:<id>" / "eosMeeting:<week>"). Lanzar acá rechaza la
   // conexión — nadie sin permiso llega a ver el texto en vivo.
   async onAuthenticate(data) {
-    data.context = await resolveDocAccess(data.documentName, data.token)
+    try {
+      data.context = await resolveDocAccess(data.documentName, data.token)
+    } catch (err) {
+      // El catch de @hocuspocus/server que envuelve este hook construye el
+      // mensaje para el cliente con `error.reason` (no `error.message`) — un
+      // `Error` común no tiene esa propiedad, así que sin esto el cliente
+      // siempre recibe el fallback genérico "permission-denied" y ni acá ni
+      // en los logs queda rastro de cuál validación de docAccess.js falló.
+      console.error(`[collab] auth denegada para "${data.documentName}": ${err.message}`)
+      err.reason = err.message
+      throw err
+    }
   },
 
   // Primera carga del documento en memoria (una vez por doc activo, no por
