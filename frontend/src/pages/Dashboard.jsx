@@ -403,12 +403,19 @@ export default function Dashboard() {
     return [...open.filter(t => t.status === 'PAUSED'), ...open.filter(t => t.status === 'PENDING')]
   }, [allMine])
 
-  // Backlog agrupado por proyecto, ordenado solo por fecha de creación según el orden
-  // elegido (el "pausadas primero" de allBacklog se mantiene para la sugerencia de NowCard,
-  // no para esta lista). El orden de los grupos sigue la primera aparición en esa lista.
+  // Backlog agrupado por proyecto. Las tareas de Contenido (vinculadas a una pieza con fecha
+  // de publicación) van primero, ordenadas por publicación más próxima — así se ve de un
+  // vistazo qué hay que diseñar más urgente sin entrar al módulo de Contenido. El resto
+  // mantiene el orden por fecha de creación según el toggle elegido (el "pausadas primero"
+  // de allBacklog se mantiene para la sugerencia de NowCard, no para esta lista). El orden
+  // de los grupos sigue la primera aparición en esta lista.
   const backlogByProject = useMemo(() => {
     const dir = backlogSort === 'asc' ? 1 : -1
-    const sorted = [...allBacklog].sort((a, b) => dir * (new Date(a.createdAt) - new Date(b.createdAt)))
+    const withPublishDate = allBacklog.filter(t => t.contentPiece?.scheduledDate)
+    const rest = allBacklog.filter(t => !t.contentPiece?.scheduledDate)
+    withPublishDate.sort((a, b) => a.contentPiece.scheduledDate.localeCompare(b.contentPiece.scheduledDate))
+    rest.sort((a, b) => dir * (new Date(a.createdAt) - new Date(b.createdAt)))
+    const sorted = [...withPublishDate, ...rest]
     const map = {}
     for (const t of sorted) {
       const pid = t.project.id

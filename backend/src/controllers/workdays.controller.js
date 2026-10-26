@@ -8,9 +8,10 @@ const taskInclude = {
   createdBy: { select: { id: true, name: true } },
   _count: { select: { comments: true, files: { where: { file: { status: 'ready', deletedAt: null } } } } },
   sessions: { select: { startedAt: true, endedAt: true } },
-  // Pieza de Contenido vinculada (si la tarea vino de "Enviar al dashboard") — alcanza con
-  // el id para armar el deep-link a /contenido?projectId=&piece= desde TaskCard.
-  contentPiece: { select: { id: true } },
+  // Pieza de Contenido vinculada (si la tarea vino de "Enviar al dashboard") — el id arma
+  // el deep-link a /contenido?projectId=&piece= desde TaskCard; scheduledDate deja mostrar
+  // la fecha de publicación en la tarjeta y ordenar el Backlog por urgencia de publicación.
+  contentPiece: { select: { id: true, scheduledDate: true } },
   // Agentes IA: quién la ejecuta (tarea de agente) y qué agente la creó, con su nombre.
   agent: { select: { id: true, label: true } },
   createdByAgent: { select: { id: true, label: true } },

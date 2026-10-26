@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { Link, useNavigate } from 'react-router-dom'
 import api from '../api/client'
 import { renderRichText } from '../utils/richText'
-import { fmtMins, activeMinutes, fmtCreatedAt, createdAtTitle } from '../utils/format'
+import { fmtMins, activeMinutes, fmtCreatedAt, createdAtTitle, fmtPublishDate } from '../utils/format'
 import UserLink from './UserLink'
 import useMembers from '../hooks/useMembers'
 import StarButton from './dashboard/StarButton'
@@ -159,6 +159,7 @@ function TaskCard({ task, onUpdate, onDelete, activeTask, backlog, future, onAdd
   const scheduledLabel = task.scheduledFor
     ? new Date(`${task.scheduledFor}T12:00:00`).toLocaleDateString('es-AR', { weekday: 'short', day: 'numeric', month: 'short' })
     : null
+  const publishInfo = task.contentPiece?.scheduledDate ? fmtPublishDate(task.contentPiece.scheduledDate) : null
 
   // Acción principal (una sola, según contexto)
   let primary = null
@@ -239,8 +240,13 @@ function TaskCard({ task, onUpdate, onDelete, activeTask, backlog, future, onAdd
           {isPaused && <span className="text-amber-700 dark:text-amber-400">Pausada · {fmtMins(activeMinutes(task))} trabajadas</span>}
           {task.recurrenceId && <span className="inline-flex items-center gap-1" title="Tarea recurrente"><Icon as={Repeat} size={13} />Recurrente</span>}
           {task.contentPiece && (
-            <Link to={`/contenido?projectId=${task.project.id}&piece=${task.contentPiece.id}`} className="inline-flex items-center gap-1 text-sky-700 dark:text-sky-300 hover:underline" title="Ver pieza de contenido">
-              <Icon as={CalendarDays} size={13} />Contenido
+            <Link
+              to={`/contenido?projectId=${task.project.id}&piece=${task.contentPiece.id}`}
+              className={`inline-flex items-center gap-1 hover:underline ${publishInfo?.urgent ? 'text-red-600 dark:text-red-400 font-medium' : 'text-sky-700 dark:text-sky-300'}`}
+              title="Ver pieza de contenido"
+            >
+              <Icon as={CalendarDays} size={13} />
+              {publishInfo ? `Contenido · publica ${publishInfo.label}` : 'Contenido'}
             </Link>
           )}
           {task.createdByAgent && (

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import api from '../../api/client'
-import { activeSeconds, fmtDuration, fmtCreatedAt, createdAtTitle } from '../../utils/format'
+import { activeSeconds, fmtDuration, fmtCreatedAt, createdAtTitle, fmtPublishDate } from '../../utils/format'
 import { renderRichText } from '../../utils/richText'
 import useMembers from '../../hooks/useMembers'
 import StarButton from './StarButton'
@@ -26,12 +26,19 @@ function Timer({ task }) {
 function Meta({ task, onOpenComments }) {
   const comments = task._count?.comments ?? 0
   const files = task._count?.files ?? 0
+  const publishInfo = task.contentPiece?.scheduledDate ? fmtPublishDate(task.contentPiece.scheduledDate) : null
   return (
     <div className="flex items-center gap-x-3 gap-y-1 flex-wrap text-sm text-gray-500 dark:text-gray-400">
       <Link to={`/my-projects/${task.project.id}`} className="font-medium text-gray-700 dark:text-gray-300 hover:text-primary-600">{task.project.name}</Link>
       {task.recurrenceId && <span className="inline-flex items-center gap-1"><Icon as={Repeat} size={14} />Recurrente</span>}
       {task.contentPiece && (
-        <Link to={`/contenido?projectId=${task.project.id}&piece=${task.contentPiece.id}`} className="inline-flex items-center gap-1 text-sky-700 dark:text-sky-300 hover:underline"><Icon as={CalendarDays} size={14} />Contenido</Link>
+        <Link
+          to={`/contenido?projectId=${task.project.id}&piece=${task.contentPiece.id}`}
+          className={`inline-flex items-center gap-1 hover:underline ${publishInfo?.urgent ? 'text-red-600 dark:text-red-400 font-medium' : 'text-sky-700 dark:text-sky-300'}`}
+        >
+          <Icon as={CalendarDays} size={14} />
+          {publishInfo ? `Contenido · publica ${publishInfo.label}` : 'Contenido'}
+        </Link>
       )}
       {task.createdBy && <span>De {task.createdBy.name.split(' ')[0]}</span>}
       {task.createdAt && <span title={createdAtTitle(task.createdAt)}>Creada {fmtCreatedAt(task.createdAt)}</span>}

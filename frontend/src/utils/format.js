@@ -109,6 +109,24 @@ export function createdAtTitle(iso) {
   return `Creada el ${new Date(iso).toLocaleString('es-AR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: ART })}`
 }
 
+// Fecha de publicación de la pieza de Contenido vinculada a una tarea (ContentPiece.scheduledDate,
+// ya un string "YYYY-MM-DD" denormalizado en la zona del proyecto — se compara tal cual, sin pasar
+// por Date/timezone, para no correrse de día) — "hoy" / "mañana" / "28 oct". `urgent: true` si
+// publica hoy o ya pasó la fecha, para resaltar en el Dashboard qué diseñar más urgente.
+export function fmtPublishDate(dateStr, now = new Date()) {
+  if (!dateStr) return null
+  const todayKey = dayKey(now)
+  const tomorrowKey = dayKey(new Date(now.getTime() + 86400000))
+  let label
+  if (dateStr === todayKey) label = 'hoy'
+  else if (dateStr === tomorrowKey) label = 'mañana'
+  else {
+    const sameYear = dateStr.slice(0, 4) === todayKey.slice(0, 4)
+    label = new Date(`${dateStr}T12:00:00`).toLocaleDateString('es-AR', { day: 'numeric', month: 'short', ...(sameYear ? {} : { year: 'numeric' }) })
+  }
+  return { label, urgent: dateStr <= todayKey }
+}
+
 // Fracción de meses entre dos fechas "YYYY-MM-DD" (inclusive ambos extremos).
 // Usa 30.4375 días/mes (365.25 / 12) para que la proporción sea estable.
 export function monthsInRange(from, to) {
