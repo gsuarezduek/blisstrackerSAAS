@@ -3,6 +3,8 @@ import api from '../../api/client'
 import { Search, Trash2 } from 'lucide-react'
 import { Icon } from '../ui/Icon'
 import LoadingSpinner from '../LoadingSpinner'
+import FunLoader from './networks/FunLoader'
+import { CANNIBALIZATION_LOADING_MESSAGES } from './networks/loadingMessages'
 
 const SEVERITY_COLORS = {
   Alta:  'bg-red-100   dark:bg-red-900/30   text-red-700   dark:text-red-400   border-red-200   dark:border-red-700',
@@ -311,12 +313,8 @@ export default function CanibalizacionTab({ projectId }) {
 
       {/* Estado running */}
       {running && !activeReport && (
-        <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-xl p-5 flex items-center gap-3">
-          <LoadingSpinner size="sm" className="flex-shrink-0" />
-          <div>
-            <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">Analizando keywords…</p>
-            <p className="text-xs text-amber-600 dark:text-amber-400 mt-0.5">Consultando Google Search Console y calculando conflictos. Puede tardar algunos segundos.</p>
-          </div>
+        <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-xl p-5">
+          <FunLoader messages={CANNIBALIZATION_LOADING_MESSAGES} spinnerSize="sm" className="py-2" />
         </div>
       )}
 

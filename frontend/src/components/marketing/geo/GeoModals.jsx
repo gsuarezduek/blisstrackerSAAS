@@ -1,7 +1,8 @@
 import { Trash2 } from 'lucide-react'
 import { Icon } from '../../ui/Icon'
 import { fmtDate } from './geoHelpers'
-import LoadingSpinner from '../../LoadingSpinner'
+import FunLoader from '../networks/FunLoader'
+import { GEO_GENERATE_LOADING_MESSAGES } from '../networks/loadingMessages'
 
 // ─── Modales de confirmación / generación de GeoTab ───────────────────────────
 
@@ -80,9 +81,8 @@ export default function GeoModals({
       )}
       {llmsModal === 'loading' && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-gray-800 rounded-xl p-8 flex items-center gap-3">
-            <LoadingSpinner size="sm" />
-            <span className="text-sm text-gray-600 dark:text-gray-300">Generando llms.txt…</span>
+          <div className="bg-white dark:bg-gray-800 rounded-xl p-6">
+            <FunLoader messages={GEO_GENERATE_LOADING_MESSAGES} spinnerSize="sm" className="py-0" />
           </div>
         </div>
       )}
@@ -123,9 +123,8 @@ export default function GeoModals({
       )}
       {schemaModal === 'loading' && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-gray-800 rounded-xl p-8 flex items-center gap-3">
-            <LoadingSpinner size="sm" />
-            <span className="text-sm text-gray-600 dark:text-gray-300">Generando Schema.org…</span>
+          <div className="bg-white dark:bg-gray-800 rounded-xl p-6">
+            <FunLoader messages={GEO_GENERATE_LOADING_MESSAGES} spinnerSize="sm" className="py-0" />
           </div>
         </div>
       )}

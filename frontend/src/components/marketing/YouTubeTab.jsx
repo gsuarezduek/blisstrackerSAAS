@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback } from 'react'
 import api from '../../api/client'
 import RrssAdvisorPanel from './RrssAdvisorPanel'
 import LoadingSpinner from '../LoadingSpinner'
+import FunLoader from './networks/FunLoader'
+import { YOUTUBE_LOADING_MESSAGES } from './networks/loadingMessages'
 import { BRANDS } from './networks/brands'
 import { fmtInt as fmtNum, fmtK, engColor, engLabel, subtractDays, todayAR, monthLabel, FOLLOWER_FILTERS } from './networks/format'
 import { LineChart, MonthNav, KpiCard, AudienceCard } from './networks/ui'
@@ -201,7 +203,7 @@ export default function YouTubeTab({ projectId, onSelectProject, projects = [] }
     />
   )
 
-  if (loading) return <LoadingSpinner size="lg" />
+  if (loading) return <FunLoader messages={YOUTUBE_LOADING_MESSAGES} />
 
   if (!integration) return <ConnectPrompt projectId={projectId} onConnected={fetchData} />
   if (integration.status === 'expired') return (

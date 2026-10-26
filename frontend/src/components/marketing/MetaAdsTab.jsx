@@ -4,7 +4,8 @@ import ObjectiveProgressBars from './ObjectiveProgressBars'
 import useObjectiveProgress from './useObjectiveProgress'
 import AdsAdvisorPanel from './AdsAdvisorPanel'
 import CrossProjectAdsPanel from './CrossProjectAdsPanel'
-import LoadingSpinner from '../LoadingSpinner'
+import FunLoader from './networks/FunLoader'
+import { META_ADS_LOADING_MESSAGES } from './networks/loadingMessages'
 import { BRANDS } from './networks/brands'
 import { fmtK, fmtUSD, fmtPct } from './networks/format'
 import { KpiCard } from './networks/ui'
@@ -344,7 +345,7 @@ export default function MetaAdsTab({ projectId, onSelectProject, projects = [] }
     )
   }
 
-  if (loading && !data) return <LoadingSpinner size="lg" />
+  if (loading && !data) return <FunLoader messages={META_ADS_LOADING_MESSAGES} />
 
   if (!integration) return <ConnectPrompt projectId={projectId} onConnected={() => fetchData()} />
   if (integration.status === 'expired') return (

@@ -3,6 +3,8 @@ import api from '../../api/client'
 import { CalendarDays, ChartColumn, Hash, Monitor, TriangleAlert } from 'lucide-react'
 import { Icon } from '../ui/Icon'
 import LoadingSpinner from '../LoadingSpinner'
+import FunLoader from './networks/FunLoader'
+import { WEB_AI_LOADING_MESSAGES } from './networks/loadingMessages'
 import ObjectiveProgressBars from './ObjectiveProgressBars'
 import useObjectiveProgress from './useObjectiveProgress'
 import CreateTaskModal from './web/CreateTaskModal'
@@ -547,10 +549,7 @@ export default function WebAnalyticsTab({ projectId, onSelectProject }) {
               </div>
 
               {insightLoading && (
-                <div className="flex items-center gap-2 text-sm text-gray-400">
-                  <LoadingSpinner size="sm" />
-                  Generando análisis con IA…
-                </div>
+                <FunLoader messages={WEB_AI_LOADING_MESSAGES} spinnerSize="sm" className="py-2" />
               )}
 
               {insight && !insightLoading && (

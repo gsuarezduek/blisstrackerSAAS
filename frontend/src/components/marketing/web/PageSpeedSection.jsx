@@ -3,7 +3,8 @@ import { Monitor, Smartphone } from 'lucide-react'
 import { Icon } from '../../ui/Icon'
 import CreateTaskModal from './CreateTaskModal'
 import { PS_SCORE_COLOR, PS_SCORE_BG, RATING_DOT, METRIC_LABELS } from './webTabHelpers'
-import LoadingSpinner from '../../LoadingSpinner'
+import FunLoader from '../networks/FunLoader'
+import { PAGESPEED_LOADING_MESSAGES } from '../networks/loadingMessages'
 
 export default function PageSpeedSection({ websiteUrl, strategy, onStrategyChange, result, history, running, onRun, projectId, projectName }) {
   const metrics       = result?.metrics       ?? {}
@@ -76,10 +77,7 @@ export default function PageSpeedSection({ websiteUrl, strategy, onStrategyChang
 
       {/* Loading */}
       {running && !result && (
-        <div className="flex items-center gap-3 text-sm text-gray-400 py-4">
-          <LoadingSpinner size="sm" className="flex-shrink-0" />
-          Analizando performance con PageSpeed Insights… puede tardar hasta 30 segundos.
-        </div>
+        <FunLoader messages={PAGESPEED_LOADING_MESSAGES} spinnerSize="sm" className="py-4" />
       )}
 
       {/* Resultado */}
