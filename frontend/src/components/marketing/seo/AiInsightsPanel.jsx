@@ -1,12 +1,20 @@
 // ─── Sugerencias IA (modo live) ────────────────────────────────────────────────
+import { fmtCreatedAt, createdAtTitle } from '../../../utils/format'
 
 const IMPACT_COLOR = { alto: 'text-red-500', medio: 'text-orange-500', bajo: 'text-blue-500' }
 
-export default function AiInsightsPanel({ aiData, aiLoading, aiError, aiCooldown, onGenerate, onCreateTask }) {
+export default function AiInsightsPanel({ aiData, aiLoading, aiError, aiCooldown, aiGeneratedAt, onGenerate, onCreateTask }) {
   return (
     <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-5">
       <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Sugerencias IA</h3>
+        <div className="flex items-center gap-2">
+          <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Sugerencias IA</h3>
+          {aiData && aiGeneratedAt && (
+            <span className="text-xs text-gray-400" title={createdAtTitle(aiGeneratedAt)}>
+              · generado {fmtCreatedAt(aiGeneratedAt)}
+            </span>
+          )}
+        </div>
         <button onClick={onGenerate} disabled={aiLoading || aiCooldown > 0}
           className="text-xs text-primary-600 dark:text-primary-400 hover:underline disabled:opacity-50 disabled:no-underline disabled:cursor-not-allowed">
           {aiLoading ? 'Generando…' : aiCooldown > 0 ? `Disponible en ${aiCooldown} min` : aiData ? 'Regenerar' : 'Generar análisis IA'}

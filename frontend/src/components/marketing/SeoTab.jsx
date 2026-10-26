@@ -43,10 +43,11 @@ export default function SeoTab({ projectId, projects, onSelectProject }) {
   const [saving,     setSaving]     = useState(false)
 
   // AI insights
-  const [aiData,     setAiData]     = useState(null)
-  const [aiLoading,  setAiLoading]  = useState(false)
-  const [aiError,    setAiError]    = useState(null)
-  const [aiCooldown, setAiCooldown] = useState(0)
+  const [aiData,        setAiData]        = useState(null)
+  const [aiLoading,     setAiLoading]     = useState(false)
+  const [aiError,       setAiError]       = useState(null)
+  const [aiCooldown,    setAiCooldown]    = useState(0)
+  const [aiGeneratedAt, setAiGeneratedAt] = useState(null)
 
   // Keywords history (sparklines) — siempre
   const [kwHistory,  setKwHistory]  = useState(null)
@@ -92,7 +93,7 @@ export default function SeoTab({ projectId, projects, onSelectProject }) {
     if (!projectId) return
     const ctrl = new AbortController()
     api.get(`/marketing/projects/${projectId}/seo/ai-insights`, { signal: ctrl.signal })
-      .then(r => { setAiData(r.data.insight); setAiCooldown(r.data.cooldownRemaining ?? 0) })
+      .then(r => { setAiData(r.data.insight); setAiGeneratedAt(r.data.generatedAt ?? null); setAiCooldown(r.data.cooldownRemaining ?? 0) })
       .catch(err => { if (err.name === 'CanceledError' || err.code === 'ERR_CANCELED') return })
     return () => ctrl.abort()
   }, [projectId])
@@ -132,6 +133,7 @@ export default function SeoTab({ projectId, projects, onSelectProject }) {
     try {
       const { data: r } = await api.post(`/marketing/projects/${projectId}/seo/ai-insights`)
       setAiData(r.insight)
+      setAiGeneratedAt(r.generatedAt ?? new Date().toISOString())
       setAiCooldown(r.cooldownRemaining ?? 60)
     } catch (err) {
       const d = err.response?.data
@@ -300,6 +302,7 @@ export default function SeoTab({ projectId, projects, onSelectProject }) {
               {/* AI Insights */}
               <AiInsightsPanel
                 aiData={aiData} aiLoading={aiLoading} aiError={aiError} aiCooldown={aiCooldown}
+                aiGeneratedAt={aiGeneratedAt}
                 onGenerate={generateAiInsights} onCreateTask={setTaskModal}
               />
 
