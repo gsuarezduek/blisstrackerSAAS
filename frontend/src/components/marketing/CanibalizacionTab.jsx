@@ -1,10 +1,16 @@
 import { useState, useEffect, useRef } from 'react'
 import api from '../../api/client'
-import { Search, Trash2 } from 'lucide-react'
+import { Search, Trash2, ShieldCheck, Languages, AlertTriangle, FileWarning } from 'lucide-react'
 import { Icon } from '../ui/Icon'
 import LoadingSpinner from '../LoadingSpinner'
 import FunLoader from './networks/FunLoader'
 import { CANNIBALIZATION_LOADING_MESSAGES } from './networks/loadingMessages'
+import ProtectedUrlsModal from './ProtectedUrlsModal'
+
+const LANGUAGE_LABELS = { default: 'Principal (sin prefijo)' }
+function languageLabel(lang) {
+  return LANGUAGE_LABELS[lang] ?? (lang || '').toUpperCase()
+}
 
 const SEVERITY_COLORS = {
   Alta:  'bg-red-100   dark:bg-red-900/30   text-red-700   dark:text-red-400   border-red-200   dark:border-red-700',
@@ -47,7 +53,7 @@ function SeverityBadge({ label }) {
 }
 
 function ConflictCard({ conflict, expanded, onToggle }) {
-  const { query, urls, severity, severityScore, totalImpressions, totalClicks, positionSpread } = conflict
+  const { query, language, urls, severity, severityScore, totalImpressions, totalClicks, positionSpread, recommendation } = conflict
 
   return (
     <div className="border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
@@ -57,6 +63,11 @@ function ConflictCard({ conflict, expanded, onToggle }) {
         className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
       >
         <SeverityBadge label={severity} />
+        {language && (
+          <span className="flex-shrink-0 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400">
+            {languageLabel(language)}
+          </span>
+        )}
         <span className="flex-1 font-medium text-gray-800 dark:text-gray-100 truncate text-sm">
           {query}
         </span>
@@ -91,14 +102,26 @@ function ConflictCard({ conflict, expanded, onToggle }) {
                 {urls.map((u, i) => (
                   <tr key={i} className="border-t border-gray-100 dark:border-gray-700/50 hover:bg-gray-50/50 dark:hover:bg-gray-800/30">
                     <td className="px-3 py-2">
-                      <a
-                        href={u.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-primary-600 dark:text-primary-400 hover:underline break-all max-w-xs block"
-                      >
-                        {u.url.replace(/^https?:\/\/[^/]+/, '') || '/'}
-                      </a>
+                      <div className="flex items-center gap-1.5">
+                        <a
+                          href={u.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-primary-600 dark:text-primary-400 hover:underline break-all max-w-xs block"
+                        >
+                          {u.url.replace(/^https?:\/\/[^/]+/, '') || '/'}
+                        </a>
+                        {u.url === recommendation?.mainUrl && (
+                          <span className="flex-shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400">
+                            principal
+                          </span>
+                        )}
+                        {u.protected && (
+                          <span className="flex-shrink-0 inline-flex items-center gap-0.5 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-sky-100 dark:bg-sky-900/30 text-sky-700 dark:text-sky-400">
+                            <Icon as={ShieldCheck} size={11} /> protegida
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="text-right px-3 py-2 font-medium text-gray-700 dark:text-gray-300">
                       {u.position?.toFixed(1) ?? '—'}
@@ -113,14 +136,22 @@ function ConflictCard({ conflict, expanded, onToggle }) {
           </div>
 
           {/* Recomendación */}
-          <p className="text-xs text-gray-500 dark:text-gray-400 italic">
-            <strong className="text-gray-600 dark:text-gray-300 not-italic">Acción:</strong>{' '}
-            {severity === 'Alta'
-              ? 'Definir una URL canónica para esta query y consolidar el contenido. Considerar 301 o canonical tag.'
-              : severity === 'Media'
-              ? 'Diferenciar el enfoque de contenido entre las URLs o consolidar la de menor rendimiento.'
-              : 'Monitorear. Las URLs compiten de forma leve; revisar si hay diferenciación suficiente de contenido.'}
-          </p>
+          {recommendation ? (
+            <div className="text-xs text-gray-600 dark:text-gray-300 space-y-1.5">
+              <p>
+                <strong className="text-gray-700 dark:text-gray-200">URL principal sugerida:</strong>{' '}
+                {recommendation.mainUrl?.replace(/^https?:\/\/[^/]+/, '') || recommendation.mainUrl}
+                {' '}<span className="text-gray-400 dark:text-gray-500">({recommendation.mainUrlReason})</span>
+              </p>
+              <ol className="list-decimal list-inside space-y-1">
+                {recommendation.steps?.map((step, i) => (
+                  <li key={i} className="text-gray-500 dark:text-gray-400">{step}</li>
+                ))}
+              </ol>
+            </div>
+          ) : (
+            <p className="text-xs text-gray-500 dark:text-gray-400 italic">Sin recomendación disponible para este conflicto.</p>
+          )}
         </div>
       )}
     </div>
@@ -135,10 +166,12 @@ export default function CanibalizacionTab({ projectId }) {
   const [running,       setRunning]       = useState(false)
   const [dateRange,     setDateRange]     = useState('90d')
   const [filter,        setFilter]        = useState('all')   // 'all' | 'Alta' | 'Media' | 'Baja'
+  const [langFilter,    setLangFilter]    = useState('all')
   const [search,        setSearch]        = useState('')
   const [expanded,      setExpanded]      = useState(new Set())
   const [deleteModal,   setDeleteModal]   = useState(null)
   const [deleting,      setDeleting]      = useState(false)
+  const [protectedModalOpen, setProtectedModalOpen] = useState(false)
   const pollRef = useRef(null)
 
   // ── Cargar lista de reportes ────────────────────────────────────────────────
@@ -233,8 +266,12 @@ export default function CanibalizacionTab({ projectId }) {
 
   // ── Filtrar conflictos ───────────────────────────────────────────────────────
   const conflicts = activeReport?.conflicts ?? []
+  const hreflangIssues = activeReport?.hreflangIssues ?? []
+  const indexedByMistake = activeReport?.indexedByMistake ?? []
+  const availableLanguages = [...new Set(conflicts.map(c => c.language).filter(Boolean))]
   const filteredConflicts = conflicts
     .filter(c => filter === 'all' || c.severity === filter)
+    .filter(c => langFilter === 'all' || c.language === langFilter)
     .filter(c => !search || c.query.toLowerCase().includes(search.toLowerCase()))
 
   // ─────────────────────────────────────────────────────────────────────────────
@@ -287,6 +324,14 @@ export default function CanibalizacionTab({ projectId }) {
           )}
         </button>
 
+        <button
+          onClick={() => setProtectedModalOpen(true)}
+          disabled={!projectId}
+          className="px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 text-sm text-gray-600 dark:text-gray-400 hover:border-primary-400 hover:text-primary-600 dark:hover:text-primary-400 transition-colors flex items-center gap-1.5 disabled:opacity-50"
+        >
+          <Icon as={ShieldCheck} size={15} /> URLs protegidas
+        </button>
+
         {/* Historial compacto */}
         {reports.length > 1 && (
           <div className="flex items-center gap-2 ml-auto">
@@ -310,6 +355,10 @@ export default function CanibalizacionTab({ projectId }) {
           </div>
         )}
       </div>
+
+      {protectedModalOpen && (
+        <ProtectedUrlsModal projectId={projectId} onClose={() => setProtectedModalOpen(false)} />
+      )}
 
       {/* Estado running */}
       {running && !activeReport && (
@@ -367,6 +416,14 @@ export default function CanibalizacionTab({ projectId }) {
                   <div className="text-center">
                     <p className="text-2xl font-bold text-gray-700 dark:text-gray-300">{fmtNum(activeReport.trafficAtRisk)}</p>
                     <p className="text-xs text-gray-500 dark:text-gray-400">Imp. en riesgo</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-2xl font-bold text-purple-600 dark:text-purple-400">{fmtNum(activeReport.hreflangCount)}</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">Hreflang</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-2xl font-bold text-gray-500 dark:text-gray-400">{fmtNum(activeReport.indexedByMistakeCount)}</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">Indexadas por error</p>
                   </div>
                 </div>
               </div>
@@ -429,6 +486,19 @@ export default function CanibalizacionTab({ projectId }) {
                   ))}
                 </div>
 
+                {availableLanguages.length > 1 && (
+                  <select
+                    value={langFilter}
+                    onChange={e => setLangFilter(e.target.value)}
+                    className="text-xs border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1.5 bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  >
+                    <option value="all">Todos los idiomas</option>
+                    {availableLanguages.map(lang => (
+                      <option key={lang} value={lang}>{languageLabel(lang)}</option>
+                    ))}
+                  </select>
+                )}
+
                 <input
                   type="text"
                   placeholder="Buscar keyword…"
@@ -460,6 +530,81 @@ export default function CanibalizacionTab({ projectId }) {
                 )}
               </div>
             </>
+          )}
+
+          {/* Posible problema de hreflang */}
+          {hreflangIssues.length > 0 && (
+            <div className="space-y-2">
+              <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 flex items-center gap-1.5">
+                <Icon as={Languages} size={16} className="text-purple-500" />
+                Posible problema de hreflang ({hreflangIssues.length})
+              </h3>
+              <p className="text-xs text-gray-400 dark:text-gray-500">
+                Google devuelve URLs de distinto idioma para la misma búsqueda — no se cuenta como canibalización.
+              </p>
+              <div className="space-y-2">
+                {hreflangIssues.map(issue => (
+                  <div key={issue.query} className="border border-purple-200 dark:border-purple-800 rounded-xl p-4 bg-purple-50/40 dark:bg-purple-900/10">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="font-medium text-sm text-gray-800 dark:text-gray-100">{issue.query}</span>
+                      <span className="text-xs text-gray-400 dark:text-gray-500 ml-auto">{fmtNum(issue.totalImpressions)} imp.</span>
+                    </div>
+                    <div className="flex flex-wrap gap-2 mb-2">
+                      {issue.urls.map((u, i) => (
+                        <span key={i} className="inline-flex items-center gap-1 text-xs bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1">
+                          <span className="font-semibold text-purple-600 dark:text-purple-400">{languageLabel(u.language)}</span>
+                          <a href={u.url} target="_blank" rel="noopener noreferrer" className="text-gray-600 dark:text-gray-300 hover:underline break-all">
+                            {u.url.replace(/^https?:\/\/[^/]+/, '') || '/'}
+                          </a>
+                        </span>
+                      ))}
+                    </div>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 italic">{issue.suggestion}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* URLs indexadas por error */}
+          {indexedByMistake.length > 0 && (
+            <div className="space-y-2">
+              <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 flex items-center gap-1.5">
+                <Icon as={FileWarning} size={16} className="text-gray-400" />
+                URLs indexadas por error ({indexedByMistake.length})
+              </h3>
+              <p className="text-xs text-gray-400 dark:text-gray-500">
+                Excluidas de los conflictos y de las impresiones en riesgo — no son canibalización, son limpieza técnica.
+              </p>
+              <div className="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="bg-gray-50 dark:bg-gray-800">
+                      <th className="text-left px-3 py-2 font-semibold text-gray-500 dark:text-gray-400">URL</th>
+                      <th className="text-left px-3 py-2 font-semibold text-gray-500 dark:text-gray-400">Motivo</th>
+                      <th className="text-left px-3 py-2 font-semibold text-gray-500 dark:text-gray-400">Sugerencia</th>
+                      <th className="text-right px-3 py-2 font-semibold text-gray-500 dark:text-gray-400">Impresiones</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {indexedByMistake.map((item, i) => (
+                      <tr key={i} className="border-t border-gray-100 dark:border-gray-700/50">
+                        <td className="px-3 py-2">
+                          <a href={item.url} target="_blank" rel="noopener noreferrer" className="text-primary-600 dark:text-primary-400 hover:underline break-all max-w-xs block">
+                            {item.url.replace(/^https?:\/\/[^/]+/, '') || '/'}
+                          </a>
+                        </td>
+                        <td className="px-3 py-2 text-gray-600 dark:text-gray-400 flex items-center gap-1">
+                          <Icon as={AlertTriangle} size={12} className="text-amber-500 flex-shrink-0" /> {item.reason}
+                        </td>
+                        <td className="px-3 py-2 text-gray-500 dark:text-gray-400">{item.suggestion}</td>
+                        <td className="text-right px-3 py-2 text-gray-600 dark:text-gray-400">{fmtNum(item.impressions)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           )}
         </div>
       )}

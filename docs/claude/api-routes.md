@@ -451,9 +451,11 @@ GET    /api/marketing/projects/:id/keywords/:kwId/serp            # snapshot SER
 POST   /api/marketing/projects/:id/keywords/:kwId/serp/refresh    # fuerza nueva captura SERP (cooldown 15min)
 
 # Marketing — Cannibalization (canibalización SEO)
-POST   /api/marketing/projects/:id/cannibal                 # dispara análisis async
+POST   /api/marketing/projects/:id/cannibal                 # dispara análisis async (body: dateRange?, language?)
 GET    /api/marketing/projects/:id/cannibal                 # lista reportes
-GET    /api/marketing/projects/:id/cannibal/:rid            # detalle de un reporte
+GET    /api/marketing/projects/:id/cannibal/protected-urls  # lista URLs protegidas del proyecto (nunca 301/noindex)
+PUT    /api/marketing/projects/:id/cannibal/protected-urls  # reemplaza la lista completa (canWrite: admin/owner o equipo del proyecto)
+GET    /api/marketing/projects/:id/cannibal/:rid            # detalle de un reporte (conflicts + hreflangIssues + indexedByMistake)
 DELETE /api/marketing/projects/:id/cannibal/:rid            # eliminar reporte
 
 # Marketing — SEO Fase 1-4 (Oportunidades, Content Brief, On-Page, Content Gap)

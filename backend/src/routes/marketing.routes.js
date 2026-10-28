@@ -203,10 +203,12 @@ router.patch('/projects/:id/objectives/:oid',     objectives.updateObjective)
 router.delete('/projects/:id/objectives/:oid',    objectives.deleteObjective)
 
 // Canibalización SEO
-router.post('/projects/:id/cannibal',         cannibalization.runAnalysis)
-router.get('/projects/:id/cannibal',          cannibalization.listReports)
-router.get('/projects/:id/cannibal/:rid',     cannibalization.getReport)
-router.delete('/projects/:id/cannibal/:rid',  cannibalization.deleteReport)
+router.post('/projects/:id/cannibal',                     cannibalization.runAnalysis)
+router.get('/projects/:id/cannibal',                      cannibalization.listReports)
+router.get('/projects/:id/cannibal/protected-urls',       cannibalization.getProtectedUrls)
+router.put('/projects/:id/cannibal/protected-urls',       cannibalization.setProtectedUrls)
+router.get('/projects/:id/cannibal/:rid',                 cannibalization.getReport)
+router.delete('/projects/:id/cannibal/:rid',              cannibalization.deleteReport)
 
 // SEO — Snapshots mensuales + Análisis IA (Google Search Console)
 router.get('/projects/:id/seo/snapshot/:month',  searchConsole.getSeoSnapshot)

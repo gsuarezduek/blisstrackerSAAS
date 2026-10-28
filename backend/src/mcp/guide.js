@@ -120,7 +120,7 @@ Lo que NO se puede hacer por MCP con tareas: borrar tareas de personas (solo las
 
   seo: `## SEO avanzado (dentro de Marketing)
 Varias herramientas con el mismo patrón run → list → get → delete:
-- Canibalización (\`marketing_cannibal_*\`): páginas propias que compiten por la misma keyword (usa Search Console).
+- Canibalización (\`marketing_cannibal_*\`): páginas propias que compiten por la misma keyword (usa Search Console). Separa conflictos por idioma (otro idioma en la misma query = hallazgo de hreflang, no canibalización) y aísla URLs indexadas por error (parámetros, feeds, paginación, slugs numéricos) aparte. Recomendaciones no destructivas por orden de prioridad (diferenciar intención → enlazado interno → canonical → 301/noindex al final); \`marketing_cannibal_protected_urls_get\`/\`_set\` gestionan URLs que nunca se recomienda redirigir ni noindexar. \`_run\` acepta \`language\` opcional para restringir a un solo idioma.
 - Content Brief (\`marketing_content_brief_*\`): brief con IA para una keyword vs el top 10 de Google.
 - On-Page Audit (\`marketing_onpage_audit_*\`): crawler de hasta 15 páginas. Async: hacé polling con \`marketing_onpage_audit_get\` mientras \`status=running\`.
 - Content Gap (\`marketing_content_gap_*\`): temas que faltan vs el top 4 del SERP. Async.

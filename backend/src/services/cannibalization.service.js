@@ -1,8 +1,11 @@
 const prisma     = require('../lib/prisma')
+const cheerio     = require('cheerio')
 const { logTokens }           = require('../lib/logTokens')
 const { getValidAccessToken } = require('./tokenRefresh.service')
 const { querySearchConsole }  = require('./googleSearchConsole.service')
 const { normalizeSiteUrl }    = require('../utils/seo')
+const { fetchPublicUrl }      = require('../lib/safeUrl')
+const { detectLanguage, classifyJunkUrl, groupConflicts } = require('../lib/cannibalAnalysis')
 
 const { anthropic, assertTokenBudget } = require('../lib/claude')
 
@@ -18,34 +21,54 @@ function dateRangeBounds(range) {
   }
 }
 
+const LANG_FETCH_MAX_URLS  = 30   // tope de páginas a fetchear (costo/latencia acotados)
+const LANG_FETCH_CONCURRENCY = 5
+const LANG_FETCH_TIMEOUT_MS  = 8000
+
 /**
- * Calcula severidad de un conflicto de canibalización.
- * Retorna: { label: 'Alta'|'Media'|'Baja', score: 0-100 }
+ * Para URLs sin prefijo de idioma reconocible en la ruta (detectLanguage ===
+ * 'default'), intenta un fetch liviano de la página y lee <html lang="...">
+ * como señal secundaria. Best-effort: cualquier fallo (timeout, 404, bloqueo,
+ * sin atributo lang) deja la URL en 'default', nunca rompe el análisis.
+ * Devuelve un Map<url, lang> solo con las URLs donde se detectó un idioma
+ * distinto de 'default'.
  */
-function calcSeverity(urls, totalImpressions) {
-  const positions = urls.map(u => u.position).filter(Boolean)
-  const positionSpread = positions.length >= 2
-    ? Math.max(...positions) - Math.min(...positions)
-    : 0
+async function resolveLanguageOverrides(rows, junkUrls) {
+  const byUrlImpressions = new Map()
+  for (const row of rows) {
+    if (junkUrls.has(row.page)) continue
+    if (detectLanguage(row.page) !== 'default') continue
+    byUrlImpressions.set(row.page, (byUrlImpressions.get(row.page) || 0) + row.impressions)
+  }
 
-  const maxCTR = Math.max(...urls.map(u => u.ctr || 0))
+  const candidates = [...byUrlImpressions.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, LANG_FETCH_MAX_URLS)
+    .map(([url]) => url)
 
-  const impressionsScore = Math.min(totalImpressions / 200, 40)          // 0-40
-  const spreadScore      = Math.min(positionSpread * 4, 30)              // 0-30
-  const urlBonus         = Math.min((urls.length - 2) * 10, 20)         // 0-20
-  const ctrPenalty       = maxCTR < 0.02 ? 15 : maxCTR < 0.05 ? 8 : 0  // 0-15
-
-  const score = Math.min(Math.round(impressionsScore + spreadScore + urlBonus + ctrPenalty), 100)
-
-  const label = score >= 55 ? 'Alta' : score >= 25 ? 'Media' : 'Baja'
-  return { label, score }
+  const overrides = new Map()
+  for (let i = 0; i < candidates.length; i += LANG_FETCH_CONCURRENCY) {
+    const batch = candidates.slice(i, i + LANG_FETCH_CONCURRENCY)
+    await Promise.all(batch.map(async url => {
+      try {
+        const res = await fetchPublicUrl(url, {
+          timeout: LANG_FETCH_TIMEOUT_MS,
+          headers: { 'User-Agent': 'BlissTrackerBot/1.0 (+https://blisstracker.app)' },
+        })
+        const $ = cheerio.load(res.data)
+        const lang = ($('html').attr('lang') || '').trim().slice(0, 2).toLowerCase()
+        if (lang && lang !== 'default') overrides.set(url, lang)
+      } catch { /* best-effort: se queda en 'default' */ }
+    }))
+  }
+  return overrides
 }
 
 /**
  * Ejecuta el análisis de canibalización para un proyecto.
  * Se llama de forma async (setImmediate) desde el controller.
  */
-async function runCannibalizationAnalysis(reportId, projectId, workspaceId, dateRange) {
+async function runCannibalizationAnalysis(reportId, projectId, workspaceId, dateRange, language = null) {
   const updateStatus = (status, errorMsg = null) =>
     prisma.cannibalReport.update({
       where: { id: reportId },
@@ -69,7 +92,7 @@ async function runCannibalizationAnalysis(reportId, projectId, workspaceId, date
 
     const project = await prisma.project.findUnique({
       where:  { id: projectId },
-      select: { websiteUrl: true, name: true },
+      select: { websiteUrl: true, name: true, cannibalProtectedUrls: true },
     })
     const siteUrl = normalizeSiteUrl(integration.propertyId || project?.websiteUrl || '')
     if (!siteUrl) {
@@ -80,72 +103,45 @@ async function runCannibalizationAnalysis(reportId, projectId, workspaceId, date
       return
     }
 
+    let protectedUrls = []
+    try { protectedUrls = JSON.parse(project?.cannibalProtectedUrls || '[]') } catch { /* ignore */ }
+
     const accessToken = await getValidAccessToken(integration)
     const { startDate, endDate } = dateRangeBounds(dateRange)
 
-    // ── 2. Consultar GSC: query + page ────────────────────────────────────────
-    const rows = await querySearchConsole(accessToken, siteUrl, {
+    // ── 2. Consultar GSC: query + page + country ──────────────────────────────
+    // rowLimit subido de 5000 a 10000: la dimensión `country` multiplica filas
+    // por (query,page) — sigue siendo un tope manual, no el máximo real de GSC
+    // (25000); sitios muy grandes pueden seguir truncando datos.
+    const rawRows = await querySearchConsole(accessToken, siteUrl, {
       startDate,
       endDate,
       type:       'web',
-      dimensions: ['query', 'page'],
-      rowLimit:   5000,
+      dimensions: ['query', 'page', 'country'],
+      rowLimit:   10000,
     })
+    const rows = (rawRows || []).map(row => ({
+      query:       row.keys[0],
+      page:        row.keys[1],
+      country:     row.keys[2],
+      clicks:      row.clicks,
+      impressions: row.impressions,
+      ctr:         row.ctr,
+      position:    row.position,
+    }))
 
-    // ── 3. Agrupar por query → detectar queries con ≥ 2 URLs ─────────────────
-    const byQuery = new Map()
-    for (const row of rows) {
-      const [query, page] = row.keys
-      if (!byQuery.has(query)) byQuery.set(query, [])
-      byQuery.get(query).push({
-        url:         page,
-        clicks:      row.clicks,
-        impressions: row.impressions,
-        ctr:         row.ctr,
-        position:    row.position,
-      })
-    }
+    // ── 3. Idioma por prefijo + fallback por fetch para URLs sin prefijo ──────
+    const junkUrls = new Set(rows.filter(r => classifyJunkUrl(r.page)).map(r => r.page))
+    const languageOverrides = await resolveLanguageOverrides(rows, junkUrls)
 
-    const conflicts = []
-    for (const [query, urls] of byQuery) {
-      if (urls.length < 2) continue
+    // ── 4. Agrupar conflictos / hreflang / URLs indexadas por error ──────────
+    const {
+      conflicts, hreflangIssues, indexedByMistake,
+      criticalCount, warningCount, lowCount, trafficAtRisk,
+      hreflangCount, indexedByMistakeCount,
+    } = groupConflicts(rows, { protectedUrls, languageFilter: language || null, languageOverrides })
 
-      const totalImpressions = urls.reduce((s, u) => s + u.impressions, 0)
-      const totalClicks      = urls.reduce((s, u) => s + u.clicks, 0)
-      if (totalImpressions < 50) continue  // descarta queries con muy poco volumen
-
-      const positions     = urls.map(u => u.position).filter(Boolean)
-      const positionSpread = positions.length >= 2
-        ? Math.max(...positions) - Math.min(...positions)
-        : 0
-
-      const { label: severity, score: severityScore } = calcSeverity(urls, totalImpressions)
-
-      // Ordenar URLs por impresiones desc
-      const urlsSorted = [...urls].sort((a, b) => b.impressions - a.impressions)
-
-      conflicts.push({
-        query,
-        urls:            urlsSorted,
-        severity,
-        severityScore,
-        totalImpressions,
-        totalClicks,
-        positionSpread:  Math.round(positionSpread * 10) / 10,
-      })
-    }
-
-    // Ordenar por severityScore desc
-    conflicts.sort((a, b) => b.severityScore - a.severityScore)
-
-    const criticalCount = conflicts.filter(c => c.severity === 'Alta').length
-    const warningCount  = conflicts.filter(c => c.severity === 'Media').length
-    const lowCount      = conflicts.filter(c => c.severity === 'Baja').length
-    const trafficAtRisk = conflicts
-      .filter(c => c.severity === 'Alta' || c.severity === 'Media')
-      .reduce((s, c) => s + c.totalImpressions, 0)
-
-    // ── 4. Análisis IA (solo si hay conflictos) ───────────────────────────────
+    // ── 5. Análisis IA (solo si hay conflictos) ───────────────────────────────
     let resumenGeneral = null
     if (conflicts.length > 0) {
       const top5 = conflicts.slice(0, 5).map(c => (
@@ -166,6 +162,7 @@ async function runCannibalizationAnalysis(reportId, projectId, workspaceId, date
 Total de conflictos: ${conflicts.length} (Alta: ${criticalCount}, Media: ${warningCount}, Baja: ${lowCount})
 Impresiones en riesgo: ${trafficAtRisk}
 Período analizado: últimos ${dateRange}
+Además se detectaron ${hreflangCount} posibles problemas de hreflang y ${indexedByMistakeCount} URLs indexadas por error (fuera de este conteo de conflictos).
 
 Top 5 conflictos más críticos:
 ${top5}
@@ -180,24 +177,29 @@ Escribí un resumen ejecutivo de 2-3 oraciones explicando el impacto en el posic
       }
     }
 
-    // ── 5. Guardar resultado ──────────────────────────────────────────────────
+    // ── 6. Guardar resultado ──────────────────────────────────────────────────
     await prisma.cannibalReport.update({
       where: { id: reportId },
       data:  {
-        status:         'completed',
-        totalConflicts: conflicts.length,
+        status:                'completed',
+        totalConflicts:        conflicts.length,
         criticalCount,
         warningCount,
         lowCount,
         trafficAtRisk,
-        conflicts:      JSON.stringify(conflicts),
+        languageFilter:        language || 'all',
+        conflicts:             JSON.stringify(conflicts),
+        hreflangIssues:        JSON.stringify(hreflangIssues),
+        indexedByMistake:      JSON.stringify(indexedByMistake),
+        hreflangCount,
+        indexedByMistakeCount,
         resumenGeneral,
-        errorMsg:       null,
-        updatedAt:      new Date(),
+        errorMsg:              null,
+        updatedAt:             new Date(),
       },
     })
 
-    console.log(`[Cannibalization] Completado reportId=${reportId}: ${conflicts.length} conflictos`)
+    console.log(`[Cannibalization] Completado reportId=${reportId}: ${conflicts.length} conflictos, ${hreflangCount} hreflang, ${indexedByMistakeCount} indexadas por error`)
   } catch (err) {
     console.error('[Cannibalization] Error fatal:', err.message)
     await prisma.cannibalReport.update({

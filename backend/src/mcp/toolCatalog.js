@@ -296,9 +296,13 @@ const tools = [
   // misma forma run/list/get/delete.
   {
     name: 'marketing_cannibal_run',
-    description: 'Dispara un análisis de canibalización SEO (keywords que compiten entre sí entre páginas del propio sitio) usando datos de Search Console.',
-    inputSchema: { ...projectIdParam, dateRange: z.enum(['30d', '90d', '180d']).optional().describe('Default 90d') },
-    request: ({ projectId, dateRange }) => ({ method: 'POST', path: `/marketing/projects/${projectId}/cannibal`, body: { dateRange } }),
+    description: 'Dispara un análisis de canibalización SEO (keywords que compiten entre sí entre páginas del propio sitio) usando datos de Search Console. Separa conflictos por idioma (URLs de otro idioma para la misma query salen como hallazgo de hreflang aparte) y aísla URLs indexadas por error (parámetros, feeds, paginación, slugs numéricos).',
+    inputSchema: {
+      ...projectIdParam,
+      dateRange: z.enum(['30d', '90d', '180d']).optional().describe('Default 90d'),
+      language: z.string().optional().describe('Código de idioma detectado (ej. "en", "pt", "default") para restringir el análisis a ese idioma únicamente; omitir para analizar todos los idiomas y detectar hreflang'),
+    },
+    request: ({ projectId, dateRange, language }) => ({ method: 'POST', path: `/marketing/projects/${projectId}/cannibal`, body: { dateRange, language } }),
   },
   {
     name: 'marketing_cannibal_list',
@@ -308,7 +312,7 @@ const tools = [
   },
   {
     name: 'marketing_cannibal_get',
-    description: 'Detalle de un reporte de canibalización SEO.',
+    description: 'Detalle de un reporte de canibalización SEO: conflictos (con recomendación no destructiva y URL principal sugerida), hallazgos de hreflang y URLs indexadas por error.',
     inputSchema: { ...projectIdParam, reportId: z.number().int() },
     request: ({ projectId, reportId }) => ({ method: 'GET', path: `/marketing/projects/${projectId}/cannibal/${reportId}` }),
   },
@@ -317,6 +321,18 @@ const tools = [
     description: 'Elimina un reporte de canibalización SEO.',
     inputSchema: { ...projectIdParam, reportId: z.number().int() },
     request: ({ projectId, reportId }) => ({ method: 'DELETE', path: `/marketing/projects/${projectId}/cannibal/${reportId}` }),
+  },
+  {
+    name: 'marketing_cannibal_protected_urls_get',
+    description: 'Lista las URLs protegidas de un proyecto: el análisis de canibalización nunca les recomienda 301 ni noindex.',
+    inputSchema: { ...projectIdParam },
+    request: ({ projectId }) => ({ method: 'GET', path: `/marketing/projects/${projectId}/cannibal/protected-urls` }),
+  },
+  {
+    name: 'marketing_cannibal_protected_urls_set',
+    description: 'Reemplaza la lista completa de URLs protegidas de un proyecto para el análisis de canibalización.',
+    inputSchema: { ...projectIdParam, urls: z.array(z.string()).describe('Lista completa de URLs protegidas (reemplaza la anterior)') },
+    request: ({ projectId, urls }) => ({ method: 'PUT', path: `/marketing/projects/${projectId}/cannibal/protected-urls`, body: { urls } }),
   },
   {
     name: 'marketing_content_brief_run',

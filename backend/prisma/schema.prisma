@@ -634,6 +634,7 @@ model Project {
   websiteUrl          String?
   connections         String    @default("{}") // JSON: { instagram, facebook, ... }
   integrationDefaults String    @default("{}") // JSON: IDs recordados por tipo para reconexión, ej { google_ads: { customerId, propertyId, country }, google_analytics: { propertyId } }
+  cannibalProtectedUrls String  @default("[]") // JSON: array de URLs que el análisis de canibalización nunca recomienda redirigir (301) ni noindexar
   domainRating        Float? // Ahrefs Domain Rating (0-100), valor actual cacheado
   domainRatingAt      DateTime? // última actualización del Domain Rating
   reportSections      String? // JSON: array de claves de sección habilitadas para el informe de este proyecto (ej: ["analytics","instagram"]). null = sin restricción (todas las disponibles, comportamiento legacy)
@@ -3097,11 +3098,24 @@ model CannibalReport {
   criticalCount  Int?
   warningCount   Int?
   lowCount       Int?
-  trafficAtRisk  Int? // impresiones en riesgo (suma de conflictos críticos + warning)
+  trafficAtRisk  Int? // impresiones en riesgo (suma de conflictos críticos + warning, sin contar URLs indexadas por error)
 
-  // JSON: [{ query, urls:[{url,clicks,impressions,ctr,position}], severity, severityScore,
-  //          totalImpressions, totalClicks, positionSpread, recommendation }]
+  languageFilter String @default("all") // idioma al que se restringió este run ("all" = todos), ver cannibalAnalysis.js
+
+  // JSON: [{ query, language, urls:[{url,clicks,impressions,ctr,position,protected}], severity, severityScore,
+  //          totalImpressions, totalClicks, positionSpread, recommendation:{mainUrl,mainUrlReason,steps,protectedUrls} }]
   conflicts String @default("[]")
+
+  // JSON: [{ query, totalImpressions, urls:[{url,language,clicks,impressions,position}], suggestion }]
+  // Queries donde Google devuelve URLs de más de un idioma — no es canibalización, posible problema de hreflang.
+  hreflangIssues String @default("[]")
+
+  // JSON: [{ url, reason, suggestionType, suggestion, impressions, clicks, sampleQueries }]
+  // URLs basura (parámetros de query, feeds, paginación, slugs numéricos) excluidas del resto del análisis.
+  indexedByMistake String @default("[]")
+
+  hreflangCount         Int?
+  indexedByMistakeCount Int?
 
   resumenGeneral String? // análisis IA resumido
   errorMsg       String?
