@@ -17,6 +17,12 @@ const { requireProjectAccess } = require('../middleware/projectPrivacy')
 
 const uploadPortalBanner = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } })
 
+// Miniatura de un archivo de la Nube (primer frame de un video / imagen
+// reducida, generada en el browser). El tope real lo valida el controller
+// (MAX_THUMB_BYTES); acá el de multer es apenas más generoso para que el error
+// legible salga del controller — mismo criterio que contenido.routes.js.
+const uploadThumbnail = multer({ storage: multer.memoryStorage(), limits: { fileSize: 4 * 1024 * 1024 } })
+
 // Audio del resumen automático de reuniones: el tope real lo pone la propia API de
 // Whisper (25 MB por request) — ver WHISPER_MAX_BYTES en projectMeetings.controller.js.
 // Multer corta un poco antes para no gastar banda con algo que Whisper va a rechazar.
@@ -119,6 +125,7 @@ router.post('/:id/files/direct',            projectFiles.directUpload)
 router.post('/:id/files/:fileId/confirm',   projectFiles.confirmFile)
 router.delete('/:id/files/:fileId/pending', projectFiles.abortUpload)
 router.get('/:id/files/:fileId/signed-url', projectFiles.fileSignedUrl)
+router.post('/:id/files/:fileId/thumbnail', uploadThumbnail.single('thumbnail'), projectFiles.uploadThumbnail)
 router.get('/:id/files/:fileId/download',   projectFiles.downloadFile)
 router.get('/:id/files/:fileId/content',    projectFiles.readFileContent)
 router.post('/:id/files/download-zip',      projectFiles.downloadZip)

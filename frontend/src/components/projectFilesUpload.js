@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef } from 'react'
 import api from '../api/client'
+import { makeThumbnail } from './projectFiles/makeThumbnail'
 
 // Mismo tope que el backend (projectFiles.controller.js) — solo para dar
 // feedback instantáneo sin ida y vuelta al servidor.
@@ -24,18 +25,6 @@ function uploadWithProgress(url, file, mimeType, onProgress, onXhr) {
   })
 }
 
-// Solo para imágenes: dimensiones, metadata liviana y opcional (no bloquea la
-// subida si falla). Videos y el resto de los archivos no la necesitan.
-function getImageDimensions(file) {
-  return new Promise(resolve => {
-    const img = new Image()
-    const url = URL.createObjectURL(file)
-    img.onload  = () => { URL.revokeObjectURL(url); resolve({ width: img.naturalWidth, height: img.naturalHeight }) }
-    img.onerror = () => { URL.revokeObjectURL(url); resolve({ width: null, height: null }) }
-    img.src = url
-  })
-}
-
 let nextLocalId = 1
 
 // Subidas simultáneas por pestaña. Debajo del tope del backend
@@ -49,17 +38,20 @@ const RETRY_WAIT_MS = 5000
 const sleep = ms => new Promise(r => setTimeout(r, ms))
 
 /**
- * Orquesta presign → PUT directo a R2 → confirm para el tab Archivos. A
- * diferencia de ContentAssetUploader.jsx, acepta cualquier tipo de archivo
- * (no solo imagen/video) y no genera thumbnail de video — eso queda para una
- * iteración futura (evita el problema que tiene Contenido hoy, donde el
- * poster queda como un segundo asset "suelto" visible en la galería).
+ * Orquesta presign → PUT directo a R2 → confirm → miniatura para el tab
+ * Archivos. A diferencia de ContentAssetUploader.jsx acepta cualquier tipo de
+ * archivo, no solo imagen/video.
+ *
+ * Imágenes y videos llevan miniatura (`makeThumbnail`, generada en el browser)
+ * y se sube por un endpoint propio DESPUÉS del confirm — así no queda como un
+ * archivo suelto visible en la carpeta, que es el problema que tiene hoy la
+ * galería de Contenido con su poster.
  *
  * Los archivos se encolan y suben de a MAX_CONCURRENT: soltar 50 archivos de
  * golpe no choca contra el tope de subidas pendientes del backend.
  */
 export function useProjectFileUpload({ projectId, onUploaded }) {
-  const [queue, setQueue] = useState([]) // [{ id, name, progress, status: queued|waiting|uploading|confirming|error, error }]
+  const [queue, setQueue] = useState([]) // [{ id, name, progress, status: queued|waiting|uploading|thumbnail|confirming|error, error }]
   const cancelRef = useRef(new Map()) // localId -> xhr
   const waitingRef = useRef([])        // [{ id, file, folderId }] todavía sin arrancar
   const activeRef = useRef(0)
@@ -119,14 +111,29 @@ export function useProjectFileUpload({ projectId, onUploaded }) {
       throw err
     }
     cancelRef.current.delete(id)
+
+    // Miniatura + dimensiones del original, en una sola decodificación. Para
+    // los tipos que no la llevan (PDF, docx, zip…) devuelve null y seguimos.
+    updateItem(id, { status: 'thumbnail' })
+    const thumb = await makeThumbnail(file).catch(() => null)
+
     updateItem(id, { status: 'confirming' })
+    const { data: fileRow } = await api.post(`/projects/${projectId}/files/${data.fileId}/confirm`, {
+      width: thumb?.width ?? null, height: thumb?.height ?? null,
+    })
 
-    let width = null, height = null
-    if (file.type?.startsWith('image/')) {
-      ;({ width, height } = await getImageDimensions(file))
+    // La miniatura es best-effort y va aparte del confirm a propósito: si falla,
+    // el archivo ya está subido y confirmado igual, solo se ve con el ícono por
+    // tipo. La respuesta trae la fila ya con `posterUrl`, así la grilla la
+    // muestra sin esperar una recarga.
+    if (thumb?.blob) {
+      try {
+        const form = new FormData()
+        form.append('thumbnail', thumb.blob, 'thumbnail')
+        const { data: withThumb } = await api.post(`/projects/${projectId}/files/${data.fileId}/thumbnail`, form)
+        return withThumb
+      } catch { /* sin miniatura, nada más que hacer */ }
     }
-
-    const { data: fileRow } = await api.post(`/projects/${projectId}/files/${data.fileId}/confirm`, { width, height })
     return fileRow
   }
 

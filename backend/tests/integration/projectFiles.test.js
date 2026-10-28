@@ -14,6 +14,7 @@ jest.mock('../../src/services/objectStorage.service', () => ({
   buildKey:        jest.fn(),
   presignPut:      jest.fn(),
   presignGet:      jest.fn(),
+  putObject:       jest.fn(),
   headObject:      jest.fn(),
   getObjectHead:   jest.fn(),
   getObjectStream: jest.fn(),
@@ -492,6 +493,99 @@ describe('GET /files/search', () => {
     expect(res.status).toBe(200)
     expect(res.body.items).toEqual([])
     expect(prisma.projectFile.findMany).not.toHaveBeenCalled()
+  })
+})
+
+describe('POST /files/:fileId/thumbnail', () => {
+  // Magic bytes reales — el endpoint valida la firma, no el nombre ni el
+  // Content-Type del multipart.
+  const JPEG = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff]), Buffer.alloc(16)])
+  const WEBP = Buffer.concat([Buffer.from('RIFF'), Buffer.alloc(4), Buffer.from('WEBP'), Buffer.alloc(8)])
+  const NOT_AN_IMAGE = Buffer.from('%PDF-1.4 esto no es una imagen')
+
+  function postThumb(buf = JPEG, name = 'thumbnail') {
+    return req('post', `${BASE}/1/thumbnail`).attach('thumbnail', buf, name)
+  }
+
+  beforeEach(() => {
+    objectStorage.putObject.mockResolvedValue({ key: 'files/1/thumbs/new.jpg', size: 42 })
+    prisma.projectFile.update.mockImplementation(({ data }) =>
+      Promise.resolve(dbItem({ mimeType: 'video/mp4', posterKey: data.posterKey })))
+  })
+
+  it('guarda el poster de un video y lo devuelve como posterUrl', async () => {
+    mockBase()
+    prisma.projectFile.findFirst.mockResolvedValue(dbItem({ mimeType: 'video/mp4', posterKey: null }))
+
+    const res = await postThumb()
+
+    expect(res.status).toBe(200)
+    expect(res.body.posterUrl).toBe('https://cdn.example.com/files/1/thumbs/new.jpg')
+    expect(prisma.projectFile.update).toHaveBeenCalledWith(expect.objectContaining({
+      data: { posterKey: 'files/1/thumbs/new.jpg' },
+    }))
+    // La miniatura NO es una fila del repositorio: no se crea ningún ProjectFile.
+    expect(prisma.projectFile.create).not.toHaveBeenCalled()
+  })
+
+  it('acepta WEBP (el formato con el que se reduce una imagen, por el alfa)', async () => {
+    mockBase()
+    prisma.projectFile.findFirst.mockResolvedValue(dbItem({ mimeType: 'image/png', posterKey: null }))
+
+    const res = await postThumb(WEBP, 'thumb.webp')
+
+    expect(res.status).toBe(200)
+    expect(objectStorage.putObject).toHaveBeenCalledWith(expect.any(Buffer), 'image/webp', expect.any(Object))
+  })
+
+  it('al reemplazar una miniatura borra el objeto anterior', async () => {
+    mockBase()
+    prisma.projectFile.findFirst.mockResolvedValue(dbItem({ mimeType: 'video/mp4', posterKey: 'files/1/thumbs/old.jpg' }))
+    objectStorage.deleteObject.mockResolvedValue()
+
+    const res = await postThumb()
+
+    expect(res.status).toBe(200)
+    expect(objectStorage.deleteObject).toHaveBeenCalledWith('files/1/thumbs/old.jpg')
+  })
+
+  it('rechaza un buffer que no es imagen, aunque venga con nombre .jpg', async () => {
+    mockBase()
+    prisma.projectFile.findFirst.mockResolvedValue(dbItem({ mimeType: 'video/mp4' }))
+
+    const res = await postThumb(NOT_AN_IMAGE, 'thumbnail.jpg')
+
+    expect(res.status).toBe(400)
+    expect(objectStorage.putObject).not.toHaveBeenCalled()
+    expect(prisma.projectFile.update).not.toHaveBeenCalled()
+  })
+
+  it('rechaza miniatura en un archivo que no es imagen ni video', async () => {
+    mockBase()
+    prisma.projectFile.findFirst.mockResolvedValue(dbItem({ mimeType: 'application/pdf' }))
+
+    const res = await postThumb()
+
+    expect(res.status).toBe(400)
+    expect(objectStorage.putObject).not.toHaveBeenCalled()
+  })
+
+  it('404 si el archivo no está ready / no es del proyecto', async () => {
+    mockBase()
+    prisma.projectFile.findFirst.mockResolvedValue(null)
+
+    const res = await postThumb()
+
+    expect(res.status).toBe(404)
+    expect(objectStorage.putObject).not.toHaveBeenCalled()
+  })
+
+  it('400 si no viene el archivo', async () => {
+    mockBase()
+
+    const res = await req('post', `${BASE}/1/thumbnail`)
+
+    expect(res.status).toBe(400)
   })
 })
 

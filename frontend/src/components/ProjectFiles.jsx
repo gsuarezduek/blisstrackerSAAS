@@ -33,7 +33,7 @@ export default function ProjectFiles({ projectId, deepLinkFileId, onCreateTaskFr
   const [modal, setModal] = useState(null) // null | {type:'newFolder'|'rename'|'move'|'delete'|'copyLink'|'bulkMove'|'bulkDelete', item?, items?}
   const [error, setError] = useState('')
   const [lightbox, setLightbox] = useState(null) // url de imagen a mostrar en grande
-  const [preview, setPreview] = useState(null) // null | { item, status:'loading'|'ready'|'error', blobUrl }
+  const [preview, setPreview] = useState(null) // null | { item, status:'loading'|'ready'|'error', src, isBlob }
   const [highlightId, setHighlightId] = useState(null) // resalta brevemente el ítem abierto por deep-link
   const [sortBy, setSortBy] = useState('name-asc')
   const [selectedIds, setSelectedIds] = useState(() => new Set())
@@ -163,42 +163,58 @@ export default function ProjectFiles({ projectId, deepLinkFileId, onCreateTaskFr
     })()
   }
 
+  // Video: URL firmada de R2 (`?inline=1`) directo en el <video>, para que
+  // arranque con los primeros bytes y el seek sea instantáneo — R2 sirve
+  // `Range` nativo. Antes se pedía el archivo COMPLETO por XHR como blob, así
+  // que no se veía un solo frame hasta que terminaba de bajarse entero.
+  // El resto (PDF: este modal es el fallback de openPdfInNewTab) sigue por
+  // blob proxied, que para un PDF no tiene el mismo costo.
   async function openPreview(item) {
-    setPreview({ item, status: 'loading', blobUrl: null })
+    setPreview({ item, status: 'loading', src: null, isBlob: false })
     try {
+      if (item.mimeType?.startsWith('video/')) {
+        const { data } = await api.get(`/projects/${projectId}/files/${item.id}/signed-url?inline=1`)
+        setPreview({ item, status: 'ready', src: data.url, isBlob: false })
+        return
+      }
       const res = await api.get(`/projects/${projectId}/files/${item.id}/download?inline=1`, { responseType: 'blob' })
-      const blobUrl = URL.createObjectURL(res.data)
-      setPreview({ item, status: 'ready', blobUrl })
+      setPreview({ item, status: 'ready', src: URL.createObjectURL(res.data), isBlob: true })
     } catch {
-      setPreview({ item, status: 'error', blobUrl: null })
+      setPreview({ item, status: 'error', src: null, isBlob: false })
     }
   }
 
   function closePreview() {
-    if (preview?.blobUrl) URL.revokeObjectURL(preview.blobUrl)
+    if (preview?.isBlob && preview.src) URL.revokeObjectURL(preview.src)
     setPreview(null)
   }
 
+  // Descarga directa desde R2 con una URL firmada de vida corta en vez de
+  // traer el archivo por XHR como blob: la baja el navegador (con su propia
+  // barra de progreso, y reanudable), y un video de 300MB no queda entero en
+  // la RAM de la pestaña — eso era lo que hacía sentir "trabado" al tracker.
+  // El <a> no lleva `download` a propósito: con una respuesta cross-origin ese
+  // atributo se ignora, el nombre del archivo lo pone el Content-Disposition
+  // que viene firmado dentro de la propia URL.
   async function handleDownload(item) {
     try {
-      const res = await api.get(`/projects/${projectId}/files/${item.id}/download`, { responseType: 'blob' })
-      const blobUrl = URL.createObjectURL(res.data)
+      const { data } = await api.get(`/projects/${projectId}/files/${item.id}/signed-url`)
       const a = document.createElement('a')
-      a.href = blobUrl
-      a.download = item.name
+      a.href = data.url
+      a.rel = 'noopener'
       document.body.appendChild(a)
       a.click()
       a.remove()
-      URL.revokeObjectURL(blobUrl)
     } catch {
       setError('No se pudo descargar el archivo')
     }
   }
 
-  // Descarga en lote: un solo archivo suelto se baja igual que siempre (sin
-  // pasar por el backend de zip); cualquier otra combinación (varios ítems, o
-  // al menos una carpeta) arma un .zip en el servidor y lo baja como blob,
-  // mismo patrón que handleDownload de arriba.
+  // Descarga en lote: un solo archivo suelto va por handleDownload (URL
+  // firmada, sin pasar por el backend de zip); cualquier otra combinación
+  // (varios ítems, o al menos una carpeta) arma un .zip en el servidor y lo
+  // baja como blob — el ZIP se construye al vuelo, así que no hay objeto en
+  // R2 que firmar y sí tiene que pasar por nosotros.
   async function handleBulkDownload(items) {
     if (items.length === 0) return
     if (items.length === 1 && items[0].type !== 'folder') { handleDownload(items[0]); return }

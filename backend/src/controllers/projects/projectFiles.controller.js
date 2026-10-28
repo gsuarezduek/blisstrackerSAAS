@@ -13,7 +13,7 @@ const archiver = require('archiver')
 const prisma = require('../../lib/prisma')
 const objectStorage = require('../../services/objectStorage.service')
 const { getEffectiveCategoryLimitMb } = require('../../lib/storageBudget')
-const { detectImageType } = require('../../lib/imageType')
+const { detectImageType, validateImageUpload } = require('../../lib/imageType')
 const { detectVideoType } = require('../../lib/mediaType')
 const { detectDocumentType } = require('../../lib/documentType')
 const { safeContentDisposition } = require('../../lib/contentDisposition')
@@ -35,6 +35,11 @@ const PRESIGN_EXPIRES_IN = 900 // 15 min (más margen que Contenido: archivos m�
 // solo tiene que durar hasta que el navegador abra la conexión.
 const SIGNED_INLINE_EXPIRES_IN = 60 * 60   // 1 h
 const SIGNED_DOWNLOAD_EXPIRES_IN = 15 * 60 // 15 min
+// Las miniaturas las genera el browser (canvas → JPEG ~400px), así que pesan
+// decenas de KB. El tope es holgado solo para cortar un payload absurdo: no es
+// un archivo que el usuario elige, es uno que produce nuestro propio código.
+const MAX_THUMB_BYTES = 2 * 1024 * 1024
+const THUMB_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp']
 const PENDING_MAX_AGE_MS = 60 * 60 * 1000
 const MAX_PENDING_PER_PROJECT = 5
 const MAX_ZIP_ENTRIES = 2000 // tope de archivos por ZIP — protege memoria/tiempo del proceso
@@ -662,6 +667,78 @@ async function revokePublicLink(req, res, next) {
 }
 
 /**
+ * POST /api/projects/:id/files/:fileId/thumbnail — multipart `thumbnail`
+ * Guarda la miniatura que el browser generó para un archivo ya confirmado:
+ * el primer frame de un video, o la versión reducida de una imagen (ver
+ * `makeThumbnail` en projectFilesUpload.js). Persiste en `ProjectFile.posterKey`
+ * y sale por `shapeItem` como `posterUrl`, que es lo que pinta la grilla.
+ *
+ * El objeto va a R2 SIN crear una fila `ProjectFile` propia — a propósito. La
+ * primera versión de esto resolvía el poster con un `posterFileId` apuntando a
+ * otro `ProjectFile` (ver confirmFile), lo que dejaba un "poster.jpg" suelto y
+ * visible en la carpeta del usuario; es el mismo problema que tiene hoy la
+ * galería de Contenido. Acá la miniatura es un derivado interno del archivo,
+ * no un archivo del repositorio: no se lista, no se mueve, no se descarga, y
+ * sigue el ciclo de vida de su archivo sin código nuevo — `purgeItem` y la
+ * limpieza de la papelera vencida (cleanup.service.js) ya borran de R2 tanto
+ * `objectKey` como `posterKey` (`deleteItem` es soft-delete y no toca R2).
+ *
+ * Idempotente por diseño: re-subir reemplaza la miniatura anterior y borra el
+ * objeto viejo. Eso es lo que permite regenerarla para los archivos que se
+ * subieron antes de que esto existiera.
+ *
+ * Nota de cuota: al no ser una fila `ProjectFile`, estos bytes no entran en el
+ * agregado de `assertWithinQuota`. Son decenas de KB por archivo frente a un
+ * tope en MB, así que la subestimación es despreciable; si algún día hay que
+ * contarlos, el lugar es el propio agregado, no una fila fantasma.
+ */
+async function uploadThumbnail(req, res, next) {
+  try {
+    const guard = await resolveFilesGuard(req)
+    if (guard.error) return res.status(guard.status).json({ error: guard.error })
+    const { projectId, workspaceId } = guard
+
+    if (!objectStorage.isConfigured()) {
+      return res.status(503).json({ error: 'El almacenamiento de archivos no está configurado en este workspace.', code: 'STORAGE_NOT_CONFIGURED' })
+    }
+    if (!req.file?.buffer?.length) return res.status(400).json({ error: 'Falta la miniatura.' })
+    if (req.file.buffer.length > MAX_THUMB_BYTES) return res.status(413).json({ error: 'La miniatura es demasiado grande.' })
+
+    // Magic bytes, igual que cualquier otra imagen que entra al sistema — que
+    // la haya generado nuestro propio frontend no la vuelve confiable.
+    const check = validateImageUpload(req.file.buffer, THUMB_MIME_TYPES)
+    if (!check.ok) return res.status(400).json({ error: check.error })
+
+    // Solo imagen y video tienen miniatura; para el resto la grilla usa el
+    // ícono por tipo y no hay nada que derivar.
+    const file = await prisma.projectFile.findFirst({
+      where: { id: Number(req.params.fileId), projectId, type: 'file', status: 'ready', deletedAt: null },
+      select: { id: true, mimeType: true, posterKey: true },
+    })
+    if (!file) return res.status(404).json({ error: 'Archivo no encontrado' })
+    const isImage = file.mimeType?.startsWith('image/')
+    const isVideo = file.mimeType?.startsWith('video/')
+    if (!isImage && !isVideo) return res.status(400).json({ error: 'Este tipo de archivo no lleva miniatura.' })
+
+    const { key } = await objectStorage.putObject(req.file.buffer, check.mimeType, { prefix: `files/${workspaceId}/thumbs` })
+    const previousKey = file.posterKey
+
+    const updated = await prisma.projectFile.update({
+      where: { id: file.id },
+      data: { posterKey: key },
+      include: { uploadedBy: { select: { id: true, name: true } }, ...CONTENT_LINKS_INCLUDE },
+    })
+    // Recién después de persistir la nueva: si el borrado falla queda un objeto
+    // huérfano (lo barre cleanup), pero nunca una fila apuntando a algo borrado.
+    if (previousKey && previousKey !== key) {
+      await objectStorage.deleteObject(previousKey).catch(() => {})
+    }
+
+    res.json(shapeItem(updated))
+  } catch (err) { next(err) }
+}
+
+/**
  * GET /api/projects/:id/files/:fileId/signed-url[?inline=1]
  * Devuelve una URL firmada de R2 de vida corta para bajar o reproducir el
  * archivo SIN pasar por nuestro backend. Es el camino rápido de los dos flujos
@@ -1057,6 +1134,7 @@ module.exports = {
   purgeItem,
   createPublicLink,
   revokePublicLink,
+  uploadThumbnail,
   fileSignedUrl,
   downloadFile,
   downloadZip,

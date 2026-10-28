@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 import { fmtBytes, iconFor } from '../../lib/fileIcons'
-import { CalendarDays, Folder, Link2 } from 'lucide-react'
+import { CalendarDays, Folder, Link2, Play } from 'lucide-react'
 import { Icon } from '../ui/Icon'
 
 // ─── Tarjeta de ítem (carpeta o archivo) con menú contextual ──────────────────
@@ -8,7 +8,14 @@ import { Icon } from '../ui/Icon'
 export default function ItemCard({ item, projectId, menuOpen, onOpenMenu, onOpen, onRename, onMove, onDelete, onDownload, onCopyLink, onShare, onCreateTask, onLinkToContent, caption, selected, onToggleSelect }) {
   const isFolder = item.type === 'folder'
   const isImage = !isFolder && item.mimeType?.startsWith('image/')
+  const isVideo = !isFolder && item.mimeType?.startsWith('video/')
   const isPreviewable = !isFolder && !isImage && item.previewable
+  // `posterUrl` es la miniatura liviana que generó el browser al subir (~40KB):
+  // se prefiere al original siempre que exista. Una imagen vieja, subida antes
+  // de que hubiera miniaturas, cae a `url` — el original completo, que es lo
+  // que hacía lenta la grilla. Un video sin miniatura no tiene a qué caer, así
+  // que se queda con el ícono por tipo.
+  const thumbUrl = isFolder ? null : (item.posterUrl || (isImage ? item.url : null))
   return (
     <div className={`relative group rounded-xl ${selected ? 'ring-2 ring-primary-500' : ''}`}>
       <button
@@ -17,8 +24,17 @@ export default function ItemCard({ item, projectId, menuOpen, onOpenMenu, onOpen
         title={item.name}
       >
         <div className="w-14 h-14 flex items-center justify-center rounded-lg bg-gray-50 dark:bg-gray-900/40 overflow-hidden relative">
-          {isImage && item.url ? (
-            <img src={item.url} alt="" className="w-full h-full object-cover" />
+          {thumbUrl ? (
+            <>
+              <img src={thumbUrl} alt="" loading="lazy" className="w-full h-full object-cover" />
+              {/* Un video y una imagen con miniatura se ven igual — el ▸ es lo
+                  que los distingue de un vistazo. */}
+              {isVideo && (
+                <span className="absolute inset-0 flex items-center justify-center bg-black/25">
+                  <Icon as={Play} size={18} className="text-white drop-shadow" />
+                </span>
+              )}
+            </>
           ) : (
             <Icon as={isFolder ? Folder : iconFor(item.mimeType)} size={30} className={isFolder ? 'text-amber-500' : 'text-gray-400'} />
           )}

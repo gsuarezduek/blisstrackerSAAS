@@ -189,18 +189,28 @@ async function presignPut(key, mimeType, { expiresIn = 600 } = {}) {
 }
 
 /**
- * URL firmada de GET que fuerza descarga: `ResponseContentDisposition` le pide a
- * R2 que la ponga en la respuesta como header propio. A diferencia de la URL
- * pública (`publicUrl`), esto SÍ dispara un "Guardar archivo" en cualquier
- * navegador/dispositivo — el atributo `download` de un <a> no alcanza cuando la
- * respuesta final viene de un dominio distinto al de la página (nuestro caso:
- * la página pega a nuestro backend, que redirige al bucket).
+ * URL firmada de GET, de vida corta. Dos usos según `disposition`:
+ *
+ *  - `attachment` (default): fuerza descarga. `ResponseContentDisposition` le
+ *    pide a R2 que ponga ese header en la respuesta. A diferencia de la URL
+ *    pública (`publicUrl`), esto SÍ dispara un "Guardar archivo" en cualquier
+ *    navegador/dispositivo — el atributo `download` de un <a> no alcanza cuando
+ *    la respuesta final viene de un dominio distinto al de la página.
+ *  - `inline`: para consumirla desde un <video>/<iframe>. A diferencia de
+ *    servir los bytes nosotros (`getObjectStream`), acá el reproductor habla
+ *    directo con R2, que soporta `Range` nativo: el video arranca con los
+ *    primeros bytes y el seek no vuelve a bajar el archivo entero.
+ *
+ * `contentType` sobreescribe el Content-Type que R2 tenga guardado en el objeto
+ * (que es solo lo que el navegador declaró al hacer el PUT, y puede estar mal)
+ * con el que validamos por magic bytes — mismo criterio que downloadFile.
  */
-async function presignGet(key, { expiresIn = 300, filename } = {}) {
+async function presignGet(key, { expiresIn = 300, filename, disposition = 'attachment', contentType } = {}) {
   const cmd = new GetObjectCommand({
     Bucket: R2_BUCKET,
     Key: key,
-    ...(filename ? { ResponseContentDisposition: safeContentDisposition(filename) } : {}),
+    ...(filename ? { ResponseContentDisposition: safeContentDisposition(filename, { type: disposition }) } : {}),
+    ...(contentType ? { ResponseContentType: contentType } : {}),
   })
   return getSignedUrl(getClient(), cmd, { expiresIn })
 }

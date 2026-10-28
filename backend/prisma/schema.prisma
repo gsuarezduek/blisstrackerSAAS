@@ -728,7 +728,10 @@ model ProjectFile {
   status       String? // solo type:"file" — "pending" | "ready" (mismo patrón que ContentAsset)
   mimeType     String?
   objectKey    String? // key en R2, prefijo files/<workspaceId>/
-  posterKey    String? // thumbnail del primer frame, solo videos
+  // Miniatura generada en el browser al subir (primer frame si es video,
+  // versión reducida si es imagen), bajo el prefijo files/<workspaceId>/thumbs.
+  // NO es una fila ProjectFile propia a propósito — ver uploadThumbnail.
+  posterKey    String?
   sizeBytes    Int? // autoritativo: sale del HeadObject post-upload, no del cliente
   width        Int?
   height       Int?
