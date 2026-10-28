@@ -17,6 +17,7 @@ jest.mock('../../src/services/objectStorage.service', () => ({
   headObject:      jest.fn(),
   getObjectHead:   jest.fn(),
   getObjectStream: jest.fn(),
+  putObject:       jest.fn(),
   deleteObject:    jest.fn(),
   deleteObjects:   jest.fn(),
   publicUrl:       jest.fn(key => `https://cdn.example.com/${key}`),
@@ -494,6 +495,80 @@ describe('GET /files/search', () => {
   })
 })
 
+describe('GET /files/:fileId/signed-url', () => {
+  const SIGNED = 'https://r2.example.com/signed-get-url'
+
+  beforeEach(() => {
+    objectStorage.presignGet.mockResolvedValue(SIGNED)
+  })
+
+  it('firma una descarga (attachment) con el nombre y el mimeType de la fila', async () => {
+    mockBase()
+    prisma.projectFile.findFirst.mockResolvedValue(dbItem({ objectKey: 'files/1/a.mp4', name: 'clip final.mp4', mimeType: 'video/mp4' }))
+
+    const res = await req('get', `${BASE}/1/signed-url`)
+
+    expect(res.status).toBe(200)
+    expect(res.body.url).toBe(SIGNED)
+    expect(objectStorage.presignGet).toHaveBeenCalledWith('files/1/a.mp4', expect.objectContaining({
+      disposition: 'attachment', filename: 'clip final.mp4', contentType: 'video/mp4',
+    }))
+    // Nunca proxeamos los bytes por este camino.
+    expect(objectStorage.getObjectStream).not.toHaveBeenCalled()
+  })
+
+  it('?inline=1 firma inline y con más vida (el <video> revalida en cada Range)', async () => {
+    mockBase()
+    prisma.projectFile.findFirst.mockResolvedValue(dbItem({ objectKey: 'files/1/a.mp4', mimeType: 'video/mp4' }))
+
+    const res = await req('get', `${BASE}/1/signed-url?inline=1`)
+
+    expect(res.status).toBe(200)
+    const opts = objectStorage.presignGet.mock.calls[0][1]
+    expect(opts.disposition).toBe('inline')
+    expect(res.body.expiresIn).toBe(3600)
+    expect(opts.expiresIn).toBe(3600)
+  })
+
+  it('la URL de descarga vive menos que la de preview', async () => {
+    mockBase()
+    prisma.projectFile.findFirst.mockResolvedValue(dbItem())
+
+    const res = await req('get', `${BASE}/1/signed-url`)
+
+    expect(res.body.expiresIn).toBe(900)
+  })
+
+  it('404 si el archivo no está ready / no es del proyecto', async () => {
+    mockBase()
+    prisma.projectFile.findFirst.mockResolvedValue(null)
+
+    const res = await req('get', `${BASE}/1/signed-url`)
+
+    expect(res.status).toBe(404)
+    expect(objectStorage.presignGet).not.toHaveBeenCalled()
+  })
+
+  it('403 si la Nube está deshabilitada en el proyecto', async () => {
+    mockBase({ filesEnabled: false })
+
+    const res = await req('get', `${BASE}/1/signed-url`)
+
+    expect(res.status).toBe(403)
+    expect(objectStorage.presignGet).not.toHaveBeenCalled()
+  })
+
+  it('503 si el storage no está configurado', async () => {
+    mockBase()
+    objectStorage.isConfigured.mockReturnValue(false)
+
+    const res = await req('get', `${BASE}/1/signed-url`)
+
+    expect(res.status).toBe(503)
+    expect(res.body.code).toBe('STORAGE_NOT_CONFIGURED')
+  })
+})
+
 describe('GET /files/:fileId/download', () => {
   it('proxea los bytes del objeto (no un redirect — la ruta es autenticada)', async () => {
     mockBase()
@@ -571,6 +646,127 @@ describe('GET /files/:fileId/locate', () => {
     mockBase()
     prisma.projectFile.findFirst.mockResolvedValue(null)
     const res = await req('get', `${BASE}/999/locate`)
+    expect(res.status).toBe(404)
+  })
+})
+
+// Subida del lado del servidor y lectura como texto: la vía de los agentes por
+// MCP, que no pueden hacer el PUT presignado ni abrir un archivo en pantalla.
+describe('POST /files/direct (agentes vía MCP)', () => {
+  const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0x0d, 0x49, 0x48, 0x44, 0x52])
+
+  beforeEach(() => {
+    objectStorage.putObject.mockResolvedValue({ key: 'files/1/abc.md', url: 'x', size: 10 })
+    prisma.projectFile.create.mockImplementation(({ data }) => Promise.resolve(dbItem({ ...data, id: 77 })))
+  })
+
+  it('sube texto a la raíz con el tipo de la extensión', async () => {
+    mockBase()
+    const res = await req('post', `${BASE}/direct`).send({ name: 'informe.md', content: '# Informe' })
+
+    expect(res.status).toBe(201)
+    expect(objectStorage.putObject).toHaveBeenCalledWith(expect.any(Buffer), 'text/markdown', { prefix: 'files/1' })
+    expect(prisma.projectFile.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ status: 'ready', name: 'informe.md', mimeType: 'text/markdown', parentId: null, sizeBytes: 9 }),
+    }))
+  })
+
+  it('folderPath crea las carpetas que faltan y sube adentro', async () => {
+    mockBase()
+    prisma.projectFile.findFirst.mockResolvedValue(null) // ninguna carpeta existe todavía
+    let nextFolderId = 100
+    prisma.projectFile.create.mockImplementation(({ data }) => Promise.resolve(
+      data.type === 'folder' ? { id: nextFolderId++ } : dbItem({ ...data, id: 77 }),
+    ))
+
+    const res = await req('post', `${BASE}/direct`).send({ name: 'seo.md', content: 'x', folderPath: 'Informes/2026' })
+
+    expect(res.status).toBe(201)
+    const folderNames = prisma.projectFile.create.mock.calls
+      .filter(([arg]) => arg.data.type === 'folder').map(([arg]) => [arg.data.name, arg.data.parentId])
+    expect(folderNames).toEqual([['Informes', null], ['2026', 100]])
+    expect(prisma.projectFile.create).toHaveBeenLastCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ type: 'file', name: 'seo.md', parentId: 101 }),
+    }))
+  })
+
+  it('404 si parentId no es una carpeta del proyecto, sin subir nada', async () => {
+    mockBase()
+    prisma.projectFile.findFirst.mockResolvedValue(null)
+    const res = await req('post', `${BASE}/direct`).send({ name: 'a.txt', content: 'x', parentId: 5 })
+    expect(res.status).toBe(404)
+    expect(objectStorage.putObject).not.toHaveBeenCalled()
+  })
+
+  it('400 sin fuente, con más de una, o si el tipo es peligroso', async () => {
+    mockBase()
+    expect((await req('post', `${BASE}/direct`).send({ name: 'a.txt' })).status).toBe(400)
+    expect((await req('post', `${BASE}/direct`).send({ name: 'a.txt', content: 'x', url: 'https://a.com/x' })).status).toBe(400)
+    expect((await req('post', `${BASE}/direct`).send({ name: 'p.html', content: '<p>h</p>', mimeType: 'text/html' })).status).toBe(400)
+    expect(objectStorage.putObject).not.toHaveBeenCalled()
+  })
+
+  it('el tipo sale de los magic bytes, no del nombre', async () => {
+    mockBase()
+    const res = await req('post', `${BASE}/direct`).send({ name: 'pieza.bin', contentBase64: PNG.toString('base64') })
+    expect(res.status).toBe(201)
+    expect(objectStorage.putObject).toHaveBeenCalledWith(expect.any(Buffer), 'image/png', expect.anything())
+  })
+
+  it('403 si la Nube está deshabilitada para el workspace', async () => {
+    mockBase({ filesEnabled: false })
+    const res = await req('post', `${BASE}/direct`).send({ name: 'a.txt', content: 'x' })
+    expect(res.status).toBe(403)
+  })
+})
+
+describe('GET /files/:fileId/content', () => {
+  const { Readable } = require('stream')
+  const streamOf = buf => ({ body: Readable.from([buf]), contentType: null, contentLength: buf.length })
+
+  it('devuelve el contenido de un archivo de texto', async () => {
+    mockBase()
+    prisma.projectFile.findFirst.mockResolvedValueOnce(dbItem({ id: 3, name: 'notas.md', mimeType: 'text/markdown', sizeBytes: 12 }))
+    objectStorage.getObjectStream.mockResolvedValue(streamOf(Buffer.from('# Hola\nmundo')))
+
+    const res = await req('get', `${BASE}/3/content`)
+
+    expect(res.status).toBe(200)
+    expect(res.body.content).toBe('# Hola\nmundo')
+    expect(res.body.format).toBe('text')
+    expect(res.body.truncated).toBe(false)
+    expect(res.body.charCount).toBe(12)
+  })
+
+  it('415 para un tipo que no se puede leer como texto', async () => {
+    mockBase()
+    prisma.projectFile.findFirst.mockResolvedValueOnce(dbItem({ id: 4, name: 'foto.png', mimeType: 'image/png' }))
+    const res = await req('get', `${BASE}/4/content`)
+    expect(res.status).toBe(415)
+    expect(res.body.code).toBe('NOT_TEXT_READABLE')
+    expect(objectStorage.getObjectStream).not.toHaveBeenCalled()
+  })
+
+  it('422 si no se puede extraer el texto de un PDF', async () => {
+    mockBase()
+    prisma.projectFile.findFirst.mockResolvedValueOnce(dbItem({ id: 5, name: 'roto.pdf', mimeType: 'application/pdf' }))
+    objectStorage.getObjectStream.mockResolvedValue(streamOf(Buffer.from('esto no es un pdf')))
+    const res = await req('get', `${BASE}/5/content`)
+    expect(res.status).toBe(422)
+    expect(res.body.code).toBe('EXTRACTION_FAILED')
+  })
+
+  it('413 si el archivo es demasiado grande para leerlo', async () => {
+    mockBase()
+    prisma.projectFile.findFirst.mockResolvedValueOnce(dbItem({ id: 6, name: 'enorme.csv', mimeType: 'text/csv', sizeBytes: 40 * 1024 * 1024 }))
+    const res = await req('get', `${BASE}/6/content`)
+    expect(res.status).toBe(413)
+  })
+
+  it('404 si el archivo no existe o no está ready', async () => {
+    mockBase()
+    prisma.projectFile.findFirst.mockResolvedValue(null)
+    const res = await req('get', `${BASE}/999/content`)
     expect(res.status).toBe(404)
   })
 })

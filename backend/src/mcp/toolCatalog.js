@@ -1264,6 +1264,98 @@ const tools = [
     request: ({ projectId, serviceIds }) => ({ method: 'PUT', path: `/projects/${projectId}`, body: { serviceIds } }),
   },
 
+  // ── Nube del proyecto (Archivos, repositorio tipo Drive sobre R2) ───────
+  {
+    name: 'project_files_list',
+    description: 'Lista UN nivel de la Nube del proyecto (carpetas + archivos, no recursivo) y el breadcrumb de dónde estás parado. Sin `parentId` devuelve la raíz; cada carpeta de la respuesta trae su `id` para volver a llamar y bajar un nivel. Para encontrar algo por nombre sin navegar carpeta por carpeta usá project_files_search.',
+    inputSchema: {
+      ...projectIdParam,
+      parentId: z.number().int().optional().describe('ID de la carpeta a abrir; omitido = raíz del proyecto'),
+    },
+    request: ({ projectId, parentId }) => ({ method: 'GET', path: `/projects/${projectId}/files`, query: { parentId } }),
+  },
+  {
+    name: 'project_files_search',
+    description: 'Busca por nombre en toda la Nube del proyecto (cualquier nivel de anidamiento, hasta 50 resultados). Cada resultado trae su `path` (breadcrumb) para saber en qué carpeta está. Es la forma rápida de ubicar un archivo sin recorrer el árbol.',
+    inputSchema: {
+      ...projectIdParam,
+      q: z.string().describe('Texto a buscar en el nombre del archivo o carpeta'),
+    },
+    request: ({ projectId, q }) => ({ method: 'GET', path: `/projects/${projectId}/files/search`, query: { q } }),
+  },
+  {
+    name: 'project_file_read',
+    description: 'Lee el CONTENIDO de un archivo de la Nube como texto: texto plano, markdown, CSV, JSON, XML y similares salen tal cual; de un PDF o un DOCX se extrae el texto. Devuelve `content` (truncado a 200.000 caracteres, con `truncated: true` si se cortó), `charCount` y `format`. Las imágenes, videos y binarios no se pueden leer (415): si necesitás uno, pasale a la persona el nombre y la carpeta para que lo abra en la app.',
+    inputSchema: {
+      ...projectIdParam,
+      fileId: z.number().int().describe('ID del archivo (de project_files_list o project_files_search)'),
+    },
+    request: ({ projectId, fileId }) => ({ method: 'GET', path: `/projects/${projectId}/files/${fileId}/content` }),
+  },
+  {
+    name: 'project_file_upload',
+    description: 'Sube un archivo a la Nube del proyecto (queda para todo el equipo). Mandá exactamente UNA fuente: `content` (texto: informes, borradores, markdown, CSV, JSON — lo más común), `contentBase64` (binario chico: el request entero no puede pasar de ~1MB) o `url` (archivo público descargable, hasta 25MB). El destino sale de `parentId` (una carpeta que ya existe) o de `folderPath` ("Informes/2026", se crea sola); sin ninguno de los dos va a la raíz. No se aceptan HTML ni SVG. Si el archivo es el resultado de una tarea puntual, mejor usá task_attach_file: lo guarda igual en la Nube pero además lo deja colgado de la tarea.',
+    inputSchema: {
+      ...projectIdParam,
+      name: z.string().describe('Nombre del archivo con extensión, ej. "informe-octubre.md". La extensión define el tipo si no se puede detectar.'),
+      content: z.string().optional().describe('Contenido de texto del archivo'),
+      contentBase64: z.string().optional().describe('Contenido binario en base64'),
+      url: z.string().optional().describe('URL pública http(s) del archivo a descargar'),
+      mimeType: z.string().optional().describe('Opcional: tipo MIME, si la extensión no alcanza'),
+      parentId: z.number().int().optional().describe('Carpeta destino que ya existe (de project_files_list)'),
+      folderPath: z.string().optional().describe('Ruta de carpetas destino separada por "/" (ej. "Informes/2026"); se crean las que falten'),
+    },
+    request: ({ projectId, ...body }) => ({ method: 'POST', path: `/projects/${projectId}/files/direct`, body }),
+  },
+  {
+    name: 'project_folder_create',
+    description: 'Crea una carpeta en la Nube del proyecto. Para subir a una ruta nueva no hace falta: project_file_upload con `folderPath` crea las carpetas que falten.',
+    inputSchema: {
+      ...projectIdParam,
+      name: z.string().describe('Nombre de la carpeta'),
+      parentId: z.number().int().optional().describe('Carpeta padre; omitido = raíz del proyecto'),
+    },
+    request: ({ projectId, name, parentId }) => ({ method: 'POST', path: `/projects/${projectId}/files/folders`, body: { name, parentId } }),
+  },
+  {
+    name: 'project_file_update',
+    description: 'Renombra y/o mueve un archivo o una carpeta de la Nube (mandá `name`, `parentId` o los dos). `parentId: null` lo manda a la raíz. Mover una carpeta se lleva todo su contenido. Estás tocando archivos de todo el equipo: confirmá con la persona antes de reordenar cosas que no creaste vos.',
+    inputSchema: {
+      ...projectIdParam,
+      itemId: z.number().int().describe('ID del archivo o carpeta'),
+      name: z.string().optional().describe('Nombre nuevo'),
+      parentId: z.number().int().nullable().optional().describe('Carpeta destino; null = raíz del proyecto'),
+    },
+    request: ({ projectId, itemId, name, parentId }) => ({
+      method: 'PATCH', path: `/projects/${projectId}/files/${itemId}`,
+      body: { name, parentId },
+    }),
+  },
+  {
+    name: 'project_file_delete',
+    description: 'Manda un archivo o una carpeta de la Nube a la papelera del proyecto (borrar una carpeta se lleva todo su contenido). Es reversible con project_file_restore mientras esté en la papelera; vaciarla del todo solo se hace desde la app y es definitivo. CONFIRMÁ SIEMPRE con la persona antes de borrar algo que no subiste vos.',
+    inputSchema: {
+      ...projectIdParam,
+      itemId: z.number().int().describe('ID del archivo o carpeta'),
+    },
+    request: ({ projectId, itemId }) => ({ method: 'DELETE', path: `/projects/${projectId}/files/${itemId}` }),
+  },
+  {
+    name: 'project_files_trash',
+    description: 'Lista lo que está en la papelera de la Nube del proyecto (solo las raíces: una carpeta borrada aparece como una fila, no una por archivo). Sirve para recuperar algo borrado por error con project_file_restore.',
+    inputSchema: { ...projectIdParam },
+    request: ({ projectId }) => ({ method: 'GET', path: `/projects/${projectId}/files/trash` }),
+  },
+  {
+    name: 'project_file_restore',
+    description: 'Saca de la papelera un archivo o una carpeta (con todo su contenido) y lo devuelve a su lugar. Si su carpeta original ya no existe, vuelve a la raíz del proyecto.',
+    inputSchema: {
+      ...projectIdParam,
+      itemId: z.number().int().describe('ID del archivo o carpeta en la papelera (de project_files_trash)'),
+    },
+    request: ({ projectId, itemId }) => ({ method: 'POST', path: `/projects/${projectId}/files/${itemId}/restore` }),
+  },
+
   // ── Situación de la cuenta (hojas acumulables por proyecto) ─────────────
   {
     name: 'project_situation_list',

@@ -3,6 +3,7 @@ const prisma = require('../lib/prisma')
 const objectStorage = require('./objectStorage.service')
 const { getSetting } = require('../lib/platformSettings')
 const { detectDocumentType } = require('../lib/documentType')
+const { extractText } = require('../lib/documentText')
 const { createMessage } = require('../lib/claude')
 
 const SUMMARY_MODEL = 'claude-haiku-4-5-20251001' // costo bajo, mismo criterio que el resto del bot
@@ -58,36 +59,6 @@ function buildTextResult(raw, summary) {
   }
   const capped = truncate(raw, MAX_CHARS_PER_DOC)
   return { text: capped.text, charCount: capped.text.length, truncated: capped.truncated, summarized: false }
-}
-
-/**
- * Extrae texto plano de un buffer según el `kind` detectado por magic bytes.
- * PDF vía pdf-parse v2 (`result.pages` en vez de `result.text` — evita los
- * separadores "-- N of M --" que mete el `text` combinado). DOCX vía mammoth
- * (`extractRawText`, ignora estilos/formato, solo el contenido). TXT es
- * decodificación directa. Puede lanzar (PDF corrupto, DOCX que en realidad es
- * otro tipo de ZIP) — el caller lo captura y marca el documento `status:'error'`.
- */
-async function extractText(buffer, kind) {
-  if (kind === 'pdf') {
-    const { PDFParse } = require('pdf-parse')
-    const parser = new PDFParse({ data: buffer })
-    try {
-      const result = await parser.getText()
-      return result.pages.map(p => p.text).join('\n\n')
-    } finally {
-      await parser.destroy()
-    }
-  }
-  if (kind === 'docx') {
-    const mammoth = require('mammoth')
-    const result = await mammoth.extractRawText({ buffer })
-    return result.value
-  }
-  if (kind === 'txt') {
-    return buffer.toString('utf8')
-  }
-  throw new Error('Tipo de documento no soportado')
 }
 
 /**

@@ -31,6 +31,7 @@ Reglas que no se negocian:
 // Prefijo de nombre de tool → sección de la guía. El orden define el orden de aparición.
 const AREAS = [
   { key: 'general',    label: 'General',                match: n => ['bliss_guide', 'bliss_tools', 'bliss_run', 'whoami', 'list_projects', 'services_list', 'project_update_services'].includes(n) || n.startsWith('project_situation_') },
+  { key: 'nube',       label: 'Nube del proyecto',      match: n => n.startsWith('project_file') || n === 'project_folder_create' },
   { key: 'tareas',     label: 'Tareas y jornada',       match: n => n.startsWith('task') },
   { key: 'equipo',     label: 'Equipo y productividad', match: n => n.startsWith('team_') },
   { key: 'marketing',  label: 'Marketing (métricas)',   match: n => n.startsWith('marketing_') && !SEO_TOOLS.test(n) },
@@ -67,6 +68,19 @@ const SECTIONS = {
 - \`project_situation_add\` agrega una hoja nueva cuando cambió el estado de la cuenta (ej. después de una reunión o un hito); la anterior pasa al historial. Si tiene título, ponelo como \`<h2>\` al principio.
 - \`project_situation_update\` corrige o completa la hoja ACTUAL: reemplaza el texto entero (mandá todo, no solo lo nuevo). Las hojas anteriores no se editan (409).
 - La ve y edita todo el equipo: escribí claro y sin datos sensibles (credenciales, etc.). Las hojas no se borran por MCP.`,
+
+  nube: `## Nube del proyecto (Archivos)
+
+Cada proyecto tiene un repositorio de archivos tipo Drive (carpetas anidadas) que ve y usa **todo el equipo** — es el reemplazo del drive compartido de la agencia, no un espacio tuyo ni de una tarea puntual.
+
+- **Para ubicar algo**: \`project_files_search\` (por nombre, en todo el proyecto, con el breadcrumb de cada resultado) es más rápido que recorrer carpetas con \`project_files_list\`. Los IDs salen de ahí: nunca los inventes.
+- **Para leerlo**: \`project_file_read\` devuelve el contenido como TEXTO — texto plano, markdown, CSV, JSON y similares tal cual; de un PDF o un DOCX se extrae el texto. Se trunca a 200.000 caracteres (\`truncated: true\`). Imágenes, videos y binarios no se pueden leer (415): decile a la persona en qué carpeta está para que lo abra en la app.
+- **Para guardar algo**: \`project_file_upload\` con UNA sola fuente — \`content\` (texto, lo más común), \`contentBase64\` (binario chico, el request no puede pasar de ~1MB) o \`url\` (archivo público, hasta 25MB). El destino va por \`folderPath\` ("Informes/2026", crea lo que falte) o \`parentId\`. Elegí una carpeta que tenga sentido para el equipo y nombres con extensión y fecha (\`informe-seo-2026-10.md\`), no "output.txt".
+- **Si lo que subís es el resultado de una tarea**, usá \`task_attach_file\` en vez de esta tool: guarda el archivo igual en la Nube (carpeta "Tareas / <Mes> / <tarea>") y además queda colgado de la tarea, que es donde la persona lo va a buscar.
+- **Tocar lo que ya está** (\`project_file_update\` para renombrar/mover, \`project_file_delete\` para mandar a la papelera): son archivos de otras personas. Confirmá SIEMPRE antes de mover o borrar algo que no subiste vos. Borrar una carpeta se lleva todo su contenido.
+- Borrar es reversible: \`project_files_trash\` lista la papelera y \`project_file_restore\` devuelve el ítem a su lugar. Vaciar la papelera del todo es definitivo y solo se hace desde la app (admin/owner).
+- No se aceptan HTML ni SVG (riesgo de XSS al servirse). El workspace tiene una cuota de almacenamiento: si una subida devuelve 413 con \`STORAGE_QUOTA_EXCEEDED\`, avisale al usuario en vez de reintentar.
+- La sección puede estar apagada para el workspace (403 "Nube deshabilitada") o el proyecto ser privado y vos no ser del equipo.`,
 
   tareas: `## Tareas y jornada
 
@@ -165,11 +179,11 @@ Bandeja de WhatsApp del número de la agencia, vinculada al CRM (contacto → le
 
 const LIMITS = `## Lo que hoy NO está disponible por MCP
 Estos módulos existen en la app pero no tienen tools: si el usuario lo pide, explicale que tiene que hacerlo desde blisstracker.app.
-- Chat interno, Notificaciones, Calendario/reuniones, Reuniones del proyecto, Briefs, Archivos (Nube del proyecto), links y accesos/credenciales de proyectos.
+- Chat interno, Notificaciones, Calendario/reuniones, Reuniones del proyecto, Briefs, links y accesos/credenciales de proyectos.
 - Finanzas (facturación electrónica, ingresos/egresos), RRHH (vacaciones, legajos, beneficios), EOS, Gamification.
 - WhatsApp: plantillas, adjuntos, bot y automatizaciones (responder con texto dentro de la ventana de 24hs sí, ver sección WhatsApp).
 - Administración: invitar o desactivar personas, roles, preferencias, módulos, facturación/plan del workspace.
-- Subir archivos o imágenes fuera de las tareas (Contenido, Nube, chat). A una tarea sí: \`task_attach_file\`.
+- Subir imágenes a Contenido o archivos al chat interno. A una tarea sí (\`task_attach_file\`) y a la Nube del proyecto también (\`project_file_upload\`).
 - Conectar integraciones (Google/Meta/TikTok/LinkedIn): requieren OAuth en el navegador.
 
 ## Buenas prácticas

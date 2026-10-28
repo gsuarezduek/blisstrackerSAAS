@@ -18,6 +18,9 @@ const { detectVideoType } = require('../../lib/mediaType')
 const { detectDocumentType } = require('../../lib/documentType')
 const { safeContentDisposition } = require('../../lib/contentDisposition')
 const { resolveProjectId } = require('./_shared')
+const { findOrCreateFolder } = require('../../lib/projectFileTree')
+const { resolveDirectUpload } = require('../../lib/directUpload')
+const { extractText } = require('../../lib/documentText')
 const { DANGEROUS_MIME_TYPES, isDangerousMime } = require('../../lib/dangerousMime')
 
 const MAX_FILE_BYTES = 500 * 1024 * 1024 // 500MB — un solo PUT sin reintento parcial; más grande necesitaría multiparte
@@ -26,6 +29,12 @@ const MAX_FILE_BYTES = 500 * 1024 * 1024 // 500MB — un solo PUT sin reintento 
 // array a mano es case-sensitive y se evade con "TEXT/HTML"/"Image/Svg+Xml".
 const DENIED_MIME = DANGEROUS_MIME_TYPES
 const PRESIGN_EXPIRES_IN = 900 // 15 min (más margen que Contenido: archivos más pesados)
+// Vida de las URLs firmadas de LECTURA (ver fileSignedUrl). La de preview es
+// más larga porque un <video> revalida la firma en CADA Range request: si
+// vence mientras alguien está mirando, el próximo seek falla. La de descarga
+// solo tiene que durar hasta que el navegador abra la conexión.
+const SIGNED_INLINE_EXPIRES_IN = 60 * 60   // 1 h
+const SIGNED_DOWNLOAD_EXPIRES_IN = 15 * 60 // 15 min
 const PENDING_MAX_AGE_MS = 60 * 60 * 1000
 const MAX_PENDING_PER_PROJECT = 5
 const MAX_ZIP_ENTRIES = 2000 // tope de archivos por ZIP — protege memoria/tiempo del proceso
@@ -72,8 +81,9 @@ const CONTENT_LINKS_INCLUDE = {
 // <img>) — es un link público sin auth a R2 (mismo criterio de "no-adivinable
 // = control de acceso" que SocialImage/ContentAsset), pensado para la
 // miniatura de la grilla. PDF/video/el resto NO tienen link público: se ven o
-// se descargan siempre vía el endpoint autenticado /download (proxied, no
-// redirect — ver objectStorage.getObjectStream), nunca directo contra R2.
+// se descargan pidiendo primero una URL FIRMADA de vida corta por el endpoint
+// autenticado /signed-url (ver fileSignedUrl), o por el proxy de /download
+// donde los bytes tienen que pasar por nosotros (ZIP, portal de cliente).
 function shapeItem(f) {
   const isImage = f.mimeType && f.mimeType.startsWith('image/')
   const isPreviewInBrowser = f.mimeType && (isImage || f.mimeType.startsWith('video/') || f.mimeType === 'application/pdf')
@@ -652,6 +662,57 @@ async function revokePublicLink(req, res, next) {
 }
 
 /**
+ * GET /api/projects/:id/files/:fileId/signed-url[?inline=1]
+ * Devuelve una URL firmada de R2 de vida corta para bajar o reproducir el
+ * archivo SIN pasar por nuestro backend. Es el camino rápido de los dos flujos
+ * donde el proxy de `downloadFile` se siente lento:
+ *
+ *  - descarga (`attachment`): la baja el navegador él mismo — barra de progreso
+ *    nativa, reanudable, y el archivo no queda entero en la RAM de la pestaña
+ *    como pasa al pedirlo por XHR con `responseType: 'blob'`;
+ *  - preview de video (`?inline=1`): el <video> habla directo con R2, que sirve
+ *    `Range`, así arranca con los primeros bytes en vez de esperar a tener el
+ *    archivo completo (que es lo que obliga a hacer un blob URL).
+ *
+ * Esto NO contradice el criterio de `shapeItem` ("video/PDF no tienen link
+ * público"): no es `publicUrl` (sin vencimiento, solo imágenes, pensada para la
+ * miniatura de la grilla) sino una firma que caduca y que se emite únicamente
+ * después de pasar el mismo guard autenticado que `downloadFile`. Mismo
+ * criterio que la descarga de assets de Contenido (contentAssets.controller.js).
+ *
+ * `downloadFile` sigue existiendo: es el camino para todo lo que necesita que
+ * los bytes pasen por nosotros (el ZIP, que se arma al vuelo, y los controllers
+ * del portal de cliente / links públicos, que replican su patrón).
+ */
+async function fileSignedUrl(req, res, next) {
+  try {
+    const guard = await resolveFilesGuard(req)
+    if (guard.error) return res.status(guard.status).json({ error: guard.error })
+    const { projectId } = guard
+
+    if (!objectStorage.isConfigured()) {
+      return res.status(503).json({ error: 'El almacenamiento de archivos no está configurado en este workspace.', code: 'STORAGE_NOT_CONFIGURED' })
+    }
+
+    const file = await prisma.projectFile.findFirst({
+      where: { id: Number(req.params.fileId), projectId, type: 'file', status: 'ready', deletedAt: null },
+      select: { name: true, mimeType: true, objectKey: true },
+    })
+    if (!file || !file.objectKey) return res.status(404).json({ error: 'Archivo no encontrado' })
+
+    const inline = req.query.inline === '1'
+    const expiresIn = inline ? SIGNED_INLINE_EXPIRES_IN : SIGNED_DOWNLOAD_EXPIRES_IN
+    const url = await objectStorage.presignGet(file.objectKey, {
+      expiresIn,
+      filename: file.name,
+      disposition: inline ? 'inline' : 'attachment',
+      contentType: file.mimeType || undefined,
+    })
+    res.json({ url, expiresIn })
+  } catch (err) { next(err) }
+}
+
+/**
  * GET /api/projects/:id/files/:fileId/download[?inline=1]
  * Autenticado (a diferencia del serve público de Contenido, pensado para el
  * portal de cliente) — por eso NO se puede resolver con un 302 a una URL
@@ -665,6 +726,13 @@ async function revokePublicLink(req, res, next) {
  * de forzar "Guardar como" — en ambos casos el frontend lo pide como blob vía
  * JS, nunca como navegación de página, así que el header Content-Disposition
  * es solo informativo (no dispara nada por sí solo en ese flujo).
+ *
+ * La Nube del equipo ya NO usa esta ruta para descargar ni para previsualizar
+ * video: pedir el archivo entero como blob antes de mostrar un frame (o antes
+ * de que el navegador empiece a guardar) era justo lo que la hacía sentir
+ * lenta, así que esos dos caminos pasaron a `fileSignedUrl`. Queda en uso para
+ * el preview de PDF, los adjuntos de tareas, y como patrón replicado por los
+ * controllers del portal de cliente y de los links públicos.
  */
 async function downloadFile(req, res, next) {
   try {
@@ -819,6 +887,162 @@ async function locateFile(req, res, next) {
   } catch (err) { next(err) }
 }
 
+// ─── LECTURA Y ESCRITURA SIN BROWSER (agentes por MCP) ──────────────────────
+// Un agente conectado por MCP no puede hacer el PUT presignado a R2 ni abrir
+// un archivo en pantalla: un tool-call manda y recibe JSON. Estos dos
+// endpoints son esa vía — subir pasando el contenido en el request, y leer un
+// archivo como texto — sobre exactamente el mismo repositorio y las mismas
+// validaciones que usa la app web (nada de un storage paralelo).
+
+// Tope de lo que se devuelve como texto en un solo read: un archivo más grande
+// se trunca (`truncated: true`) en vez de fallar — el que lee es un modelo con
+// ventana de contexto finita, devolverle 10MB de texto no le sirve a nadie.
+const MAX_READ_CHARS = 200_000
+const MAX_READ_BYTES = 30 * 1024 * 1024 // más que esto no se baja a memoria para leerlo
+
+// Tipos que se pueden devolver como texto plano tal cual (el resto necesita
+// extracción — PDF/DOCX — o directamente no es legible — imágenes, video, zips).
+const TEXTISH_MIME = /^text\/|^application\/(json|xml|x-yaml|yaml|javascript|sql|csv)$|\+xml$|\+json$/
+const TEXTISH_EXT = new Set([
+  'txt', 'md', 'markdown', 'csv', 'tsv', 'json', 'yaml', 'yml', 'xml', 'log',
+  'html', 'htm', 'svg', 'js', 'ts', 'css', 'sql', 'env', 'ini', 'conf',
+])
+
+/**
+ * POST /api/projects/:id/files/direct
+ * { name, content? | contentBase64? | url?, mimeType?, parentId?, folderPath? }
+ *
+ * Sube un archivo desde el servidor, sin el presign→PUT→confirm del browser.
+ * La carpeta destino sale de `parentId` (una carpeta que ya existe) o de
+ * `folderPath` ("Informes/2026": se crea sola, nivel por nivel, con el mismo
+ * findOrCreateFolder que usan los adjuntos de tareas y el espejo de Contenido);
+ * sin ninguno de los dos va a la raíz del proyecto. Mismas validaciones que el
+ * flujo normal: MIME denylist por magic bytes, tope de tamaño y cuota del
+ * workspace.
+ */
+async function directUpload(req, res, next) {
+  try {
+    const guard = await resolveFilesGuard(req)
+    if (guard.error) return res.status(guard.status).json({ error: guard.error })
+    const { projectId, workspaceId } = guard
+
+    if (!objectStorage.isConfigured()) {
+      return res.status(503).json({ error: 'La subida de archivos no está configurada en este workspace.', code: 'STORAGE_NOT_CONFIGURED' })
+    }
+
+    const name = sanitizeName(req.body?.name)
+    if (!name) return res.status(400).json({ error: 'Nombre de archivo requerido' })
+
+    let parentId = null
+    if (req.body?.parentId != null) {
+      parentId = Number(req.body.parentId)
+      if (!Number.isInteger(parentId) || parentId <= 0) return res.status(400).json({ error: 'parentId inválido' })
+      const parent = await prisma.projectFile.findFirst({ where: { id: parentId, projectId, type: 'folder', deletedAt: null } })
+      if (!parent) return res.status(404).json({ error: 'Carpeta destino no encontrada' })
+    }
+
+    const { buffer, mimeType } = await resolveDirectUpload({ ...req.body, name })
+
+    // folderPath se resuelve DESPUÉS de validar los bytes: si el archivo se
+    // rechaza, no queda un árbol de carpetas vacías creado al pedo.
+    if (typeof req.body?.folderPath === 'string' && req.body.folderPath.trim()) {
+      const segments = req.body.folderPath.split('/').map(sanitizeName).filter(Boolean)
+      if (segments.length > 10) return res.status(400).json({ error: 'folderPath demasiado profundo (máximo 10 niveles)' })
+      for (const segment of segments) {
+        parentId = await findOrCreateFolder(projectId, workspaceId, parentId, segment, req.user.userId)
+      }
+    }
+
+    const quotaError = await assertWithinQuota(workspaceId, buffer.length)
+    if (quotaError) return res.status(413).json({ error: quotaError, code: 'STORAGE_QUOTA_EXCEEDED' })
+
+    const { key: objectKey } = await objectStorage.putObject(buffer, mimeType, { prefix: `files/${workspaceId}` })
+    try {
+      const created = await prisma.projectFile.create({
+        data: {
+          projectId, workspaceId, parentId, type: 'file', status: 'ready',
+          name, mimeType, objectKey, sizeBytes: buffer.length,
+          uploadedById: req.user.userId, confirmedAt: new Date(),
+        },
+        include: { uploadedBy: { select: { id: true, name: true } } },
+      })
+      res.status(201).json({ ...shapeItem(created), parentId, projectId })
+    } catch (err) {
+      await objectStorage.deleteObject(objectKey)
+      throw err
+    }
+  } catch (err) {
+    if (err.isOperational && err.status) {
+      return res.status(err.status).json(err.code ? { error: err.message, code: err.code } : { error: err.message })
+    }
+    next(err)
+  }
+}
+
+/**
+ * GET /api/projects/:id/files/:fileId/content
+ * Devuelve el contenido de un archivo como TEXTO (no los bytes: eso es
+ * /download, que sirve para el browser). Texto plano/markdown/CSV/JSON salen
+ * tal cual; PDF y DOCX pasan por la extracción de texto que ya usa el bot de
+ * WhatsApp (lib/documentText.js). Lo que no es legible como texto (imágenes,
+ * video, binarios) devuelve 415 con el link de descarga, en vez de basura.
+ */
+async function readFileContent(req, res, next) {
+  try {
+    const guard = await resolveFilesGuard(req)
+    if (guard.error) return res.status(guard.status).json({ error: guard.error })
+    const { projectId } = guard
+
+    const file = await prisma.projectFile.findFirst({
+      where: { id: Number(req.params.fileId), projectId, type: 'file', status: 'ready', deletedAt: null },
+      include: { uploadedBy: { select: { id: true, name: true } } },
+    })
+    if (!file || !file.objectKey) return res.status(404).json({ error: 'Archivo no encontrado' })
+    if (file.sizeBytes > MAX_READ_BYTES) {
+      return res.status(413).json({ error: `El archivo es demasiado grande para leerlo como texto (${Math.round(MAX_READ_BYTES / (1024 * 1024))}MB máximo).` })
+    }
+
+    const ext = file.name.includes('.') ? file.name.split('.').pop().toLowerCase() : ''
+    const mime = file.mimeType || ''
+    const isPdf = mime === 'application/pdf' || ext === 'pdf'
+    const isDocx = mime.includes('wordprocessingml') || ext === 'docx'
+    const isText = TEXTISH_MIME.test(mime) || TEXTISH_EXT.has(ext)
+    if (!isPdf && !isDocx && !isText) {
+      return res.status(415).json({
+        error: `No se puede leer "${file.name}" como texto (${mime || 'tipo desconocido'}). Descargalo desde la app si necesitás verlo.`,
+        code: 'NOT_TEXT_READABLE',
+      })
+    }
+
+    const { body } = await objectStorage.getObjectStream(file.objectKey)
+    const chunks = []
+    for await (const chunk of body) chunks.push(chunk)
+    const buffer = Buffer.concat(chunks)
+
+    let text
+    if (isPdf || isDocx) {
+      try {
+        text = await extractText(buffer, isPdf ? 'pdf' : 'docx')
+      } catch (err) {
+        return res.status(422).json({ error: `No se pudo extraer el texto de "${file.name}": ${err.message}`, code: 'EXTRACTION_FAILED' })
+      }
+    } else {
+      text = buffer.toString('utf8')
+    }
+
+    const full = (text || '').trim()
+    const truncated = full.length > MAX_READ_CHARS
+    res.json({
+      file: shapeItem(file),
+      path: file.parentId ? await buildPath(file.parentId, projectId) : [],
+      format: isPdf ? 'pdf' : isDocx ? 'docx' : 'text',
+      charCount: full.length,
+      truncated,
+      content: truncated ? full.slice(0, MAX_READ_CHARS) : full,
+    })
+  } catch (err) { next(err) }
+}
+
 module.exports = {
   listFiles,
   searchFiles,
@@ -833,9 +1057,12 @@ module.exports = {
   purgeItem,
   createPublicLink,
   revokePublicLink,
+  fileSignedUrl,
   downloadFile,
   downloadZip,
   locateFile,
+  directUpload,
+  readFileContent,
   // exportados para tests
   MAX_FILE_BYTES,
   DENIED_MIME,

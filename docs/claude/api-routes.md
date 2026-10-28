@@ -112,6 +112,26 @@ DELETE /api/projects/:id/meetings/:mid/participants/:uid     # quita participant
 POST   /api/projects/:id/meetings/:mid/todos                 # agrega tarea (title, ownerId?) — si la reunión ya terminó y nace con responsable, va directo al dashboard
 PATCH  /api/projects/:id/meetings/:mid/todos/:tid            # edita tarea (title?, done?, ownerId?) — si la reunión ya terminó, cambiar el responsable crea/mueve/borra la tarea del dashboard
 DELETE /api/projects/:id/meetings/:mid/todos/:tid            # elimina tarea
+
+# Nube del proyecto (Archivos — repositorio tipo Drive sobre R2, projectFiles.controller.js)
+GET    /api/projects/:id/files[?parentId=]              # un nivel: carpetas + archivos 'ready' + breadcrumb (cualquier miembro del workspace)
+GET    /api/projects/:id/files/search?q=                # busca por nombre en todo el proyecto (máx. 50, cada uno con su path)
+GET    /api/projects/:id/files/trash                    # papelera (solo las raíces de cada subárbol borrado)
+POST   /api/projects/:id/files/folders                  # { name, parentId? }
+POST   /api/projects/:id/files/presign                  # { name, mimeType, sizeBytes, parentId? } → URL de PUT directo a R2
+POST   /api/projects/:id/files/direct                   # { name, content | contentBase64 | url, mimeType?, parentId? | folderPath? } — sube desde el servidor (agentes vía MCP), hasta 25MB por url; folderPath crea las carpetas que falten
+POST   /api/projects/:id/files/:fileId/confirm          # valida tamaño real + magic bytes y marca 'ready'
+DELETE /api/projects/:id/files/:fileId/pending          # aborta una subida pendiente
+GET    /api/projects/:id/files/:fileId/download[?inline=1]  # proxy de los bytes desde R2
+GET    /api/projects/:id/files/:fileId/content          # contenido como TEXTO (texto/md/CSV/JSON tal cual; PDF/DOCX extraídos) — 415 si no es legible, 413 si pesa más de 30MB, truncado a 200k caracteres
+POST   /api/projects/:id/files/download-zip             # { itemIds } → ZIP en streaming
+GET    /api/projects/:id/files/:fileId/locate           # archivo + breadcrumb de su carpeta (deep-link)
+POST   /api/projects/:id/files/:itemId/public-link      # genera/rota el link público del ítem
+DELETE /api/projects/:id/files/:itemId/public-link      # revoca el link público
+POST   /api/projects/:id/files/:itemId/restore          # saca de la papelera (con su subárbol)
+DELETE /api/projects/:id/files/:itemId/purge            # admin/owner: borra definitivamente (R2 + DB)
+PATCH  /api/projects/:id/files/:itemId                  # renombra y/o mueve { name?, parentId? }
+DELETE /api/projects/:id/files/:itemId                  # papelera (soft-delete, cascada al subárbol)
 GET    /api/realtime
 GET    /api/search                       # ?q= (mín. 2 caracteres) — buscador global: { tasks, pieces, events, files }, cada bloque filtrado por flag/acceso de su módulo
 GET    /api/reports/by-project              # admin: proyecto→persona→tarea + horas registradas vs 100% horas contratadas

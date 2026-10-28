@@ -1305,7 +1305,7 @@ Así el agente sabe sus límites desde el primer mensaje, sin que tengas que exp
         title: 'Qué puede (y qué no puede) hacer un agente',
         audience: 'todos',
         module: 'mcp',
-        summary: 'Proyectos, tareas, equipo, marketing, SEO, contenido, ventas y responder WhatsApp sí; chat, calendario, finanzas, RRHH, EOS y archivos todavía no.',
+        summary: 'Proyectos, tareas, la Nube del proyecto, equipo, marketing, SEO, contenido, ventas y responder WhatsApp sí; chat, calendario, finanzas, RRHH y EOS todavía no.',
         body: `El agente usa **tus mismos permisos**: puede hacer lo que vos podés hacer en la app, nunca más. Si no tenés acceso a un módulo, el agente tampoco.
 
 ## Lo que sí puede hacer
@@ -1314,6 +1314,7 @@ Así el agente sabe sus límites desde el primer mensaje, sin que tengas que exp
 - **Situación de la cuenta** — leer las hojas de un proyecto, corregir o completar la hoja actual y agregar una hoja nueva (la anterior queda en el historial). Lo que escribe aparece con tu nombre y la marca "vía <agente>". No puede borrar hojas.
 - **Tareas** — ver la jornada de hoy; crear tareas (también futuras y recurrentes, y asignadas a otra persona); corregir el texto, el proyecto o la fecha de tus tareas; pasarle una tarea tuya a otra persona del equipo (le llega un aviso); iniciar, pausar, reanudar, completar, bloquear y desbloquear; corregir el tiempo de una tarea ya completada.
 - **Comentarios y adjuntos** — comentar en una tarea para dejar avances o notas sin bloquearla (el comentario aparece con tu nombre y la marca "vía <agente>", y te llega un aviso) y adjuntar archivos: informes y borradores de texto, o archivos publicados en internet como imágenes o PDFs. Quedan en la Nube del proyecto, igual que los que adjuntás vos.
+- **Nube del proyecto (Archivos)** — navegar y buscar en el repositorio de archivos del proyecto, **leer** el contenido de un archivo (texto, markdown, CSV, JSON, y el texto de PDFs y documentos de Word), **subir** archivos a la carpeta que le indiques (crea las carpetas que falten), crear carpetas, renombrar, mover y mandar a la papelera (reversible: también puede restaurar). No puede leer imágenes ni videos, ni vaciar la papelera del todo.
 - **Tareas propias del agente** — el agente puede crear tareas que **ejecuta él mismo** (no vos): quedan en su propia lista de trabajo, puede tener varias en curso a la vez y no ocupan tu lugar de "una tarea en curso". También puede tomar las tareas que le delegues, devolvértelas y **borrar** las de su lista que todavía no completó (nunca tus tareas ni las ya completadas). Si algo lo frena, bloquea la tarea con un motivo para pedirte ayuda.
 - **Equipo** — listar el equipo. Los admins además: asistencia y tardanzas de una persona, historial detallado de tareas y ver la jornada de otra persona (solo lectura).
 - **Marketing** — salud del proyecto, GA4, Search Console (+ desglose por query, snapshot mensual, sugerencias IA), Domain Rating (+ actualizar), keywords (+ sugerir, dejar de trackear, histórico/heatmap, SERP y análisis IA), oportunidades SEO y plan de acción, las 5 redes, Meta y Google Ads, competidores, objetivos, informes y auditorías GEO (+ borrar, generar llms.txt, generar schema y vincular un hallazgo a una tarea). Puede agregar o sacar keywords y competidores, correr una auditoría GEO, regenerar un informe y refrescar todas las fuentes.
@@ -1324,16 +1325,16 @@ Así el agente sabe sus límites desde el primer mensaje, sin que tengas que exp
 
 ## Lo que todavía no puede hacer
 
-- Chat, notificaciones, Calendario y reuniones, Briefs, Nube/archivos, links y accesos de proyectos.
+- Chat, notificaciones, Calendario y reuniones, Briefs, links y accesos de proyectos.
 - Finanzas, RRHH (vacaciones, legajos, beneficios), EOS y Gamification.
 - En WhatsApp: mandar plantillas o reabrir conversaciones vencidas (tienen costo), mandar imágenes o archivos, y configurar el bot o las automatizaciones.
 - Administración: invitar o desactivar personas, roles, preferencias, módulos, facturación.
 - En tareas: borrar las tuyas (solo puede borrar las del agente), editar o pasar tareas de otras personas, destacarlas, moverlas al backlog o seguirlas.
-- **Subir archivos** fuera de las tareas (Contenido, Nube, chat), ni conectar integraciones (Google, Meta, TikTok, LinkedIn): esas cosas necesitan el navegador.
+- **Subir imágenes a Contenido** o archivos al chat, ni conectar integraciones (Google, Meta, TikTok, LinkedIn): esas cosas necesitan el navegador. A una tarea y a la Nube del proyecto sí puede subir.
 
 ## Acciones que el agente confirma antes
 
-Las que tienen efecto hacia afuera o consumen IA: mandarle algo al cliente (un WhatsApp, pedir aprobación, comentarios visibles en el portal, confirmar una propuesta), borrar, convertir un lead, y correr auditorías, informes, investigaciones o propuestas con IA, que gastan el presupuesto de tokens del workspace.`,
+Las que tienen efecto hacia afuera o consumen IA: mandarle algo al cliente (un WhatsApp, pedir aprobación, comentarios visibles en el portal, confirmar una propuesta), borrar (incluido mover o mandar a la papelera archivos de la Nube que no subió él), convertir un lead, y correr auditorías, informes, investigaciones o propuestas con IA, que gastan el presupuesto de tokens del workspace.`,
         tips: [
           'Pedile al agente que use executor "agent" en las tareas que va a hacer él: así no se mezclan con las tuyas.',
           'El tiempo de tus agentes no suma a tus horas, a tu asistencia ni a las horas contratadas del proyecto: en Productividad se ve aparte, en "Sus agentes de IA".',
