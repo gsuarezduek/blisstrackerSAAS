@@ -240,9 +240,20 @@ async function verifyEmailChange(req, res, next) {
 
     const before = await prisma.user.findUnique({ where: { id: record.userId }, select: { email: true, name: true } })
 
+    // Haber abierto el link en la casilla nueva ya prueba que es suya: el email queda
+    // verificado acá mismo (si no, el banner de verificación sobrevive al cambio). Los
+    // `EmailVerificationToken` pendientes se invalidan porque apuntan al email anterior
+    // — típicamente uno mal escrito, inaccesible — y confirmarlos no probaría nada.
     await prisma.$transaction([
-      prisma.user.update({ where: { id: record.userId }, data: { email: record.newEmail } }),
+      prisma.user.update({
+        where: { id: record.userId },
+        data: { email: record.newEmail, emailVerified: true },
+      }),
       prisma.emailChangeToken.update({ where: { id: record.id }, data: { used: true } }),
+      prisma.emailVerificationToken.updateMany({
+        where: { userId: record.userId, used: false },
+        data: { used: true },
+      }),
     ])
 
     // Aviso de seguridad al email anterior (best-effort).
