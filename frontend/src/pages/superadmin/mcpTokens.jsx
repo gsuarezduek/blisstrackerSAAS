@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import api from '../../api/client'
 import LoadingSpinner from '../../components/LoadingSpinner'
 import { timeAgo } from './shared'
@@ -6,10 +6,58 @@ import { timeAgo } from './shared'
 // Visibilidad global (todos los workspaces) de los tokens de MCP/Agentes IA — solo
 // lectura. El alta/baja la gestiona cada usuario desde su propio perfil (Preferencias
 // → Agentes IA) o, para casos puntuales, los scripts backend/scripts/mcp-*-token.js.
+
+// Dirección con la que arranca cada columna al clickearla por primera vez: las
+// fechas y el estado interesan "lo más reciente / lo activo primero", los textos
+// alfabético.
+const SORT_DEFAULT_DIR = {
+  label: 'asc', user: 'asc', workspace: 'asc', createdAt: 'desc', lastUsedAt: 'desc', status: 'asc',
+}
+
+// `lastUsedAt` devuelve null para los agentes que nunca se usaron: "nunca" no es
+// una fecha, así que esas filas van al final en las dos direcciones (ver el
+// comparador abajo), no mezcladas con las más viejas.
+function sortValue(t, col) {
+  switch (col) {
+    case 'label':      return (t.label || '').toLowerCase()
+    case 'user':       return (t.user?.name || t.user?.email || '').toLowerCase()
+    case 'workspace':  return (t.workspace?.name || t.workspace?.slug || '').toLowerCase()
+    case 'createdAt':  return new Date(t.createdAt).getTime()
+    case 'lastUsedAt': return t.lastUsedAt ? new Date(t.lastUsedAt).getTime() : null
+    case 'status':     return t.revokedAt ? 1 : 0 // activos primero en asc
+    default:           return 0
+  }
+}
+
+// Encabezado de columna ordenable — mismo patrón que ProductivityTab.jsx.
+function SortTh({ label, col, sortBy, sortDir, onSort }) {
+  const active = sortBy === col
+  return (
+    <th className="px-4 py-2.5 font-medium">
+      <button
+        onClick={() => onSort(col)}
+        className={`inline-flex items-center gap-1 transition-colors ${
+          active ? 'text-gray-700 dark:text-gray-200' : 'hover:text-gray-600 dark:hover:text-gray-300'
+        }`}
+      >
+        {label}
+        <span className={active ? 'opacity-100' : 'opacity-0'}>{sortDir === 'asc' ? '▲' : '▼'}</span>
+      </button>
+    </th>
+  )
+}
+
 export function SectionMcpTokens() {
   const [tokens,  setTokens]  = useState([])
   const [loading, setLoading] = useState(true)
   const [q,       setQ]       = useState('')
+  const [sortBy,  setSortBy]  = useState('createdAt')
+  const [sortDir, setSortDir] = useState('desc')
+
+  function handleSort(col) {
+    if (col === sortBy) setSortDir(d => (d === 'asc' ? 'desc' : 'asc'))
+    else { setSortBy(col); setSortDir(SORT_DEFAULT_DIR[col] || 'desc') }
+  }
 
   useEffect(() => {
     api.get('/superadmin/mcp-tokens')
@@ -17,13 +65,20 @@ export function SectionMcpTokens() {
       .finally(() => setLoading(false))
   }, [])
 
-  const filtered = tokens.filter(t => {
-    if (!q.trim()) return true
+  const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase()
-    return [t.label, t.user?.name, t.user?.email, t.workspace?.name, t.workspace?.slug]
-      .filter(Boolean)
-      .some(v => v.toLowerCase().includes(needle))
-  })
+    const matches = tokens.filter(t => (
+      !needle || [t.label, t.user?.name, t.user?.email, t.workspace?.name, t.workspace?.slug]
+        .filter(Boolean)
+        .some(v => v.toLowerCase().includes(needle))
+    ))
+    return matches.sort((a, b) => {
+      const va = sortValue(a, sortBy), vb = sortValue(b, sortBy)
+      if (va === null || vb === null) return va === vb ? 0 : (va === null ? 1 : -1)
+      const cmp = typeof va === 'string' ? va.localeCompare(vb, 'es') : va - vb
+      return sortDir === 'asc' ? cmp : -cmp
+    })
+  }, [tokens, q, sortBy, sortDir])
 
   const activeCount = tokens.filter(t => !t.revokedAt).length
 
@@ -53,12 +108,12 @@ export function SectionMcpTokens() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-200 dark:border-gray-700 text-left text-xs text-gray-400 dark:text-gray-500">
-                <th className="px-4 py-2.5 font-medium">Agente</th>
-                <th className="px-4 py-2.5 font-medium">Persona</th>
-                <th className="px-4 py-2.5 font-medium">Workspace</th>
-                <th className="px-4 py-2.5 font-medium">Creado</th>
-                <th className="px-4 py-2.5 font-medium">Último uso</th>
-                <th className="px-4 py-2.5 font-medium">Estado</th>
+                <SortTh label="Agente"     col="label"      sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
+                <SortTh label="Persona"    col="user"       sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
+                <SortTh label="Workspace"  col="workspace"  sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
+                <SortTh label="Creado"     col="createdAt"  sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
+                <SortTh label="Último uso" col="lastUsedAt" sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
+                <SortTh label="Estado"     col="status"     sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
               </tr>
             </thead>
             <tbody>
