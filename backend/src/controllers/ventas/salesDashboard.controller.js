@@ -41,9 +41,13 @@ async function getDashboard(req, res, next) {
     const actionsOverdue = []
     for (const a of actions) {
       const d = a.dueAt.toLocaleDateString('en-CA', { timeZone: tz })
+      // El título de la fila es la empresa (a quién hay que contactar); el título del
+      // lead (suele ser el servicio) queda como dato secundario.
+      const companyName = a.lead.company?.name
       const item = {
         id: a.lead.id,
-        title: a.lead.title || a.lead.company?.name || 'Lead',
+        title: companyName || a.lead.title || 'Lead',
+        leadTitle: companyName ? a.lead.title : null,
         actionTitle: a.title,
         dueAt: a.dueAt,
         owner: a.owner,

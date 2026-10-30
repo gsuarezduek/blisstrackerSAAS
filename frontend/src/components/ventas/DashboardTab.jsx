@@ -57,7 +57,11 @@ function ActionRow({ a, onOpenLead, overdue }) {
     >
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{a.title}</p>
-        {a.actionTitle && <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{a.actionTitle}</p>}
+        {(a.actionTitle || a.leadTitle) && (
+          <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+            {[a.actionTitle, a.leadTitle].filter(Boolean).join(' · ')}
+          </p>
+        )}
       </div>
       {a.owner ? (
         <span className="flex items-center gap-1.5 flex-shrink-0">
