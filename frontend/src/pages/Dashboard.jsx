@@ -679,7 +679,7 @@ export default function Dashboard() {
   const inFocus = starred.length + blocked.length
   const leftToday = inFocus + allBacklog.length
   // Sin onMoveToBacklog: con un solo Backlog para todo lo no destacado, "Mover al Backlog" ya no aplica.
-  const taskProps = { onUpdate: handleUpdateTask, onDelete: handleDeleteTask, activeTask, onOpenComments: setCommentTask, onDelegated: handleAgentHandoff }
+  const taskProps = { onUpdate: handleUpdateTask, onDelete: handleDeleteTask, activeTask, onOpenComments: setCommentTask, onDelegated: handleAgentHandoff, onReassigned: handleAgentHandoff }
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -904,7 +904,7 @@ export default function Dashboard() {
                 ) : (
                   <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200/80 dark:border-gray-700 divide-y divide-gray-100 dark:divide-gray-700/70">
                     {future.map(t => (
-                      <TaskCard key={t.id} task={t} onUpdate={handleUpdateTask} onDelete={handleDeleteTask} future onBringToToday={handleBringToToday} onOpenComments={setCommentTask} onDelegated={handleAgentHandoff} />
+                      <TaskCard key={t.id} task={t} onUpdate={handleUpdateTask} onDelete={handleDeleteTask} future onBringToToday={handleBringToToday} onOpenComments={setCommentTask} onDelegated={handleAgentHandoff} onReassigned={handleAgentHandoff} />
                     ))}
                   </div>
                 )

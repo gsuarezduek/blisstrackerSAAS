@@ -12,6 +12,7 @@ import { Repeat, CalendarDays, MessageSquare, Paperclip, Bot } from 'lucide-reac
 import { Icon } from './ui/Icon'
 import useMyAgents, { agentName } from '../hooks/useMyAgents'
 import DelegateAgentModal from './dashboard/DelegateAgentModal'
+import DelegatePersonModal from './dashboard/DelegatePersonModal'
 
 // Fila de tarea del Dashboard (foco del día, Backlog y Programadas). Una sola acción
 // principal visible según el estado — el resto (mover al Backlog, eliminar) vive en
@@ -96,7 +97,8 @@ export function OverflowMenu({ items }) {
 }
 
 // onDelegated(task, scope): la tarea pasó a uno de mis agentes (sale de mis listas).
-function TaskCard({ task, onUpdate, onDelete, activeTask, backlog, future, onAddToToday, onBringToToday, onMoveToBacklog, onOpenComments, onDelegated }) {
+// onReassigned(task): la tarea pasó a otra persona del workspace (sale de mis listas).
+function TaskCard({ task, onUpdate, onDelete, activeTask, backlog, future, onAddToToday, onBringToToday, onMoveToBacklog, onOpenComments, onDelegated, onReassigned }) {
   const { members } = useMembers()
   const navigate = useNavigate()
   const myAgents = useMyAgents()
@@ -104,6 +106,7 @@ function TaskCard({ task, onUpdate, onDelete, activeTask, backlog, future, onAdd
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [showBlock, setShowBlock] = useState(false)
   const [showDelegate, setShowDelegate] = useState(false)
+  const [showDelegatePerson, setShowDelegatePerson] = useState(false)
 
   async function patch(endpoint) {
     const { data } = await api.patch(`/tasks/${task.id}/${endpoint}`)
@@ -188,6 +191,12 @@ function TaskCard({ task, onUpdate, onDelete, activeTask, backlog, future, onAdd
   // (cambiar quién la ejecuta en plena ejecución lo rechaza el backend).
   if (onDelegated && myAgents.length > 0 && ['PENDING', 'PAUSED', 'BLOCKED'].includes(task.status)) {
     menu.push({ label: 'Delegar a mi agente', onClick: () => setShowDelegate(true) })
+  }
+  // Delegar a otra persona: solo tareas sin empezar — una pausada/bloqueada ya tiene
+  // tiempo registrado, y al cambiar el responsable esas horas pasarían a la otra
+  // persona en Productividad/Reportes (se leen por userId).
+  if (onReassigned && task.status === 'PENDING') {
+    menu.push({ label: 'Delegar a otra persona', onClick: () => setShowDelegatePerson(true) })
   }
   if (onOpenComments) menu.push({ label: 'Abrir detalle', onClick: () => onOpenComments(task) })
   if (task.status === 'PENDING' || task.status === 'PAUSED') {
@@ -331,6 +340,9 @@ function TaskCard({ task, onUpdate, onDelete, activeTask, backlog, future, onAdd
       )}
       {showDelegate && (
         <DelegateAgentModal task={task} agents={myAgents} onClose={() => setShowDelegate(false)} onDelegated={onDelegated} />
+      )}
+      {showDelegatePerson && (
+        <DelegatePersonModal task={task} onClose={() => setShowDelegatePerson(false)} onReassigned={onReassigned} />
       )}
       <ReasonModal
         open={showBlock}
