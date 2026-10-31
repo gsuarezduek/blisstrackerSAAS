@@ -739,6 +739,26 @@ async function uploadThumbnail(req, res, next) {
 }
 
 /**
+ * Firma la URL de lectura de un archivo ya resuelto. Lo comparten los tres
+ * endpoints de `signed-url` (equipo, portal de cliente y links públicos) para
+ * que las expiraciones y la forma de la respuesta no se dupliquen.
+ *
+ * NO decide la política de seguridad: el caller resuelve si corresponde
+ * `inline` (los controllers públicos, por ejemplo, lo niegan para tipos que el
+ * navegador podría ejecutar — ver `isDangerousMime` en publicFiles).
+ */
+async function signedUrlForFile(file, { inline = false } = {}) {
+  const expiresIn = inline ? SIGNED_INLINE_EXPIRES_IN : SIGNED_DOWNLOAD_EXPIRES_IN
+  const url = await objectStorage.presignGet(file.objectKey, {
+    expiresIn,
+    filename: file.name,
+    disposition: inline ? 'inline' : 'attachment',
+    contentType: file.mimeType || undefined,
+  })
+  return { url, expiresIn }
+}
+
+/**
  * GET /api/projects/:id/files/:fileId/signed-url[?inline=1]
  * Devuelve una URL firmada de R2 de vida corta para bajar o reproducir el
  * archivo SIN pasar por nuestro backend. Es el camino rápido de los dos flujos
@@ -777,15 +797,7 @@ async function fileSignedUrl(req, res, next) {
     })
     if (!file || !file.objectKey) return res.status(404).json({ error: 'Archivo no encontrado' })
 
-    const inline = req.query.inline === '1'
-    const expiresIn = inline ? SIGNED_INLINE_EXPIRES_IN : SIGNED_DOWNLOAD_EXPIRES_IN
-    const url = await objectStorage.presignGet(file.objectKey, {
-      expiresIn,
-      filename: file.name,
-      disposition: inline ? 'inline' : 'attachment',
-      contentType: file.mimeType || undefined,
-    })
-    res.json({ url, expiresIn })
+    res.json(await signedUrlForFile(file, { inline: req.query.inline === '1' }))
   } catch (err) { next(err) }
 }
 
@@ -1135,6 +1147,7 @@ module.exports = {
   createPublicLink,
   revokePublicLink,
   uploadThumbnail,
+  signedUrlForFile,
   fileSignedUrl,
   downloadFile,
   downloadZip,

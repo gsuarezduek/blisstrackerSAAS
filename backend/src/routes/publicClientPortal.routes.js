@@ -23,6 +23,7 @@ const {
 const {
   listPortalFiles,
   searchPortalFiles,
+  portalFileSignedUrl,
   downloadPortalFile,
 } = require('../controllers/clientPortalFiles.controller')
 const { clientPortalAuth } = require('../middleware/clientPortalAuth')
@@ -62,6 +63,7 @@ router.patch('/client-portal/:slug/content/:pid/copy',           clientPortalAut
 // (chequeados dentro de cada handler, ver clientPortalFiles.controller.js).
 router.get('/client-portal/:slug/files',                  clientPortalAuth, listPortalFiles)
 router.get('/client-portal/:slug/files/search',            clientPortalAuth, searchPortalFiles)
+router.get('/client-portal/:slug/files/:fileId/signed-url', clientPortalAuth, portalFileSignedUrl)
 router.get('/client-portal/:slug/files/:fileId/download',  clientPortalAuth, downloadPortalFile)
 
 module.exports = router

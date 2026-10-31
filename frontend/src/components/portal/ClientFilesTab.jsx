@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import axios from 'axios'
 import LoadingSpinner from '../LoadingSpinner'
 import { fmtBytes, iconFor } from '../../lib/fileIcons'
-import { Folder, FolderOpen, Search, X } from 'lucide-react'
+import { Folder, FolderOpen, Play, Search, X } from 'lucide-react'
 import { Icon } from '../ui/Icon'
 
 const API = import.meta.env.VITE_API_URL || ''
@@ -24,6 +24,11 @@ function fmtDate(iso) {
 function ItemCard({ item, onOpen }) {
   const isFolder = item.type === 'folder'
   const isImage = !isFolder && item.mimeType?.startsWith('image/')
+  const isVideo = !isFolder && item.mimeType?.startsWith('video/')
+  // `posterUrl` es la miniatura liviana que generó el browser del equipo al
+  // subir (~40KB). Un archivo subido antes de que existieran cae al original
+  // (imagen) o al ícono por tipo (video) — ver ItemCard, mismo criterio.
+  const thumbUrl = isFolder ? null : (item.posterUrl || (isImage ? item.url : null))
   return (
     <button
       onClick={() => onOpen(item)}
@@ -31,8 +36,15 @@ function ItemCard({ item, onOpen }) {
       title={item.name}
     >
       <div className="w-14 h-14 flex items-center justify-center rounded-lg bg-gray-50 overflow-hidden">
-        {isImage && item.url ? (
-          <img src={item.url} alt="" className="w-full h-full object-cover" />
+        {thumbUrl ? (
+          <div className="relative w-full h-full">
+            <img src={thumbUrl} alt="" loading="lazy" className="w-full h-full object-cover" />
+            {isVideo && (
+              <span className="absolute inset-0 flex items-center justify-center bg-black/25">
+                <Icon as={Play} size={18} className="text-white drop-shadow" />
+              </span>
+            )}
+          </div>
         ) : (
           <Icon as={isFolder ? Folder : iconFor(item.mimeType)} size={30} className={isFolder ? 'text-amber-500' : 'text-gray-400'} />
         )}
@@ -54,7 +66,7 @@ export default function ClientFilesTab({ slug, token, requireReauth }) {
   const [loading, setLoading]   = useState(true)
   const [error, setError]       = useState('')
   const [lightbox, setLightbox] = useState(null)
-  const [preview, setPreview]   = useState(null) // null | { item, status:'loading'|'ready'|'error', blobUrl }
+  const [preview, setPreview]   = useState(null) // null | { item, status:'loading'|'ready'|'error', src }
   const [searchQuery, setSearchQuery]     = useState('')
   const [searchResults, setSearchResults] = useState(null)
   const [searching, setSearching]         = useState(false)
@@ -96,35 +108,45 @@ export default function ClientFilesTab({ slug, token, requireReauth }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchQuery, slug, token])
 
-  function downloadUrl(item, inline) {
-    return `${API}/api/public/client-portal/${slug}/files/${item.id}/download${inline ? '?inline=1' : ''}`
+  // URL firmada de R2 de vida corta: la descarga la hace el navegador y el
+  // <video> habla directo con R2 (que sirve `Range`), en vez de traer el
+  // archivo completo por XHR como blob antes de mostrar el primer frame.
+  // Mismo cambio y mismo motivo que en la Nube del equipo (ProjectFiles.jsx).
+  async function signedUrl(item, inline) {
+    const { data } = await axios.get(
+      `${API}/api/public/client-portal/${slug}/files/${item.id}/signed-url${inline ? '?inline=1' : ''}`,
+      authHeaders,
+    )
+    return data.url
   }
 
+  // El <a> no lleva `download`: cross-origin ese atributo se ignora, el nombre
+  // lo pone el Content-Disposition que viaja firmado en la propia URL.
   async function handleDownload(item) {
     try {
-      const res = await axios.get(downloadUrl(item), { ...authHeaders, responseType: 'blob' })
-      const blobUrl = URL.createObjectURL(res.data)
       const a = document.createElement('a')
-      a.href = blobUrl
-      a.download = item.name
+      a.href = await signedUrl(item)
+      a.rel = 'noopener'
       document.body.appendChild(a)
       a.click()
       a.remove()
-      URL.revokeObjectURL(blobUrl)
     } catch (err) {
       if (err.response?.status === 401) requireReauth()
       else setError('No se pudo descargar el archivo')
     }
   }
 
+  // La pestaña VACÍA se abre sincrónicamente dentro del gesto del click (si no,
+  // el navegador la bloquea como popup) y recién después se apunta a la URL
+  // firmada. Un PDF por URL real es además más confiable que un PDF-blob
+  // embebido, que Safari/iOS no siempre renderiza.
   function openPdfInNewTab(item) {
     const win = window.open('', '_blank')
     ;(async () => {
       try {
-        const res = await axios.get(downloadUrl(item, true), { ...authHeaders, responseType: 'blob' })
-        const blobUrl = URL.createObjectURL(res.data)
-        if (win) win.location.href = blobUrl
-        else openPreview(item, blobUrl)
+        const url = await signedUrl(item, true)
+        if (win) win.location.href = url
+        else openPreview(item, url)
       } catch (err) {
         if (win) win.close()
         if (err.response?.status === 401) requireReauth()
@@ -133,20 +155,19 @@ export default function ClientFilesTab({ slug, token, requireReauth }) {
     })()
   }
 
-  async function openPreview(item, preloadedBlobUrl) {
-    if (preloadedBlobUrl) { setPreview({ item, status: 'ready', blobUrl: preloadedBlobUrl }); return }
-    setPreview({ item, status: 'loading', blobUrl: null })
+  async function openPreview(item, preloadedSrc) {
+    if (preloadedSrc) { setPreview({ item, status: 'ready', src: preloadedSrc }); return }
+    setPreview({ item, status: 'loading', src: null })
     try {
-      const res = await axios.get(downloadUrl(item, true), { ...authHeaders, responseType: 'blob' })
-      setPreview({ item, status: 'ready', blobUrl: URL.createObjectURL(res.data) })
+      setPreview({ item, status: 'ready', src: await signedUrl(item, true) })
     } catch (err) {
       if (err.response?.status === 401) requireReauth()
-      setPreview({ item, status: 'error', blobUrl: null })
+      setPreview({ item, status: 'error', src: null })
     }
   }
 
+  // Ya no hay blob URLs que liberar: todo el preview va por URL firmada.
   function closePreview() {
-    if (preview?.blobUrl) URL.revokeObjectURL(preview.blobUrl)
     setPreview(null)
   }
 
@@ -238,10 +259,10 @@ export default function ClientFilesTab({ slug, token, requireReauth }) {
             {preview.status === 'loading' && <LoadingSpinner size="lg" />}
             {preview.status === 'error' && <p className="text-white text-sm">No se pudo cargar la vista previa.</p>}
             {preview.status === 'ready' && preview.item.mimeType?.startsWith('video/') && (
-              <video src={preview.blobUrl} controls autoPlay className="max-w-full max-h-[85vh] rounded-lg" />
+              <video src={preview.src} controls autoPlay playsInline className="max-w-full max-h-[85vh] rounded-lg" />
             )}
             {preview.status === 'ready' && preview.item.mimeType === 'application/pdf' && (
-              <iframe src={preview.blobUrl} title={preview.item.name} className="w-full h-[85vh] bg-white rounded-lg" />
+              <iframe src={preview.src} title={preview.item.name} className="w-full h-[85vh] bg-white rounded-lg" />
             )}
           </div>
           <button onClick={closePreview} className="absolute top-4 right-4 text-white text-3xl leading-none">×</button>

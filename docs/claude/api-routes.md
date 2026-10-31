@@ -559,7 +559,8 @@ POST   /api/public/client-portal/:slug/content/:pid/request-changes # { comment 
 POST   /api/public/client-portal/:slug/content/:pid/comments        # { body } — mensaje suelto del cliente en el hilo
 GET    /api/public/client-portal/:slug/files[?parentId=]           # lista carpetas/archivos de un nivel (solo lectura, mismo repositorio ProjectFile del equipo)
 GET    /api/public/client-portal/:slug/files/search?q=             # buscador global del proyecto (solo lectura)
-GET    /api/public/client-portal/:slug/files/:fileId/download[?inline=1]  # proxy autenticado a R2 (nunca redirect directo)
+GET    /api/public/client-portal/:slug/files/:fileId/signed-url[?inline=1]  # URL firmada de R2, vida corta (descarga del navegador / streaming de video con Range)
+GET    /api/public/client-portal/:slug/files/:fileId/download[?inline=1]  # proxy a R2 — el portal ya no lo usa (todo va por signed-url), se mantiene por compatibilidad
 GET    /api/public/content-asset/:publicId                         # sin auth — asset de una pieza, servido por publicId no adivinable
 
 # Documentos legales — acceso público (sin auth)

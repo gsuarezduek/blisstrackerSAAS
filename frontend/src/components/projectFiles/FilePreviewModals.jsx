@@ -1,9 +1,9 @@
 import LoadingSpinner from '../LoadingSpinner'
 
 // ─── Lightbox de imagen + preview de video/PDF ────────────────────────────────
-// `preview.src` es una URL firmada de R2 de vida corta para video (streaming
-// con Range: arranca sin esperar la descarga completa) o un blob URL para PDF
-// — ver openPreview en ProjectFiles.jsx. Nunca un link público permanente.
+// `preview.src` es una URL firmada de R2 de vida corta (streaming con Range:
+// el video arranca sin esperar la descarga completa) — ver openPreview en
+// ProjectFiles.jsx. Nunca un link público permanente, y nunca más un blob.
 
 export default function FilePreviewModals({ lightbox, onCloseLightbox, preview, onClosePreview }) {
   return (

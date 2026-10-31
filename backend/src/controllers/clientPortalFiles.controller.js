@@ -9,7 +9,7 @@
 const prisma = require('../lib/prisma')
 const objectStorage = require('../services/objectStorage.service')
 const { safeContentDisposition } = require('../lib/contentDisposition')
-const { shapeItem, buildPath } = require('./projects/projectFiles.controller')
+const { shapeItem, buildPath, signedUrlForFile } = require('./projects/projectFiles.controller')
 
 /**
  * Dos guardas que ningún middleware da acá (las rutas públicas no pasan por
@@ -91,6 +91,37 @@ async function searchPortalFiles(req, res, next) {
 }
 
 /**
+ * GET /api/public/client-portal/:slug/files/:fileId/signed-url[?inline=1]
+ * URL firmada de R2 de vida corta, para que el cliente baje y reproduzca sin
+ * que los bytes pasen por nosotros — mismo criterio y mismo helper que el
+ * endpoint del equipo (ver fileSignedUrl en projectFiles.controller.js): la
+ * descarga la hace el navegador y el <video> habla directo con R2, que sirve
+ * `Range`, en vez de esperar el archivo completo como blob.
+ *
+ * El link firmado caduca y solo se emite después de pasar el mismo
+ * assertFilesAccess que el resto del portal; no es un link permanente.
+ */
+async function portalFileSignedUrl(req, res, next) {
+  try {
+    const portal = req.clientPortal
+    const guard = await assertFilesAccess(portal)
+    if (guard) return res.status(guard.status).json({ error: guard.error })
+
+    if (!objectStorage.isConfigured()) {
+      return res.status(503).json({ error: 'El almacenamiento de archivos no está disponible.', code: 'STORAGE_NOT_CONFIGURED' })
+    }
+
+    const file = await prisma.projectFile.findFirst({
+      where: { id: Number(req.params.fileId), projectId: portal.projectId, type: 'file', status: 'ready', deletedAt: null },
+      select: { name: true, mimeType: true, objectKey: true },
+    })
+    if (!file || !file.objectKey) return res.status(404).json({ error: 'Archivo no encontrado' })
+
+    res.json(await signedUrlForFile(file, { inline: req.query.inline === '1' }))
+  } catch (err) { next(err) }
+}
+
+/**
  * GET /api/public/client-portal/:slug/files/:fileId/download[?inline=1]
  * Mismo criterio de proxy (no redirect a R2) que el endpoint autenticado de
  * equipo — acá el motivo es el mismo: el frontend pega con fetch/axios y el
@@ -120,5 +151,6 @@ async function downloadPortalFile(req, res, next) {
 module.exports = {
   listPortalFiles,
   searchPortalFiles,
+  portalFileSignedUrl,
   downloadPortalFile,
 }

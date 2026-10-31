@@ -3,7 +3,7 @@ import { useParams } from 'react-router-dom'
 import axios from 'axios'
 import LoadingSpinner from '../components/LoadingSpinner'
 import { fmtBytes, iconFor } from '../lib/fileIcons'
-import { FileX } from 'lucide-react'
+import { FileX, Play } from 'lucide-react'
 import { Icon } from '../components/ui/Icon'
 
 const API = import.meta.env.VITE_API_URL || ''
@@ -30,7 +30,7 @@ export default function SharedFilePublic() {
   const [loading, setLoading] = useState(true)
   const [notFound, setNotFound] = useState(false)
   const [error, setError] = useState('')
-  const [preview, setPreview] = useState(null) // null | { status:'loading'|'ready'|'error', blobUrl }
+  const [preview, setPreview] = useState(null) // null | { status:'loading'|'ready'|'error', src }
 
   useEffect(() => {
     window.scrollTo(0, 0)
@@ -43,38 +43,44 @@ export default function SharedFilePublic() {
       .finally(() => setLoading(false))
   }, [token])
 
-  function downloadUrl(inline) {
-    return `${API}/api/public/shared-file/${token}/download${inline ? '?inline=1' : ''}`
+  // URL firmada de R2 de vida corta: la descarga la hace el navegador y el
+  // <video> habla directo con R2 (que sirve `Range`), en vez de traer el
+  // archivo completo por XHR como blob. Mismo cambio y mismo motivo que en la
+  // Nube del equipo (ProjectFiles.jsx). El backend niega `inline` para tipos
+  // que el navegador podría ejecutar, igual que hacía el download proxied.
+  async function signedUrl(inline) {
+    const { data } = await axios.get(
+      `${API}/api/public/shared-file/${token}/signed-url${inline ? '?inline=1' : ''}`,
+    )
+    return data.url
   }
 
+  // El <a> no lleva `download`: cross-origin ese atributo se ignora, el nombre
+  // lo pone el Content-Disposition que viaja firmado en la propia URL.
   async function handleDownload() {
     try {
-      const res = await axios.get(downloadUrl(), { responseType: 'blob' })
-      const blobUrl = URL.createObjectURL(res.data)
       const a = document.createElement('a')
-      a.href = blobUrl
-      a.download = file.name
+      a.href = await signedUrl()
+      a.rel = 'noopener'
       document.body.appendChild(a)
       a.click()
       a.remove()
-      URL.revokeObjectURL(blobUrl)
     } catch {
       setError('No se pudo descargar el archivo')
     }
   }
 
   // PDF se abre en pestaña nueva (más confiable entre navegadores que un
-  // <iframe> con un blob — Safari/iOS en particular no siempre renderiza un
-  // PDF-blob embebido), con el mismo fallback inline si el popup se bloquea
-  // — mismo criterio que ProjectFiles.jsx/SharedFolderPublic.jsx.
+  // <iframe> embebido), con el mismo fallback inline si el popup se bloquea
+  // — mismo criterio que ProjectFiles.jsx/SharedFolderPublic.jsx. Ahora va por
+  // URL firmada, que además le saca a Safari/iOS el problema del PDF-blob.
   function openPdfInNewTab() {
     const win = window.open('', '_blank')
     ;(async () => {
       try {
-        const res = await axios.get(downloadUrl(true), { responseType: 'blob' })
-        const blobUrl = URL.createObjectURL(res.data)
-        if (win) win.location.href = blobUrl
-        else openPreview(blobUrl)
+        const url = await signedUrl(true)
+        if (win) win.location.href = url
+        else openPreview(url)
       } catch {
         if (win) win.close()
         setError('No se pudo cargar la vista previa del PDF')
@@ -82,25 +88,27 @@ export default function SharedFilePublic() {
     })()
   }
 
-  async function openPreview(preloadedBlobUrl) {
-    if (preloadedBlobUrl) { setPreview({ status: 'ready', blobUrl: preloadedBlobUrl }); return }
-    setPreview({ status: 'loading', blobUrl: null })
+  async function openPreview(preloadedSrc) {
+    if (preloadedSrc) { setPreview({ status: 'ready', src: preloadedSrc }); return }
+    setPreview({ status: 'loading', src: null })
     try {
-      const res = await axios.get(downloadUrl(true), { responseType: 'blob' })
-      setPreview({ status: 'ready', blobUrl: URL.createObjectURL(res.data) })
+      setPreview({ status: 'ready', src: await signedUrl(true) })
     } catch {
-      setPreview({ status: 'error', blobUrl: null })
+      setPreview({ status: 'error', src: null })
     }
   }
 
+  // Ya no hay blob URLs que liberar: todo el preview va por URL firmada.
   function closePreview() {
-    if (preview?.blobUrl) URL.revokeObjectURL(preview.blobUrl)
     setPreview(null)
   }
 
   const isImage = file?.mimeType?.startsWith('image/')
   const isPdf = file?.mimeType === 'application/pdf'
   const isVideo = file?.mimeType?.startsWith('video/')
+  // `posterUrl` es la miniatura liviana que se generó al subir; un archivo
+  // subido antes de que existieran cae al original (imagen) o al ícono.
+  const thumbUrl = file ? (file.posterUrl || (isImage ? file.url : null)) : null
 
   if (notFound) {
     return (
@@ -132,8 +140,15 @@ export default function SharedFilePublic() {
 
             <div className="rounded-xl border border-gray-200 bg-white p-5 flex items-center gap-4">
               <div className="w-16 h-16 flex items-center justify-center rounded-lg bg-gray-50 overflow-hidden shrink-0">
-                {isImage && file.url ? (
-                  <img src={file.url} alt="" className="w-full h-full object-cover" />
+                {thumbUrl ? (
+                  <div className="relative w-full h-full">
+                    <img src={thumbUrl} alt="" className="w-full h-full object-cover" />
+                    {isVideo && (
+                      <span className="absolute inset-0 flex items-center justify-center bg-black/25">
+                        <Icon as={Play} size={20} className="text-white drop-shadow" />
+                      </span>
+                    )}
+                  </div>
                 ) : (
                   <Icon as={iconFor(file.mimeType)} size={32} className="text-gray-400" />
                 )}
@@ -170,10 +185,10 @@ export default function SharedFilePublic() {
             {preview.status === 'loading' && <LoadingSpinner size="lg" />}
             {preview.status === 'error' && <p className="text-white text-sm">No se pudo cargar la vista previa.</p>}
             {preview.status === 'ready' && isVideo && (
-              <video src={preview.blobUrl} controls autoPlay className="max-w-full max-h-[85vh] rounded-lg" />
+              <video src={preview.src} controls autoPlay playsInline className="max-w-full max-h-[85vh] rounded-lg" />
             )}
             {preview.status === 'ready' && isPdf && (
-              <iframe src={preview.blobUrl} title={file.name} className="w-full h-[85vh] bg-white rounded-lg" />
+              <iframe src={preview.src} title={file.name} className="w-full h-[85vh] bg-white rounded-lg" />
             )}
           </div>
           <button onClick={closePreview} className="absolute top-4 right-4 text-white text-3xl leading-none">×</button>

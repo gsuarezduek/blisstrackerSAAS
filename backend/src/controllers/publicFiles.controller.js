@@ -10,7 +10,16 @@ const prisma = require('../lib/prisma')
 const objectStorage = require('../services/objectStorage.service')
 const { safeContentDisposition } = require('../lib/contentDisposition')
 const { isDangerousMime } = require('../lib/dangerousMime')
-const { shapeItem, buildPath } = require('./projects/projectFiles.controller')
+const { shapeItem, buildPath, signedUrlForFile } = require('./projects/projectFiles.controller')
+
+// Mismo refuerzo que aplican los dos `download` de acá: un link público no
+// tiene auth, así que nunca se firma `inline` para un tipo que el navegador
+// pueda ejecutar como HTML/script, sin importar `?inline=1`. Vale incluso
+// sirviéndose desde el dominio de R2 (otro origen, pero igual asociado al
+// producto: no queremos ser el host de un phishing).
+function wantsInline(req, file) {
+  return req.query.inline === '1' && !isDangerousMime(file.mimeType)
+}
 
 async function resolveSharedRoot(token) {
   if (!token) return null
@@ -131,6 +140,32 @@ async function searchSharedFolder(req, res, next) {
 }
 
 /**
+ * GET /api/public/shared-folder/:token/signed-url/:fileId[?inline=1]
+ * URL firmada de vida corta, con el mismo guard de subárbol que el download
+ * proxied de abajo (el token nunca alcanza para un archivo de otra parte del
+ * proyecto). Mismo helper y mismas expiraciones que el endpoint del equipo.
+ */
+async function sharedFileSignedUrl(req, res, next) {
+  try {
+    const root = await resolveSharedRoot(req.params.token)
+    if (!root) return res.status(404).json({ error: 'Este link no existe o fue desactivado.' })
+    if (!objectStorage.isConfigured()) {
+      return res.status(503).json({ error: 'El almacenamiento de archivos no está disponible.', code: 'STORAGE_NOT_CONFIGURED' })
+    }
+
+    const file = await prisma.projectFile.findFirst({
+      where: { id: Number(req.params.fileId), projectId: root.projectId, type: 'file', status: 'ready', deletedAt: null },
+      select: { name: true, mimeType: true, objectKey: true, parentId: true },
+    })
+    if (!file || !file.objectKey || file.parentId == null) return res.status(404).json({ error: 'Archivo no encontrado' })
+    const within = await isWithinSharedTree(file.parentId, root.id, root.projectId)
+    if (!within) return res.status(404).json({ error: 'Archivo no encontrado' })
+
+    res.json(await signedUrlForFile(file, { inline: wantsInline(req, file) }))
+  } catch (err) { next(err) }
+}
+
+/**
  * GET /api/public/shared-folder/:token/download/:fileId[?inline=1]
  * Mismo proxy (no redirect a R2) que el resto de Archivos — ver el comentario
  * en downloadFile de projectFiles.controller.js sobre por qué.
@@ -154,7 +189,7 @@ async function downloadSharedFile(req, res, next) {
     // ejecutar como HTML/script, sin importar `?inline=1` — cubre tanto un bug
     // futuro en la validación de subida como cualquier fila ya guardada antes de
     // este chequeo.
-    const type = (req.query.inline === '1' && !isDangerousMime(file.mimeType)) ? 'inline' : 'attachment'
+    const type = wantsInline(req, file) ? 'inline' : 'attachment'
     res.setHeader('Content-Disposition', safeContentDisposition(file.name, { type }))
     body.on('error', next)
     body.pipe(res)
@@ -199,6 +234,25 @@ async function getSharedFile(req, res, next) {
 }
 
 /**
+ * GET /api/public/shared-file/:token/signed-url[?inline=1]
+ * Igual que sharedFileSignedUrl, pero resuelto directo por el token del
+ * archivo (no hace falta un :fileId — el token YA identifica un único archivo).
+ */
+async function sharedFileByTokenSignedUrl(req, res, next) {
+  try {
+    const resolved = await resolveSharedFile(req.params.token)
+    if (!resolved) return res.status(404).json({ error: 'Este link no existe o fue desactivado.' })
+    if (!objectStorage.isConfigured()) {
+      return res.status(503).json({ error: 'El almacenamiento de archivos no está disponible.', code: 'STORAGE_NOT_CONFIGURED' })
+    }
+    const file = resolved.file
+    if (!file.objectKey) return res.status(404).json({ error: 'Archivo no encontrado' })
+
+    res.json(await signedUrlForFile(file, { inline: wantsInline(req, file) }))
+  } catch (err) { next(err) }
+}
+
+/**
  * GET /api/public/shared-file/:token/download[?inline=1]
  * Mismo proxy que downloadSharedFile, pero resuelto directo por el token del
  * archivo (no hace falta un :fileId — el token YA identifica un único archivo).
@@ -214,7 +268,7 @@ async function downloadSharedFileByToken(req, res, next) {
     res.setHeader('Content-Type', file.mimeType || 'application/octet-stream')
     if (contentLength != null) res.setHeader('Content-Length', contentLength)
     // Mismo refuerzo que downloadSharedFile: ignora `?inline=1` para tipos peligrosos.
-    const type = (req.query.inline === '1' && !isDangerousMime(file.mimeType)) ? 'inline' : 'attachment'
+    const type = wantsInline(req, file) ? 'inline' : 'attachment'
     res.setHeader('Content-Disposition', safeContentDisposition(file.name, { type }))
     body.on('error', next)
     body.pipe(res)
@@ -224,7 +278,9 @@ async function downloadSharedFileByToken(req, res, next) {
 module.exports = {
   getSharedFolder,
   searchSharedFolder,
+  sharedFileSignedUrl,
   downloadSharedFile,
   getSharedFile,
+  sharedFileByTokenSignedUrl,
   downloadSharedFileByToken,
 }
