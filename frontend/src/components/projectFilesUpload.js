@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import api from '../api/client'
 import { makeThumbnail } from './projectFiles/makeThumbnail'
 
@@ -51,11 +51,12 @@ const sleep = ms => new Promise(r => setTimeout(r, ms))
  * golpe no choca contra el tope de subidas pendientes del backend.
  */
 export function useProjectFileUpload({ projectId, onUploaded }) {
-  const [queue, setQueue] = useState([]) // [{ id, name, progress, status: queued|waiting|uploading|thumbnail|confirming|error, error }]
+  const [queue, setQueue] = useState([]) // [{ id, name, progress, status: queued|waiting|thumbnail|uploading|confirming|error, error, previewUrl }]
   const cancelRef = useRef(new Map()) // localId -> xhr
   const waitingRef = useRef([])        // [{ id, file, folderId }] todavía sin arrancar
   const activeRef = useRef(0)
   const cancelledRef = useRef(new Set())
+  const previewUrlsRef = useRef(new Map()) // localId -> object URL de la miniatura en curso
   const onUploadedRef = useRef(onUploaded)
   onUploadedRef.current = onUploaded
 
@@ -64,7 +65,16 @@ export function useProjectFileUpload({ projectId, onUploaded }) {
   }, [])
   const removeItem = useCallback((id) => {
     cancelRef.current.delete(id)
+    const url = previewUrlsRef.current.get(id)
+    if (url) { URL.revokeObjectURL(url); previewUrlsRef.current.delete(id) }
     setQueue(prev => prev.filter(it => it.id !== id))
+  }, [])
+
+  // Un ítem en error no se saca solo de la cola, así que su object URL vive
+  // hasta que el componente se va.
+  useEffect(() => () => {
+    for (const url of previewUrlsRef.current.values()) URL.revokeObjectURL(url)
+    previewUrlsRef.current.clear()
   }, [])
 
   // Libera el lugar del upload en el backend (si no, cuenta como "en curso"
@@ -99,7 +109,20 @@ export function useProjectFileUpload({ projectId, onUploaded }) {
     const data = await presign(id, file, folderId)
     if (cancelledRef.current.has(id)) { abortPending(data.fileId); throw new Error('CANCELLED') }
 
-    updateItem(id, { status: 'uploading', progress: 0 })
+    // La miniatura se genera ANTES de subir (no después, como en la primera
+    // versión) para que la cola pueda mostrar el frame del video mientras el
+    // archivo viaja: una subida de 150MB tarda minutos y hasta ahora sólo se
+    // veía el nombre y un porcentaje. Decodificar es local —lee el archivo del
+    // disco, no espera a R2—, así que retrasa el arranque unos cientos de ms.
+    updateItem(id, { status: 'thumbnail' })
+    const thumb = await makeThumbnail(file).catch(() => null)
+    let previewUrl = null
+    if (thumb?.blob) {
+      previewUrl = URL.createObjectURL(thumb.blob)
+      previewUrlsRef.current.set(id, previewUrl)
+    }
+
+    updateItem(id, { status: 'uploading', progress: 0, previewUrl })
     try {
       await uploadWithProgress(
         data.uploadUrl, file, file.type || 'application/octet-stream',
@@ -111,11 +134,6 @@ export function useProjectFileUpload({ projectId, onUploaded }) {
       throw err
     }
     cancelRef.current.delete(id)
-
-    // Miniatura + dimensiones del original, en una sola decodificación. Para
-    // los tipos que no la llevan (PDF, docx, zip…) devuelve null y seguimos.
-    updateItem(id, { status: 'thumbnail' })
-    const thumb = await makeThumbnail(file).catch(() => null)
 
     updateItem(id, { status: 'confirming' })
     const { data: fileRow } = await api.post(`/projects/${projectId}/files/${data.fileId}/confirm`, {

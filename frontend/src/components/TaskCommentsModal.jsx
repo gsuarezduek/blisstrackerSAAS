@@ -721,7 +721,13 @@ export default function TaskCommentsModal({ task, onClose, onCommentAdded, onTas
                 ))}
                 {uploadQueue.map(item => (
                   <div key={item.id} className="flex items-center gap-2 text-sm px-2 py-1 rounded-lg">
-                    <Icon as={Paperclip} size={14} className="text-gray-400" />
+                    {/* La miniatura ya existe cuando arranca el PUT, así que se
+                        ve el frame del video mientras sube. */}
+                    {item.previewUrl ? (
+                      <img src={item.previewUrl} alt="" className="w-8 h-8 rounded object-cover shrink-0 border border-gray-200 dark:border-gray-600" />
+                    ) : (
+                      <Icon as={Paperclip} size={14} className="text-gray-400" />
+                    )}
                     <span className="flex-1 min-w-0 truncate text-gray-500 dark:text-gray-400">{item.name}</span>
                     <span className="flex-shrink-0 text-xs text-gray-400 dark:text-gray-500">
                       {item.status === 'error' ? (item.error || 'Error')

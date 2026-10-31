@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import api from '../api/client'
 import { makeThumbnail } from './projectFiles/makeThumbnail'
 import { MAX_FILE_BYTES, fmtMb } from './projectFilesUpload'
@@ -37,13 +37,23 @@ let nextLocalId = 1
 export function useTaskFileUpload({ taskId, onUploaded }) {
   const [queue, setQueue] = useState([]) // [{ id, name, progress, status, error }]
   const cancelRef = useRef(new Map()) // localId -> xhr
+  const previewUrlsRef = useRef(new Map()) // localId -> object URL de la miniatura en curso
 
   const updateItem = useCallback((id, patch) => {
     setQueue(prev => prev.map(it => (it.id === id ? { ...it, ...patch } : it)))
   }, [])
   const removeItem = useCallback((id) => {
     cancelRef.current.delete(id)
+    const url = previewUrlsRef.current.get(id)
+    if (url) { URL.revokeObjectURL(url); previewUrlsRef.current.delete(id) }
     setQueue(prev => prev.filter(it => it.id !== id))
+  }, [])
+
+  // Un ítem en error no se saca solo de la cola, así que su object URL vive
+  // hasta que el componente se va.
+  useEffect(() => () => {
+    for (const url of previewUrlsRef.current.values()) URL.revokeObjectURL(url)
+    previewUrlsRef.current.clear()
   }, [])
 
   async function runUpload(item, file) {
@@ -60,18 +70,23 @@ export function useTaskFileUpload({ taskId, onUploaded }) {
       throw new Error(err.response?.data?.error || 'No se pudo iniciar la subida')
     }
 
-    updateItem(item.id, { status: 'uploading' })
+    // Igual que en la Nube: la miniatura se genera ANTES de subir para que la
+    // cola muestre el frame del video mientras el archivo viaja.
+    updateItem(item.id, { status: 'thumbnail' })
+    const thumb = await makeThumbnail(file).catch(() => null)
+    let previewUrl = null
+    if (thumb?.blob) {
+      previewUrl = URL.createObjectURL(thumb.blob)
+      previewUrlsRef.current.set(item.id, previewUrl)
+    }
+
+    updateItem(item.id, { status: 'uploading', previewUrl })
     await uploadWithProgress(
       presign.uploadUrl, file, file.type || 'application/octet-stream',
       pct => updateItem(item.id, { progress: pct }),
       xhr => cancelRef.current.set(item.id, xhr),
     )
     cancelRef.current.delete(item.id)
-
-    // Miniatura + dimensiones del original, en una sola decodificación. Para
-    // los tipos que no la llevan (PDF, docx, zip…) devuelve null y seguimos.
-    updateItem(item.id, { status: 'thumbnail' })
-    const thumb = await makeThumbnail(file).catch(() => null)
 
     updateItem(item.id, { status: 'confirming' })
     const { data: fileRow } = await api.post(`/tasks/${taskId}/attachments/${presign.fileId}/confirm`, {
