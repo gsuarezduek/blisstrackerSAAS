@@ -97,4 +97,4 @@ export default function MonthGrid({ month, onMonthChange, monthLabel, renderCell
   )
 }
 
-export { currentMonthStr, buildGridDays }
+export { currentMonthStr, buildGridDays, shiftMonth }

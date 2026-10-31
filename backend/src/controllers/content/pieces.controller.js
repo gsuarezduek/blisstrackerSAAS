@@ -45,10 +45,14 @@ async function listPieces(req, res, next) {
       const list = String(status).split(',').filter(isValidStatus)
       if (list.length) where.status = { in: list }
     } else {
-      // Sin filtro explícito de estado, las piezas 'publicado' quedan afuera
-      // de la vista general (Tabla/Kanban/Calendario) — viven solo en la
-      // sección "Publicadas", que pide explícitamente ?status=publicado.
-      where.status = { not: 'publicado' }
+      // Sin filtro explícito se muestra TODO lo vivo, incluido 'publicado': una
+      // pieza publicada sigue siendo parte de su mes, y hacerla desaparecer sola
+      // obligaba a ir a buscarla a una pantalla aparte (?status=publicado) que,
+      // al ser un filtro excluyente, no mostraba nada de lo pendiente. El
+      // acotamiento lo da el mes (las pestañas de ContentMonthTabs), no el
+      // estado. 'archivado' sí queda afuera — es el cajón de descartes, no
+      // trabajo del mes; se ve eligiéndolo a mano en el filtro de estado.
+      where.status = { not: 'archivado' }
     }
     // `networks` es un JSON array serializado; el match por substring de la clave
     // entre comillas evita falsos positivos entre redes con nombres contenidos.

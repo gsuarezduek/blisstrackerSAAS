@@ -5,6 +5,7 @@ import LoadingSpinner from '../components/LoadingSpinner'
 import HowToButton from '../components/HowToButton'
 import ProjectSearchSelect from '../components/marketing/ProjectSearchSelect'
 import ContentFilters from '../components/contenido/ContentFilters'
+import ContentMonthTabs from '../components/contenido/ContentMonthTabs'
 import ContentTableView from '../components/contenido/ContentTableView'
 import ContentKanbanView from '../components/contenido/ContentKanbanView'
 import ContentCalendarView, { currentMonthStr } from '../components/contenido/ContentCalendarView'
@@ -16,6 +17,7 @@ import useContentSocket from '../components/contenido/useContentSocket'
 import { useFeatureFlag } from '../hooks/useFeatureFlag'
 import { useAuth } from '../context/AuthContext'
 import api from '../api/client'
+import { OPEN_STATUSES } from '../components/contenido/contentCatalog'
 import { CalendarDays, Lock, X } from 'lucide-react'
 import { Icon } from '../components/ui/Icon'
 
@@ -46,7 +48,7 @@ export default function Contenido() {
   const [searchParams, setSearchParams] = useSearchParams()
   const [projects,  setProjects]  = useState([])
   const [projectId, setProjectId] = useState(searchParams.get('projectId') ?? '')
-  const [filters,   setFilters]   = useState({ status: '', network: '', ownerId: '', q: '', scheduledMonth: '' })
+  const [filters,   setFilters]   = useState({ status: '', network: '', ownerId: '', q: '' })
   const [summary,   setSummary]   = useState(null) // { byStatus, total, awaitingClient } — GET /summary
   const [requestingApproval, setRequestingApproval] = useState(false)
   const [approvalMsg, setApprovalMsg] = useState(null) // { type: 'success'|'error', text }
@@ -61,29 +63,36 @@ export default function Contenido() {
   const rawView = searchParams.get('view')
   const view = VALID_VIEWS.has(rawView) ? rawView : 'tabla'
 
+  // Mes activo, compartido por las pestañas de la Tabla y la navegación ‹ › del
+  // Calendario — una sola noción en la URL, así cambiar de vista lo conserva.
+  // 'none' = pestaña "Sin programar" (piezas sin fecha todavía, ej. ideas).
   const rawMonth = searchParams.get('month')
-  const month = MONTH_RE.test(rawMonth || '') ? rawMonth : currentMonthStr()
+  const month = rawMonth === 'none' ? 'none' : (MONTH_RE.test(rawMonth || '') ? rawMonth : currentMonthStr())
+  // El Calendario necesita un mes real: "Sin programar" no es una grilla.
+  const calendarMonth = month === 'none' ? currentMonthStr() : month
 
   const pieceId = searchParams.get('piece')
 
-  // Traduce el filtro de mes de la Tabla/Kanban (`scheduledMonth`) a los query
-  // params que ya entiende el backend: un mes concreto → rango from/to; "none" →
-  // noDate=1 (piezas sin fecha, ej. todavía en Idea); vacío → sin filtrar.
-  function scheduledMonthParams(scheduledMonth) {
-    if (!scheduledMonth) return {}
-    if (scheduledMonth === 'none') return { noDate: '1' }
-    return monthBoundsOf(scheduledMonth)
-  }
-
-  // El Calendario acota el fetch al mes navegado (ignora `scheduledMonth`: ahí
-  // la navegación de mes ya cumple ese rol); la Tabla y el Kanban usan el filtro
-  // de mes elegido, si hay uno.
+  // La Tabla y el Calendario se acotan al mes activo; el Kanban, no (ver abajo).
+  // Sin filtro de estado el backend devuelve todo lo vivo del mes, publicadas
+  // incluidas — el recorte de la vista es el mes, no el estado.
   const effectiveFilters = useMemo(() => {
-    const { scheduledMonth, ...rest } = filters
-    return view === 'calendario'
-      ? { ...rest, ...monthBoundsOf(month) }
-      : { ...rest, ...scheduledMonthParams(scheduledMonth) }
-  }, [view, month, filters])
+    // `take` explícito: el backend corta en 50 por default y el frontend no
+    // pagina. Con la vista acotada a un mes 200 es holgado; si aun así sobrara,
+    // se avisa debajo de la tabla en vez de perder piezas en silencio.
+    const base = { ...filters, take: 200 }
+    if (view === 'kanban') {
+      // El Kanban es el pipeline de producción y cruza meses (una pieza de
+      // noviembre se produce en octubre), así que acotarlo al mes lo rompería.
+      // Pide los estados abiertos explícitamente: son sus únicas columnas, y sin
+      // esto el tope de piezas se gastaría en publicadas que no tiene dónde
+      // mostrar.
+      return { ...base, status: filters.status || OPEN_STATUSES.map(s => s.key).join(',') }
+    }
+    if (view === 'calendario') return { ...base, ...monthBoundsOf(calendarMonth) }
+    if (month === 'none')      return { ...base, noDate: '1' }
+    return { ...base, ...monthBoundsOf(month) }
+  }, [view, month, calendarMonth, filters])
 
   const { pieces, members, clientContacts, total, loading, error, setError, reload, create, update, move, star, remove } =
     useContentPieces(projectId, effectiveFilters)
@@ -134,9 +143,9 @@ export default function Contenido() {
   // Espejo de `update`/`reload` del hook, pero para una pieza traída aparte
   // (fuera de `pieces`): pegarle directo al PATCH/GET puntual en vez de tocar
   // una lista que no la contiene. Un cambio de `status` puede sacar o meter la
-  // pieza de la vista activa (ej. pasar a/desde 'publicado') — se recarga la
-  // lista además del update puntual, así no queda un row obsoleto hasta el
-  // próximo refresh manual.
+  // pieza de la vista activa (pasar a/desde 'archivado', o salir de los estados
+  // abiertos que pide el Kanban) — se recarga la lista además del update
+  // puntual, así no queda un row obsoleto hasta el próximo refresh manual.
   async function handleModalUpdate(id, patch) {
     if (pieceInList) {
       const result = await update(id, patch)
@@ -215,6 +224,24 @@ export default function Contenido() {
     }
   }
 
+  // Una pieza nueva nace en el mes que estás mirando: con la Tabla acotada al
+  // mes, crearla sin fecha la haría desaparecer de la vista en el próximo reload
+  // — el mismo "desaparece sola" que se vino a corregir. Cae hoy si el mes
+  // activo es el actual, y el día 1 si estás planificando otro mes (editable
+  // después, como cualquier fecha). En "Sin programar" nace sin fecha, que es
+  // justamente lo que esa pestaña junta.
+  const createInActiveMonth = useCallback((payload) => {
+    if (payload.scheduledAt || month === 'none') return create(payload)
+    const [y, m] = month.split('-').map(Number)
+    const day = month === currentMonthStr() ? new Date().getDate() : 1
+    return create({ ...payload, scheduledAt: new Date(y, m - 1, day, 12, 0).toISOString() })
+  }, [create, month])
+
+  // Las pestañas de mes se recargan cuando cambia la distribución por fecha de
+  // lo que está cargado: alcanza para cubrir crear/borrar una pieza y moverla de
+  // mes (que no cambia el total y por eso no se puede derivar de `summary`).
+  const monthsSignature = useMemo(() => pieces.map(p => p.scheduledDate ?? 'none').join(','), [pieces])
+
   // Conteo por estado (incluye `awaitingClient`, el badge del botón "Pedir
   // aprobación"). Independiente de `filters`/`view` — siempre refleja TODAS las
   // piezas del proyecto, no solo las que la vista actual tiene cargadas.
@@ -290,8 +317,20 @@ export default function Contenido() {
 
     return (
       <>
+        {/* Las pestañas de mes son la navegación primaria de la Tabla. El
+            Calendario navega con sus propias ‹ › sobre el MISMO `month`; el
+            Kanban es global (ver effectiveFilters), así que no las lleva. */}
+        {view === 'tabla' && (
+          <ContentMonthTabs
+            projectId={projectId}
+            month={month}
+            onChange={m => patchParams({ month: m })}
+            refreshKey={monthsSignature}
+          />
+        )}
+
         {view !== 'calendario' && (
-          <ContentFilters projectId={projectId} value={filters} onChange={setFilters} members={members} total={total} />
+          <ContentFilters value={filters} onChange={setFilters} members={members} total={total} />
         )}
 
         {error && (
@@ -304,30 +343,43 @@ export default function Contenido() {
         {loading && pieces.length === 0 ? (
           <div className="py-16"><LoadingSpinner size="lg" /></div>
         ) : view === 'tabla' ? (
-          <ContentTableView
-            pieces={pieces}
-            members={members}
-            clientContacts={clientContacts}
-            loading={loading}
-            canEdit={canEdit}
-            onCreate={create}
-            onUpdate={(id, patch) => updateAndMaybePromptDashboard(id, patch, update)}
-            onStar={star}
-            onDelete={handleDelete}
-            onOpen={p => patchParams({ piece: p.id })}
-          />
+          <>
+            <ContentTableView
+              pieces={pieces}
+              members={members}
+              clientContacts={clientContacts}
+              loading={loading}
+              canEdit={canEdit}
+              onCreate={createInActiveMonth}
+              onUpdate={(id, patch) => updateAndMaybePromptDashboard(id, patch, update)}
+              onStar={star}
+              onDelete={handleDelete}
+              onOpen={p => patchParams({ piece: p.id })}
+            />
+            {total > pieces.length && (
+              <p className="mt-2 px-1 text-xs text-amber-600 dark:text-amber-400">
+                Mostrando {pieces.length} de {total} piezas. Usá la búsqueda o los filtros para acotar.
+              </p>
+            )}
+          </>
         ) : view === 'kanban' ? (
-          <ContentKanbanView
-            pieces={pieces}
-            canEdit={canEdit}
-            onMove={move}
-            onStar={star}
-            onOpen={p => patchParams({ piece: p.id })}
-          />
+          <>
+            <p className="text-xs text-gray-400 dark:text-gray-500 mb-2 px-1">
+              El Kanban muestra el pipeline completo, de todos los meses — una pieza de noviembre se produce en octubre.
+              Lo publicado y lo archivado se ve en la Tabla, en su mes.
+            </p>
+            <ContentKanbanView
+              pieces={pieces}
+              canEdit={canEdit}
+              onMove={move}
+              onStar={star}
+              onOpen={p => patchParams({ piece: p.id })}
+            />
+          </>
         ) : (
           <ContentCalendarView
             pieces={pieces}
-            month={month}
+            month={calendarMonth}
             onMonthChange={m => patchParams({ month: m })}
             canEdit={canEdit}
             onUpdate={update}
@@ -446,20 +498,6 @@ export default function Contenido() {
                     {approvalMsg.text}
                   </span>
                 )}
-                <button
-                  onClick={() => {
-                    patchParams({ view: 'tabla' })
-                    setFilters(prev => ({ ...prev, status: 'publicado' }))
-                  }}
-                  title="Ver las piezas ya publicadas — salieron de la vista general por default"
-                  className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors inline-flex items-center gap-1.5 ${
-                    filters.status === 'publicado'
-                      ? 'border-primary-300 dark:border-primary-700 bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-300'
-                      : 'border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'}`}
-                >
-                  Publicadas
-                  {summary?.byStatus?.publicado ? ` (${summary.byStatus.publicado})` : ''}
-                </button>
                 <button
                   onClick={() => setTrashOpen(true)}
                   title="Piezas eliminadas, recuperables durante 30 días"
