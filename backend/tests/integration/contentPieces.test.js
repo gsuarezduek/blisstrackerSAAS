@@ -171,6 +171,30 @@ describe('GET /pieces', () => {
     expect(where.networks).toEqual({ contains: '"instagram"' })
   })
 
+  it('sin filtro de estado NO esconde las publicadas, solo las archivadas', async () => {
+    mockBase()
+    prisma.contentPiece.count.mockResolvedValue(0)
+    prisma.contentPiece.findMany.mockResolvedValue([])
+
+    await req('get', `${BASE}?from=2026-08-01&to=2026-08-31`)
+
+    // Una pieza publicada sigue siendo parte de su mes: desaparecer sola de la
+    // vista obligaba a ir a buscarla a ?status=publicado, que al ser excluyente
+    // no mostraba nada de lo pendiente. El recorte de la vista es el mes.
+    const { where } = prisma.contentPiece.findMany.mock.calls[0][0]
+    expect(where.status).toEqual({ not: 'archivado' })
+  })
+
+  it('status=publicado explícito sigue filtrando solo por ese estado', async () => {
+    mockBase()
+    prisma.contentPiece.count.mockResolvedValue(0)
+    prisma.contentPiece.findMany.mockResolvedValue([])
+
+    await req('get', `${BASE}?status=publicado`)
+
+    expect(prisma.contentPiece.findMany.mock.calls[0][0].where.status).toEqual({ in: ['publicado'] })
+  })
+
   it('descarta estados inválidos del filtro en vez de romper', async () => {
     mockBase()
     prisma.contentPiece.count.mockResolvedValue(0)
@@ -219,6 +243,33 @@ describe('GET /pieces/months', () => {
     expect(res.status).toBe(200)
     expect(res.body.months).toEqual(['2026-07', '2026-09'])
     expect(res.body.hasUnscheduled).toBe(true)
+  })
+
+  it('devuelve el conteo por mes y cuántas no tienen fecha (badges de las pestañas)', async () => {
+    mockBase()
+    prisma.contentPiece.findMany.mockResolvedValue([
+      { scheduledDate: '2026-09-05' },
+      { scheduledDate: '2026-09-20' },
+      { scheduledDate: '2026-07-01' },
+      { scheduledDate: null },
+      { scheduledDate: null },
+    ])
+
+    const res = await req('get', `${BASE}/months`)
+
+    expect(res.body.counts).toEqual({ '2026-09': 2, '2026-07': 1 })
+    expect(res.body.unscheduled).toBe(2)
+  })
+
+  it('excluye las archivadas, para no ofrecer una pestaña de mes que abre vacía', async () => {
+    mockBase()
+    prisma.contentPiece.findMany.mockResolvedValue([])
+
+    await req('get', `${BASE}/months`)
+
+    expect(prisma.contentPiece.findMany.mock.calls[0][0].where).toEqual(
+      expect.objectContaining({ status: { not: 'archivado' } }),
+    )
   })
 
   it('hasUnscheduled en false si todas las piezas tienen fecha', async () => {

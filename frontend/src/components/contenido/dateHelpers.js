@@ -19,9 +19,18 @@ export function formatDateTime(iso) {
   return d.toLocaleString('es-AR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
 }
 
-// "YYYY-MM" → "septiembre 2026". Compartido por el Calendario y el filtro de
-// mes de la Tabla/Kanban (ContentFilters).
+// "YYYY-MM" → "septiembre 2026". Compartido por el Calendario y las pestañas
+// de mes (ContentMonthTabs).
 export function monthLabel(month) {
   const [y, m] = month.split('-').map(Number)
   return new Date(y, m - 1, 1).toLocaleDateString('es-AR', { month: 'long', year: 'numeric' })
+}
+
+// Versión corta para las pestañas de mes: "oct" dentro del año en curso,
+// "oct 2025" fuera — el año solo aparece cuando aporta algo, así la fila de
+// pestañas de un proyecto con dos años de contenido sigue siendo legible.
+export function shortMonthLabel(month) {
+  const [y, m] = month.split('-').map(Number)
+  const name = new Date(y, m - 1, 1).toLocaleDateString('es-AR', { month: 'short' }).replace('.', '')
+  return y === new Date().getFullYear() ? name : `${name} ${y}`
 }

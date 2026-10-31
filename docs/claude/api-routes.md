@@ -302,7 +302,8 @@ POST   /api/whatsapp/automation-rules/:id/run-now  # corre la regla ya mismo (mi
 
 # Contenido (requiere feature flag 'contenido'). Lectura abierta a cualquier
 # miembro activo del workspace; las mutaciones validan canWrite() adentro del handler.
-GET    /api/contenido/projects/:id/pieces                        # ?from=&to=&status=&network=&ownerId=&q=&skip=&take=
+GET    /api/contenido/projects/:id/pieces                        # ?from=&to=&status=&network=&ownerId=&q=&noDate=&skip=&take= — sin `status` devuelve todo salvo 'archivado' (lo publicado SÍ entra)
+GET    /api/contenido/projects/:id/pieces/months                 # { months[], counts{mes:n}, unscheduled, hasUnscheduled } — pestañas de mes
 POST   /api/contenido/projects/:id/pieces
 GET    /api/contenido/projects/:id/pieces/:pid
 PATCH  /api/contenido/projects/:id/pieces/:pid                   # campos parciales; status dispara ContentStatusEvent

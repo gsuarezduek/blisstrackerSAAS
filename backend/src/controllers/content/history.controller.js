@@ -38,10 +38,14 @@ async function getHistory(req, res, next) {
 
 /**
  * GET /api/contenido/projects/:id/pieces/months
- * Meses (YYYY-MM, sobre scheduledDate) que tienen al menos una pieza, más si hay
- * alguna sin fecha asignada — alimenta el selector de mes de ContentFilters.
+ * Meses (YYYY-MM, sobre scheduledDate) que tienen al menos una pieza, con su
+ * conteo, más cuántas no tienen fecha asignada — alimenta las pestañas de mes
+ * (ContentMonthTabs), que son la navegación primaria del módulo.
  * Deliberadamente independiente de `listPieces`: si se derivara del listado ya
- * filtrado por mes, elegir un mes dejaría al selector con una sola opción.
+ * filtrado por mes, elegir un mes dejaría una sola pestaña.
+ * Excluye 'archivado' por el mismo criterio que el default de `listPieces` — un
+ * mes cuyas únicas piezas están archivadas no es un mes de trabajo, y la
+ * pestaña abriría vacía.
  */
 async function listMonths(req, res, next) {
   try {
@@ -49,18 +53,25 @@ async function listMonths(req, res, next) {
     if (!ctx) return
 
     const rows = await prisma.contentPiece.findMany({
-      where:  { projectId: ctx.projectId, workspaceId: ctx.workspaceId, deletedAt: null },
+      where:  { projectId: ctx.projectId, workspaceId: ctx.workspaceId, deletedAt: null, status: { not: 'archivado' } },
       select: { scheduledDate: true },
     })
 
-    const months = new Set()
-    let hasUnscheduled = false
+    const counts = {}
+    let unscheduled = 0
     for (const r of rows) {
-      if (r.scheduledDate) months.add(r.scheduledDate.slice(0, 7))
-      else hasUnscheduled = true
+      if (r.scheduledDate) {
+        const m = r.scheduledDate.slice(0, 7)
+        counts[m] = (counts[m] || 0) + 1
+      } else unscheduled++
     }
 
-    res.json({ months: [...months].sort(), hasUnscheduled })
+    res.json({
+      months: Object.keys(counts).sort(),
+      counts,
+      unscheduled,
+      hasUnscheduled: unscheduled > 0,
+    })
   } catch (err) { next(err) }
 }
 
