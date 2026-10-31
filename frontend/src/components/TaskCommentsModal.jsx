@@ -11,7 +11,16 @@ import MessageReactionPicker from './chat/MessageReactionPicker'
 import { groupReactions } from './chat/reactions'
 import { useTaskFileUpload } from './taskFileUpload'
 import { fmtBytes, iconFor } from '../lib/fileIcons'
-import { Eye, Paperclip, MessageSquare, SmilePlus, Bot } from 'lucide-react'
+
+// Miniatura de un adjunto: la liviana que generó el browser al subirlo a la
+// Nube (`posterUrl`, ~40KB) y, si ese archivo es anterior a que existieran,
+// el original — pero sólo cuando es una imagen; un video sin miniatura no
+// tiene a qué caer y se queda con el ícono por tipo. Mismo criterio que
+// ItemCard y las pantallas del portal.
+function attachmentThumb(f) {
+  return f.posterUrl || (f.mimeType?.startsWith('image/') ? f.url : null)
+}
+import { Eye, Paperclip, MessageSquare, SmilePlus, Bot, Play } from 'lucide-react'
 import { Icon } from './ui/Icon'
 import { agentName } from '../hooks/useMyAgents'
 import { STATUS_LABEL, STATUS_CLASS } from '../utils/taskStatus'
@@ -198,20 +207,43 @@ export default function TaskCommentsModal({ task, onClose, onCommentAdded, onTas
     e.target.value = ''
   }
 
+  // URL firmada de R2 de vida corta, igual que la Nube del proyecto (de donde
+  // estos adjuntos salen, literalmente: son ProjectFile): la descarga la hace
+  // el navegador, con su propia barra de progreso y sin dejar el archivo
+  // entero en la RAM de la pestaña. El <a> no lleva `download` porque
+  // cross-origin se ignora — el nombre viaja firmado en el Content-Disposition.
   async function handleDownloadAttachment(item) {
     try {
-      const res = await api.get(`/projects/${item.projectId}/files/${item.id}/download`, { responseType: 'blob' })
-      const blobUrl = URL.createObjectURL(res.data)
+      const { data } = await api.get(`/projects/${item.projectId}/files/${item.id}/signed-url`)
       const a = document.createElement('a')
-      a.href = blobUrl
-      a.download = item.name
+      a.href = data.url
+      a.rel = 'noopener'
       document.body.appendChild(a)
       a.click()
       a.remove()
-      URL.revokeObjectURL(blobUrl)
     } catch {
       setAttError('No se pudo descargar el archivo')
     }
+  }
+
+  // Click en la miniatura: una imagen va al lightbox con el ORIGINAL (no la
+  // miniatura reducida), un video se abre en una pestaña nueva con la URL
+  // firmada — R2 sirve `Range`, así que arranca sin bajar el archivo entero.
+  // La pestaña se abre sincrónicamente dentro del gesto del click o el
+  // navegador la bloquea como popup.
+  function handleOpenAttachment(item) {
+    if (item.mimeType?.startsWith('image/')) { setLightbox(item.url); return }
+    const win = window.open('', '_blank')
+    ;(async () => {
+      try {
+        const { data } = await api.get(`/projects/${item.projectId}/files/${item.id}/signed-url?inline=1`)
+        if (win) win.location.href = data.url
+        else setAttError('El navegador bloqueó la ventana de vista previa')
+      } catch {
+        if (win) win.close()
+        setAttError('No se pudo abrir la vista previa')
+      }
+    })()
   }
 
   async function handleRemoveAttachment(item) {
@@ -646,18 +678,24 @@ export default function TaskCommentsModal({ task, onClose, onCommentAdded, onTas
               <div className="mt-1.5 space-y-1">
                 {attachments.map(f => (
                   <div key={f.id} className="group flex items-center gap-2 text-sm px-2 py-1 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700">
-                    {f.mimeType?.startsWith('image/') && f.url ? (
+                    {attachmentThumb(f) ? (
                       <button
                         type="button"
-                        onClick={() => setLightbox(f.url)}
-                        title="Ver imagen"
-                        className="flex-shrink-0"
+                        onClick={() => handleOpenAttachment(f)}
+                        title={f.mimeType?.startsWith('video/') ? 'Ver video' : 'Ver imagen'}
+                        className="flex-shrink-0 relative"
                       >
                         <img
-                          src={f.url}
+                          src={attachmentThumb(f)}
                           alt={f.name}
+                          loading="lazy"
                           className="w-14 h-14 rounded-lg object-cover border border-gray-200 dark:border-gray-600"
                         />
+                        {f.mimeType?.startsWith('video/') && (
+                          <span className="absolute inset-0 flex items-center justify-center bg-black/25 rounded-lg">
+                            <Icon as={Play} size={18} className="text-white drop-shadow" />
+                          </span>
+                        )}
                       </button>
                     ) : (
                       <Icon as={iconFor(f.mimeType)} size={15} className="text-gray-400 flex-shrink-0" />
@@ -686,7 +724,10 @@ export default function TaskCommentsModal({ task, onClose, onCommentAdded, onTas
                     <Icon as={Paperclip} size={14} className="text-gray-400" />
                     <span className="flex-1 min-w-0 truncate text-gray-500 dark:text-gray-400">{item.name}</span>
                     <span className="flex-shrink-0 text-xs text-gray-400 dark:text-gray-500">
-                      {item.status === 'error' ? (item.error || 'Error') : `${item.progress}%`}
+                      {item.status === 'error' ? (item.error || 'Error')
+                        : item.status === 'thumbnail' ? 'Generando miniatura…'
+                        : item.status === 'confirming' ? 'Confirmando…'
+                        : `${item.progress}%`}
                     </span>
                   </div>
                 ))}

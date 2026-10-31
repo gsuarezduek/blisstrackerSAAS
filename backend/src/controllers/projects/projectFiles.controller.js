@@ -1147,6 +1147,7 @@ module.exports = {
   createPublicLink,
   revokePublicLink,
   uploadThumbnail,
+  clampDim,
   signedUrlForFile,
   fileSignedUrl,
   downloadFile,

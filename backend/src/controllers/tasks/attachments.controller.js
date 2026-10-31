@@ -19,7 +19,7 @@ const { monthLabel } = require('../../lib/monthUtils')
 const { todayString } = require('../../utils/dates')
 const { isDangerousMime } = require('../../lib/dangerousMime')
 const {
-  sanitizeName, shapeItem, MAX_FILE_BYTES, assertWithinQuota, PRESIGN_EXPIRES_IN,
+  sanitizeName, shapeItem, clampDim, MAX_FILE_BYTES, assertWithinQuota, PRESIGN_EXPIRES_IN,
 } = require('../projects/projectFiles.controller')
 
 const PENDING_MAX_AGE_MS = 60 * 60 * 1000
@@ -172,7 +172,12 @@ async function confirmAttachment(req, res, next) {
     const [updated] = await prisma.$transaction([
       prisma.projectFile.update({
         where: { id: file.id },
-        data:  { status: 'ready', sizeBytes: head.size, mimeType, confirmedAt: new Date() },
+        data:  {
+          status: 'ready', sizeBytes: head.size, mimeType, confirmedAt: new Date(),
+          // Las manda el browser tras decodificar el archivo, junto con la
+          // miniatura (ver makeThumbnail) — mismo criterio que confirmFile.
+          width: clampDim(req.body?.width), height: clampDim(req.body?.height),
+        },
         include: { uploadedBy: { select: { id: true, name: true } } },
       }),
       prisma.taskFile.create({

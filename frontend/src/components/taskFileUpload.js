@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef } from 'react'
 import api from '../api/client'
+import { makeThumbnail } from './projectFiles/makeThumbnail'
 import { MAX_FILE_BYTES, fmtMb } from './projectFilesUpload'
 
 export { MAX_FILE_BYTES, fmtMb }
@@ -22,10 +23,16 @@ function uploadWithProgress(url, file, mimeType, onProgress, onXhr) {
 let nextLocalId = 1
 
 /**
- * Orquesta presign → PUT directo a R2 → confirm para adjuntar un archivo a
- * una tarea (mismo patrón que useProjectFileUpload en projectFilesUpload.js,
- * pero contra /tasks/:id/attachments/* — la carpeta destino ("Tareas / <mes>
- * / <tarea>") la resuelve el backend solo, no hace falta elegir parentId).
+ * Orquesta presign → PUT directo a R2 → confirm → miniatura para adjuntar un
+ * archivo a una tarea (mismo patrón que useProjectFileUpload en
+ * projectFilesUpload.js, pero contra /tasks/:id/attachments/* — la carpeta
+ * destino ("Tareas / <mes> / <tarea>") la resuelve el backend solo, no hace
+ * falta elegir parentId).
+ *
+ * Un adjunto ES un ProjectFile de la Nube del proyecto, así que lleva la misma
+ * miniatura: si no la generara acá, un video adjuntado desde una tarea se
+ * vería con el ícono genérico mientras el mismo video subido desde la Nube se
+ * ve con su primer frame.
  */
 export function useTaskFileUpload({ taskId, onUploaded }) {
   const [queue, setQueue] = useState([]) // [{ id, name, progress, status, error }]
@@ -60,9 +67,29 @@ export function useTaskFileUpload({ taskId, onUploaded }) {
       xhr => cancelRef.current.set(item.id, xhr),
     )
     cancelRef.current.delete(item.id)
-    updateItem(item.id, { status: 'confirming' })
 
-    const { data: fileRow } = await api.post(`/tasks/${taskId}/attachments/${presign.fileId}/confirm`, {})
+    // Miniatura + dimensiones del original, en una sola decodificación. Para
+    // los tipos que no la llevan (PDF, docx, zip…) devuelve null y seguimos.
+    updateItem(item.id, { status: 'thumbnail' })
+    const thumb = await makeThumbnail(file).catch(() => null)
+
+    updateItem(item.id, { status: 'confirming' })
+    const { data: fileRow } = await api.post(`/tasks/${taskId}/attachments/${presign.fileId}/confirm`, {
+      width: thumb?.width ?? null, height: thumb?.height ?? null,
+    })
+
+    // La miniatura va al endpoint de la Nube (el adjunto ya es un ProjectFile
+    // de ese proyecto, y el `projectId` viene en la respuesta del confirm).
+    // Best-effort: si falla, el adjunto ya quedó confirmado igual.
+    if (thumb?.blob && fileRow?.projectId) {
+      try {
+        const form = new FormData()
+        form.append('thumbnail', thumb.blob, 'thumbnail')
+        const { data: withThumb } = await api.post(
+          `/projects/${fileRow.projectId}/files/${presign.fileId}/thumbnail`, form)
+        return { ...withThumb, projectId: fileRow.projectId }
+      } catch { /* sin miniatura, nada más que hacer */ }
+    }
     return fileRow
   }
 

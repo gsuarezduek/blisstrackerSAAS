@@ -171,6 +171,40 @@ describe('POST /api/tasks/:id/attachments/:fileId/confirm', () => {
     }))
   })
 
+  it('guarda width/height del original (los manda el browser con la miniatura)', async () => {
+    prisma.task.findFirst.mockResolvedValue(dbTask())
+    prisma.projectFile.findFirst.mockResolvedValue(dbFile({ status: 'pending' }))
+    objectStorage.headObject.mockResolvedValue({ size: 1000 })
+    objectStorage.getObjectHead.mockResolvedValue(Buffer.from('%PDF-1.4'))
+    prisma.$transaction.mockImplementation(ops => Promise.all(ops))
+    prisma.projectFile.update.mockResolvedValue(dbFile({ status: 'ready' }))
+    prisma.taskFile.create.mockResolvedValue({ id: 9 })
+
+    // Un adjunto ES un ProjectFile de la Nube: no debe quedarle sin dimensiones
+    // sólo por haber entrado desde una tarea.
+    await req('post', `${BASE}/55/confirm`).send({ width: 1920, height: 1080 })
+
+    expect(prisma.projectFile.update).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ width: 1920, height: 1080 }),
+    }))
+  })
+
+  it('descarta dimensiones absurdas en vez de persistirlas (clampDim)', async () => {
+    prisma.task.findFirst.mockResolvedValue(dbTask())
+    prisma.projectFile.findFirst.mockResolvedValue(dbFile({ status: 'pending' }))
+    objectStorage.headObject.mockResolvedValue({ size: 1000 })
+    objectStorage.getObjectHead.mockResolvedValue(Buffer.from('%PDF-1.4'))
+    prisma.$transaction.mockImplementation(ops => Promise.all(ops))
+    prisma.projectFile.update.mockResolvedValue(dbFile({ status: 'ready' }))
+    prisma.taskFile.create.mockResolvedValue({ id: 9 })
+
+    await req('post', `${BASE}/55/confirm`).send({ width: 999999, height: 'nope' })
+
+    expect(prisma.projectFile.update).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ width: null, height: null }),
+    }))
+  })
+
   it('404 si el archivo pending no existe', async () => {
     prisma.task.findFirst.mockResolvedValue(dbTask())
     prisma.projectFile.findFirst.mockResolvedValue(null)
