@@ -1,5 +1,5 @@
 const axios  = require('axios')
-const jwt    = require('jsonwebtoken')
+const { signState, verifyState } = require('../lib/oauthState')
 const prisma = require('../lib/prisma')
 const { encrypt } = require('../lib/encryption')
 const { listAdminOrganizations } = require('../services/linkedin.service')
@@ -41,16 +41,12 @@ async function getLinkedinAuthUrl(req, res, next) {
     })
     if (!project) return res.status(404).json({ error: 'Proyecto no encontrado' })
 
-    const state = jwt.sign(
-      {
+    const state = signState({
         projectId:   Number(projectId),
         workspaceId: req.workspace.id,
         slug:        req.workspace.slug,
         userId:      req.user.userId,
-      },
-      process.env.JWT_SECRET,
-      { expiresIn: '10m' },
-    )
+      })
 
     const redirectUri = buildLinkedinRedirectUri()
     const params = new URLSearchParams({
@@ -89,7 +85,7 @@ async function handleLinkedinCallback(req, res, next) {
 
   let statePayload
   try {
-    statePayload = jwt.verify(state, process.env.JWT_SECRET)
+    statePayload = verifyState(state)
   } catch {
     return res.redirect(
       `${process.env.FRONTEND_URL || 'http://localhost:5173'}/oauth-result?error=invalid_state`

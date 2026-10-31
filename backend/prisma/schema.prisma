@@ -389,6 +389,16 @@ model User {
   avatar            String    @default("2bee.png")
   customAvatar      Avatar? // foto propia subida por el usuario (Avatar.ownerId), si tiene
 
+  // ── Segundo factor (2FA) ──────────────────────────────────────────────────
+  // Secret TOTP cifrado con AES-256-GCM (lib/encryption.js, mismo mecanismo que
+  // ProjectAccess.password): en claro no se guarda nunca. Es global al usuario,
+  // no por workspace — el login es por cuenta, no por membresía.
+  // `totpSecret` presente + `totpConfirmedAt` null = enrolamiento a medias (se
+  // generó el QR pero nunca se validó el primer código); en ese estado el login
+  // NO pide segundo factor, para no dejar a nadie afuera de su propia cuenta.
+  totpSecret      String?
+  totpConfirmedAt DateTime?
+
   // Relaciones
   workspaceMembers                  WorkspaceMember[]
   workDays                          WorkDay[]
@@ -414,6 +424,7 @@ model User {
   passwordResetTokens               PasswordResetToken[]
   emailChangeTokens                 EmailChangeToken[]
   emailVerificationTokens           EmailVerificationToken[]
+  mfaRecoveryCodes                  MfaRecoveryCode[]
   loginEvents                       UserLogin[]
   sentInvitations                   WorkspaceInvitation[]       @relation("InvitedByUser")
   deletionRequestsMade              WorkspaceDeletionRequest[]  @relation("DeletionRequestedBy")
@@ -581,6 +592,25 @@ model EmailVerificationToken {
   expiresAt DateTime
   used      Boolean  @default(false)
   createdAt DateTime @default(now())
+}
+
+// Códigos de recuperación del 2FA: la salida para quien perdió el dispositivo
+// con la app de autenticación. Se generan los 10 juntos al confirmar el
+// enrolamiento, se muestran UNA sola vez y son de un solo uso.
+//
+// Se guarda sha256 y no bcrypt a propósito: son secretos generados por nosotros
+// con ~50 bits de entropía (no contraseñas elegidas por una persona), así que no
+// hay diccionario que estirar con un hash lento, y cada intento de login tiene
+// que compararse contra los 10 códigos.
+model MfaRecoveryCode {
+  id        Int       @id @default(autoincrement())
+  userId    Int
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  codeHash  String
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
 }
 
 model Feedback {

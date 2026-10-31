@@ -12,7 +12,7 @@ import BlissIcon from '../components/BlissIcon'
 // primario. La "tarjeta" es solo la columna centrada — sin fondo propio,
 // como en la web — para que se sienta la misma app, no una pantalla genérica.
 export default function LoginScreen() {
-  const { login } = useAuth()
+  const { login, verifyMfa } = useAuth()
   const { colors } = useTheme()
   const styles = useMemo(() => makeStyles(colors), [colors])
   const [email, setEmail] = useState('')
@@ -21,18 +21,109 @@ export default function LoginScreen() {
   const [focusedField, setFocusedField] = useState(null)
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  // Desafío de 2FA pendiente: la contraseña ya validó pero no hay sesión todavía.
+  const [mfaToken, setMfaToken] = useState(null)
+  const [code, setCode] = useState('')
 
   async function handleSubmit() {
     if (!email || !password || submitting) return
     setError('')
     setSubmitting(true)
     try {
-      await login(email.trim(), password)
+      const res = await login(email.trim(), password)
+      if (res?.mfaRequired) {
+        setMfaToken(res.mfaToken)
+        setPassword('')
+      }
     } catch (err) {
       setError(err.response?.data?.error || 'No pudimos iniciar sesión. Probá de nuevo.')
     } finally {
       setSubmitting(false)
     }
+  }
+
+  async function handleVerify() {
+    if (!code.trim() || submitting) return
+    setError('')
+    setSubmitting(true)
+    try {
+      await verifyMfa(mfaToken, code.trim())
+    } catch (err) {
+      const res = err.response?.data
+      // Desafío quemado o vencido: el mfaToken ya no sirve, se vuelve a la
+      // contraseña en vez de dejar reintentar un código que nunca va a entrar.
+      if (res?.code === 'MFA_TOO_MANY_ATTEMPTS' || res?.code?.startsWith('MFA_CHALLENGE')) {
+        setMfaToken(null)
+      }
+      setCode('')
+      setError(res?.error || 'No pudimos verificar el código. Probá de nuevo.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  function cancelMfa() {
+    setMfaToken(null)
+    setCode('')
+    setError('')
+  }
+
+  if (mfaToken) {
+    return (
+      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+          <View style={styles.lockup}>
+            <BlissIcon size={30} />
+            <Text style={styles.lockupText}>BlissTracker</Text>
+          </View>
+
+          <View style={styles.headings}>
+            <Text style={styles.title}>Verificación en dos pasos</Text>
+            <Text style={styles.subtitle}>
+              Ingresá el código de tu app de autenticación, o uno de recuperación.
+            </Text>
+          </View>
+
+          <TextInput
+            style={[styles.input, styles.codeInput, focusedField === 'code' && styles.inputFocused]}
+            placeholder="123456"
+            placeholderTextColor={colors.placeholder}
+            autoCapitalize="characters"
+            autoCorrect={false}
+            autoComplete="one-time-code"
+            textContentType="oneTimeCode"
+            maxLength={12}
+            autoFocus
+            value={code}
+            onChangeText={setCode}
+            onFocus={() => setFocusedField('code')}
+            onBlur={() => setFocusedField(null)}
+            onSubmitEditing={handleVerify}
+            returnKeyType="go"
+          />
+
+          {error ? (
+            <View style={styles.errorBanner}>
+              <Text style={styles.errorText}>{error}</Text>
+            </View>
+          ) : null}
+
+          <Pressable
+            style={[styles.button, submitting && styles.buttonDisabled]}
+            onPress={handleVerify}
+            disabled={submitting}
+          >
+            {submitting
+              ? <ActivityIndicator color={colors.white} />
+              : <Text style={styles.buttonText}>Verificar</Text>}
+          </Pressable>
+
+          <Pressable style={styles.forgotLink} onPress={cancelMfa} hitSlop={8}>
+            <Text style={styles.forgotLinkText}>Volver</Text>
+          </Pressable>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    )
   }
 
   return (
@@ -125,6 +216,7 @@ function makeStyles(c) {
     passwordRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 0, paddingRight: 12 },
     passwordInput: { flex: 1, paddingVertical: 13, fontSize: 15, color: c.text },
     eyeIcon: { fontSize: 16, marginLeft: 8 },
+    codeInput: { textAlign: 'center', fontSize: 20, letterSpacing: 6, fontVariant: ['tabular-nums'] },
     errorBanner: { backgroundColor: c.dangerSoft, borderRadius: 14, paddingHorizontal: 16, paddingVertical: 12, marginBottom: 12 },
     errorText: { color: c.dangerText, fontSize: 13 },
     button: {

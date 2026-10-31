@@ -7,8 +7,9 @@
 POST   /api/auth/login
 POST   /api/auth/google
 GET    /api/auth/me
+POST   /api/auth/mfa/verify              # paso 2 del login con 2FA: { mfaToken, code } → la misma respuesta que /login sin 2FA
 POST   /api/auth/forgot-password
-POST   /api/auth/reset-password
+POST   /api/auth/reset-password          # con 2FA activo exige `code`; sin él responde 401 MFA_REQUIRED
 
 GET    /api/profile
 PATCH  /api/profile
@@ -21,6 +22,13 @@ GET    /api/legajo/fields                 # config efectiva de campos (cualquier
 PUT    /api/legajo/fields                 # admin: reemplaza config { fields, legajoEnabled }
 POST   /api/profile/weekly-email/send    # trigger test email immediately
 POST   /api/profile/change-password
+
+# Segundo factor (2FA) — autoadministración, opt-in personal (mfa.controller.js)
+GET    /api/profile/mfa                   # { mfaEnabled, mfaPendingSetup, confirmedAt, recoveryCodesLeft }
+POST   /api/profile/mfa/setup             # { password } → { qr, secret, otpauthUri }; guarda el secret cifrado, NO activa
+POST   /api/profile/mfa/confirm           # { code } → activa + devuelve los 10 códigos de recuperación (única vez)
+POST   /api/profile/mfa/disable           # { password, code } — pide los dos factores
+POST   /api/profile/mfa/recovery-codes    # { password } → regenera los 10, invalida los anteriores
 
 # Workspace
 POST   /api/workspaces                    # crear workspace (registro público)

@@ -1,5 +1,6 @@
 const { OAuth2Client } = require('google-auth-library')
 const jwt              = require('jsonwebtoken')
+const { signState, verifyState } = require('../lib/oauthState')
 const prisma           = require('../lib/prisma')
 const { encrypt }      = require('../lib/encryption')
 
@@ -35,11 +36,7 @@ function buildOAuthClient() {
 // GET /api/calendar/google/auth-url
 async function getAuthUrl(req, res, next) {
   try {
-    const state = jwt.sign(
-      { workspaceId: req.workspace.id, slug: req.workspace.slug, userId: req.user.userId },
-      process.env.JWT_SECRET,
-      { expiresIn: '10m' },
-    )
+    const state = signState({ workspaceId: req.workspace.id, slug: req.workspace.slug, userId: req.user.userId })
     const client = buildOAuthClient()
     const url = client.generateAuthUrl({
       access_type: 'offline',
@@ -63,7 +60,7 @@ async function handleCallback(req, res, next) {
   try {
     let statePayload
     try {
-      statePayload = jwt.verify(state, process.env.JWT_SECRET)
+      statePayload = verifyState(state)
     } catch {
       return res.redirect(`${frontendBase}/oauth-result?error=invalid_state`)
     }

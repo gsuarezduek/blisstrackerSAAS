@@ -60,6 +60,17 @@ En mobile no hay subdominio, así que se resuelve en el login:
   (`setUnauthorizedHandler` en `client.js`, consumido por `AuthContext`).
 - **Sin endpoint nuevo de backend** para esto — todo ya existía para el caso
   "login desde el dominio raíz" de la web.
+- **Verificación en dos pasos (2FA)**: si la cuenta la tiene activa,
+  `POST /auth/login` devuelve `{ mfaRequired, mfaToken }` en vez de la sesión —
+  `LoginScreen` muestra un paso de código (TOTP o código de recuperación) y
+  `AuthContext.verifyMfa(mfaToken, code)` lo canjea por la sesión real. Las dos
+  respuestas pasan por el mismo `resolveLoginResponse()`, así que el flujo de
+  "1 workspace entro directo / varios muestro el selector" no se duplica. No
+  hace falta nada nativo: es un `TextInput` con `textContentType="oneTimeCode"`.
+  **Activar o desactivar el 2FA se hace desde la web** — la app no tiene
+  pantalla de enrolamiento (el QR se escanearía con el mismo teléfono, y el
+  alcance de la app es el colaborador no-admin). Ver el concepto
+  "Verificación en dos pasos (2FA)" en el `CLAUDE.md` raíz.
 
 ## Estructura
 

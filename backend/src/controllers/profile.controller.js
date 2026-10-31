@@ -5,6 +5,7 @@ const prisma = require('../lib/prisma')
 const { resolveLegajoFields, coerceCustomValue, BUILTIN_KEYS } = require('../lib/legajoCatalog')
 const { sendEmailChangeVerification } = require('../services/email.service')
 const { validatePassword } = require('../lib/passwordPolicy')
+const { countUnusedRecoveryCodes } = require('../lib/mfa')
 const { validateImageUpload } = require('../lib/imageType')
 const objectStorage = require('../services/objectStorage.service')
 const { normalizeEmail } = require('../lib/normalizeEmail')
@@ -32,6 +33,9 @@ const USER_SELECT = {
   cuit: true, alias: true, bankName: true, maritalStatus: true, children: true,
   educationLevel: true, educationTitle: true, bloodType: true,
   medicalConditions: true, healthInsurance: true, emergencyContact: true,
+  // 2FA: se seleccionan para derivar `mfaEnabled`, pero buildProfileResponse los
+  // saca de la respuesta — el secret cifrado no sale nunca del backend.
+  totpSecret: true, totpConfirmedAt: true,
 }
 
 // Flags de preferencias que viven en WorkspaceMember
@@ -74,11 +78,16 @@ async function notifyLegajoUpdate(workspaceId, actorId, actorName, changedLabels
 // La validación de avatares se hace contra la DB (modelo Avatar) en updateAvatar.
 
 // Arma la respuesta de perfil (datos del User + preferencias y legajoData del WorkspaceMember).
-function buildProfileResponse(user, member) {
-  const { googleId, ...rest } = user
+function buildProfileResponse(user, member, extra = {}) {
+  const { googleId, totpSecret, totpConfirmedAt, ...rest } = user
   return {
     ...rest,
     googleConnected: !!googleId,
+    mfaEnabled: !!(totpSecret && totpConfirmedAt),
+    // Enrolamiento empezado y nunca confirmado (se cerró el modal del QR antes de
+    // validar el primer código): la UI ofrece retomarlo, y el login no lo exige.
+    mfaPendingSetup: !!(totpSecret && !totpConfirmedAt),
+    ...extra,
     role: member?.teamRole ?? '',
     isAdmin: member?.role === 'admin' || member?.role === 'owner',
     weeklyEmailEnabled: member?.weeklyEmailEnabled ?? true,
@@ -100,7 +109,10 @@ async function getProfile(req, res, next) {
       where: { id: req.user.userId },
       select: USER_SELECT,
     })
-    res.json(buildProfileResponse(user, req.workspaceMember))
+    const mfaRecoveryCodesLeft = user.totpConfirmedAt
+      ? await countUnusedRecoveryCodes(user.id)
+      : 0
+    res.json(buildProfileResponse(user, req.workspaceMember, { mfaRecoveryCodesLeft }))
   } catch (err) { next(err) }
 }
 

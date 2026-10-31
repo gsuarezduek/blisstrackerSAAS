@@ -6,6 +6,7 @@ import { useAuth } from '../context/AuthContext'
 import { useWorkspace } from '../context/WorkspaceContext'
 import BlissLogo from '../components/BlissLogo'
 import PasswordInput from '../components/PasswordInput'
+import MfaCodeInput from '../components/MfaCodeInput'
 import { isWorkspaceSubdomain } from '../utils/domain'
 
 // ── Selector de workspace post-login ──────────────────────────────────────────
@@ -59,6 +60,84 @@ function WorkspacePicker({ workspaces }) {
   )
 }
 
+// ── Paso 2 del login: verificación en dos pasos ───────────────────────────────
+
+// La contraseña ya validó pero el backend no entregó ninguna sesión: con el
+// `mfaToken` en mano, este paso canjea el código por los tokens de workspace.
+function MfaStep({ challenge, onVerified, onCancel }) {
+  const [code,    setCode]    = useState('')
+  const [error,   setError]   = useState('')
+  const [loading, setLoading] = useState(false)
+  const [useRecovery, setUseRecovery] = useState(false)
+
+  async function handleSubmit(e) {
+    e.preventDefault()
+    setError('')
+    setLoading(true)
+    try {
+      const { data } = await axios.post(`${import.meta.env.VITE_API_URL}/api/auth/mfa/verify`, {
+        mfaToken: challenge.mfaToken,
+        code,
+      })
+      onVerified(data.workspaces)
+    } catch (err) {
+      const res = err.response?.data
+      // Desafío quemado o vencido: no tiene sentido dejarlo reintentar acá, el
+      // mfaToken ya no sirve. Se vuelve al formulario de contraseña.
+      if (res?.code === 'MFA_TOO_MANY_ATTEMPTS' || res?.code?.startsWith('MFA_CHALLENGE')) {
+        onCancel(res.error)
+        return
+      }
+      setError(res?.error || 'No se pudo verificar el código')
+      setCode('')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 px-6 py-12">
+      <div className="w-full max-w-sm space-y-6">
+        <BlissLogo variant="lockup" className="h-8 w-auto" />
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-1">Verificación en dos pasos</h1>
+          <p className="text-gray-500 dark:text-gray-400 text-sm">
+            {useRecovery
+              ? 'Ingresá uno de tus códigos de recuperación. Cada código sirve una sola vez.'
+              : 'Ingresá el código de 6 dígitos que muestra tu app de autenticación.'}
+          </p>
+        </div>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <MfaCodeInput
+            autoFocus
+            required
+            value={code}
+            onChange={setCode}
+            placeholder={useRecovery ? 'A2BC-D3EF4G' : '123456'}
+          />
+          {error && (
+            <div className="bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 text-sm rounded-xl px-4 py-3">{error}</div>
+          )}
+          <button type="submit" disabled={loading || !code.trim()}
+            className="w-full bg-primary-600 hover:bg-primary-700 disabled:opacity-60 text-white font-semibold rounded-xl px-4 py-2.5 transition-colors">
+            {loading ? 'Verificando…' : 'Verificar'}
+          </button>
+        </form>
+        <div className="flex justify-between text-xs text-gray-400 dark:text-gray-500">
+          <button type="button" onClick={() => { setUseRecovery(v => !v); setCode(''); setError('') }}
+            className="hover:text-primary-600 dark:hover:text-primary-400 transition-colors">
+            {useRecovery ? 'Usar el código de la app' : '¿Perdiste el dispositivo?'}
+          </button>
+          <button type="button" onClick={() => onCancel('')}
+            className="hover:text-primary-600 dark:hover:text-primary-400 transition-colors">
+            Volver
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Login central (raíz o localhost) ──────────────────────────────────────────
 
 function RootLogin() {
@@ -70,6 +149,8 @@ function RootLogin() {
   const [error,      setError]      = useState('')
   const [loading,    setLoading]    = useState(false)
   const [workspaces, setWorkspaces] = useState(null)
+  // Desafío de 2FA pendiente: { mfaToken, methods, recoveryCodesLeft }
+  const [challenge,  setChallenge]  = useState(null)
 
   // Nonce para el botón de Google — generado una sola vez por sesión de login
   const nonce = useMemo(() => {
@@ -96,6 +177,11 @@ function RootLogin() {
     setLoading(true)
     try {
       const { data } = await axios.post(`${import.meta.env.VITE_API_URL}/api/auth/login`, { email, password })
+      // Con 2FA la respuesta no trae sesión: falta el segundo paso.
+      if (data.mfaRequired) {
+        setChallenge(data)
+        return
+      }
       redirect(data.workspaces)
     } catch (err) {
       setError(err.response?.data?.error || 'Error al iniciar sesión')
@@ -115,6 +201,16 @@ function RootLogin() {
     } finally {
       setLoading(false)
     }
+  }
+
+  if (challenge) {
+    return (
+      <MfaStep
+        challenge={challenge}
+        onVerified={redirect}
+        onCancel={msg => { setChallenge(null); setPassword(''); setError(msg) }}
+      />
+    )
   }
 
   if (workspaces) return <WorkspacePicker workspaces={workspaces} />

@@ -1,11 +1,12 @@
 const router = require('express').Router()
-const { login, me, forgotPassword, resetPassword, verifyEmailChange, verifyEmail, resendVerificationEmail, connectGoogleWithToken, googleLogin, switchWorkspace, recordLogin, logout } = require('../controllers/auth.controller')
+const { login, verifyMfa, me, forgotPassword, resetPassword, verifyEmailChange, verifyEmail, resendVerificationEmail, connectGoogleWithToken, googleLogin, switchWorkspace, recordLogin, logout } = require('../controllers/auth.controller')
 const { auth } = require('../middleware/auth')
 const { resolveWorkspace } = require('../middleware/workspace')
 const prisma = require('../lib/prisma')
 const { normalizeEmail } = require('../lib/normalizeEmail')
 
 router.post('/login',             login)
+router.post('/mfa/verify',        verifyMfa)   // paso 2 del login con 2FA (público: todavía no hay sesión)
 router.post('/google',            googleLogin)
 router.post('/forgot-password',   forgotPassword)
 router.post('/reset-password',    resetPassword)

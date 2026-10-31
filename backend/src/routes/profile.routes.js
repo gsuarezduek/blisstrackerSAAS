@@ -1,6 +1,7 @@
 const router = require('express').Router()
 const multer  = require('multer')
 const { getProfile, updateProfile, changePassword, requestEmailChange, googleLinkToken, disconnectGoogle, updateAvatar, uploadAvatarImage, deleteAvatarImage, updatePreferences, sendTestWeeklyEmail } = require('../controllers/profile.controller')
+const mfa = require('../controllers/mfa.controller')
 const { auth } = require('../middleware/auth')
 const { resolveWorkspace } = require('../middleware/workspace')
 
@@ -38,6 +39,13 @@ router.delete('/avatar/upload',     deleteAvatarImage)
 router.patch('/preferences',        updatePreferences)
 router.post('/weekly-email/send',   sendTestWeeklyEmail)
 router.post('/change-password',     changePassword)
+
+// Segundo factor (2FA) — autoadministración, ver mfa.controller.js
+router.get('/mfa',                  mfa.status)
+router.post('/mfa/setup',           mfa.setup)
+router.post('/mfa/confirm',         mfa.confirm)
+router.post('/mfa/disable',         mfa.disable)
+router.post('/mfa/recovery-codes',  mfa.regenerateRecoveryCodes)
 router.post('/change-email',        requestEmailChange)
 router.post('/google-link-token',   googleLinkToken)
 router.delete('/connect-google',    disconnectGoogle)

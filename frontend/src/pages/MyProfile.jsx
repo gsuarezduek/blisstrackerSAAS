@@ -9,6 +9,7 @@ import useLegajoFields from '../hooks/useLegajoFields'
 import LegajoFormFields from '../components/legajo/LegajoFormFields'
 import RoleBadge from '../components/RoleBadge'
 import PasswordInput from '../components/PasswordInput'
+import MfaSection from '../components/profile/MfaSection'
 import { avatarUrl } from '../utils/avatarUrl'
 import { useFeatureFlag } from '../hooks/useFeatureFlag'
 import { LEAVE_TYPES, BENEFIT_BANKS } from './rrhh/shared'
@@ -927,6 +928,12 @@ export default function MyProfile() {
             </div>
           </form>
         </div>
+
+        {/* Verificación en dos pasos (2FA) */}
+        <MfaSection
+          profile={profile}
+          onChange={patch => setProfile(p => ({ ...p, ...patch }))}
+        />
 
         {/* Email de la cuenta */}
         <div className="bg-white dark:bg-gray-800 rounded-2xl border dark:border-gray-700 p-6">
