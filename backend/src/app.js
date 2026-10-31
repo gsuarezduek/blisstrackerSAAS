@@ -120,6 +120,29 @@ const loginLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
 })
+// Instancia PROPIA (no reusar loginLimiter): express-rate-limit comparte el
+// contador entre todos los paths montados sobre la misma instancia, y un login
+// con 2FA gasta 1 intento de /login + hasta 5 de /mfa/verify. Con un presupuesto
+// compartido de 15, dos logins con el código mal tipeado dejaban a la persona
+// afuera 15 minutos. El tope por intento ya lo pone el desafío (5 por mfaToken,
+// lib/mfaChallenge.js); esto sólo corta el otro ángulo: muchos desafíos nuevos
+// desde una misma IP.
+const mfaVerifyLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  message: { error: 'Demasiados intentos. Intentá de nuevo en 15 minutos.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+})
+// También con instancia propia: con 2FA activo este endpoint verifica un código
+// de 6 dígitos, y el enlace de reset vive 1 hora.
+const resetPasswordLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 15,
+  message: { error: 'Demasiados intentos. Intentá de nuevo en 15 minutos.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+})
 const forgotPasswordLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
   max: 5,
@@ -154,6 +177,8 @@ const leadWebhookLimiter = rateLimit({
 app.use('/api', globalLimiter)
 app.use('/api/auth/login', loginLimiter)
 app.use('/api/auth/google', loginLimiter)
+app.use('/api/auth/mfa/verify', mfaVerifyLimiter)
+app.use('/api/auth/reset-password', resetPasswordLimiter)
 app.use('/api/auth/forgot-password', forgotPasswordLimiter)
 app.use('/api/insights/refresh', aiLimiter)
 app.use('/api/marketing/geo/audit', aiLimiter)

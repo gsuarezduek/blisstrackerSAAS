@@ -170,6 +170,61 @@ async function sendWeeklySummaryEmail(email, name, html, weekLabel, workspaceId,
   }
 }
 
+// ── Avisos de seguridad del segundo factor (2FA) ─────────────────────────────
+// Los tres son best-effort (no relanzan): son avisos, no parte del flujo. Y los
+// tres existen por el mismo motivo — son los momentos en que una víctima se
+// entera de que alguien más tiene su cuenta. Por eso se avisa también cuando el
+// cambio lo hizo el usuario legítimo: el falso positivo molesta, el silencio
+// cuesta la cuenta.
+async function sendMfaNotice(email, name, { subject, title, body, workspaceId }) {
+  const from = await getEmailFrom(workspaceId)
+  try {
+    const { error } = await resend.emails.send({
+      from,
+      to: email,
+      subject,
+      html: emailShell(`
+        <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;padding:28px 32px;margin-top:8px;">
+          <h2 style="color:#1e293b;margin:0 0 12px;font-size:20px;">${title}</h2>
+          <p style="color:#475569;margin:0 0 16px;">Hola <strong>${name}</strong>, ${body}</p>
+          <p style="color:#94a3b8;font-size:14px;margin:0;">Si no fuiste vos, cambiá tu contraseña y contactá al soporte de inmediato.</p>
+        </div>
+      `),
+    })
+    if (error) throw new Error(error.message)
+    await logEmail({ workspaceId, to: email, subject, type: 'mfa', status: 'sent' })
+  } catch (err) {
+    await logEmail({ workspaceId, to: email, subject, type: 'mfa', status: 'failed', errorMsg: err.message })
+  }
+}
+
+async function sendMfaEnabledNotice(email, name, workspaceId) {
+  return sendMfaNotice(email, name, {
+    workspaceId,
+    subject: 'Activaste la verificación en dos pasos — BlissTracker',
+    title:   'Verificación en dos pasos activada',
+    body:    'tu cuenta ahora pide un código de tu app de autenticación cada vez que inicias sesión. Guardá los códigos de recuperación en un lugar seguro: son la única forma de entrar si perdés el teléfono.',
+  })
+}
+
+async function sendMfaDisabledNotice(email, name, workspaceId) {
+  return sendMfaNotice(email, name, {
+    workspaceId,
+    subject: 'Se desactivó la verificación en dos pasos — BlissTracker',
+    title:   'Verificación en dos pasos desactivada',
+    body:    'tu cuenta volvió a entrar sólo con email y contraseña.',
+  })
+}
+
+async function sendMfaRecoveryCodeUsedNotice(email, name, remaining, workspaceId) {
+  return sendMfaNotice(email, name, {
+    workspaceId,
+    subject: 'Se usó un código de recuperación — BlissTracker',
+    title:   'Se usó un código de recuperación',
+    body:    `alguien inició sesión con un código de recuperación en lugar del código de tu app. Te ${remaining === 1 ? 'queda 1 código' : `quedan ${remaining} códigos`}; podés generar nuevos desde Mi perfil → Seguridad.`,
+  })
+}
+
 module.exports = {
   sendPasswordReset,
   sendEmailChangeVerification,
@@ -177,4 +232,7 @@ module.exports = {
   sendWelcomeEmail,
   sendVerificationEmail,
   sendWeeklySummaryEmail,
+  sendMfaEnabledNotice,
+  sendMfaDisabledNotice,
+  sendMfaRecoveryCodeUsedNotice,
 }

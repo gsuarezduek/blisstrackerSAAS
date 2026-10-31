@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useSearchParams, useNavigate, Link } from 'react-router-dom'
 import api from '../api/client'
 import PasswordInput from '../components/PasswordInput'
+import MfaCodeInput from '../components/MfaCodeInput'
 import { TriangleAlert } from 'lucide-react'
 import { Icon } from '../components/ui/Icon'
 
@@ -14,6 +15,11 @@ export default function ResetPassword() {
   const [confirm, setConfirm] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  // El backend no dice de antemano si la cuenta del enlace tiene 2FA (eso
+  // filtraría quién lo tiene activo a cualquiera que pida un reset): el primer
+  // intento vuelve con MFA_REQUIRED y recién entonces se muestra el campo.
+  const [needsCode, setNeedsCode] = useState(false)
+  const [code, setCode] = useState('')
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -24,10 +30,12 @@ export default function ResetPassword() {
     }
     setLoading(true)
     try {
-      await api.post('/auth/reset-password', { token, password })
+      await api.post('/auth/reset-password', { token, password, code: code || undefined })
       navigate('/login?reset=ok')
     } catch (err) {
-      setError(err.response?.data?.error || 'Error al cambiar la contraseña')
+      const res = err.response?.data
+      if (res?.code === 'MFA_REQUIRED') setNeedsCode(true)
+      setError(res?.error || 'Error al cambiar la contraseña')
     } finally {
       setLoading(false)
     }
@@ -78,6 +86,22 @@ export default function ResetPassword() {
               placeholder="Repetí la contraseña"
             />
           </div>
+
+          {needsCode && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Código de verificación</label>
+              <MfaCodeInput
+                required
+                autoFocus
+                value={code}
+                onChange={setCode}
+                className="!rounded-lg"
+              />
+              <p className="text-xs text-gray-400 dark:text-gray-500 mt-1.5">
+                El de tu app de autenticación, o uno de tus códigos de recuperación.
+              </p>
+            </div>
+          )}
 
           {error && (
             <div className="bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 text-sm rounded-lg px-4 py-3">

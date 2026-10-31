@@ -68,8 +68,15 @@ export function AuthProvider({ children }) {
     return () => window.removeEventListener('bliss:workspace-suspended', onWorkspaceSuspended)
   }, [])
 
+  // Camino de login desde un subdominio (manda X-Workspace vía `api`). Hoy NO
+  // tiene consumidores — Login2.jsx hace el login contra el dominio raíz con
+  // axios directo y AuthCallback entra por loginWithToken —, pero si se vuelve a
+  // usar tiene que respetar el 2FA: con `mfaRequired` no hay token todavía y
+  // guardarlo igual dejaría `"undefined"` en localStorage. Quien lo llame tiene
+  // que resolver el código contra POST /auth/mfa/verify.
   async function login(email, password) {
     const { data } = await api.post('/auth/login', { email, password })
+    if (data.mfaRequired) return data
     localStorage.setItem('token', data.token)
     // Fetch /auth/me para obtener el perfil completo (incl. isSuperAdmin)
     const meRes = await api.get('/auth/me').catch(() => ({ data: data.user }))
@@ -77,6 +84,8 @@ export function AuthProvider({ children }) {
     return meRes.data
   }
 
+  // Google no pide el segundo factor propio (ya lo aplicó Google), así que acá
+  // no hay rama de 2FA — igual que en el backend (`googleLogin`).
   async function loginWithGoogle(credential) {
     const { data } = await api.post('/auth/google', { credential })
     localStorage.setItem('token', data.token)

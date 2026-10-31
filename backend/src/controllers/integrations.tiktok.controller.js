@@ -1,6 +1,6 @@
 const crypto = require('crypto')
 const axios  = require('axios')
-const jwt    = require('jsonwebtoken')
+const { signState, verifyState } = require('../lib/oauthState')
 const prisma = require('../lib/prisma')
 const { encrypt } = require('../lib/encryption')
 
@@ -29,17 +29,13 @@ async function getTikTokAuthUrl(req, res, next) {
     const codeVerifier  = crypto.randomBytes(32).toString('base64url')
     const codeChallenge = crypto.createHash('sha256').update(codeVerifier).digest('base64url')
 
-    const state = jwt.sign(
-      {
+    const state = signState({
         projectId:    Number(projectId),
         workspaceId:  req.workspace.id,
         slug:         req.workspace.slug,
         userId:       req.user.userId,
         codeVerifier,
-      },
-      process.env.JWT_SECRET,
-      { expiresIn: '10m' },
-    )
+      })
 
     const params = new URLSearchParams({
       client_key:            process.env.TIKTOK_CLIENT_KEY,
@@ -73,7 +69,7 @@ async function handleTikTokCallback(req, res, next) {
 
   let statePayload
   try {
-    statePayload = jwt.verify(state, process.env.JWT_SECRET)
+    statePayload = verifyState(state)
   } catch {
     return res.redirect(
       `${process.env.FRONTEND_URL || 'http://localhost:5173'}/oauth-result?error=invalid_state`

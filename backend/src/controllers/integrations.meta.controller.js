@@ -1,6 +1,6 @@
 const FormData         = require('form-data')
 const axios            = require('axios')
-const jwt              = require('jsonwebtoken')
+const { signState, verifyState } = require('../lib/oauthState')
 const crypto           = require('crypto')
 const prisma           = require('../lib/prisma')
 const { encrypt }      = require('../lib/encryption')
@@ -62,11 +62,7 @@ async function getMetaAuthUrl(req, res, next) {
     })
     if (!project) return res.status(404).json({ error: 'Proyecto no encontrado' })
 
-    const state = jwt.sign(
-      { projectId: Number(projectId), workspaceId: req.workspace.id, slug: req.workspace.slug, userId: req.user.userId },
-      process.env.JWT_SECRET,
-      { expiresIn: '10m' },
-    )
+    const state = signState({ projectId: Number(projectId), workspaceId: req.workspace.id, slug: req.workspace.slug, userId: req.user.userId })
 
     const params = new URLSearchParams({
       client_id:     process.env.META_APP_ID,
@@ -98,7 +94,7 @@ async function handleMetaCallback(req, res, next) {
 
   let statePayload
   try {
-    statePayload = jwt.verify(state, process.env.JWT_SECRET)
+    statePayload = verifyState(state)
   } catch {
     return res.redirect(
       `${process.env.FRONTEND_URL || 'http://localhost:5173'}/oauth-result?error=invalid_state`
@@ -220,11 +216,7 @@ async function getMetaAdsAuthUrl(req, res, next) {
     })
     if (!project) return res.status(404).json({ error: 'Proyecto no encontrado' })
 
-    const state = jwt.sign(
-      { projectId: Number(projectId), workspaceId: req.workspace.id, slug: req.workspace.slug, userId: req.user.userId },
-      process.env.JWT_SECRET,
-      { expiresIn: '10m' },
-    )
+    const state = signState({ projectId: Number(projectId), workspaceId: req.workspace.id, slug: req.workspace.slug, userId: req.user.userId })
 
     const params = new URLSearchParams({
       client_id:     process.env.META_ADS_APP_ID,
@@ -266,7 +258,7 @@ async function handleMetaAdsCallback(req, res, next) {
 
   let statePayload
   try {
-    statePayload = jwt.verify(state, process.env.JWT_SECRET)
+    statePayload = verifyState(state)
   } catch (err) {
     console.error('[MetaAdsOAuth] State inválido o expirado:', err.message, '· code presente:', !!code)
     return res.redirect(
@@ -821,11 +813,7 @@ async function getFacebookAuthUrl(req, res, next) {
     })
     if (!project) return res.status(404).json({ error: 'Proyecto no encontrado' })
 
-    const state = jwt.sign(
-      { projectId: Number(projectId), workspaceId: req.workspace.id, slug: req.workspace.slug, userId: req.user.userId },
-      process.env.JWT_SECRET,
-      { expiresIn: '10m' },
-    )
+    const state = signState({ projectId: Number(projectId), workspaceId: req.workspace.id, slug: req.workspace.slug, userId: req.user.userId })
 
     const params = new URLSearchParams({
       client_id:     process.env.META_APP_ID,
@@ -854,7 +842,7 @@ async function handleFacebookCallback(req, res, next) {
   }
 
   let statePayload
-  try { statePayload = jwt.verify(state, process.env.JWT_SECRET) }
+  try { statePayload = verifyState(state) }
   catch { return res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:5173'}/oauth-result?error=invalid_state`) }
 
   const { projectId, workspaceId, slug, userId } = statePayload

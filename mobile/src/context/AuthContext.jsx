@@ -161,18 +161,37 @@ export function AuthProvider({ children }) {
     return true
   }
 
-  // POST /auth/login sin X-Workspace (no hay slug guardado aún en el primer
-  // login) → el backend devuelve { user, workspaces: [{slug,name,role,token}] }.
-  // Con 1 solo workspace entramos directo; con varios, se resuelve con
+  // Resuelve la respuesta de login, venga del paso 1 o del paso 2 del 2FA — las
+  // dos devuelven exactamente la misma forma cuando la identidad ya quedó
+  // probada. Con 1 solo workspace entramos directo; con varios, se resuelve con
   // selectWorkspace() desde la pantalla de selección.
-  async function login(email, password) {
-    const { data } = await api.post('/auth/login', { email, password })
+  async function resolveLoginResponse(data) {
+    // Con 2FA activo el backend todavía no entregó ninguna sesión: falta el
+    // código. El desafío queda en la pantalla de login, que llama a verifyMfa.
+    if (data.mfaRequired) {
+      return { done: false, mfaRequired: true, mfaToken: data.mfaToken }
+    }
     if (data.workspaces.length === 1) {
       await enterWorkspace(data.workspaces[0])
       return { done: true }
     }
     setPendingWorkspaces(data.workspaces)
     return { done: false, workspaces: data.workspaces }
+  }
+
+  // POST /auth/login sin X-Workspace (no hay slug guardado aún en el primer
+  // login) → el backend devuelve { user, workspaces: [{slug,name,role,token}] }
+  // o, con 2FA, { mfaRequired, mfaToken }.
+  async function login(email, password) {
+    const { data } = await api.post('/auth/login', { email, password })
+    return resolveLoginResponse(data)
+  }
+
+  // Paso 2 del login con 2FA: canjea el código (TOTP o de recuperación) por la
+  // sesión. El `mfaToken` no sirve como token de sesión — sólo para esto.
+  async function verifyMfa(mfaToken, code) {
+    const { data } = await api.post('/auth/mfa/verify', { mfaToken, code })
+    return resolveLoginResponse(data)
   }
 
   async function enterWorkspace(ws) {
@@ -202,7 +221,7 @@ export function AuthProvider({ children }) {
   return (
     <AuthContext.Provider value={{
       user, loading, locked, pendingWorkspaces,
-      login, selectWorkspace, switchWorkspace, logout, unlock, forgetBiometricAndLogout, togglePush,
+      login, verifyMfa, selectWorkspace, switchWorkspace, logout, unlock, forgetBiometricAndLogout, togglePush,
     }}>
       {children}
     </AuthContext.Provider>

@@ -1,5 +1,6 @@
 const { OAuth2Client }     = require('google-auth-library')
 const jwt                  = require('jsonwebtoken')
+const { signState, verifyState } = require('../lib/oauthState')
 const prisma               = require('../lib/prisma')
 const { encrypt, decrypt } = require('../lib/encryption')
 const { saveCurrentMonthSnapshotSafe } = require('../services/analyticsSnapshot.service')
@@ -88,17 +89,13 @@ async function getAuthUrl(req, res, next) {
     if (!project) return res.status(404).json({ error: 'Proyecto no encontrado' })
 
     // state JWT firmado: projectId, workspaceId, type, slug para construir redirect del frontend
-    const state = jwt.sign(
-      {
+    const state = signState({
         projectId:   Number(projectId),
         workspaceId: req.workspace.id,
         slug:        req.workspace.slug,
         type,
         userId:      req.user.userId,
-      },
-      process.env.JWT_SECRET,
-      { expiresIn: '10m' },
-    )
+      })
 
     const client = buildOAuthClient()
     const url    = client.generateAuthUrl({
@@ -214,7 +211,7 @@ async function handleCallback(req, res, next) {
     // Validar state JWT
     let statePayload
     try {
-      statePayload = jwt.verify(state, process.env.JWT_SECRET)
+      statePayload = verifyState(state)
     } catch {
       return res.redirect(
         `${process.env.FRONTEND_URL || 'http://localhost:5173'}/oauth-result?error=invalid_state`
