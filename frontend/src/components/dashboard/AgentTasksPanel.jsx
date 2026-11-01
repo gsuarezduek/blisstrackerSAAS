@@ -4,6 +4,7 @@ import { Bot, Repeat } from 'lucide-react'
 import api from '../../api/client'
 import { Icon } from '../ui/Icon'
 import { OverflowMenu } from '../TaskCard'
+import UnblockAgentTaskModal from './UnblockAgentTaskModal'
 import { agentName } from '../../hooks/useMyAgents'
 import { fmtMins, activeMinutes, completedMinutes, fmtCreatedAt, createdAtTitle } from '../../utils/format'
 
@@ -36,6 +37,7 @@ export function groupAgentTasks(tasks, today) {
 
 function AgentTaskRow({ task, today, onChanged, onReturned, onOpenComments }) {
   const [loading, setLoading] = useState(false)
+  const [unblocking, setUnblocking] = useState(false)
 
   async function run(fn) {
     setLoading(true)
@@ -56,10 +58,22 @@ function AgentTaskRow({ task, today, onChanged, onReturned, onOpenComments }) {
     if (task.recurrenceId) menu.push({ label: 'Devolverme la serie', onClick: () => returnToMe('series') })
   }
 
-  // Desbloquear = "ya resolví lo que lo frenaba": vuelve a en curso y el agente la
-  // retoma cuando revise su lista.
+  // Desbloquear = "ya resolví lo que te frenaba". Abre el modal en vez de resolverlo en
+  // el acto: el motivo del bloqueo suele ser una pregunta, y ahí se la responde (la
+  // respuesta queda como comentario, que es donde el agente la lee). La tarea vuelve
+  // PAUSADA — nadie está trabajando — y el agente la retoma cuando lo uses.
   const primary = task.status === 'BLOCKED'
-    ? { label: 'Desbloquear', onClick: () => run(async () => { const { data } = await api.patch(`/tasks/${task.id}/unblock`); onChanged(data) }) }
+    ? { label: 'Desbloquear', onClick: () => setUnblocking(true) }
+    : null
+
+  // Le dejaste algo (la destrabaste o le comentaste) y el agente todavía no pasó a
+  // buscarlo: `Task.agentUpdateAt` se limpia cuando revisa sus novedades
+  // (tasks_agent_updates). Por el estado, no por el kind: comentar después de destrabar
+  // reemplaza la novedad, y el aviso no tiene que desaparecer por eso.
+  const pendingNews = task.agentUpdateAt && !['IN_PROGRESS', 'COMPLETED'].includes(task.status)
+    ? (task.agentUpdateKind === 'comment'
+        ? 'Tu comentario le llega la próxima vez que uses el agente.'
+        : 'Desbloqueada: la retoma la próxima vez que uses el agente.')
     : null
 
   const scheduledLabel = task.scheduledFor && task.scheduledFor > today && task.status !== 'COMPLETED'
@@ -94,6 +108,11 @@ function AgentTaskRow({ task, today, onChanged, onReturned, onOpenComments }) {
             <span className="font-medium">Bloqueada:</span> {task.blockedReason}
           </p>
         )}
+        {pendingNews && (
+          <p className="mt-2 text-sm text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/20 rounded-lg px-3 py-2">
+            {pendingNews}
+          </p>
+        )}
       </div>
       <div className="flex items-center gap-1 flex-shrink-0">
         {primary && (
@@ -104,6 +123,13 @@ function AgentTaskRow({ task, today, onChanged, onReturned, onOpenComments }) {
         )}
         <OverflowMenu items={menu} />
       </div>
+      {unblocking && (
+        <UnblockAgentTaskModal
+          task={task}
+          onClose={() => setUnblocking(false)}
+          onUnblocked={onChanged}
+        />
+      )}
     </div>
   )
 }

@@ -131,4 +131,6 @@ function prepareRun(tools, name, rawArgs) {
   return { tool, args: parsed.data, agentName }
 }
 
-module.exports = { describeTools, prepareRun }
+// paramsSchema lo usa además services/agentWake.service.js, para declararle las tools
+// al modelo del proveedor con los mismos schemas que ve un cliente MCP.
+module.exports = { describeTools, prepareRun, paramsSchema }

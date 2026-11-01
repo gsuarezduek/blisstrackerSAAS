@@ -65,7 +65,7 @@ PATCH  /api/tasks/:id/pause
 PATCH  /api/tasks/:id/resume
 PATCH  /api/tasks/:id/complete
 PATCH  /api/tasks/:id/block
-PATCH  /api/tasks/:id/unblock
+PATCH  /api/tasks/:id/unblock            # body { reply? } (solo tareas de agente: queda como comentario). Una tarea de agente destrabada desde la app vuelve PAUSED (no IN_PROGRESS) y se marca como novedad para el agente
 PATCH  /api/tasks/:id/star
 PATCH  /api/tasks/:id/add-to-today
 PATCH  /api/tasks/:id/bring-to-today      # adelantar una tarea futura a hoy
@@ -76,6 +76,8 @@ POST   /api/tasks  body: { ..., scheduledFor?, recurrence? }  # tarea futura / r
 POST   /api/tasks  body: { ..., executor?: 'agent'|'user', agentId? }  # executor:'agent' = la ejecuta un agente (solo para uno mismo)
 GET    /api/tasks/agent-queue            # tareas de agente abiertas de la persona (vía MCP: las de ese agente + las delegadas a cualquiera); materializa recurrentes sin reabrir la jornada
 PATCH  /api/tasks/:id/agent?scope=series # body { executor:'agent'|'user', agentId? } — delegar a mi agente / devolver; no sobre tareas en curso ni completadas
+GET    /api/tasks/agent-updates          # solo MCP. Bandeja de novedades del agente: ?markSeen=false solo lee. kind 'completed' (tareas que creó y completaron) | 'unblocked' | 'comment' (lo que la persona le dejó en sus tareas)
+PATCH  /api/tasks/:id/working-on         # solo MCP. Deja lista una tarea planificada para que el agente la tome; devuelve { task, next: 'start'|'resume'|'unblock'|'none' }
 GET    /api/tasks/completed              # ?skip=N&before=YYYY-MM-DD, 10/page
 PATCH  /api/tasks/:id/duration           # task owner or admin
 DELETE /api/tasks/:id
@@ -87,6 +89,14 @@ POST   /api/tasks/:id/attachments/presign            # { name, mimeType, sizeByt
 POST   /api/tasks/:id/attachments/direct             # { name, content | contentBase64 | url, mimeType? } — sube desde el servidor (agentes vía MCP), hasta 25MB por url
 POST   /api/tasks/:id/attachments/:fileId/confirm    # valida tamaño real + magic bytes, crea el vínculo TaskFile
 DELETE /api/tasks/:id/attachments/:fileId            # saca el vínculo (el archivo sigue en Archivos del proyecto)
+
+# Agentes IA — tokens de MCP (self-service, cada uno gestiona SOLO los propios)
+GET    /api/mcp-tokens
+POST   /api/mcp-tokens                   # body { label? } — devuelve el token en claro UNA sola vez
+PATCH  /api/mcp-tokens/:id/revoke
+PATCH  /api/mcp-tokens/:id               # body { workReminderMins? , webhookUrl? , wakeEnabled? } — campos independientes; webhookUrl '' saca el webhook y su secret
+GET    /api/mcp-tokens/wake-config       # { configured, model, defaultModel, canEdit } — la API key nunca se devuelve
+PUT    /api/mcp-tokens/wake-config       # admin/owner. body { apiKey?, model? } — apiKey '' borra la guardada (se guarda cifrada)
 
 GET    /api/projects                     # todos los proyectos activos del workspace (incluye starred del usuario)
 PUT    /api/projects/:id                 # admin: editar nombre, websiteUrl, connections, serviceIds, memberIds

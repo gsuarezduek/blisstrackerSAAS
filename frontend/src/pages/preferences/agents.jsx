@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import api from '../../api/client'
 import { invalidateMyAgents } from '../../hooks/useMyAgents'
+import { AgentChannels, WakeConfigCard } from '../../components/preferences/agentChannels'
 
 const MCP_URL = `${import.meta.env.VITE_API_URL}/api/mcp`
 
@@ -151,7 +152,8 @@ export default function AgentsTab() {
         ) : (
           <div className="space-y-2">
             {tokens.map(t => (
-              <div key={t.id} className="flex items-center justify-between gap-3 py-2.5 px-3 rounded-lg bg-gray-50 dark:bg-gray-700/50">
+              <div key={t.id} className="py-2.5 px-3 rounded-lg bg-gray-50 dark:bg-gray-700/50">
+               <div className="flex items-center justify-between gap-3">
                 <div className="min-w-0">
                   <p className="text-sm font-medium text-gray-800 dark:text-gray-200 truncate">{t.label || '(sin nombre)'}</p>
                   <p className="text-xs text-gray-400 dark:text-gray-500">
@@ -185,11 +187,20 @@ export default function AgentsTab() {
                     </>
                   )}
                 </div>
+               </div>
+                {!t.revokedAt && (
+                  <AgentChannels
+                    token={t}
+                    onSaved={updated => setTokens(prev => prev.map(x => (x.id === updated.id ? updated : x)))}
+                  />
+                )}
               </div>
             ))}
           </div>
         )}
       </div>
+
+      <WakeConfigCard />
 
       {/* Modal: token revelado una sola vez */}
       {revealed && (

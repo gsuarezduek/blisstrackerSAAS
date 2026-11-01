@@ -39,6 +39,13 @@ model Workspace {
   // Feature flags: keys que este workspace optó por desactivar (aunque estén habilitados globalmente o en su lista)
   disabledFeatureKeys             String          @default("[]")
   monthlyTokenLimit               Int             @default(1000000) // Límite mensual de tokens de IA (configurable desde SuperAdmin)
+  // Despertador de agentes IA: API key del proveedor (hoy xAI/Grok) con la que el
+  // backend invoca a un agente cuando hay una novedad para él (ver
+  // services/agentWake.service.js). **Cifrada** con AES-256-GCM (lib/encryption.js),
+  // igual que los tokens de ProjectIntegration. La paga el workspace, por eso vive acá
+  // y no en el McpToken de cada persona. `agentWakeModel` null = default en código.
+  agentWakeApiKey                 String?
+  agentWakeModel                  String?
   storageLimitMb                  Int             @default(20480) // Límite de almacenamiento (MB) del workspace (configurable desde SuperAdmin). 0 = ilimitado. INFORMATIVO/de alerta — no bloquea subidas, ver *MaxMbOverride abajo
   // Override puntual por workspace de las cuotas que SÍ bloquean subidas (ver assertWithinQuota
   // en projectFiles/contentAssets/chat controllers). null = usa el default global de PlatformSetting
@@ -1037,6 +1044,13 @@ model Task {
   // enteró de que se completó. null + COMPLETED = novedad pendiente; completarla de
   // nuevo (tras reabrirla) la vuelve a null.
   createdByAgentSeenAt  DateTime?
+  // Bandeja de novedades del agente EJECUTOR (GET /tasks/agent-updates): novedad que la
+  // persona le dejó desde la app y el agente todavía no vio — desbloquear ('unblocked')
+  // o comentar ('comment') una tarea de agente. MCP es unidireccional (nunca iniciamos
+  // una conversación con el agente), así que se entera revisando la bandeja; devolverla
+  // ahí la limpia. No la setea lo que hace el agente mismo: ya lo sabe.
+  agentUpdateAt         DateTime?
+  agentUpdateKind       String?
   createdAt             DateTime        @default(now())
   updatedAt             DateTime        @updatedAt
 
@@ -1064,6 +1078,7 @@ model Task {
   @@index([userId, status])
   @@index([userId, isAgentTask, status])
   @@index([createdByAgentId, status, createdByAgentSeenAt])
+  @@index([userId, isAgentTask, agentUpdateAt])
   @@index([projectId])
   @@index([workDayId])
   @@index([userId, scheduledFor])
@@ -4748,6 +4763,25 @@ model McpToken {
   // una tool) que registre en qué está trabajando si no tiene ninguna tarea en
   // curso — ver mcp/workReminder.js. 0 = nunca.
   workReminderMins Int @default(30)
+  // ── Canales de salida hacia el agente ──────────────────────────────────────
+  // MCP es unidireccional (el agente nos llama, nunca al revés), así que estos dos
+  // campos son la única forma de que algo le llegue sin que él pregunte. Ver
+  // services/agentNotify.service.js, que los dispara desde un solo lugar.
+  //
+  // Webhook: POST firmado con HMAC-SHA256 a una URL del usuario (n8n, un script, un
+  // bot propio). null = sin webhook. `webhookLastAt`/`webhookLastStatus` son para que
+  // Preferencias muestre si la última entrega salió bien, sin una tabla de log aparte.
+  webhookUrl        String?
+  webhookSecret     String?
+  webhookLastAt     DateTime?
+  webhookLastStatus String?
+  // Despertador: invocar al agente por la API del proveedor (hoy xAI) cuando hay una
+  // novedad, con las tools de BlissTracker. Requiere `Workspace.agentWakeApiKey`.
+  // OJO: el agente de la API NO es el de grok.com — no comparte su configuración ni su
+  // memoria. Ver services/agentWake.service.js.
+  wakeEnabled       Boolean   @default(false)
+  wakeLastAt        DateTime?
+  wakeLastStatus    String?
 
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)

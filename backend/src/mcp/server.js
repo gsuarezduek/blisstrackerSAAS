@@ -7,6 +7,7 @@ const { callApi } = require('./apiBridge')
 const { INSTRUCTIONS, buildGuide, GUIDE_TOPICS } = require('./guide')
 const { describeTools, prepareRun } = require('./liveTools')
 const { maybeWorkReminder } = require('./workReminder')
+const { maybeNewsNudge } = require('./newsNudge')
 const { z } = require('zod')
 
 // Quita keys undefined antes de mandarlas como query/body — evita que axios/Express
@@ -94,8 +95,10 @@ function textResult(text, isError = false) {
 // Handler común a todas las tools del catálogo (llamadas directo o vía bliss_run).
 // Una tool es `request(args)` (una llamada a la API) o `run(args, call)` (varias
 // encadenadas, ej. task_working_on; `call` ya lleva la identidad y el agentName).
-// Si la tool salió bien y el agente no tiene ninguna tarea en curso, se suma el
-// recordatorio de registrarla (ver workReminder.js).
+// Si la tool salió bien se le pueden sumar dos bloques de texto, que son la única vía
+// que tiene BlissTracker de decirle algo sin que él pregunte (MCP va solo del agente
+// hacia acá): las novedades sin ver (newsNudge.js) y el recordatorio de registrar en qué
+// está trabajando si no tiene ninguna tarea en curso (workReminder.js).
 async function runTool(identity, tool, args) {
   try {
     const { agentName, ...toolArgs } = args || {}
@@ -111,9 +114,13 @@ async function runTool(identity, tool, args) {
     const { status, data } = result
     const text = JSON.stringify(data, null, 2)
     if (status >= 400) return textResult(`Error ${status}: ${text}`, true)
-    const reminder = await maybeWorkReminder(identity, agentName)
-    return reminder
-      ? { content: [{ type: 'text', text }, { type: 'text', text: reminder }] }
+    // Las novedades van primero: pueden cambiar lo que el agente iba a hacer.
+    const extras = [
+      await maybeNewsNudge(identity, agentName, tool.name),
+      await maybeWorkReminder(identity, agentName),
+    ].filter(Boolean)
+    return extras.length
+      ? { content: [{ type: 'text', text }, ...extras.map(t => ({ type: 'text', text: t }))] }
       : textResult(text)
   } catch (err) {
     return textResult(`Error: ${err.message}`, true)

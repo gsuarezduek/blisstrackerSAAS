@@ -15,6 +15,7 @@ const { taskInclude, assertNoActiveTask, handleActiveTaskConflict, requestAgentI
 const { formatAgentName } = require('../../lib/agentTasks')
 const { getOrCreateWorkDay, rehomeToTodayData } = require('../../lib/workDay')
 const { sendPushToUser } = require('../../services/pushNotification.service')
+const { notifyAgentOfNewsInBackground } = require('../../services/agentNotify.service')
 
 // Resuelve @menciones de un texto contra los miembros activos del workspace (cualquiera
 // puede ser mencionado en una tarea, sea o no su responsable — la etiqueta de proyecto/
@@ -712,6 +713,25 @@ async function unblockTask(req, res, next) {
     if (current.status !== 'BLOCKED') return res.status(400).json({ error: 'Solo se puede desbloquear una tarea bloqueada.' })
     if (!current.isAgentTask) await assertNoActiveTask(userId, req.workspace?.id)
 
+    // Tarea de agente destrabada por su dueño DESDE LA APP: queda PAUSADA, no en curso.
+    // En ese momento nadie está trabajando (un agente solo actúa cuando lo invocan), y
+    // dejarla IN_PROGRESS le sumaba tiempo real hasta el cron de medianoche — tiempo de
+    // agente que consume horas contratadas y se le informa al cliente (ver
+    // lib/agentTasks.js). PAUSED y no PENDING para no perder lo trabajado antes del
+    // bloqueo: `resumeTask` conserva `startedAt`, `startTask` lo pisa. El agente la
+    // retoma con task_resume / task_working_on.
+    // Desbloqueada por el agente mismo (vía MCP): sigue el camino de siempre, porque ahí
+    // sí hay alguien trabajando — es el paso `unblock` de `task_working_on`.
+    const byAgent = requestAgentId(req) !== null
+    const parked  = current.isAgentTask && !byAgent
+
+    // "Desbloquear con respuesta": el agente bloqueó para preguntar algo, así que lo que
+    // escribe la persona al destrabarlo queda como comentario de la tarea, que es donde
+    // el agente lo lee (task_comments_list). Solo en tareas de agente: en una tarea
+    // humana el que desbloquea es el que estaba bloqueado, y un comentario sin las
+    // notificaciones de addComment sería un canal silencioso.
+    const reply = current.isAgentTask && typeof req.body?.reply === 'string' ? req.body.reply.trim() : ''
+
     const now       = new Date()
     const blockedMs = current.pausedAt ? now.getTime() - new Date(current.pausedAt).getTime() : 0
     const addedMins = Math.round(blockedMs / 60000)
@@ -722,11 +742,25 @@ async function unblockTask(req, res, next) {
     const [task] = await prisma.$transaction([
       prisma.task.update({
         where: { id: taskId },
-        data: { status: 'IN_PROGRESS', blockedReason: null, pausedAt: null, pausedMinutes: { increment: addedMins }, ...rehome },
+        data: parked
+          // pausedAt: now → el tramo que va desde acá hasta que el agente la retome
+          // también cuenta como pausa, no como trabajo.
+          ? {
+              status: 'PAUSED', blockedReason: null, pausedAt: now, pausedMinutes: { increment: addedMins },
+              agentUpdateAt: now, agentUpdateKind: 'unblocked', ...rehome,
+            }
+          : { status: 'IN_PROGRESS', blockedReason: null, pausedAt: null, pausedMinutes: { increment: addedMins }, ...rehome },
         include: taskInclude,
       }),
-      prisma.taskSession.create({ data: { taskId, startedAt: now } }),
+      ...(parked ? [] : [prisma.taskSession.create({ data: { taskId, startedAt: now } })]),
+      ...(reply ? [prisma.taskComment.create({ data: { taskId, userId, content: reply } })] : []),
     ])
+
+    // Canales de salida hacia el agente (webhook / despertador). La novedad ya quedó
+    // marcada arriba en `agentUpdateAt`, que es lo que no puede fallar; esto es el
+    // empujón para que no haya que esperar a que alguien lo invoque. En segundo plano:
+    // el despertador es un loop de LLM y puede tardar minutos.
+    if (parked) notifyAgentOfNewsInBackground({ event: 'task.unblocked', task, workspaceId })
 
     // Cierra el loop del BLOCKED: avisa a los mismos destinatarios que se desbloqueó.
     // En una tarea de agente el bloqueo solo le llegó a su dueño, que es quien la destraba.

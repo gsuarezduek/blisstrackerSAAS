@@ -4,6 +4,7 @@ const { sendPushToUser } = require('../services/pushNotification.service')
 const { isAdmin, isProjectMember } = require('../lib/projectAccess')
 const { requestAgentId, requestAgentName } = require('./tasks/_shared')
 const { formatAgentName } = require('../lib/agentTasks')
+const { notifyAgentOfNewsInBackground } = require('../services/agentNotify.service')
 
 // Mismo criterio "equipo = etiqueta, no barrera" que el resto del modelo de acceso a
 // proyectos (ver ProjectAccess/Links/lecturas): cualquier miembro activo del workspace
@@ -64,6 +65,23 @@ async function addComment(req, res, next) {
       include: COMMENT_INCLUDE,
     })
     const agentName = agentId ? formatAgentName(comment.agent ?? { id: agentId }, comment.agentName) : null
+
+    // Tarea de agente comentada por una PERSONA: queda como novedad pendiente en la
+    // bandeja del agente ejecutor (GET /tasks/agent-updates). Es la única forma de que
+    // se entere de una indicación o de una aprobación — a un agente MCP no le llega
+    // ningún aviso, solo actúa cuando lo invocan. Si ya había una novedad sin ver, esta
+    // la reemplaza: la bandeja devuelve igual el estado actual de la tarea y sus últimos
+    // comentarios, así que no se pierde nada. Lo que comenta un agente no la marca (ya
+    // lo sabe), tampoco en una tarea humana (ahí hay notificaciones de verdad).
+    if (task.isAgentTask && !agentId) {
+      await prisma.task.update({
+        where: { id: taskId },
+        data: { agentUpdateAt: new Date(), agentUpdateKind: 'comment' },
+      })
+      // Y el empujón por los canales de salida, si ese agente tiene alguno configurado
+      // (ver services/agentNotify.service.js). En segundo plano, no bloquea la respuesta.
+      notifyAgentOfNewsInBackground({ event: 'task.comment', task, workspaceId })
+    }
 
     const desc = task.description.length > 60 ? task.description.slice(0, 57) + '...' : task.description
 

@@ -1295,7 +1295,7 @@ Así el agente sabe sus límites desde el primer mensaje, sin que tengas que exp
           'Un token por agente o dispositivo: así podés revocar uno sin cortar los demás.',
           'Algunos asistentes (como Grok) guardan la lista de herramientas cuando configurás el conector y no se enteran de las nuevas. No hace falta reconectarlo: el agente puede consultar la lista actual con bliss_tools y usar las nuevas con bliss_run. Si preferís que las vea como herramientas propias, cambiá la URL del conector agregándole algo al final (ej. ?v=2).',
           'Si el agente usa BlissTracker sin tener ninguna tarea en curso, se le recuerda que registre en qué está trabajando, con las tareas que tiene planificadas para hoy, para que arranque una de esas en vez de crear otra. Elegís cada cuánto (o "nunca") en Preferencias → Agentes IA, en cada token.',
-          'Cuando terminás una tarea que te creó un agente, el agente se entera la próxima vez que trabaja: revisa sus novedades y ve quién la completó, cuánto llevó y los últimos comentarios. Si querés dejarle el resultado, escribilo en un comentario de la tarea antes de completarla.',
+          'De fábrica el agente no recibe avisos: solo actúa cuando lo usás. Lo que pasó mientras no estaba le aparece solo al final de la primera respuesta —una tarea que te creó y completaste, una tarea suya que destrabaste, los comentarios que le dejaste—, sin que tenga que acordarse de buscarlo. Si querés que reaccione sin que lo uses, en Preferencias → Agentes IA podés darle un webhook o activar el despertador.',
           'Si varios agentes comparten el mismo conector (por ejemplo, varios agentes de Grok), pediles que pasen su nombre en el parámetro agentName: en BlissTracker vas a ver "nombre del token · nombre del agente" en tareas, comentarios, WhatsApp y Productividad. Es un nombre que declara el propio agente: sirve para ordenar, no como control de seguridad.',
         ],
         related: ['agentes-ia-capacidades', 'agentes-ia-seguridad'],
@@ -1315,13 +1315,32 @@ Así el agente sabe sus límites desde el primer mensaje, sin que tengas que exp
 - **Tareas** — ver la jornada de hoy; crear tareas (también futuras y recurrentes, y asignadas a otra persona); corregir el texto, el proyecto o la fecha de tus tareas; pasarle una tarea tuya a otra persona del equipo (le llega un aviso); iniciar, pausar, reanudar, completar, bloquear y desbloquear; corregir el tiempo de una tarea ya completada.
 - **Comentarios y adjuntos** — comentar en una tarea para dejar avances o notas sin bloquearla (el comentario aparece con tu nombre y la marca "vía <agente>", y te llega un aviso) y adjuntar archivos: informes y borradores de texto, o archivos publicados en internet como imágenes o PDFs. Quedan en la Nube del proyecto, igual que los que adjuntás vos.
 - **Nube del proyecto (Archivos)** — navegar y buscar en el repositorio de archivos del proyecto, **leer** el contenido de un archivo (texto, markdown, CSV, JSON, y el texto de PDFs y documentos de Word), **subir** archivos a la carpeta que le indiques (crea las carpetas que falten), crear carpetas, renombrar, mover y mandar a la papelera (reversible: también puede restaurar). No puede leer imágenes ni videos, ni vaciar la papelera del todo.
-- **Tareas propias del agente** — el agente puede crear tareas que **ejecuta él mismo** (no vos): quedan en su propia lista de trabajo, puede tener varias en curso a la vez y no ocupan tu lugar de "una tarea en curso". También puede tomar las tareas que le delegues, devolvértelas y **borrar** las de su lista que todavía no completó (nunca tus tareas ni las ya completadas). Si algo lo frena, bloquea la tarea con un motivo para pedirte ayuda.
+- **Tareas propias del agente** — el agente puede crear tareas que **ejecuta él mismo** (no vos): quedan en su propia lista de trabajo, puede tener varias en curso a la vez y no ocupan tu lugar de "una tarea en curso". También puede tomar las tareas que le delegues, devolvértelas y **borrar** las de su lista que todavía no completó (nunca tus tareas ni las ya completadas). Si algo lo frena, bloquea la tarea con un motivo para pedirte ayuda — ver abajo cómo se le contesta.
 - **Equipo** — listar el equipo. Los admins además: asistencia y tardanzas de una persona, historial detallado de tareas y ver la jornada de otra persona (solo lectura).
 - **Marketing** — salud del proyecto, GA4, Search Console (+ desglose por query, snapshot mensual, sugerencias IA), Domain Rating (+ actualizar), keywords (+ sugerir, dejar de trackear, histórico/heatmap, SERP y análisis IA), oportunidades SEO y plan de acción, las 5 redes, Meta y Google Ads, competidores, objetivos, informes y auditorías GEO (+ borrar, generar llms.txt, generar schema y vincular un hallazgo a una tarea). Puede agregar o sacar keywords y competidores, correr una auditoría GEO, regenerar un informe y refrescar todas las fuentes.
 - **SEO avanzado** — Canibalización, Content Brief, Auditoría On-Page, Content Gap y PageSpeed Insights: correr, listar, ver y borrar (PageSpeed no tiene borrar). **GEO Visibility** (menciones de marca en respuestas de IA): cargar preguntas y competidores a monitorear, y correr el chequeo (consume IA con búsqueda web — la acción más cara de Marketing).
 - **Contenido** — ver, crear, editar y borrar piezas; ver historial y comentarios; comentar; enviar al dashboard del responsable; pedir aprobación al cliente.
 - **Ventas** — dashboard y métricas; empresas, contactos y leads (crear, editar, borrar); cambiar estado y responsable; archivar; convertir a proyecto; próximas acciones y notas; investigación con IA, informe de diagnóstico y propuestas.
 - **WhatsApp** — leer las conversaciones y **responder con texto** dentro de la ventana de 24 hs desde el último mensaje del contacto. El mensaje sale a tu nombre y en la bandeja queda rotulado con el nombre del agente. **El agente tiene prioridad sobre el bot**: cuando toma una conversación o responde, el bot deja de contestar ahí y el chip muestra "Agente «nombre»". También podés asignarle una conversación a tu agente desde el chat, en el selector **"La atiende mi agente"**. En la configuración del bot podés activar **"Darle prioridad a los agentes de IA"**: el bot espera unos minutos antes de responder y, si en ese rato un agente o una persona toma la conversación, no contesta. Para que el bot vuelva a atenderla, elegí **"La atiende el bot"**. También puede **fijar o desfijar** una conversación (el mismo pin 📌 compartido de la bandeja, lo ve todo el equipo).
+
+## Cuando el agente se traba (y cómo le contestás)
+
+Si al agente le falta algo para seguir —un acceso, un dato, tu aprobación— **bloquea la tarea con un motivo**: ese motivo es su pregunta. Te llega a la campanita ("Tu agente «X» bloqueó…") y la tarea aparece primero en la pestaña **Agentes** del Dashboard, en "Necesitan tu ayuda".
+
+Para contestarle, tocá **Desbloquear**: se abre una ventana que te muestra qué preguntó y te deja escribir la respuesta. Lo que escribís queda como comentario de la tarea, que es donde el agente lo lee. **Es la forma de aprobarle o rechazarle algo.** La respuesta es opcional: si lo que lo frenaba se resolvió afuera (le diste el acceso, publicaste lo que faltaba), desbloqueá sin escribir nada.
+
+La tarea vuelve a su lista **como pausada**, no en curso: el agente solo trabaja cuando lo usás, así que nadie está trabajando en ese momento (si quedara "en curso" sumaría horas de trabajo que no existieron, y el tiempo de tus agentes se le factura al cliente). La próxima vez que lo uses, el agente ve la novedad, lee tu respuesta y la retoma. Mientras eso no pase, la fila dice "Desbloqueada: la retoma la próxima vez que uses el agente".
+
+Si lo que le contestaste no le alcanza, vuelve a bloquearla preguntando de nuevo. Y si preferís hacerla vos, el menú ⋯ tiene "Devolverme la tarea".
+
+### Que no haya que esperar a usarlo
+
+En **Preferencias → Agentes IA**, cada agente tiene abajo "Avisarle cuando hay novedades", con dos opciones:
+
+- **Webhook** — le mandamos un aviso a una URL tuya cuando hay una novedad. Solo sirve si tenés algo escuchando (n8n, un script, un bot propio) que después vaya a buscar el detalle. Grok en grok.com no puede recibirlo: es un chat, no tiene dirección.
+- **Despertarlo automáticamente** — BlissTracker invoca al agente y le pasa la novedad, con sus mismas herramientas y permisos. Es el único que funciona sin que lo uses. Necesita una API key de xAI cargada por un admin (abajo en la misma pantalla) y gasta esa key en cada despertar. **Tené en cuenta que el agente que corre así es uno nuevo por API: no tiene la configuración ni la memoria del Grok con el que hablás en grok.com.**
+
+Y sin configurar nada: la próxima vez que uses el agente, sus novedades aparecen solas al final de la primera respuesta, sin que tenga que acordarse de buscarlas.
 
 ## Lo que todavía no puede hacer
 
@@ -1338,7 +1357,7 @@ Las que tienen efecto hacia afuera o consumen IA: mandarle algo al cliente (un W
         tips: [
           'Pedile al agente que use executor "agent" en las tareas que va a hacer él: así no se mezclan con las tuyas.',
           'El tiempo de tus agentes SÍ cuenta como horas del proyecto: se le informa al cliente como trabajo hecho y consume las horas contratadas, igual que el tuyo. Lo que no toca son las métricas con las que se te evalúa (tus horas, tu Δ horas, tu asistencia): esas siguen midiendo solo lo tuyo, y el dato de los agentes aparece al lado, en "Sus agentes de IA".',
-          'Para pasarle una tarea tuya al agente: menú ⋯ de la tarea → "Delegar a mi agente". Al crear una tarea, en "Asignar a" elegí tu agente. Todo lo que hacen tus agentes está en la pestaña Agentes del Dashboard; si uno se traba, te avisa a vos.',
+          'Para pasarle una tarea tuya al agente: menú ⋯ de la tarea → "Delegar a mi agente". Al crear una tarea, en "Asignar a" elegí tu agente. Todo lo que hacen tus agentes está en la pestaña Agentes del Dashboard; si uno se traba, te avisa a vos y le contestás desde ahí.',
         ],
         related: ['agentes-ia-conectar', 'agentes-ia-seguridad', 'como-usa-la-ia'],
       },

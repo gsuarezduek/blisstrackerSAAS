@@ -33,9 +33,18 @@ jest.mock('../../src/lib/prisma', () => ({
   $transaction: jest.fn(ops => Promise.all(ops)),
 }))
 
+// Los canales de salida (webhook / despertador) tienen su propio test unitario
+// (tests/unit/agentOutboundChannels.test.js); acá solo se verifica el cable: que el
+// desbloqueo y el comentario los disparen.
+jest.mock('../../src/services/agentNotify.service', () => ({
+  notifyAgentOfNews: jest.fn(),
+  notifyAgentOfNewsInBackground: jest.fn(),
+}))
+
 const request = require('supertest')
 const jwt     = require('jsonwebtoken')
 const prisma  = require('../../src/lib/prisma')
+const { notifyAgentOfNewsInBackground } = require('../../src/services/agentNotify.service')
 const app     = require('../../src/app')
 
 const SECRET         = process.env.JWT_SECRET
@@ -349,8 +358,16 @@ describe('GET /api/tasks/agent-updates', () => {
       ...overrides,
     })
   }
+  // Dos consultas en paralelo: lo que el agente creó y se completó, y las novedades que
+  // la persona le dejó en sus tareas (Task.agentUpdateAt). Se distinguen por el where.
+  function mockSources({ created = [completed()], inbox = [] } = {}) {
+    prisma.task.findMany.mockImplementation(({ where }) =>
+      Promise.resolve(where.agentUpdateAt ? inbox : created))
+  }
+  const inboxWhere = () => prisma.task.findMany.mock.calls.find(c => c[0].where.agentUpdateAt)[0].where
+
   beforeEach(() => {
-    prisma.task.findMany.mockResolvedValue([completed()])
+    mockSources()
     prisma.task.updateMany.mockResolvedValue({ count: 1 })
   })
 
@@ -399,6 +416,66 @@ describe('GET /api/tasks/agent-updates', () => {
     const res = await get(undefined, {})
     expect(res.status).toBe(400)
     expect(prisma.task.findMany).not.toHaveBeenCalled()
+  })
+
+  // Lo que la persona le deja desde la app (destrabar / comentar) es la otra mitad de la
+  // bandeja: sin esto el desbloqueo no llega nunca al agente.
+  it('trae el desbloqueo que la persona le dejó, con el estado de la tarea y el comentario', async () => {
+    const at = new Date('2026-10-23T10:00:00Z')
+    mockSources({ created: [], inbox: [makeTask({
+      id: 8, status: 'PAUSED', isAgentTask: true, agentId: AGENT_ID,
+      agentUpdateAt: at, agentUpdateKind: 'unblocked', user: { id: 1, name: 'Gastón' }, agent: null,
+      comments: [{ content: 'Sí, publicá con la cuenta de la agencia', createdAt: at, agentId: null, user: { name: 'Gastón' } }],
+    })] })
+
+    const res = await get()
+
+    expect(res.status).toBe(200)
+    expect(res.body.updates).toEqual([expect.objectContaining({
+      kind: 'unblocked',
+      taskId: 8,
+      status: 'PAUSED',
+      owner: { id: 1, name: 'Gastón' },
+      recentComments: [expect.objectContaining({ content: 'Sí, publicá con la cuenta de la agencia' })],
+    })])
+    // Su lista de trabajo: las suyas + las delegadas a "cualquiera de mis agentes"
+    expect(inboxWhere()).toMatchObject({
+      userId: 1, isAgentTask: true, agentUpdateAt: { not: null },
+      workDay: { workspaceId: WORKSPACE_ID }, OR: [{ agentId: AGENT_ID }, { agentId: null }],
+    })
+  })
+
+  it('un comentario de la persona llega como novedad `comment`', async () => {
+    mockSources({ created: [], inbox: [makeTask({
+      id: 9, status: 'PAUSED', isAgentTask: true, agentId: AGENT_ID,
+      agentUpdateAt: new Date('2026-10-23T11:00:00Z'), agentUpdateKind: 'comment',
+      user: { id: 1, name: 'Gastón' }, agent: null, comments: [],
+    })] })
+
+    const res = await get()
+    expect(res.body.updates).toEqual([expect.objectContaining({ kind: 'comment', taskId: 9 })])
+  })
+
+  it('mezcla las dos fuentes en orden cronológico y las marca vistas cada una con su campo', async () => {
+    mockSources({ inbox: [makeTask({
+      id: 8, status: 'PAUSED', isAgentTask: true, agentId: AGENT_ID,
+      // Anterior a la que se completó (22/10 15:00): tiene que salir primero
+      agentUpdateAt: new Date('2026-10-22T09:00:00Z'), agentUpdateKind: 'unblocked',
+      user: { id: 1, name: 'Gastón' }, agent: null, comments: [],
+    })] })
+
+    const res = await get()
+
+    expect(res.body.updates.map(u => [u.kind, u.taskId])).toEqual([['unblocked', 8], ['completed', 5]])
+    expect(prisma.task.updateMany).toHaveBeenCalledWith({
+      where: { id: { in: [5] }, createdByAgentSeenAt: null },
+      data: { createdByAgentSeenAt: expect.any(Date) },
+    })
+    // La novedad se limpia: aparece una sola vez
+    expect(prisma.task.updateMany).toHaveBeenCalledWith({
+      where: { id: { in: [8] } },
+      data: { agentUpdateAt: null, agentUpdateKind: null },
+    })
   })
 })
 
@@ -555,6 +632,119 @@ describe('avisos de tareas de agente', () => {
         message: 'Tu agente «Grok» bloqueó "Tarea de prueba": Falta el acceso a GA4',
       }),
     })
+  })
+})
+
+// ─── Desbloquear ──────────────────────────────────────────────────────────────
+
+describe('PATCH /api/tasks/:id/unblock — agentes', () => {
+  function blocked(overrides = {}) {
+    return makeTask({
+      status: 'BLOCKED', isAgentTask: true, agentId: AGENT_ID,
+      pausedAt: new Date(Date.now() - 30 * 60000), blockedReason: '¿Apruebo este texto?',
+      ...overrides,
+    })
+  }
+
+  function unblock({ mcpTokenId, body } = {}) {
+    const req = request(app)
+      .patch('/api/tasks/1/unblock')
+      .set('Authorization', authHeader(mcpTokenId ? { mcpTokenId } : {}))
+      .set('X-Workspace', WORKSPACE_SLUG)
+    return body ? req.send(body) : req
+  }
+
+  const updateData = () => prisma.task.update.mock.calls[0][0].data
+
+  beforeEach(() => {
+    prisma.projectMember.findMany.mockResolvedValue([{ userId: 2 }])
+    prisma.taskFollow.findMany.mockResolvedValue([])
+    prisma.projectMeetingParticipant.findUnique.mockResolvedValue(null)
+    prisma.leadAction.findUnique.mockResolvedValue(null)
+    prisma.task.update.mockResolvedValue(blocked({ status: 'PAUSED' }))
+  })
+
+  // El punto del cambio: dejarla IN_PROGRESS le sumaba tiempo real (facturable) hasta el
+  // cron de medianoche, con nadie trabajando — un agente solo actúa cuando lo invocan.
+  it('destrabada por la persona desde la app queda PAUSADA y sin sesión nueva', async () => {
+    prisma.task.findFirst.mockResolvedValueOnce(blocked())
+
+    const res = await unblock()
+
+    expect(res.status).toBe(200)
+    expect(updateData()).toMatchObject({
+      status: 'PAUSED', blockedReason: null, pausedAt: expect.any(Date),
+      agentUpdateAt: expect.any(Date), agentUpdateKind: 'unblocked',
+    })
+    expect(prisma.taskSession.create).not.toHaveBeenCalled()
+  })
+
+  // PAUSED y no PENDING: resumeTask conserva startedAt, startTask lo pisaría y se
+  // perdería lo trabajado antes del bloqueo.
+  it('el tiempo que estuvo bloqueada cuenta como pausa', async () => {
+    prisma.task.findFirst.mockResolvedValueOnce(blocked())
+
+    await unblock()
+
+    expect(updateData().pausedMinutes).toEqual({ increment: 30 })
+  })
+
+  it('la respuesta queda como comentario de la tarea: es donde el agente la lee', async () => {
+    prisma.task.findFirst.mockResolvedValueOnce(blocked())
+
+    await unblock({ body: { reply: '  Sí, publicá con la cuenta de la agencia  ' } })
+
+    expect(prisma.taskComment.create).toHaveBeenCalledWith({
+      data: { taskId: 1, userId: 1, content: 'Sí, publicá con la cuenta de la agencia' },
+    })
+  })
+
+  it('sin respuesta (o en blanco) no crea comentario', async () => {
+    prisma.task.findFirst.mockResolvedValueOnce(blocked())
+
+    await unblock({ body: { reply: '   ' } })
+
+    expect(prisma.taskComment.create).not.toHaveBeenCalled()
+  })
+
+  // Es el paso `unblock` de task_working_on: ahí sí hay alguien trabajando.
+  it('destrabada por el agente mismo (vía MCP) vuelve a estar en curso', async () => {
+    prisma.task.findFirst.mockResolvedValueOnce(blocked())
+    prisma.task.update.mockResolvedValue(blocked({ status: 'IN_PROGRESS' }))
+
+    const res = await unblock({ mcpTokenId: AGENT_ID })
+
+    expect(res.status).toBe(200)
+    expect(updateData()).toMatchObject({ status: 'IN_PROGRESS', pausedAt: null })
+    expect(updateData()).not.toHaveProperty('agentUpdateAt')
+    expect(prisma.taskSession.create).toHaveBeenCalled()
+  })
+
+  // El cable hacia los canales de salida: sin esto el agente sigue dependiendo de que
+  // alguien lo invoque.
+  it('le avisa al agente por los canales de salida (webhook / despertador)', async () => {
+    prisma.task.findFirst.mockResolvedValueOnce(blocked())
+
+    await unblock()
+
+    expect(notifyAgentOfNewsInBackground).toHaveBeenCalledWith(
+      expect.objectContaining({ event: 'task.unblocked', workspaceId: WORKSPACE_ID }),
+    )
+  })
+
+  it('en una tarea humana no cambia nada: en curso, con sesión, avisando al equipo, y sin tomar el reply', async () => {
+    prisma.task.findFirst.mockResolvedValueOnce(blocked({ isAgentTask: false, agentId: null }))
+    prisma.task.update.mockResolvedValue(makeTask({ status: 'IN_PROGRESS' }))
+
+    const res = await unblock({ body: { reply: 'listo' } })
+
+    expect(res.status).toBe(200)
+    expect(updateData()).toMatchObject({ status: 'IN_PROGRESS' })
+    expect(updateData()).not.toHaveProperty('agentUpdateAt')
+    expect(prisma.taskSession.create).toHaveBeenCalled()
+    expect(prisma.taskComment.create).not.toHaveBeenCalled()
+    expect(prisma.notification.createMany).toHaveBeenCalled()
+    expect(notifyAgentOfNewsInBackground).not.toHaveBeenCalled()
   })
 })
 

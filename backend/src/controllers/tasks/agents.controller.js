@@ -5,6 +5,7 @@ const { taskInclude, requestAgentId, requestAgentName, assertOwnAgent } = requir
 const { agentTasksQuery } = require('../workdays.controller')
 const { taskMins } = require('../../lib/timeMetrics')
 const { getOrCreateWorkDay } = require('../../lib/workDay')
+const { createdNewsWhere, inboxNewsWhere } = require('../../lib/agentNews')
 
 // Agentes IA (MCP) — ver concepto "Agentes IA" en backend/CLAUDE.md.
 // Una tarea de agente (Task.isAgentTask) la EJECUTA un agente; userId sigue siendo la
@@ -75,13 +76,20 @@ async function agentQueue(req, res, next) {
 }
 
 // ─── GET /api/tasks/agent-updates ───────────────────────────────────────────
-// Bandeja de novedades del agente: tareas que ESTE agente creó y que alguien
-// completó desde la última vez que miró. Un agente MCP no recibe avisos push (solo
-// actúa cuando lo invocan), así que se entera revisando esto al empezar.
-// - Si el agente declaró su nombre (agentName), solo las que creó con ese nombre:
-//   varios agentes pueden compartir un token.
-// - Se excluyen las que ejecutó él mismo (ya sabe que las terminó).
-// - Por default las marca como vistas (createdByAgentSeenAt); ?markSeen=false solo lee.
+// Bandeja de novedades del agente. Un agente MCP no recibe avisos push (solo actúa
+// cuando lo invocan), así que TODO lo que pasó mientras no estaba se entera revisando
+// esto al empezar. Dos fuentes, un solo array ordenado por fecha del evento:
+//  - `kind: 'completed'` — tareas que ESTE agente creó y que alguien completó. Si
+//    declaró su nombre (agentName), solo las que creó con ese nombre (varios agentes
+//    pueden compartir un token); se excluyen las que ejecutó él mismo (ya lo sabe).
+//    Marcadas como vistas con Task.createdByAgentSeenAt.
+//  - `kind: 'unblocked' | 'comment'` — lo que la persona le dejó en SUS tareas de
+//    agente desde la app: la destrabó o le comentó algo (una indicación, una
+//    aprobación). Marcadas con Task.agentUpdateAt/agentUpdateKind, que se limpian al
+//    devolverlas. Mismo scope que `agent-queue` (las suyas + las delegadas a
+//    "cualquiera de mis agentes"), sin filtrar por nombre declarado: es su lista de
+//    trabajo, y una tarea destrabada tiene que llegarle igual.
+// Por default marca vistas las novedades que devuelve; ?markSeen=false solo lee.
 // Solo vía MCP: desde la app no hay "agente que pregunta".
 const UPDATES_LIMIT = 50
 
@@ -90,63 +98,102 @@ async function agentUpdates(req, res, next) {
     const agentId = requestAgentId(req)
     if (!agentId) return res.status(400).json({ error: 'Solo disponible para agentes conectados por MCP' })
     const declaredName = requestAgentName(req)
+    const workspaceId = req.workspace.id
+    const markSeen = req.query.markSeen !== 'false'
 
-    const where = {
-      createdByAgentId: agentId,
-      ...(declaredName ? { createdByAgentName: declaredName } : {}),
-      status: 'COMPLETED',
-      createdByAgentSeenAt: null,
-      workDay: { workspaceId: req.workspace.id },
-      NOT: { isAgentTask: true, agentId, ...(declaredName ? { agentName: declaredName } : {}) },
+    const createdWhere = createdNewsWhere({ agentId, declaredName, workspaceId })
+    const inboxWhere = inboxNewsWhere({ agentId, userId: req.user.userId, workspaceId })
+
+    const commentsInclude = {
+      orderBy: { createdAt: 'desc' },
+      take: 3,
+      select: { content: true, createdAt: true, agentId: true, user: { select: { name: true } } },
     }
-    const rows = await prisma.task.findMany({
-      where,
-      orderBy: { completedAt: 'asc' },
-      take: UPDATES_LIMIT + 1,
-      include: {
-        project: { select: { id: true, name: true } },
-        user: { select: { id: true, name: true } },
-        agent: { select: { id: true, label: true } },
-        // Lo último que se dijo en la tarea: muchas veces el resultado está ahí.
-        comments: {
-          orderBy: { createdAt: 'desc' },
-          take: 3,
-          select: { content: true, createdAt: true, agentId: true, user: { select: { name: true } } },
-        },
-      },
-    })
-    const hasMore = rows.length > UPDATES_LIMIT
-    const tasks = rows.slice(0, UPDATES_LIMIT)
-
-    if (tasks.length && req.query.markSeen !== 'false') {
-      await prisma.task.updateMany({
-        where: { id: { in: tasks.map(t => t.id) }, createdByAgentSeenAt: null },
-        data: { createdByAgentSeenAt: new Date() },
-      })
+    const baseInclude = {
+      project: { select: { id: true, name: true } },
+      user: { select: { id: true, name: true } },
+      agent: { select: { id: true, label: true } },
+      // Lo último que se dijo en la tarea: muchas veces el resultado (o la respuesta de
+      // la persona) está ahí.
+      comments: commentsInclude,
     }
 
-    res.json({
-      updates: tasks.map(t => ({
+    const [createdRows, inboxRows] = await Promise.all([
+      prisma.task.findMany({
+        where: createdWhere,
+        orderBy: { completedAt: 'asc' },
+        take: UPDATES_LIMIT + 1,
+        include: baseInclude,
+      }),
+      prisma.task.findMany({
+        where: inboxWhere,
+        orderBy: { agentUpdateAt: 'asc' },
+        take: UPDATES_LIMIT + 1,
+        include: baseInclude,
+      }),
+    ])
+
+    const hasMore = createdRows.length > UPDATES_LIMIT || inboxRows.length > UPDATES_LIMIT
+    const created = createdRows.slice(0, UPDATES_LIMIT)
+    const inbox = inboxRows.slice(0, UPDATES_LIMIT)
+
+    const recentComments = t => t.comments.slice().reverse().map(c => ({
+      author: c.user?.name ?? null,
+      viaAgent: c.agentId != null,
+      content: c.content,
+      createdAt: c.createdAt,
+    }))
+
+    const updates = [
+      ...created.map(t => ({
+        kind: 'completed',
+        at: t.completedAt,
         taskId: t.id,
         description: t.description,
         project: t.project,
+        status: t.status,
         completedBy: t.isAgentTask
           ? { agent: t.agent ? { id: t.agent.id, label: t.agent.label, agentName: t.agentName } : null, ownerId: t.user.id, ownerName: t.user.name }
           : { id: t.user.id, name: t.user.name },
         executedByAgent: t.isAgentTask,
         completedAt: t.completedAt,
         workedMinutes: taskMins(t),
-        recentComments: t.comments.reverse().map(c => ({
-          author: c.user?.name ?? null,
-          viaAgent: c.agentId != null,
-          content: c.content,
-          createdAt: c.createdAt,
-        })),
+        recentComments: recentComments(t),
       })),
-      hasMore,
-    })
+      ...inbox.map(t => ({
+        kind: t.agentUpdateKind === 'comment' ? 'comment' : 'unblocked',
+        at: t.agentUpdateAt,
+        taskId: t.id,
+        description: t.description,
+        project: t.project,
+        status: t.status,
+        owner: { id: t.user.id, name: t.user.name },
+        recentComments: recentComments(t),
+      })),
+    ].sort((a, b) => new Date(a.at ?? 0) - new Date(b.at ?? 0))
+
+    if (markSeen) {
+      const now = new Date()
+      await Promise.all([
+        created.length
+          ? prisma.task.updateMany({
+              where: { id: { in: created.map(t => t.id) }, createdByAgentSeenAt: null },
+              data: { createdByAgentSeenAt: now },
+            })
+          : null,
+        inbox.length
+          ? prisma.task.updateMany({
+              where: { id: { in: inbox.map(t => t.id) } },
+              data: { agentUpdateAt: null, agentUpdateKind: null },
+            })
+          : null,
+      ])
+    }
+
+    res.json({ updates, hasMore })
   } catch (err) { next(err) }
 }
+
 
 // ─── PATCH /api/tasks/:id/working-on ────────────────────────────────────────
 // Primer paso de la tool MCP `task_working_on` con taskId ("estoy trabajando en
