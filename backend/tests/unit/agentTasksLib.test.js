@@ -1,4 +1,7 @@
-const { computeAgentStats, isPresenceTask, formatAgentName, HUMAN_TASK_WHERE, PRESENCE_WORKDAY_WHERE } = require('../../src/lib/agentTasks')
+const {
+  computeAgentStats, isPresenceTask, formatAgentName, HUMAN_TASK_WHERE, PRESENCE_WORKDAY_WHERE,
+  splitByExecutor, addExecutorMinutes, emptyExecutorSplit, agentDetail,
+} = require('../../src/lib/agentTasks')
 
 const period = { curStart: '2026-10-01', curEnd: '2026-10-31', prevStart: '2026-09-01', prevEnd: '2026-09-30' }
 const grok   = { id: 7, label: 'Grok' }
@@ -85,5 +88,86 @@ describe('formatAgentName', () => {
   })
   it('token sin label cae a "Agente #id"', () => {
     expect(formatAgentName({ id: 9, label: null }, 'SEO')).toBe('Agente #9 · SEO')
+  })
+})
+
+// ── Partir un agregado en tiempo de personas y tiempo de agentes ──────────────
+// Convención: totalMinutes/taskCount = personas, agentMinutes/agentTasks = agentes.
+// Las dos mitades salen de la MISMA query (una sola, sin filtro de ejecutor), así que el
+// total que se le factura al cliente es por construcción totalMinutes + agentMinutes.
+
+describe('splitByExecutor / addExecutorMinutes', () => {
+  const human = (mins, extra = {}) => ({ isAgentTask: false, minutesOverride: mins, ...extra })
+  const robot = (mins, extra = {}) => ({ isAgentTask: true,  minutesOverride: mins, ...extra })
+
+  it('acumula cada mitad por separado', () => {
+    const s = splitByExecutor([human(60), human(30), robot(45), robot(15)])
+    expect(s).toEqual({ totalMinutes: 90, taskCount: 2, agentMinutes: 60, agentTasks: 2 })
+  })
+
+  it('una lista vacía devuelve el bucket en cero (no null)', () => {
+    expect(splitByExecutor([])).toEqual(emptyExecutorSplit())
+  })
+
+  it('solo agentes: horas trabajadas con 0 tareas de personas', () => {
+    const s = splitByExecutor([robot(120)])
+    expect(s.totalMinutes).toBe(0)
+    expect(s.taskCount).toBe(0)
+    expect(s.agentMinutes).toBe(120)
+  })
+
+  it('addExecutorMinutes devuelve los minutos y de qué lado cayó, para el detalle del caller', () => {
+    const bucket = emptyExecutorSplit()
+    expect(addExecutorMinutes(bucket, human(25))).toEqual({ mins: 25, isAgent: false })
+    expect(addExecutorMinutes(bucket, robot(10))).toEqual({ mins: 10, isAgent: true })
+    expect(bucket).toEqual({ totalMinutes: 25, taskCount: 1, agentMinutes: 10, agentTasks: 1 })
+  })
+
+  it('usa taskMins: respeta minutesOverride y topea en 8h solo cuando no hay override', () => {
+    // Sin override, 10h de reloj se recortan a 480 (alguien se olvidó de pausar).
+    const sinOverride = {
+      isAgentTask: false,
+      startedAt: '2026-10-20T00:00:00Z', completedAt: '2026-10-20T10:00:00Z',
+    }
+    expect(splitByExecutor([sinOverride]).totalMinutes).toBe(480)
+    // Con override el valor pasa tal cual — por eso el tope del tiempo declarado por un
+    // agente vive en la escritura (setDuration), no acá.
+    expect(splitByExecutor([robot(600)]).agentMinutes).toBe(600)
+  })
+
+  it('descuenta las pausas', () => {
+    const t = {
+      isAgentTask: false, pausedMinutes: 20,
+      startedAt: '2026-10-20T10:00:00Z', completedAt: '2026-10-20T11:00:00Z',
+    }
+    expect(splitByExecutor([t]).totalMinutes).toBe(40)
+  })
+})
+
+describe('agentDetail', () => {
+  it('una fila por agente, ordenada por tiempo, con su nombre resuelto', () => {
+    const rows = agentDetail([
+      { isAgentTask: true, minutesOverride: 30, agent: grok },
+      { isAgentTask: true, minutesOverride: 90, agent: other },
+      { isAgentTask: true, minutesOverride: 10, agent: grok },
+      { isAgentTask: false, minutesOverride: 500, agent: null }, // humana: se ignora
+    ])
+    expect(rows).toEqual([
+      { agentId: 8, agentName: null, name: 'Agente #8', minutes: 90, taskCount: 1 },
+      { agentId: 7, agentName: null, name: 'Grok',      minutes: 40, taskCount: 2 },
+    ])
+  })
+
+  it('separa agentes que comparten token por su nombre declarado', () => {
+    const rows = agentDetail([
+      { isAgentTask: true, minutesOverride: 20, agent: grok, agentName: 'Ventas' },
+      { isAgentTask: true, minutesOverride: 50, agent: grok, agentName: 'SEO' },
+    ])
+    expect(rows.map(r => [r.name, r.minutes])).toEqual([['Grok · SEO', 50], ['Grok · Ventas', 20]])
+  })
+
+  it('un token borrado no pierde su tiempo', () => {
+    const rows = agentDetail([{ isAgentTask: true, minutesOverride: 15, agent: null, agentName: 'Ventas' }])
+    expect(rows[0]).toMatchObject({ agentId: null, name: 'Agente eliminado · Ventas', minutes: 15 })
   })
 })

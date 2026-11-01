@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { fmtMins, activeMinutes, activeSeconds, fmtDuration, completedDuration, fmtCreatedAt } from '../../utils/format'
+import { fmtMins, activeMinutes, activeSeconds, fmtDuration, completedDuration, fmtCreatedAt, fmtHours, workedSplit } from '../../utils/format'
 
 // ── fmtMins ───────────────────────────────────────────────────────────────────
 
@@ -174,5 +174,31 @@ describe('fmtCreatedAt', () => {
 
   it('agrega el año si es de otro año', () => {
     expect(fmtCreatedAt('2025-12-31T15:00:00Z', now)).toMatch(/2025/)
+  })
+})
+
+// ── fmtHours / workedSplit ────────────────────────────────────────────────────
+
+describe('fmtHours', () => {
+  it('horas de 1 en adelante, minutos abajo, guión en cero', () => {
+    expect(fmtHours(6.1)).toBe('6.1h')
+    expect(fmtHours(1)).toBe('1h')
+    expect(fmtHours(0.5)).toBe('30m')
+    expect(fmtHours(0)).toBe('—')
+    expect(fmtHours(undefined)).toBe('—')
+  })
+  it('redondea a una décima', () => expect(fmtHours(6.14159)).toBe('6.1h'))
+})
+
+describe('workedSplit', () => {
+  it('parte el tiempo en persona y agentes, con el total', () => {
+    expect(workedSplit(370, 210)).toEqual({ person: 370, agent: 210, total: 580, hasAgent: true })
+  })
+  it('sin agentes marca hasAgent false (la UI muestra solo el número de la persona)', () => {
+    expect(workedSplit(370, 0)).toEqual({ person: 370, agent: 0, total: 370, hasAgent: false })
+    expect(workedSplit(370, null).hasAgent).toBe(false)
+  })
+  it('tolera nulos de los dos lados', () => {
+    expect(workedSplit(null, null)).toEqual({ person: 0, agent: 0, total: 0, hasAgent: false })
   })
 })

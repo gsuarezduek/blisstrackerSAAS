@@ -8,6 +8,8 @@ import EditDurationModal from '../components/EditDurationModal'
 import RoleBadge from '../components/RoleBadge'
 import api from '../api/client'
 import { fmtMins } from '../utils/format'
+import { deriveBudget } from '../utils/budget'
+import WorkedTime from '../components/ui/WorkedTime'
 import { Bot, ChartColumn, Pencil, Search, X } from 'lucide-react'
 import { Icon } from '../components/ui/Icon'
 
@@ -26,38 +28,33 @@ const STATUS_META = {
   noBudget:   { label: 'Sin presupuesto configurado', cls: 'bg-gray-100 text-gray-500 border-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-700' },
 }
 
+// El consumo del presupuesto (persona + agentes) lo resuelve utils/budget.js — una sola
+// política para Reportes, la pestaña Horas del proyecto y el Resumen.
 function deriveProjectStatus(d) {
-  const hoursEnabled = d.project.hoursEnabled
-  const monthlyHours = d.project.monthlyHours
-  const useBudget = hoursEnabled && monthlyHours != null
-  const noBudget  = hoursEnabled && monthlyHours == null
-  const budgetMins = useBudget ? monthlyHours * 60 : 0
-  const pctRaw = useBudget ? (budgetMins > 0 ? (d.totalMinutes / budgetMins) * 100 : 0) : null
-
-  let status = 'untracked' // hoursEnabled=false: proyecto fuera del seguimiento de presupuesto
-  if (noBudget) status = 'noBudget'
-  else if (useBudget) {
-    if (d.totalMinutes === 0) status = 'noActivity'
-    else if (pctRaw > 100) status = 'over'
-    else if (pctRaw >= 80) status = 'near'
-    else status = 'onTrack'
-  }
-
-  return { ...d, useBudget, noBudget, pctRaw, status }
+  return { ...d, ...deriveBudget({
+    hoursEnabled: d.project.hoursEnabled,
+    monthlyHours: d.project.monthlyHours,
+    totalMinutes: d.totalMinutes,
+    agentMinutes: d.agentMinutes,
+  }) }
 }
 
 function exportCsv(rows) {
-  const header = 'proyecto,horas contratadas,horas registradas,% usado,tareas,estado'
+  const header = 'proyecto,horas contratadas,horas usadas,horas personas,horas agentes,% usado,tareas,tareas de agentes,estado'
   const csvRows = rows.map(d => {
     const contracted = d.useBudget ? d.project.monthlyHours : ''
     const pctLabel = d.useBudget ? `${Math.round(d.pctRaw)}%` : ''
     const statusLabel = STATUS_META[d.status]?.label ?? (d.status === 'onTrack' ? 'En curso' : 'Sin seguimiento')
+    const h = mins => (mins / 60).toFixed(1)
     return [
       `"${d.project.name}"`,
       contracted,
-      (d.totalMinutes / 60).toFixed(1),
+      h(d.usedMinutes),
+      h(d.personMinutes),
+      h(d.agentMinutes),
       pctLabel,
       d.taskCount,
+      d.agentTasks ?? 0,
       `"${statusLabel}"`,
     ].join(',')
   })
@@ -87,16 +84,18 @@ function ByProjectView({ data, sortBy, search, statusFilter, loading, onEditTask
     return searched.filter(d => d.status === statusFilter)
   }, [searched, statusFilter])
 
-  const totalMins = filtered.reduce((s, d) => s + d.totalMinutes, 0)
+  const totalMins      = filtered.reduce((s, d) => s + d.usedMinutes, 0)
+  const totalPersonMins = filtered.reduce((s, d) => s + d.personMinutes, 0)
+  const totalAgentMins  = filtered.reduce((s, d) => s + d.agentMinutes, 0)
 
   const sorted = useMemo(() => {
     const arr = [...filtered]
     if (sortBy === 'contracted') {
-      arr.sort((a, b) => (b.useBudget ? b.project.monthlyHours : -1) - (a.useBudget ? a.project.monthlyHours : -1) || b.totalMinutes - a.totalMinutes)
+      arr.sort((a, b) => (b.useBudget ? b.project.monthlyHours : -1) - (a.useBudget ? a.project.monthlyHours : -1) || b.usedMinutes - a.usedMinutes)
     } else if (sortBy === 'pct') {
-      arr.sort((a, b) => (b.pctRaw ?? -1) - (a.pctRaw ?? -1) || b.totalMinutes - a.totalMinutes)
+      arr.sort((a, b) => (b.pctRaw ?? -1) - (a.pctRaw ?? -1) || b.usedMinutes - a.usedMinutes)
     } else {
-      arr.sort((a, b) => b.totalMinutes - a.totalMinutes)
+      arr.sort((a, b) => b.usedMinutes - a.usedMinutes)
     }
     return arr
   }, [filtered, sortBy])
@@ -118,7 +117,11 @@ function ByProjectView({ data, sortBy, search, statusFilter, loading, onEditTask
         <div className="bg-primary-50 dark:bg-primary-900/20 rounded-xl px-4 py-3 mb-5 flex items-center justify-between gap-3 flex-wrap">
           <span className="text-sm text-primary-700 dark:text-primary-300 font-medium">Tiempo total registrado</span>
           <div className="flex items-center gap-3">
-            <span className="text-xl font-bold text-primary-700 dark:text-primary-300">{fmtMins(totalMins)}</span>
+            <WorkedTime
+              person={totalPersonMins}
+              agent={totalAgentMins}
+              className="text-right text-primary-700 dark:text-primary-300 [&>span:first-child]:text-xl [&>span:first-child]:font-bold"
+            />
             <button
               onClick={() => exportCsv(sorted)}
               className="text-xs bg-white dark:bg-gray-800 border border-primary-200 dark:border-primary-800 text-primary-700 dark:text-primary-300 rounded-lg px-2.5 py-1 font-medium hover:bg-primary-100 dark:hover:bg-primary-900/40 transition-colors"
@@ -132,7 +135,7 @@ function ByProjectView({ data, sortBy, search, statusFilter, loading, onEditTask
       <div className="space-y-3">
         {sorted.map(d => {
           const { useBudget, noBudget, pctRaw, status } = d
-          const pct = pctRaw != null ? Math.min(100, pctRaw) : (totalMins > 0 ? (d.totalMinutes / totalMins) * 100 : 0)
+          const pct = pctRaw != null ? Math.min(100, pctRaw) : (totalMins > 0 ? (d.usedMinutes / totalMins) * 100 : 0)
           const barColor = status === 'over' ? 'bg-red-500' : status === 'near' ? 'bg-yellow-500' : 'bg-primary-500'
           const statusBadge = STATUS_META[status]
           return (
@@ -145,8 +148,8 @@ function ByProjectView({ data, sortBy, search, statusFilter, loading, onEditTask
                 <span className="font-medium text-gray-800 dark:text-gray-200 truncate">{d.project.name}</span>
                 <span className="text-xs bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 rounded px-2 py-0.5 shrink-0">{d.taskCount} tareas</span>
                 {d.agentTasks > 0 && (
-                  <span className="inline-flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400 shrink-0" title="Tareas completadas por agentes de IA: no suman a las horas de personas">
-                    <Icon as={Bot} size={12} />{d.agentTasks}
+                  <span className="inline-flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400 shrink-0" title="Tareas completadas por agentes de IA (su tiempo suma a las horas del proyecto)">
+                    <Icon as={Bot} size={12} />{d.agentTasks} de agentes
                   </span>
                 )}
                 {statusBadge && (status === 'over' || status === 'near' || status === 'noActivity') && (
@@ -154,7 +157,11 @@ function ByProjectView({ data, sortBy, search, statusFilter, loading, onEditTask
                 )}
               </div>
               <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-                <span className="font-bold text-primary-600">{fmtMins(d.totalMinutes)}</span>
+                <WorkedTime
+                  person={d.personMinutes}
+                  agent={d.agentMinutes}
+                  className="text-right [&>span:first-child]:font-bold [&>span:first-child]:text-primary-600"
+                />
                 {useBudget && (
                   <span className="hidden sm:inline text-xs text-gray-500 dark:text-gray-400">/ {d.project.monthlyHours}h contratadas</span>
                 )}

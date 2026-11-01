@@ -84,8 +84,15 @@ function shapeMember(m, statsMap, attendanceMap, hist) {
       attendance: attendanceOut,
       utilization,
       hoursHistory,
-      // Sus agentes de IA (tareas completadas, minutos, por agente/proyecto) — aparte de lo de arriba.
+      agentHoursHistory: hist.agentHistory?.get(u.id) ?? null,
+      // Sus agentes de IA. El tiempo de un agente ES tiempo trabajado del proyecto (se le
+      // informa al cliente y consume sus horas contratadas), pero NO entra en las métricas
+      // con las que se evalúa a la persona — `hours`, `utilization` y el benchmark siguen
+      // midiendo solo lo suyo. `agentHours`/`agentCompleted` están acá para que la UI pueda
+      // mostrar la referencia al lado de cada número sin bajar a `agents.current`.
       agents: s.agents,
+      agentHours: Math.round((s.agents?.current?.minutes ?? 0) / 60 * 10) / 10,
+      agentCompleted: s.agents?.current?.completed ?? 0,
     },
     insight: insight && (insight.tendencias || insight.fortalezas || insight.areasDeAtencion)
       ? { tendencias: insight.tendencias, fortalezas: insight.fortalezas, areasDeAtencion: insight.areasDeAtencion, updatedAt: insight.updatedAt }
@@ -238,7 +245,7 @@ async function userBreakdown(req, res, next) {
           lte: new Date(period.curEnd   + 'T23:59:59' + offset),
         },
         workDay: { workspaceId },
-        ...HUMAN_TASK_WHERE, // el detalle es de las horas de la persona; sus agentes van aparte
+        ...HUMAN_TASK_WHERE, // el detalle es de las horas de la persona; sus agentes van en su propio bloque
       },
       select: {
         id: true, description: true, startedAt: true, completedAt: true,

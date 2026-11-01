@@ -1,12 +1,12 @@
 import { Bot } from 'lucide-react'
 import { Icon } from '../ui/Icon'
-
-const fmtHours = h => (h >= 1 ? `${h}h` : h > 0 ? `${Math.round(h * 60)}m` : '—')
+import { fmtHours, fmtMins } from '../../utils/format'
 
 // "Sus agentes": lo que hicieron los agentes de IA de la persona en el período (tareas
-// completadas y tiempo registrado, por agente y por proyecto). Va aparte a propósito:
-// nada de esto suma a sus horas, tareas, tasa ni asistencia. El tiempo de un agente no
-// se compara con el de una persona — la métrica principal son las tareas completadas.
+// completadas y tiempo registrado, por agente y por proyecto). El tiempo de un agente ES
+// tiempo trabajado — se le informa al cliente y consume las horas contratadas del
+// proyecto —, pero NO entra en las métricas con las que se evalúa a la persona (sus
+// horas, su tasa, su Δ horas, su asistencia): por eso se muestra en su propio bloque.
 // Compartido entre la tabla de admin (ProductivityTab.jsx) y la vista personal
 // (MyProductivity.jsx) — mismo shape de `agents` en ambos casos (computeAgentStats).
 export default function AgentsBlock({ agents }) {
@@ -16,7 +16,7 @@ export default function AgentsBlock({ agents }) {
   return (
     <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
       <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 mb-2 inline-flex items-center gap-1">
-        <Icon as={Bot} size={12} />Sus agentes de IA <span className="normal-case font-normal">· aparte: no suma a sus horas ni a sus tareas</span>
+        <Icon as={Bot} size={12} />Sus agentes de IA <span className="normal-case font-normal">· su tiempo suma a las horas del proyecto, no a las métricas de la persona</span>
       </p>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="space-y-1">
@@ -36,7 +36,8 @@ export default function AgentsBlock({ agents }) {
           <ul className="space-y-0.5">
             {porAgente.map(a => (
               <li key={a.agentId ?? 'deleted'} className="flex justify-between text-xs text-gray-700 dark:text-gray-300">
-                <span className="truncate">{a.name}</span><span className="tabular-nums text-gray-500">{a.completed}</span>
+                <span className="truncate">{a.name}</span>
+                <span className="tabular-nums text-gray-500 shrink-0">{a.completed} · {fmtMins(a.minutes)}</span>
               </li>
             ))}
           </ul>
@@ -46,7 +47,8 @@ export default function AgentsBlock({ agents }) {
           <ul className="space-y-0.5">
             {porProyecto.slice(0, 6).map(p => (
               <li key={p.projectId} className="flex justify-between text-xs text-gray-700 dark:text-gray-300">
-                <span className="truncate">{p.name}</span><span className="tabular-nums text-gray-500">{p.completed}</span>
+                <span className="truncate">{p.name}</span>
+                <span className="tabular-nums text-gray-500 shrink-0">{p.completed} · {fmtMins(p.minutes)}</span>
               </li>
             ))}
           </ul>

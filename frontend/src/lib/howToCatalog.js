@@ -89,7 +89,7 @@ export const HOW_TO_CATALOG = {
     glossary: [
       ['Δ horas', 'Horas registradas ÷ horas disponibles (días esperados × la jornada del horario configurado). Mide cuánto del tiempo disponible quedó registrado en tareas. Requiere horario (inicio y fin) cargado; si no, muestra "—".'],
       ['Tareas', 'Tareas completadas en el período, por fecha de completado (incluye las que se arrastraron de días previos). Compará contra la mediana del equipo (▲/▼).'],
-      ['Horas', 'Tiempo activo de esas tareas (completado − iniciado − pausas, tope 8h por tarea, o el ajuste manual). No cuenta tiempo en tareas sin terminar.'],
+      ['Horas', 'Tiempo activo de esas tareas (completado − iniciado − pausas, tope 8h por tarea, o el ajuste manual). No cuenta tiempo en tareas sin terminar. Son solo horas de la persona: el tiempo de sus agentes de IA aparece abajo con el ícono de agente y en el bloque "Sus agentes de IA" — cuenta como horas del proyecto frente al cliente, pero no como trabajo suyo.'],
       ['Tasa', 'Completadas ÷ creadas en el período: ritmo de cierre vs creación. >100% = está bajando backlog; <100% sostenido = lo está acumulando.'],
       ['Horas y Asistencia', 'Al expandir la fila: Δ horas, horas disponibles vs registradas, presencia (días hábiles trabajados / esperados = hábiles − licencias) y tardanzas (primer login vs su horario). Separa "el mes está a medias" de "faltó".'],
       ['Estado', 'Semáforo automático: inactivo (vino ≥3 días la última semana y no completó nada), ↓ baja (cae fuerte en tareas/horas/tasa), atascos (≥5 tareas frenadas >7d), ↑ alta (sube ≥30%), OK. Mirá primero a los rojos y ámbar.'],

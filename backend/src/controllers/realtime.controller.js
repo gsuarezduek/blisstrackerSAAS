@@ -62,9 +62,13 @@ async function snapshot(req, res, next) {
       const humanToday = wd.tasks.filter(t => !t.isAgentTask)
       const inProgressTask = allTasks.find(t => t.status === 'IN_PROGRESS') ?? null
       const completedCount = humanToday.filter(t => t.status === 'COMPLETED').length
-      const totalMins = humanToday
-        .filter(t => t.status === 'COMPLETED')
-        .reduce((s, t) => s + taskWorkedMinutes(t), 0)
+      const minsOf = list => list.filter(t => t.status === 'COMPLETED').reduce((s, t) => s + taskWorkedMinutes(t), 0)
+      const totalMins = minsOf(humanToday)
+      // Lo que completaron hoy sus agentes: es tiempo trabajado del proyecto, así que se
+      // informa al lado del suyo (aparte, nunca sumado en el mismo número).
+      const agentToday = wd.tasks.filter(t => t.isAgentTask)
+      const agentCompleted = agentToday.filter(t => t.status === 'COMPLETED').length
+      const agentMins = minsOf(agentToday)
 
       return {
         user: { ...wd.user, role: memberMap[wd.userId] ?? '' },
@@ -77,6 +81,8 @@ async function snapshot(req, res, next) {
           blocked: allTasks.filter(t => t.status === 'BLOCKED').length,
           totalMinutes: totalMins,
           agentInProgress,
+          agentCompleted,
+          agentMinutes: agentMins,
         },
       }
     })

@@ -8,6 +8,7 @@ import MyProductivity from '../components/MyProductivity'
 import api from '../api/client'
 import { useAuth } from '../context/AuthContext'
 import { fmtMins } from '../utils/format'
+import WorkedTime from '../components/ui/WorkedTime'
 import { Bot, ClipboardList, Pencil } from 'lucide-react'
 import { Icon } from '../components/ui/Icon'
 
@@ -67,7 +68,12 @@ export default function MyReports() {
         {data && (
           <div className="grid grid-cols-2 gap-4 mb-6">
             <div className="bg-white dark:bg-gray-800 rounded-xl border dark:border-gray-700 p-4 text-center">
-              <p className="text-2xl font-bold text-primary-600">{fmtMins(data.totalMinutes)}</p>
+              <WorkedTime
+                person={data.totalMinutes}
+                agent={data.agentTotalMinutes}
+                variant="hero"
+                className="[&>span:first-child]:text-2xl [&>span:first-child]:font-bold [&>span:first-child]:text-primary-600"
+              />
               <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Tiempo total registrado</p>
             </div>
             <div className="bg-white dark:bg-gray-800 rounded-xl border dark:border-gray-700 p-4 text-center">
@@ -145,14 +151,14 @@ export default function MyReports() {
           </div>
         )}
 
-        {/* Tus agentes de IA — aparte, no suma a los totales de arriba (ver AgentsBlock en Productividad) */}
+        {/* Tus agentes de IA — el detalle de lo que ya está incluido en el total de arriba */}
         {!loading && agentByProject.length > 0 && (
           <div className="mt-8">
             <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-1 inline-flex items-center gap-1.5">
               <Icon as={Bot} size={18} />Tus agentes de IA
             </h2>
             <p className="text-xs text-gray-400 dark:text-gray-500 mb-3">
-              {fmtMins(data.agentTotalMinutes)} registrados · {data.agentTaskCount} tarea{data.agentTaskCount !== 1 ? 's' : ''} completada{data.agentTaskCount !== 1 ? 's' : ''} · aparte, no suma al total de arriba
+              {fmtMins(data.agentTotalMinutes)} registrados · {data.agentTaskCount} tarea{data.agentTaskCount !== 1 ? 's' : ''} completada{data.agentTaskCount !== 1 ? 's' : ''} · ya incluido en el tiempo total de arriba
             </p>
             <div className="space-y-3">
               {agentByProject.map(p => (

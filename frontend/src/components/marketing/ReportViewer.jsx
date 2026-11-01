@@ -7,7 +7,7 @@ import { linkify } from '../../utils/linkify'
 import '../situation-editor.css'
 import {
   PRINT_STYLES, ReportEditContext, fmt, monthLabel, dataPeriodLabel,
-  DeltaChip, SectionCard, ObjectivesResults, ReportSignature,
+  DeltaChip, SectionCard, ObjectivesResults, ReportSignature, reportTaskLine,
 } from './ReportViewerParts'
 import { RRSSSection, PublicidadSection, SeoGeoSection, SitioWebSection } from './ReportViewerSections'
 import { ReportHistoryContext } from './ReportHistory'
@@ -737,20 +737,8 @@ export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, o
         <SectionCard title="Trabajo realizado en el mes" sectionKey="tasks">
           <ul className="space-y-2">
             {s.tasks.map((task) => {
-              // Tarea ejecutada por un agente de IA: se muestra como "Agente de <dueño>" y
-              // sin duración — su tiempo de ejecución no son horas trabajadas por una persona.
-              const byAgent = !!task.isAgentTask
-              const who = byAgent
-                ? `Agente de ${task.user?.name?.split(' ')[0] ?? 'IA'}`
-                : task.user?.name
-              const mins = byAgent ? null : task.minutesOverride != null
-                ? task.minutesOverride
-                : (task.startedAt && task.completedAt)
-                  ? Math.max(0, Math.round((new Date(task.completedAt) - new Date(task.startedAt)) / 60000) - (task.pausedMinutes || 0))
-                  : null
-              const duration = mins != null && mins > 0
-                ? (mins < 60 ? `${mins}m` : `${Math.floor(mins / 60)}h ${mins % 60 > 0 ? `${mins % 60}m` : ''}`.trim())
-                : null
+              // Quién y cuánto, sin distinguir persona de agente de IA (ver reportTaskLine).
+              const { who, duration } = reportTaskLine(task)
               return (
                 <li key={task.id} className="flex items-start gap-2 text-sm">
                   <span className="text-green-500 mt-0.5 shrink-0">✓</span>

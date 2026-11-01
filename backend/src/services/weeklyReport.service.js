@@ -100,8 +100,10 @@ async function getWeeklyData(userId, workspace) {
           lte: new Date(currentWeek.to   + 'T23:59:59' + offset),
         },
         workDay: { workspaceId },
-        ...HUMAN_TASK_WHERE, // el resumen semanal es del trabajo de la persona, no de sus agentes de IA
       },
+      // Sin filtro de ejecutor: el resumen (y el análisis de la IA) sigue siendo del
+      // trabajo de la PERSONA, pero se informa aparte lo que hicieron sus agentes de IA
+      // — ese tiempo cuenta como horas del proyecto frente al cliente.
       include: {
         project:  { select: { id: true, name: true } },
         sessions: { select: { startedAt: true, endedAt: true }, where: { endedAt: { not: null } } },
@@ -150,10 +152,14 @@ async function getWeeklyData(userId, workspace) {
     }),
   ])
 
-  // Agrupar completadas por proyecto (solo tiempo que cayó dentro de esta semana)
+  // Agrupar completadas por proyecto (solo tiempo que cayó dentro de esta semana). Lo que
+  // ejecutaron sus agentes de IA se totaliza aparte: no es trabajo de la persona ni se
+  // evalúa como tal, pero tiene que estar a la vista.
+  const humanCompleted = completedTasks.filter(t => !t.isAgentTask)
+  const agentCompleted = completedTasks.filter(t => t.isAgentTask)
   const byProject = {}
   let totalMinutes = 0
-  for (const t of completedTasks) {
+  for (const t of humanCompleted) {
     const mins = calcMinsForRange(t, currentWeek.from, currentWeek.to, tz)
     totalMinutes += mins
     const pid = t.project.id
@@ -161,14 +167,17 @@ async function getWeeklyData(userId, workspace) {
     byProject[pid].minutes += mins
     byProject[pid].tasks.push({ description: t.description, minutes: mins })
   }
+  const agentMinutes = agentCompleted.reduce((s, t) => s + calcMinsForRange(t, currentWeek.from, currentWeek.to, tz), 0)
 
   const prevTotalMinutes = prevTasks.reduce((s, t) => s + calcMinsForRange(t, prevWeek.from, prevWeek.to, tz), 0)
 
   return {
     week: currentWeek,
     workDays,
-    completedTasks,
+    completedTasks: humanCompleted,
     totalMinutes,
+    agentCompletedCount: agentCompleted.length,
+    agentMinutes,
     byProject: Object.values(byProject).sort((a, b) => b.minutes - a.minutes),
     pendingTasks,
     prev: {
@@ -282,7 +291,7 @@ function buildMemoryContext(memories) {
 }
 
 async function generateAnalysis(user, data, roleExpectation, memory) {
-  const { week, completedTasks, totalMinutes, byProject, pendingTasks, prev, workDays } = data
+  const { week, completedTasks, totalMinutes, agentMinutes, agentCompletedCount, byProject, pendingTasks, prev, workDays } = data
 
   const projectSummary = byProject
     .map(p => `  - ${p.project.name}: ${fmtMins(p.minutes)} (${p.tasks.length} tareas)`)
@@ -325,6 +334,8 @@ ${pendingList}
 COMPARACIÓN:
 ${prevComparison}
 Esta semana: ${completedTasks.length} tareas, ${fmtMins(totalMinutes)} registrados
+${agentMinutes > 0 ? `
+SUS AGENTES DE IA: ${agentCompletedCount} tarea(s) completada(s), ${fmtMins(agentMinutes)} registrados. Ese tiempo cuenta como horas del proyecto frente al cliente, pero NO es trabajo de la persona: no lo sumes a su tiempo ni lo evalúes como su rendimiento.` : ''}
 `.trim()
 
   try {
@@ -366,7 +377,7 @@ Escribís en español rioplatense, forma clara, directa y ligeramente crítica c
 }
 
 function buildWeeklyEmailHtml(user, data, analysis) {
-  const { week, completedTasks, totalMinutes, byProject, pendingTasks, prev, workDays } = data
+  const { week, completedTasks, totalMinutes, agentMinutes, agentCompletedCount, byProject, pendingTasks, prev, workDays } = data
 
   const completedDiff = completedTasks.length - prev.completedCount
   const minutesDiff   = totalMinutes - prev.totalMinutes
@@ -441,6 +452,7 @@ function buildWeeklyEmailHtml(user, data, analysis) {
     <div style="background: white; border-radius: 12px; padding: 16px; text-align: center; border: 1px solid #e2e8f0;">
       <p style="font-size: 26px; font-weight: 700; color: #4f46e5; margin: 0;">${fmtMins(totalMinutes)}</p>
       <p style="font-size: 12px; color: #94a3b8; margin: 4px 0 0 0;">Tiempo registrado</p>
+      ${agentMinutes > 0 ? `<p style="font-size: 11px; color: #94a3b8; margin: 2px 0 0 0;">+ ${fmtMins(agentMinutes)} de tus agentes de IA</p>` : ''}
       ${hasPrev ? `<p style="font-size: 11px; color: ${minutesDiff >= 0 ? '#22c55e' : '#ef4444'}; margin: 2px 0 0 0;">${diffSign(Math.round(minutesDiff / 60))}h vs semana ant.</p>` : ''}
     </div>
     <div style="background: white; border-radius: 12px; padding: 16px; text-align: center; border: 1px solid #e2e8f0;">

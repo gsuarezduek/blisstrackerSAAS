@@ -108,6 +108,10 @@ const profileTaskInclude = {
   createdBy: { select: { id: true, name: true, avatar: true } },
   user: { select: { id: true, name: true, avatar: true } },
   _count: { select: { comments: true } },
+  // Quién la ejecuta: las listas del perfil rotulan las de agente (ver AgentTag).
+  agent: { select: { id: true, label: true } },
+  agentName: true,
+  isAgentTask: true,
 }
 
 // Filtra tareas de proyectos privados que el usuario que está mirando el perfil
@@ -167,12 +171,14 @@ async function getUserProfile(req, res, next) {
         select: { type: true, startDate: true, endDate: true },
       }),
       // Completadas del mes en curso (1 → hoy): se bucketea día/semana/mes en JS.
+      // Sin filtro de ejecutor: el resumen muestra las dos mitades (lo de la persona y lo
+      // de sus agentes de IA) por separado, ver lib/agentTasks.js#addExecutorMinutes.
       prisma.task.findMany({
         where: {
-          userId: targetId, status: 'COMPLETED', workDay: { workspaceId }, ...HUMAN_TASK_WHERE,
+          userId: targetId, status: 'COMPLETED', workDay: { workspaceId },
           completedAt: utcRange(monthStart, todayStr, TZ),
         },
-        select: { completedAt: true, minutesOverride: true, startedAt: true, pausedMinutes: true },
+        select: { completedAt: true, minutesOverride: true, startedAt: true, pausedMinutes: true, isAgentTask: true },
       }),
       prisma.task.findMany({
         where: { userId: targetId, status: { not: 'COMPLETED' }, workDay: { workspaceId }, ...notFuture, ...HUMAN_TASK_WHERE },
@@ -205,13 +211,20 @@ async function getUserProfile(req, res, next) {
     // Resumen de completadas: hoy / semana / mes (a la fecha), con minutos vía taskMins.
     const { gte: dayFrom } = utcRange(todayStr, todayStr, TZ)
     const { gte: weekFrom } = utcRange(weekStart, todayStr, TZ)
-    const summary = { day: { count: 0, minutes: 0 }, week: { count: 0, minutes: 0 }, month: { count: 0, minutes: 0 } }
-    for (const t of completedMonth) {
+    // `count`/`minutes` siguen siendo los de la PERSONA (no se renombran: los consume la
+    // ficha y el test de integración); `agentTasks`/`agentMinutes` son los de sus agentes.
+    const emptyBucket = () => ({ count: 0, minutes: 0, agentTasks: 0, agentMinutes: 0 })
+    const addToBucket = (b, t) => {
       const mins = taskMins(t)
+      if (t.isAgentTask) { b.agentTasks++; b.agentMinutes += mins }
+      else { b.count++; b.minutes += mins }
+    }
+    const summary = { day: emptyBucket(), week: emptyBucket(), month: emptyBucket() }
+    for (const t of completedMonth) {
       const at = new Date(t.completedAt)
-      summary.month.count++; summary.month.minutes += mins
-      if (at >= weekFrom) { summary.week.count++; summary.week.minutes += mins }
-      if (at >= dayFrom) { summary.day.count++; summary.day.minutes += mins }
+      addToBucket(summary.month, t)
+      if (at >= weekFrom) addToBucket(summary.week, t)
+      if (at >= dayFrom)  addToBucket(summary.day, t)
     }
 
     // Proyectos privados (ver concepto "Proyectos privados"): sin esto, el perfil
@@ -273,9 +286,11 @@ async function getUserCompleted(req, res, next) {
       endStr = date
     }
 
+    // Sin filtro de ejecutor: la lista trae también lo que completaron sus agentes de IA,
+    // rotulado por fila (isAgentTask/agent) y totalizado aparte en `total`.
     const tasksRaw = await prisma.task.findMany({
       where: {
-        userId: targetId, status: 'COMPLETED', workDay: { workspaceId }, ...HUMAN_TASK_WHERE,
+        userId: targetId, status: 'COMPLETED', workDay: { workspaceId },
         completedAt: utcRange(startStr, endStr, TZ),
       },
       include: profileTaskInclude,
@@ -284,10 +299,11 @@ async function getUserCompleted(req, res, next) {
     // Proyectos privados (ver concepto "Proyectos privados"): mismo filtro que getUserProfile.
     const [tasks] = await filterVisibleTasks(req, [tasksRaw])
 
-    let totalMinutes = 0
+    const totals = { count: 0, minutes: 0, agentTasks: 0, agentMinutes: 0 }
     const items = tasks.map(t => {
       const minutes = taskMins(t)
-      totalMinutes += minutes
+      if (t.isAgentTask) { totals.agentTasks++; totals.agentMinutes += minutes }
+      else { totals.count++; totals.minutes += minutes }
       return {
         id: t.id,
         description: t.description,
@@ -297,10 +313,13 @@ async function getUserCompleted(req, res, next) {
         minutes,
         createdBy: t.createdBy,
         _count: t._count,
+        isAgentTask: t.isAgentTask,
+        agent: t.agent,
+        agentName: t.agentName,
       }
     })
 
-    res.json({ period, startDate: startStr, endDate: endStr, items, total: { count: items.length, minutes: totalMinutes } })
+    res.json({ period, startDate: startStr, endDate: endStr, items, total: totals })
   } catch (err) { next(err) }
 }
 

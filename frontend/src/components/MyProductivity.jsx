@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react'
 import api from '../api/client'
 import AgentsBlock from './productivity/AgentsBlock'
+import AgentTimeRef from './ui/AgentTimeRef'
+import { fmtHours } from '../utils/format'
 
-const fmtHours = h => (h >= 1 ? `${Math.round(h * 10) / 10}h` : h > 0 ? `${Math.round(h * 60)}m` : '—')
 
 // "d/m" a partir de un weekStart "YYYY-MM-DD".
 const weekLabel = ws => {
@@ -133,11 +134,13 @@ function HoursHistorySection({ initialHistory }) {
 }
 
 // Métrica con comparación opcional contra la mediana del equipo (anónima).
-function Metric({ label, value, team, hint }) {
+function Metric({ label, value, team, hint, extra }) {
   return (
     <div className="bg-gray-50 dark:bg-gray-800/60 rounded-xl px-4 py-3">
       <p className="text-2xl font-bold text-gray-900 dark:text-white tabular-nums leading-none">{value}</p>
       <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{label}</p>
+      {/* `extra`: el dato de los agentes de IA al lado de la métrica de la persona. */}
+      {extra && <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">{extra}</p>}
       {team != null && <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-0.5">equipo {team}</p>}
       {hint && <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-0.5">{hint}</p>}
     </div>
@@ -196,7 +199,12 @@ export default function MyProductivity() {
               hint={s.utilization == null ? 'configurá tu horario' : undefined}
             />
             <Metric label="Tareas completadas" value={s.completed} team={b ? Math.round(b.completed) : null} />
-            <Metric label="Horas registradas" value={fmtHours(s.hours)} team={b ? fmtHours(b.horas) : null} />
+            <Metric
+              label="Horas registradas"
+              value={fmtHours(s.hours)}
+              team={b ? fmtHours(b.horas) : null}
+              extra={s.agentHours > 0 ? `+${fmtHours(s.agentHours)} de tus agentes` : null}
+            />
             <Metric label="Tasa de cierre" value={`${Math.round(s.tasaCompletado * 100)}%`} team={b ? `${Math.round(b.tasaCompletado * 100)}%` : null} />
           </div>
 
@@ -205,6 +213,13 @@ export default function MyProductivity() {
           )}
 
           {note && <p className={`text-sm leading-snug ${note.cls} ${(hasAgents || ins) ? 'mb-4' : ''}`}>{note.text}</p>}
+
+          {/* La ocupación (Δ horas) se mide solo con horas propias — si sumara el tiempo
+              de los agentes, podría dar más del 100% sin que la persona haya trabajado
+              más. El dato va al lado, como referencia. */}
+          {s.agentHours > 0 && (
+            <AgentTimeRef minutes={Math.round(s.agentHours * 60)} tasks={s.agentCompleted} owner="tus" className="mb-3" />
+          )}
 
           {hasAgents && <div className="mb-4"><AgentsBlock agents={data.agents} /></div>}
 

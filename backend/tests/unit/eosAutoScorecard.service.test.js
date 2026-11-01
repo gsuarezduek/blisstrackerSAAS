@@ -155,6 +155,28 @@ describe('computeAutoScorecardYear — ocupación', () => {
     expect(wk.top3[1]).toMatchObject({ userId: 1, util: 50, registeredHours: 20, availableHours: 40 })
   })
 
+  it('el tiempo de los agentes de IA NO mueve la ocupación, pero se informa al lado', async () => {
+    // La ocupación es una métrica de evaluación de personas: si sumara el tiempo de los
+    // agentes podría pasar el 100% sin que nadie haya trabajado más. Va como referencia.
+    prisma.workspaceMember.findMany.mockResolvedValue([
+      { userId: 1, workStartTime: '09:00', workEndTime: '17:00', user: { name: 'Ana', avatar: 'a.png' } },
+      { userId: 2, workStartTime: '09:00', workEndTime: '13:00', user: { name: 'Beto', avatar: 'b.png' } },
+    ])
+    prisma.userLogin.findMany.mockResolvedValue(loginsFor([1, 2], W10_WEEKDAYS))
+    prisma.task.findMany.mockResolvedValue([
+      { userId: 1, completedAt: '2026-03-02T12:00:00-03:00', startedAt: '2026-03-02T02:00:00-03:00', pausedMinutes: 0, minutesOverride: 1200, isAgentTask: false },
+      { userId: 2, completedAt: '2026-03-03T12:00:00-03:00', startedAt: '2026-03-03T07:00:00-03:00', pausedMinutes: 0, minutesOverride: 300,  isAgentTask: false },
+      // 10h de un agente de Ana, el mismo período:
+      { userId: 1, completedAt: '2026-03-04T12:00:00-03:00', startedAt: '2026-03-04T02:00:00-03:00', pausedMinutes: 0, minutesOverride: 600, isAgentTask: true },
+    ])
+    const out = await computeAutoScorecardYear(1, TZ, 2026, ['ocupacion'])
+    const wk = out.ocupacion['2026-W10']
+    expect(wk.value).toBe(42)                 // ← idéntico al test de arriba
+    expect(wk.agentMinutes).toBe(600)         // la referencia, aparte
+    const ana = wk.top3.find(p => p.userId === 1)
+    expect(ana).toMatchObject({ registeredHours: 20, agentHours: 10 })
+  })
+
   it('descuenta días de licencia de las horas disponibles', async () => {
     prisma.workspaceMember.findMany.mockResolvedValue([
       { userId: 1, workStartTime: '09:00', workEndTime: '17:00', user: { name: 'Ana', avatar: 'a.png' } },
@@ -327,17 +349,19 @@ describe('computeAutoScorecardYear — semanales nuevas', () => {
 
   it('tareas_completadas_agentes: cuenta completadas por agente de IA, aparte del ranking de personas', async () => {
     prisma.task.findMany.mockResolvedValue([
-      { completedAt: '2026-03-02T12:00:00-03:00', agent: { id: 1, label: 'grokbot' }, agentName: 'Ventas' },
-      { completedAt: '2026-03-03T12:00:00-03:00', agent: { id: 1, label: 'grokbot' }, agentName: 'Ventas' },
-      { completedAt: '2026-03-04T12:00:00-03:00', agent: { id: 1, label: 'grokbot' }, agentName: 'SEO' },
-      { completedAt: '2026-03-05T12:00:00-03:00', agent: null, agentName: null }, // token borrado
+      { completedAt: '2026-03-02T12:00:00-03:00', agent: { id: 1, label: 'grokbot' }, agentName: 'Ventas', minutesOverride: 60 },
+      { completedAt: '2026-03-03T12:00:00-03:00', agent: { id: 1, label: 'grokbot' }, agentName: 'Ventas', minutesOverride: 30 },
+      { completedAt: '2026-03-04T12:00:00-03:00', agent: { id: 1, label: 'grokbot' }, agentName: 'SEO', minutesOverride: 90 },
+      { completedAt: '2026-03-05T12:00:00-03:00', agent: null, agentName: null, minutesOverride: 20 }, // token borrado
     ])
     const out = await computeAutoScorecardYear(1, TZ, 2026, ['tareas_completadas_agentes'])
     const wk = out.tareas_completadas_agentes['2026-W10']
     expect(wk.value).toBe(4)
-    expect(wk.top3[0]).toMatchObject({ name: 'grokbot · Ventas', value: 2 })
-    expect(wk.top3[1]).toMatchObject({ name: 'grokbot · SEO', value: 1 })
-    expect(wk.top3[2]).toMatchObject({ name: 'Agente eliminado', value: 1 })
+    // Además del conteo, el tiempo que registraron (es trabajo facturable del proyecto).
+    expect(wk.totalMinutes).toBe(200)
+    expect(wk.top3[0]).toMatchObject({ name: 'grokbot · Ventas', value: 2, minutes: 90 })
+    expect(wk.top3[1]).toMatchObject({ name: 'grokbot · SEO', value: 1, minutes: 90 })
+    expect(wk.top3[2]).toMatchObject({ name: 'Agente eliminado', value: 1, minutes: 20 })
   })
 
   it('propuestas_enviadas: cuenta propuestas generadas por semana y rankea por autor', async () => {

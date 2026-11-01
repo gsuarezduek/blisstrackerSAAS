@@ -7,16 +7,13 @@ const AI_TIMEOUT_MS = 20000
 const { logTokens } = require('../lib/logTokens')
 const { getSetting } = require('../lib/platformSettings')
 const { HUMAN_TASK_WHERE } = require('../lib/agentTasks')
+// `taskMins` compartido (antes había una copia local sin el tope de 8h, que daba
+// números distintos a los de Reportes/Productividad para la misma tarea).
+const { taskMins } = require('../lib/timeMetrics')
 
 function fmtMins(m) {
   if (m < 60) return `${m}m`
   return `${Math.floor(m / 60)}h ${m % 60}m`
-}
-
-function calcMins(t) {
-  if (t.minutesOverride !== null && t.minutesOverride !== undefined) return t.minutesOverride
-  if (!t.startedAt || !t.completedAt) return 0
-  return Math.max(0, Math.round((new Date(t.completedAt) - new Date(t.startedAt)) / 60000) - (t.pausedMinutes || 0))
 }
 
 function getWeekStart(tz) {
@@ -147,10 +144,12 @@ function buildMemoryContext(memories) {
 // ni lea su volumen como trabajo propio; solo las bloqueadas requieren algo de su parte.
 function buildAgentContext(agentTasks) {
   if (!agentTasks?.length) return ''
-  const done    = agentTasks.filter(t => t.status === 'COMPLETED').length
+  const doneTasks = agentTasks.filter(t => t.status === 'COMPLETED')
+  const done      = doneTasks.length
+  const agentMins = doneTasks.reduce((s, t) => s + taskMins(t), 0)
   const blocked = agentTasks.filter(t => t.status === 'BLOCKED')
   const open    = agentTasks.filter(t => t.status !== 'COMPLETED' && t.status !== 'BLOCKED').length
-  let ctx = `\nSUS AGENTES DE IA (tareas que ejecuta un agente automático, NO la persona — no le sugieras hacerlas ni las cuentes como trabajo suyo): ${done} completada(s) esta semana, ${open} en la lista del agente`
+  let ctx = `\nSUS AGENTES DE IA (tareas que ejecuta un agente automático, NO la persona — no le sugieras hacerlas ni las cuentes como trabajo suyo): ${done} completada(s) esta semana${agentMins > 0 ? ` (${fmtMins(agentMins)} registrados, que SÍ cuentan como horas del proyecto frente al cliente pero NO como trabajo de la persona)` : ''}, ${open} en la lista del agente`
   if (blocked.length > 0) {
     ctx += `, ${blocked.length} BLOQUEADA(S) esperando que la persona destrabe algo:\n`
     for (const t of blocked) ctx += `  - "${t.description}"${t.blockedReason ? ` — motivo: "${t.blockedReason}"` : ''}\n`
@@ -232,14 +231,14 @@ function buildContext(user, todayTasks, carryOver, completedThisWeek, roleExpect
   }
 
   if (completedToday.length > 0) {
-    const todayMins = completedToday.reduce((s, t) => s + calcMins(t), 0)
+    const todayMins = completedToday.reduce((s, t) => s + taskMins(t), 0)
     ctx += `COMPLETADAS HOY (${completedToday.length}) — ${fmtMins(todayMins)} registrados:\n`
-    for (const t of completedToday) ctx += `  - [${t.project.name}] "${t.description}" (${fmtMins(calcMins(t))})\n`
+    for (const t of completedToday) ctx += `  - [${t.project.name}] "${t.description}" (${fmtMins(taskMins(t))})\n`
     ctx += '\n'
   }
 
   if (completedThisWeek.length > 0) {
-    const weekMins = completedThisWeek.reduce((s, t) => s + calcMins(t), 0)
+    const weekMins = completedThisWeek.reduce((s, t) => s + taskMins(t), 0)
     const byProject = {}
     for (const t of completedThisWeek) byProject[t.project.name] = (byProject[t.project.name] || 0) + 1
     const summary = Object.entries(byProject).map(([p, n]) => `${p} (${n})`).join(', ')
@@ -320,7 +319,10 @@ async function generateInsight(userId, workspace, member) {
           { status: 'COMPLETED', workDay: { date: { gte: weekStart, lte: today }, workspaceId } },
         ],
       },
-      select: { status: true, description: true, blockedReason: true },
+      select: {
+        status: true, description: true, blockedReason: true,
+        startedAt: true, completedAt: true, pausedMinutes: true, minutesOverride: true,
+      },
     }),
   ])
 

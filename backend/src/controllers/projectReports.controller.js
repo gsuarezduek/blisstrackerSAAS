@@ -1,7 +1,8 @@
 const prisma = require('../lib/prisma')
-const { taskMins, buildCompletedAtWhere, monthStringInTz } = require('../lib/timeMetrics')
+const { buildCompletedAtWhere, monthStringInTz } = require('../lib/timeMetrics')
 const { monthBounds, prevMonthsArr, monthLabel } = require('../lib/monthUtils')
 const { resolveMonthlyHoursByMonth } = require('../lib/monthlyHoursHistory')
+const { emptyExecutorSplit, addExecutorMinutes, formatAgentName } = require('../lib/agentTasks')
 
 // Resuelve :id (numérico o name) a un projectId del workspace actual.
 async function resolveProjectId(param, workspaceId) {
@@ -52,6 +53,7 @@ async function hoursHistory(req, res, next) {
         select: {
           id: true, description: true, startedAt: true, completedAt: true,
           pausedMinutes: true, minutesOverride: true, isAgentTask: true,
+          agentName: true, agent: { select: { id: true, label: true } },
           user: { select: { id: true, name: true, avatar: true } },
         },
         orderBy: { completedAt: 'desc' },
@@ -65,21 +67,35 @@ async function hoursHistory(req, res, next) {
 
     const bucket = {}
     for (const m of monthKeys) {
-      bucket[m] = { month: m, label: monthLabel(m), totalMinutes: 0, taskCount: 0, byUser: {}, monthlyHours: monthlyHoursByMonth[m], agentTasks: 0, agentMinutes: 0 }
+      bucket[m] = {
+        month: m, label: monthLabel(m), ...emptyExecutorSplit(),
+        byUser: {}, byAgent: {}, monthlyHours: monthlyHoursByMonth[m],
+      }
     }
     for (const t of tasks) {
       const key = monthStringInTz(t.completedAt, tz)
       const b = bucket[key]
       if (!b) continue // fuera del rango pedido (no debería pasar dado el filtro de completedAt)
-      const mins = taskMins(t)
-      // Horas del mes vs contratadas = horas de personas; lo de los agentes de IA va aparte.
-      if (t.isAgentTask) {
-        b.agentTasks += 1
-        b.agentMinutes += mins
+      // Horas del mes vs contratadas = personas + agentes de IA (el tiempo del agente se
+      // le informa al cliente, así que consume su presupuesto). Se devuelve desglosado:
+      // `totalMinutes` personas / `agentMinutes` agentes, y el frontend arma el total y
+      // el % con utils/budget.js. `byUser` sigue siendo el detalle de las personas.
+      const { mins, isAgent } = addExecutorMinutes(b, t)
+      if (isAgent) {
+        const declared = t.agentName?.trim() || null
+        const aKey = `${t.agent?.id ?? 0}|${declared ?? ''}`
+        if (!b.byAgent[aKey]) {
+          b.byAgent[aKey] = {
+            agentId: t.agent?.id ?? null,
+            agentName: declared,
+            name: t.agent ? formatAgentName(t.agent, declared) : (declared ? `Agente eliminado · ${declared}` : 'Agente eliminado'),
+            minutes: 0, tasks: 0, ownerName: t.user?.name ?? null,
+          }
+        }
+        b.byAgent[aKey].minutes += mins
+        b.byAgent[aKey].tasks   += 1
         continue
       }
-      b.totalMinutes += mins
-      b.taskCount += 1
       const uid = t.user.id
       if (!b.byUser[uid]) b.byUser[uid] = { user: t.user, minutes: 0, tasks: 0, taskList: [] }
       b.byUser[uid].minutes += mins
@@ -91,7 +107,11 @@ async function hoursHistory(req, res, next) {
       })
     }
 
-    const monthsOut = monthKeys.map(m => ({ ...bucket[m], byUser: Object.values(bucket[m].byUser) })).reverse()
+    const monthsOut = monthKeys.map(m => ({
+      ...bucket[m],
+      byUser:  Object.values(bucket[m].byUser),
+      byAgent: Object.values(bucket[m].byAgent).sort((a, b) => b.minutes - a.minutes),
+    })).reverse()
 
     res.json({ project, months: monthsOut })
   } catch (err) { next(err) }

@@ -25,6 +25,24 @@ export function fmtMins(mins) {
   return `${Math.floor(mins / 60)}h ${mins % 60}m`
 }
 
+// Horas para las vistas que miden en horas y no en minutos (Productividad, ocupación):
+// "6.1h" de una hora para arriba, "40m" abajo, "—" en cero. Unifica las tres copias
+// locales idénticas que había en ProductivityTab, MyProductivity y AgentsBlock.
+export function fmtHours(h) {
+  if (h >= 1) return `${Math.round(h * 10) / 10}h`
+  return h > 0 ? `${Math.round(h * 60)}m` : '—'
+}
+
+// Tiempo trabajado partido en sus dos mitades: lo que puso la persona y lo que pusieron
+// sus agentes de IA. El tiempo de agente ES tiempo trabajado (se le informa al cliente y
+// consume horas contratadas), pero internamente se muestra siempre separado — ver
+// components/ui/WorkedTime.jsx y utils/budget.js.
+export function workedSplit(personMinutes, agentMinutes) {
+  const person = personMinutes || 0
+  const agent  = agentMinutes || 0
+  return { person, agent, total: person + agent, hasAgent: agent > 0 }
+}
+
 const MAX_ACTIVE_MINS = 12 * 60  // cota de seguridad: 12h máximo para tareas en curso
 
 // Tiempo activo de una tarea en SEGUNDOS — fuente de verdad única para todas las vistas.

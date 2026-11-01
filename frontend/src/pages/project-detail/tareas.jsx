@@ -5,20 +5,10 @@ import DateRangeFilter from '../../components/DateRangeFilter'
 import RoleBadge from '../../components/RoleBadge'
 import UserLink from '../../components/UserLink'
 import { Card, Avatar, StatusBadge, STATUS_META } from './ui'
-import { Repeat, MessageSquare, Pencil, Bot } from 'lucide-react'
+import { Repeat, MessageSquare, Pencil } from 'lucide-react'
 import { Icon } from '../../components/ui/Icon'
 import { agentName } from '../../hooks/useMyAgents'
-
-// Rótulo de una tarea que ejecuta (o ejecutó) un agente de IA de la persona — las
-// tareas se agrupan por persona, así que sin esto parecerían hechas por ella.
-function AgentTag({ task }) {
-  if (!task.isAgentTask) return null
-  return (
-    <span className="inline-flex items-center gap-1 text-sky-700 dark:text-sky-300" title="La ejecuta un agente de IA de esta persona">
-      <Icon as={Bot} size={13} />{task.agent ? agentName(task.agent, task.agentName) : 'Agente'}
-    </span>
-  )
-}
+import AgentTag from '../../components/ui/AgentTag'
 
 // Pestaña "Tareas" — el tablero completo del proyecto. Filtro por estado arriba
 // (con conteo, así "Bloqueadas" se ve de un vistazo), tareas activas agrupadas

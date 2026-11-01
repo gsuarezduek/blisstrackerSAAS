@@ -100,9 +100,12 @@ async function occupancyByBucket(workspaceId, tz, offset, rangeStart, rangeEnd, 
         status: 'COMPLETED',
         completedAt: { gte: new Date(rangeStart + 'T00:00:00' + offset), lte: new Date(rangeEnd + 'T23:59:59' + offset) },
         workDay: { workspaceId },
-        ...HUMAN_TASK_WHERE, // ocupación = horas de personas, no de sus agentes de IA
       },
-      select: { userId: true, completedAt: true, pausedMinutes: true, minutesOverride: true, startedAt: true },
+      // Sin filtro de ejecutor: la OCUPACIÓN sigue midiendo solo horas de personas (si
+      // sumara el tiempo de sus agentes podría pasar el 100% sin que nadie trabaje más),
+      // pero el tiempo de los agentes se informa al lado como referencia. Las dos mitades
+      // salen de la misma query, así no pueden divergir.
+      select: { userId: true, completedAt: true, pausedMinutes: true, minutesOverride: true, startedAt: true, isAgentTask: true },
     }),
     prisma.userLogin.findMany({
       where: { workspaceId, loginAt: { gte: new Date(rangeStart + 'T00:00:00' + offset), lte: new Date(rangeEnd + 'T23:59:59' + offset) } },
@@ -138,27 +141,34 @@ async function occupancyByBucket(workspaceId, tz, offset, rangeStart, rangeEnd, 
     }
   }
 
-  // Horas trabajadas por (bucket, usuario) — solo quienes tienen horario.
-  const regByBucket = new Map()
+  // Horas trabajadas por (bucket, usuario) — solo quienes tienen horario. Las de la
+  // persona van a `regByBucket` (la métrica) y las de sus agentes a `agentByBucket` (la
+  // referencia que se muestra al lado).
+  const regByBucket   = new Map()
+  const agentByBucket = new Map()
   for (const t of tasks) {
     if (!scheduledIds.has(t.userId)) continue
     const date = localDate(t.completedAt, tz)
     if (date < rangeStart || date > rangeEnd) continue
     const period = periodOf(date)
-    if (!regByBucket.has(period)) regByBucket.set(period, new Map())
-    const wm = regByBucket.get(period)
+    const target = t.isAgentTask ? agentByBucket : regByBucket
+    if (!target.has(period)) target.set(period, new Map())
+    const wm = target.get(period)
     wm.set(t.userId, (wm.get(t.userId) || 0) + taskMins(t))
   }
 
   for (const [period, availMap] of availByBucket) {
-    const regMap = regByBucket.get(period) || new Map()
-    let sumAvail = 0, sumReg = 0
+    const regMap   = regByBucket.get(period) || new Map()
+    const agentMap = agentByBucket.get(period) || new Map()
+    let sumAvail = 0, sumReg = 0, sumAgent = 0
     const people = []
     for (const [uid, availMins] of availMap) {
       if (availMins <= 0) continue
-      const regMins = regMap.get(uid) || 0
+      const regMins   = regMap.get(uid) || 0
+      const agentMins = agentMap.get(uid) || 0
       sumAvail += availMins
       sumReg   += regMins
+      sumAgent += agentMins
       const pInfo = info.get(uid)
       people.push({
         userId: uid,
@@ -167,11 +177,16 @@ async function occupancyByBucket(workspaceId, tz, offset, rangeStart, rangeEnd, 
         util:   Math.round(regMins / availMins * 100),
         registeredHours: round1(regMins / 60),
         availableHours:  round1(availMins / 60),
+        agentHours:      round1(agentMins / 60),
       })
     }
     if (sumAvail <= 0) continue
     people.sort((a, b) => a.util - b.util) // los que menos aprovecharon, primero
-    out[period] = { value: Math.round(sumReg / sumAvail * 100), top3: people.slice(0, 3) }
+    out[period] = {
+      value: Math.round(sumReg / sumAvail * 100), // ← solo personas, a propósito
+      agentMinutes: sumAgent,
+      top3: people.slice(0, 3),
+    }
   }
   return out
 }
@@ -287,7 +302,10 @@ async function computeTareasCompletadasAgentesWeekly(workspaceId, tz, offset, ra
       completedAt: { gte: new Date(rangeStart + 'T00:00:00' + offset), lte: new Date(rangeEnd + 'T23:59:59' + offset) },
       workDay: { workspaceId },
     },
-    select: { completedAt: true, agent: { select: { id: true, label: true } }, agentName: true },
+    select: {
+      completedAt: true, agent: { select: { id: true, label: true } }, agentName: true,
+      startedAt: true, pausedMinutes: true, minutesOverride: true,
+    },
   })
 
   const byWeek = new Map() // period -> Map<agentKey, {name, count}>
@@ -299,20 +317,24 @@ async function computeTareasCompletadasAgentesWeekly(workspaceId, tz, offset, ra
     const wm = byWeek.get(period)
     const declared = t.agentName?.trim() || null
     const key = `${t.agent?.id ?? 0}|${declared ?? ''}`
-    const cur = wm.get(key) || { name: t.agent ? formatAgentName(t.agent, declared) : (declared ? `Agente eliminado · ${declared}` : 'Agente eliminado'), count: 0 }
-    cur.count += 1
+    const cur = wm.get(key) || { name: t.agent ? formatAgentName(t.agent, declared) : (declared ? `Agente eliminado · ${declared}` : 'Agente eliminado'), count: 0, minutes: 0 }
+    cur.count   += 1
+    cur.minutes += taskMins(t)
     wm.set(key, cur)
   }
 
   for (const [period, wm] of byWeek) {
-    let total = 0
+    let total = 0, totalMinutes = 0
     const agents = []
     for (const a of wm.values()) {
-      total += a.count
-      agents.push({ name: a.name, value: a.count })
+      total        += a.count
+      totalMinutes += a.minutes
+      agents.push({ name: a.name, value: a.count, minutes: a.minutes })
     }
     agents.sort((a, b) => b.value - a.value)
-    out[period] = { value: total, top3: agents.slice(0, 3) }
+    // `totalMinutes`: el tiempo que registraron los agentes (cuenta como horas del
+    // proyecto frente al cliente, nunca en el ranking humano de "Tareas completadas").
+    out[period] = { value: total, totalMinutes, top3: agents.slice(0, 3) }
   }
   return out
 }

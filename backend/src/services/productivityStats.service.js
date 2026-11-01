@@ -112,7 +112,9 @@ function computeMemberStats({ workDays, completedTasks, stuckCount, period, agen
     stuckTasks: stuckCount,
     recentInactive,
     hasData: current.daysWorked > 0 || current.totalCompleted > 0,
-    // Lo que hicieron sus agentes de IA — aparte: nada de esto suma a las métricas de arriba.
+    // Lo que hicieron sus agentes de IA. Su tiempo cuenta como horas del proyecto frente
+    // al cliente (ver utils/budget.js del frontend), pero NO entra en las métricas con las
+    // que se evalúa a la persona (sus horas, su tasa, su Δ horas): esas son solo suyas.
     agents: computeAgentStats(agentTasks, period),
   }
 }
@@ -145,7 +147,8 @@ async function fetchRows(workspaceId, tz, { userId = null, period = null } = {})
   }
 
   // Todo lo de la persona excluye las tareas que ejecutan sus agentes (HUMAN_TASK_WHERE);
-  // las de los agentes se traen aparte (agentTasks) para el bloque "Sus agentes".
+  // las de los agentes se traen aparte (agentTasks) para el bloque "Sus agentes" y para
+  // la referencia que se muestra al lado de cada número de la persona.
   const [workDays, completedTasks, stuckTasks, agentTasks] = await Promise.all([
     prisma.workDay.findMany({
       where: { workspaceId, date: { gte: prevStart, lte: curEnd }, ...userFilter },
@@ -433,30 +436,35 @@ async function getHoursHistory(workspaceId, tz, { weeks = 12, granularity = 'wee
       status: 'COMPLETED',
       completedAt: { gte: new Date(startDate + 'T00:00:00' + tzOff), lte: new Date(endDate + 'T23:59:59' + tzOff) },
       workDay: { workspaceId },
-      ...HUMAN_TASK_WHERE,
     },
-    select: { userId: true, startedAt: true, completedAt: true, pausedMinutes: true, minutesOverride: true },
+    // Una sola query sin filtro de ejecutor: el historial de horas de la persona (`history`)
+    // y el de sus agentes (`agentHistory`) salen de los mismos buckets, así el gráfico
+    // puede mostrar las dos series sin que puedan divergir.
+    select: { userId: true, startedAt: true, completedAt: true, pausedMinutes: true, minutesOverride: true, isAgentTask: true },
   })
 
   const labels = daily
     ? Array.from({ length: buckets }, (_, i) => addDays(startDate, i))
     : Array.from({ length: buckets }, (_, i) => addDays(startDate, i * 7))
-  const minsByUser = new Map()
+  const minsByUser      = new Map()
+  const agentMinsByUser = new Map()
   for (const t of tasks) {
     const date = new Date(t.completedAt).toLocaleDateString('en-CA', { timeZone: tz })
     const idx  = daily
       ? Math.min(buckets - 1, Math.max(0, dateDiffDays(startDate, date)))
       : Math.min(buckets - 1, Math.max(0, Math.floor(dateDiffDays(startDate, date) / 7)))
-    if (!minsByUser.has(t.userId)) minsByUser.set(t.userId, new Array(buckets).fill(0))
-    minsByUser.get(t.userId)[idx] += taskMins(t)
+    const target = t.isAgentTask ? agentMinsByUser : minsByUser
+    if (!target.has(t.userId)) target.set(t.userId, new Array(buckets).fill(0))
+    target.get(t.userId)[idx] += taskMins(t)
   }
 
   const key = daily ? 'date' : 'weekStart'
-  const history = new Map()
-  for (const [uid, mins] of minsByUser) {
-    history.set(uid, mins.map((m, i) => ({ [key]: labels[i], hours: Math.round(m / 60 * 10) / 10 })))
-  }
-  return { history, labels, key }
+  const toSeries = mins => mins.map((m, i) => ({ [key]: labels[i], hours: Math.round(m / 60 * 10) / 10 }))
+  const history      = new Map()
+  const agentHistory = new Map()
+  for (const [uid, mins] of minsByUser)      history.set(uid, toSeries(mins))
+  for (const [uid, mins] of agentMinsByUser) agentHistory.set(uid, toSeries(mins))
+  return { history, agentHistory, labels, key }
 }
 
 // Umbrales para clasificar el estado de cada miembro (determinístico, sin IA).
@@ -496,6 +504,9 @@ function computeBenchmark(statsMap) {
     tareasPorDia:   median(members.map(s => s.current.tareasPorDia)),
     completed:      median(members.map(s => s.current.totalCompleted)),
     horas:          Math.round(median(members.map(s => s.current.totalMinutes)) / 60 * 10) / 10,
+    // Mediana del tiempo de los agentes del equipo — referencia al lado de las medianas
+    // humanas, que no la incluyen (el benchmark compara personas con personas).
+    agentHoras:     Math.round(median(members.map(s => s.agents?.current?.minutes ?? 0)) / 60 * 10) / 10,
     teamSize:       members.length,
   }
 }

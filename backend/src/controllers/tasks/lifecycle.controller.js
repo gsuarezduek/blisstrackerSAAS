@@ -13,6 +13,7 @@ const { startMeetingCore } = require('../calendar.controller')
 const { statusSideEffects, logEvent, loadPiece, formatPiece, emitPieceUpdated } = require('../content/_shared')
 const { taskInclude, assertNoActiveTask, handleActiveTaskConflict, requestAgentId, requestAgentName, assertOwnAgent } = require('./_shared')
 const { formatAgentName } = require('../../lib/agentTasks')
+const { getOrCreateWorkDay, rehomeToTodayData } = require('../../lib/workDay')
 const { sendPushToUser } = require('../../services/pushNotification.service')
 
 // Resuelve @menciones de un texto contra los miembros activos del workspace (cualquiera
@@ -346,7 +347,10 @@ async function startTask(req, res, next) {
     // Scopear por workspace: evita que alguien con doble membresía (frecuente en
     // una agencia que trabaja con varios workspaces de clientes) mute una tarea
     // propia de OTRO workspace solo porque el id numérico coincide.
-    const existing = await prisma.task.findFirst({ where: { id: Number(req.params.id), workDay: { workspaceId } } })
+    const existing = await prisma.task.findFirst({
+      where: { id: Number(req.params.id), workDay: { workspaceId } },
+      include: { workDay: { select: { date: true } } },
+    })
     if (!existing || existing.userId !== userId) return res.status(404).json({ error: 'Tarea no encontrada' })
     if (existing.isBacklog) return res.status(400).json({ error: 'Agregá la tarea al día primero para iniciarla.' })
     if (existing.status !== 'PENDING') return res.status(400).json({ error: 'Solo se puede iniciar una tarea pendiente.' })
@@ -383,11 +387,14 @@ async function startTask(req, res, next) {
     // agente que la toma.
     const claimAgentId = existing.isAgentTask && existing.agentId == null ? requestAgentId(req) : null
 
+    // Arrastrada de un día anterior: pasa a la jornada de hoy (ver lib/workDay.js).
+    const rehome = await rehomeToTodayData(prisma, existing, { workspaceId, tz: req.workspace.timezone })
+
     const now = new Date()
     const [task] = await prisma.$transaction([
       prisma.task.update({
         where: { id: taskId, userId },
-        data: { status: 'IN_PROGRESS', startedAt: now, ...(claimAgentId ? { agentId: claimAgentId } : {}), ...executorNameData(existing, req) },
+        data: { status: 'IN_PROGRESS', startedAt: now, ...rehome, ...(claimAgentId ? { agentId: claimAgentId } : {}), ...executorNameData(existing, req) },
         include: taskInclude,
       }),
       prisma.taskSession.create({ data: { taskId, startedAt: now } }),
@@ -465,7 +472,10 @@ async function resumeTask(req, res, next) {
     const userId = req.user.userId
     const workspaceId = req.workspace.id
 
-    const current = await prisma.task.findFirst({ where: { id: Number(req.params.id), workDay: { workspaceId } } })
+    const current = await prisma.task.findFirst({
+      where: { id: Number(req.params.id), workDay: { workspaceId } },
+      include: { workDay: { select: { date: true } } },
+    })
     if (!current || current.userId !== userId) {
       return res.status(404).json({ error: 'Tarea no encontrada' })
     }
@@ -477,11 +487,13 @@ async function resumeTask(req, res, next) {
     const pausedMs  = current.pausedAt ? now.getTime() - new Date(current.pausedAt).getTime() : 0
     const addedMins = Math.round(pausedMs / 60000)
     const taskId    = Number(req.params.id)
+    // Arrastrada de un día anterior: pasa a la jornada de hoy (ver lib/workDay.js).
+    const rehome    = await rehomeToTodayData(prisma, current, { workspaceId, tz: req.workspace.timezone })
 
     const [task] = await prisma.$transaction([
       prisma.task.update({
         where: { id: taskId },
-        data: { status: 'IN_PROGRESS', pausedAt: null, pausedMinutes: { increment: addedMins }, ...executorNameData(current, req) },
+        data: { status: 'IN_PROGRESS', pausedAt: null, pausedMinutes: { increment: addedMins }, ...rehome, ...executorNameData(current, req) },
         include: taskInclude,
       }),
       prisma.taskSession.create({ data: { taskId, startedAt: now } }),
@@ -506,9 +518,17 @@ async function completeTask(req, res, next) {
     const userId = req.user.userId
     const workspaceId = req.workspace.id
     const taskId = Number(req.params.id)
-    const existing = await prisma.task.findFirst({ where: { id: taskId, workDay: { workspaceId } } })
+    const existing = await prisma.task.findFirst({
+      where: { id: taskId, workDay: { workspaceId } },
+      include: { workDay: { select: { date: true } } },
+    })
     if (!existing || existing.userId !== userId) return res.status(404).json({ error: 'Tarea no encontrada' })
     if (existing.status !== 'IN_PROGRESS') return res.status(400).json({ error: 'Solo se puede completar una tarea en curso.' })
+
+    // Red de seguridad para la tarea que quedó IN_PROGRESS de un día previo (el cron de
+    // medianoche no la pausó, o se inició antes de este fix): se cierra en la jornada de
+    // hoy, no en la de ayer, así la cuenta el día en que efectivamente se terminó.
+    const rehome = await rehomeToTodayData(prisma, existing, { workspaceId, tz: req.workspace.timezone })
 
     const now    = new Date()
     const [task] = await prisma.$transaction([
@@ -516,7 +536,7 @@ async function completeTask(req, res, next) {
         where:   { id: taskId, userId },
         // createdByAgentSeenAt: null → si la creó un agente, le queda la novedad en su
         // bandeja (GET /tasks/agent-updates), también si se completa de nuevo.
-        data:    { status: 'COMPLETED', completedAt: now, pausedAt: null, createdByAgentSeenAt: null, ...executorNameData(existing, req) },
+        data:    { status: 'COMPLETED', completedAt: now, pausedAt: null, createdByAgentSeenAt: null, ...rehome, ...executorNameData(existing, req) },
         include: taskInclude,
       }),
       prisma.taskSession.updateMany({ where: { taskId, endedAt: null }, data: { endedAt: now } }),
@@ -681,7 +701,10 @@ async function unblockTask(req, res, next) {
     const userId = req.user.userId
     const workspaceId = req.workspace.id
 
-    const current = await prisma.task.findFirst({ where: { id: Number(req.params.id), workDay: { workspaceId } } })
+    const current = await prisma.task.findFirst({
+      where: { id: Number(req.params.id), workDay: { workspaceId } },
+      include: { workDay: { select: { date: true } } },
+    })
     if (!current || current.userId !== userId) {
       return res.status(404).json({ error: 'Tarea no encontrada' })
     }
@@ -693,11 +716,13 @@ async function unblockTask(req, res, next) {
     const blockedMs = current.pausedAt ? now.getTime() - new Date(current.pausedAt).getTime() : 0
     const addedMins = Math.round(blockedMs / 60000)
     const taskId    = Number(req.params.id)
+    // Arrastrada de un día anterior: pasa a la jornada de hoy (ver lib/workDay.js).
+    const rehome    = await rehomeToTodayData(prisma, current, { workspaceId, tz: req.workspace.timezone })
 
     const [task] = await prisma.$transaction([
       prisma.task.update({
         where: { id: taskId },
-        data: { status: 'IN_PROGRESS', blockedReason: null, pausedAt: null, pausedMinutes: { increment: addedMins } },
+        data: { status: 'IN_PROGRESS', blockedReason: null, pausedAt: null, pausedMinutes: { increment: addedMins }, ...rehome },
         include: taskInclude,
       }),
       prisma.taskSession.create({ data: { taskId, startedAt: now } }),
@@ -794,17 +819,7 @@ async function editTask(req, res, next) {
         data.agentId = null
         data.agentName = null
       }
-      const today = todayString(tz)
-      const wdKey = { userId_workspaceId_date: { userId: newUserId, workspaceId, date: today } }
-      let workDay = await prisma.workDay.findUnique({ where: wdKey })
-      if (!workDay) {
-        try {
-          workDay = await prisma.workDay.create({ data: { userId: newUserId, workspaceId, date: today } })
-        } catch (createErr) {
-          if (createErr.code === 'P2002') workDay = await prisma.workDay.findUnique({ where: wdKey })
-          else throw createErr
-        }
-      }
+      const workDay = await getOrCreateWorkDay(prisma, { userId: newUserId, workspaceId, date: todayString(tz) })
       if (workDay) data.workDayId = workDay.id
     }
 
@@ -1000,12 +1015,23 @@ async function remove(req, res, next) {
   }
 }
 
+const MAX_TASK_OVERRIDE_MINS = 1440 // 24h — ver setDuration
+
 async function setDuration(req, res, next) {
   try {
     const id = Number(req.params.id)
     const { minutes } = req.body
     if (!Number.isInteger(minutes) || minutes < 0) {
       return res.status(400).json({ error: 'minutes debe ser un entero mayor o igual a 0' })
+    }
+    // Tope duro de un día. `minutesOverride` es la única vía por la que un agente de IA
+    // registra su tiempo (task_set_duration), y ese tiempo ahora se le muestra al cliente
+    // y consume las horas contratadas del proyecto — un valor absurdo (segundos pasados
+    // como minutos, o una alucinación) no puede entrar. `taskMins` no lo puede atajar:
+    // su tope de 8h aplica solo a la rama sin override, y bajarlo en lectura cambiaría
+    // también las duraciones que las personas editan a mano con el mismo campo.
+    if (minutes > MAX_TASK_OVERRIDE_MINS) {
+      return res.status(400).json({ error: `La duración no puede superar ${MAX_TASK_OVERRIDE_MINS} minutos (24 horas)` })
     }
     // Scopear por workspace: evita editar la duración de tareas de otros workspaces vía ID.
     const task = await prisma.task.findFirst({ where: { id, workDay: { workspaceId: req.workspace.id } } })

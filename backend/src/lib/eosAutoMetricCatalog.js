@@ -24,7 +24,7 @@ const EOS_AUTO_METRICS = {
     unit:          '%',
     lowerIsBetter: false,           // más es mejor
     frequency:     'weekly',
-    description:   'Horas trabajadas del equipo sobre horas disponibles (según el horario cargado de cada uno). Solo cuenta a quienes tienen horario. La tarjeta muestra el top 3 que menos aprovecharon sus horas.',
+    description:   'Horas trabajadas del equipo sobre horas disponibles (según el horario cargado de cada uno). Solo cuenta a quienes tienen horario. Mide SOLO horas de personas: el tiempo de los agentes de IA se muestra al lado como referencia (cuenta como horas del proyecto frente al cliente, pero no como ocupación del equipo). La tarjeta muestra el top 3 que menos aprovecharon sus horas.',
   },
   todos_completados: {
     key:           'todos_completados',
@@ -48,7 +48,7 @@ const EOS_AUTO_METRICS = {
     unit:          null,            // conteo
     lowerIsBetter: false,           // más es mejor
     frequency:     'weekly',
-    description:   'Tareas que completaron los agentes de IA del equipo en la semana (por fecha de completado) — aparte del ranking de personas, nunca suma a "Tareas completadas". La tarjeta muestra el top 3 de agentes que más completaron.',
+    description:   'Tareas que completaron los agentes de IA del equipo en la semana (por fecha de completado), con el tiempo que registraron — fila separada a propósito: no suma a "Tareas completadas", que es el ranking de personas. Ese tiempo sí cuenta como horas del proyecto frente al cliente. La tarjeta muestra el top 3 de agentes que más completaron.',
   },
   propuestas_enviadas: {
     key:           'propuestas_enviadas',
@@ -74,7 +74,7 @@ const EOS_AUTO_METRICS = {
     unit:          '%',
     lowerIsBetter: false,
     frequency:     'monthly',
-    description:   'Ocupación del equipo del mes cerrado (Σ horas trabajadas ÷ Σ horas disponibles, ponderada). Es el "Δ horas del equipo" de Productividad. La tarjeta muestra el top 3 que menos aprovecharon sus horas.',
+    description:   'Ocupación del equipo del mes cerrado (Σ horas trabajadas ÷ Σ horas disponibles, ponderada). Es el "Δ horas del equipo" de Productividad. Mide SOLO horas de personas; el tiempo de los agentes de IA va al lado como referencia. La tarjeta muestra el top 3 que menos aprovecharon sus horas.',
   },
   proyectos_nuevos: {
     key:           'proyectos_nuevos',

@@ -1,6 +1,7 @@
 const prisma = require('../../lib/prisma')
 const { todayString } = require('../../utils/dates')
 const { taskInclude, handleActiveTaskConflict } = require('./_shared')
+const { getOrCreateWorkDay } = require('../../lib/workDay')
 
 async function starTask(req, res, next) {
   try {
@@ -32,16 +33,7 @@ async function starTask(req, res, next) {
     if (nextLevel === 0 && task.status === 'PENDING' && !task.isBacklog) {
       const date = todayString(req.workspace.timezone)
       if (task.workDay && task.workDay.date < date) {
-        const wdKey = { userId_workspaceId_date: { userId, workspaceId, date } }
-        let workDay = await prisma.workDay.findUnique({ where: wdKey })
-        if (!workDay) {
-          try {
-            workDay = await prisma.workDay.create({ data: { userId, workspaceId, date } })
-          } catch (createErr) {
-            if (createErr.code === 'P2002') workDay = await prisma.workDay.findUnique({ where: wdKey })
-            else throw createErr
-          }
-        }
+        const workDay = await getOrCreateWorkDay(prisma, { userId, workspaceId, date })
         if (workDay) data.workDayId = workDay.id
       }
     }
@@ -84,19 +76,7 @@ async function addToToday(req, res, next) {
       )
     }
 
-    const wdKey2 = { userId_workspaceId_date: { userId, workspaceId, date } }
-    let workDay = await prisma.workDay.findUnique({ where: wdKey2 })
-    if (!workDay) {
-      try {
-        workDay = await prisma.workDay.create({ data: { userId, workspaceId, date } })
-      } catch (createErr) {
-        if (createErr.code === 'P2002') {
-          workDay = await prisma.workDay.findUnique({ where: wdKey2 })
-        } else {
-          throw createErr
-        }
-      }
-    }
+    const workDay = await getOrCreateWorkDay(prisma, { userId, workspaceId, date })
 
     if (!workDay) {
       return res.status(500).json({ error: 'No se pudo obtener la jornada laboral. Recargá la página.' })
@@ -128,16 +108,7 @@ async function bringToToday(req, res, next) {
     if (!task.scheduledFor) return res.status(400).json({ error: 'La tarea no es futura.' })
 
     const date = todayString(tz)
-    const wdKey = { userId_workspaceId_date: { userId, workspaceId, date } }
-    let workDay = await prisma.workDay.findUnique({ where: wdKey })
-    if (!workDay) {
-      try {
-        workDay = await prisma.workDay.create({ data: { userId, workspaceId, date } })
-      } catch (createErr) {
-        if (createErr.code === 'P2002') workDay = await prisma.workDay.findUnique({ where: wdKey })
-        else throw createErr
-      }
-    }
+    const workDay = await getOrCreateWorkDay(prisma, { userId, workspaceId, date })
     if (!workDay) return res.status(500).json({ error: 'No se pudo obtener la jornada laboral. Recargá la página.' })
 
     const updated = await prisma.task.update({

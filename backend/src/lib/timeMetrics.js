@@ -111,21 +111,66 @@ function daysAgo(n, tz) {
   return date.toISOString().slice(0, 10)
 }
 
-// Filtra por completedAt usando el timezone del workspace. Devuelve un objeto
-// { gte?, lte? } listo para usar en un where de Prisma sobre un campo DateTime.
-function buildCompletedAtWhere(from, to, tz = DEFAULT_TZ) {
-  // Obtener el offset UTC para la timezone dada (aproximación para ART y similares)
-  const testDate = new Date(`${from}T12:00:00Z`)
-  const localStr = testDate.toLocaleDateString('en-CA', { timeZone: tz })
-  const offsetMs = new Date(`${localStr}T12:00:00Z`) - testDate
-  const offsetH  = -Math.round(offsetMs / 3600000)
-  const sign     = offsetH <= 0 ? '+' : '-'
-  const pad      = String(Math.abs(offsetH)).padStart(2, '0')
-  const tzStr    = `${sign}${pad}:00`
+// Offset de una timezone, en minutos, EN UN INSTANTE DADO (positivo al este de UTC).
+// Formatea la hora de pared de la zona y la re-interpreta como UTC: la diferencia contra
+// el instante real es el offset. Es date-aware a propósito — una zona con horario de
+// verano no tiene un offset fijo, y un rango de meses puede cruzar el cambio.
+function tzOffsetMinutes(date, tz) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: tz, hour12: false,
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+  }).formatToParts(date)
+  const p = {}
+  for (const { type, value } of parts) p[type] = value
+  // hour12:false devuelve '24' para la medianoche en algunas versiones de Node/ICU.
+  const hour = p.hour === '24' ? '00' : p.hour
+  const asUtc = Date.UTC(+p.year, +p.month - 1, +p.day, +hour, +p.minute, +p.second)
+  return Math.round((asUtc - date.getTime()) / 60000)
+}
 
+// Instante UTC de una hora de pared ("YYYY-MM-DD" + h/m/s/ms) en una timezone.
+// Resuelve el offset en dos pasadas (el ajuste puede cruzar un cambio de horario de
+// verano) y después se queda con el candidato que REALMENTE dice la hora pedida en esa
+// zona. Los dos casos límite importan en zonas que cambian la hora a medianoche (Chile,
+// Paraguay, Cuba), justo donde caen los bordes de un día:
+//   - hora repetida (el reloj atrasa): se toma la primera vez que ocurre;
+//   - hora inexistente (el reloj adelanta): se toma el primer instante que sí existe ese
+//     día — si no, el día arrancaría antes de su medianoche y se solaparía con el anterior,
+//     contando dos veces una hora de trabajo.
+function zonedTimeToUtc(dateStr, tz, { h = 0, m = 0, s = 0, ms = 0 } = {}) {
+  const [y, mo, d] = dateStr.split('-').map(Number)
+  const naive = Date.UTC(y, mo - 1, d, h, m, s, ms)   // la hora local leída como si fuera UTC
+  const off1 = tzOffsetMinutes(new Date(naive), tz)
+  const c1   = new Date(naive - off1 * 60000)
+  const off2 = tzOffsetMinutes(c1, tz)
+  if (off2 === off1) return c1                        // caso normal: sin cambio de offset
+  const c2 = new Date(naive - off2 * 60000)
+  // La hora de pared de un instante `c` es la pedida si y solo si offset(c) == naive - c.
+  const fits = c => tzOffsetMinutes(c, tz) === Math.round((naive - c.getTime()) / 60000)
+  const ok1 = fits(c1), ok2 = fits(c2)
+  if (ok1 && ok2) return new Date(Math.min(c1.getTime(), c2.getTime()))
+  if (ok1) return c1
+  if (ok2) return c2
+  return new Date(Math.max(c1.getTime(), c2.getTime()))
+}
+
+// Filtra por completedAt usando el timezone del workspace: el rango abarca el día local
+// completo, de 00:00:00.000 a 23:59:59.999. Devuelve { gte?, lte? } listo para un where
+// de Prisma sobre un campo DateTime. Cada borde se resuelve por separado, así un rango
+// abierto de un solo lado funciona (antes, sin `from`, el `lte` salía Invalid Date).
+//
+// La versión anterior intentaba derivar un offset fijo comparando `${from}T12:00:00Z`
+// contra la fecha local de ESE MISMO instante: dos valores idénticos por construcción en
+// toda zona donde el mediodía UTC cae en la misma fecha local, así que el offset salía 0
+// y el rango terminaba siendo el día UTC. En ART (UTC-3) eso atribuía lo completado entre
+// las 21:00 y las 23:59 al día siguiente, y en la pestaña Horas del proyecto el trabajo
+// de la noche del último día del mes se perdía de los dos meses (quedaba fuera del rango
+// de la query, y el bucketing por `monthStringInTz` no tenía dónde ponerlo).
+function buildCompletedAtWhere(from, to, tz = DEFAULT_TZ) {
   const range = {}
-  if (from) range.gte = new Date(`${from}T00:00:00${tzStr}`)
-  if (to)   range.lte = new Date(`${to}T23:59:59${tzStr}`)
+  if (from) range.gte = zonedTimeToUtc(from, tz)
+  if (to)   range.lte = zonedTimeToUtc(to, tz, { h: 23, m: 59, s: 59, ms: 999 })
   return range
 }
 
@@ -151,6 +196,7 @@ function fmtMins(m) {
 }
 
 module.exports = {
-  tzOffsetStr, getNWeeksAgoMonday, getProductivityPeriod, daysAgo, taskMins, fmtMins,
+  tzOffsetStr, tzOffsetMinutes, zonedTimeToUtc,
+  getNWeeksAgoMonday, getProductivityPeriod, daysAgo, taskMins, fmtMins,
   addDays, businessDaysBetween, buildCompletedAtWhere, monthStringInTz, daysBetweenInclusive,
 }

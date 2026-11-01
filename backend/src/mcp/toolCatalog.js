@@ -629,7 +629,7 @@ const tools = [
   },
   {
     name: 'tasks_agent_updates',
-    description: 'Tus novedades: tareas que VOS creaste (para la persona o para otro miembro) y que alguien completó desde la última vez que miraste — con quién la completó, cuándo, cuánto tiempo llevó y los últimos comentarios (muchas veces el resultado está ahí). Revisala al empezar a trabajar. Cada novedad aparece una sola vez: se marca como vista al devolverla (markSeen: false para solo mirar). Si declarás tu agentName, trae solo las que creaste con ese nombre.',
+    description: 'Tus novedades — revisala al empezar a trabajar: no recibís avisos, así que es la única forma de enterarte de lo que pasó mientras no estabas. Cada una trae `kind`, el estado actual de la tarea y sus últimos comentarios. `completed` = una tarea que VOS creaste la completó alguien (quién, cuándo, cuánto llevó; muchas veces el resultado está en los comentarios) — si declarás tu agentName, solo las que creaste con ese nombre. `unblocked` = la persona destrabó una tarea tuya que estaba bloqueada: quedó PAUSADA, leé el comentario (ahí está la respuesta a lo que preguntaste) y retomala con `task_resume`. `comment` = te comentó algo en una tarea tuya (una indicación, una aprobación): leelo antes de seguir. Cada novedad aparece una sola vez: se marca como vista al devolverla (markSeen: false para solo mirar).',
     inputSchema: {
       markSeen: z.boolean().optional().describe('false = solo leer, sin marcarlas como vistas (default true)'),
     },
@@ -746,20 +746,20 @@ const tools = [
   },
   {
     name: 'task_block',
-    description: 'Bloquea una tarea en curso con un motivo (notifica al equipo del proyecto).',
+    description: 'Bloquea una tarea en curso con un motivo. En una tarea tuya (de agente) el aviso le llega solo a la persona dueña, que es quien te destraba: poné en el motivo exactamente qué necesitás saber o qué tiene que aprobarte. Cuando lo haga te queda como novedad en `tasks_agent_updates` (la tarea vuelve PAUSADA, no en curso). En una tarea de una persona notifica al equipo del proyecto.',
     inputSchema: { taskId: z.number().int(), reason: z.string().describe('Motivo del bloqueo') },
     request: ({ taskId, reason }) => ({ method: 'PATCH', path: `/tasks/${taskId}/block`, body: { reason } }),
   },
   {
     name: 'task_unblock',
-    description: 'Desbloquea una tarea (vuelve a IN_PROGRESS).',
+    description: 'Desbloquea una tarea y la deja en curso: usala cuando VOS resolviste lo que te frenaba. Si la destraba la persona desde la app es distinto — la tarea queda PAUSADA y te llega como novedad en `tasks_agent_updates`, para retomarla con `task_resume`.',
     inputSchema: { taskId: z.number().int() },
     request: ({ taskId }) => ({ method: 'PATCH', path: `/tasks/${taskId}/unblock` }),
   },
   {
     name: 'task_set_duration',
-    description: 'Edita el tiempo registrado de una tarea ya completada (en minutos). Solo funciona sobre tareas COMPLETED; sobreescribe el tiempo que cuenta en Reportes/Productividad.',
-    inputSchema: { taskId: z.number().int(), minutes: z.number().int().min(0).describe('Minutos totales a registrar') },
+    description: 'Edita el tiempo registrado de una tarea ya completada (en minutos). Solo funciona sobre tareas COMPLETED; sobreescribe el tiempo que cuenta en Reportes/Productividad. Tu tiempo SÍ cuenta como horas del proyecto frente al cliente: registrá minutos reales de trabajo, no estimaciones infladas. Máximo 1440 (24h).',
+    inputSchema: { taskId: z.number().int(), minutes: z.number().int().min(0).max(1440).describe('Minutos totales a registrar (máximo 1440 = 24h)') },
     request: ({ taskId, minutes }) => ({ method: 'PATCH', path: `/tasks/${taskId}/duration`, body: { minutes } }),
   },
 

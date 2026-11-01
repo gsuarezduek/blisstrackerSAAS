@@ -12,6 +12,7 @@ import { roleColor } from '../utils/roleColor'
 import { useAuth } from '../context/AuthContext'
 import { Lock, Palmtree, Bot } from 'lucide-react'
 import { Icon } from '../components/ui/Icon'
+import WorkedTime from '../components/ui/WorkedTime'
 
 const REFRESH_INTERVAL = 30 // seconds
 
@@ -175,7 +176,13 @@ function UserCard({ entry, now, onOpenUser, onOpenTask, ownUserId }) {
             </span>
           )}
         </div>
-        <span className="font-medium text-gray-600 dark:text-gray-400">{fmtMins(stats.totalMinutes)} registradas</span>
+        <WorkedTime
+          person={stats.totalMinutes}
+          agent={stats.agentMinutes}
+          label="registradas"
+          variant="inline"
+          className="font-medium text-gray-600 dark:text-gray-400"
+        />
       </div>
 
       {/* Workday elapsed */}

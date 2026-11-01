@@ -1,6 +1,7 @@
 const prisma = require('../../lib/prisma')
 const { computeObjectives } = require('../marketingObjectives.service')
 const { prevMonthStr, prevMonthsArr, monthsInRange } = require('../../lib/monthUtils')
+const { taskMins } = require('../../lib/timeMetrics')
 const { resolveReportPeriod, buildPeriodMeta } = require('./_shared')
 const { buildInstagramSection, buildCompetitorComparison } = require('./sectionBuilders/instagram')
 const { buildTikTokSection } = require('./sectionBuilders/tiktok')
@@ -237,8 +238,8 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
     }),
 
     // Tasks COMPLETED en el mes — también las que ejecutaron agentes de IA (Task.isAgentTask):
-    // son trabajo hecho para el cliente y se muestran, pero el frontend las rotula
-    // "Agente de <dueño>" y sin duración (su tiempo no son horas de una persona).
+    // para el cliente son trabajo hecho, sin distinguir quién lo ejecutó, así que van con
+    // el nombre de la persona responsable y con su duración, igual que las humanas.
     prisma.task.findMany({
       where: {
         projectId,
@@ -367,7 +368,13 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
   const keywords = buildKeywordsSection(allKeywords, dataMonth, prev)
 
   // ── Tasks completadas ────────────────────────────────────────────────────────
-  const tasks = completedTasks.length > 0 ? completedTasks : null
+  // `minutes` resuelto acá con taskMins (la misma fuente que las horas usadas vs
+  // contratadas): así el minuto que ve el cliente es exactamente el que consume su
+  // presupuesto. Los informes con `dataCache` escrito antes de esto no lo traen y el
+  // frontend cae a su propio cálculo hasta que se regeneren.
+  const tasks = completedTasks.length > 0
+    ? completedTasks.map(t => ({ ...t, minutes: taskMins(t) }))
+    : null
 
   // ── Servicios del proyecto ────────────────────────────────────────────────────
   const services = project?.services?.map(ps => ps.service.name) ?? []

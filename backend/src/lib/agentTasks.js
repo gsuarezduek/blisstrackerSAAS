@@ -26,6 +26,75 @@ function isPresenceTask(t) {
   return !t.isAgentTask && t.createdByAgentId == null
 }
 
+// ── Tiempo de personas vs tiempo de agentes, en el mismo agregado ──────────────
+// El tiempo de un agente ES tiempo trabajado: se le informa al cliente como trabajo
+// hecho y consume las horas contratadas del proyecto. Pero internamente se muestra
+// siempre separado del de la persona, y las métricas con las que se la evalúa
+// (ocupación, benchmark) siguen siendo solo humanas. Para eso, en vez de dos queries
+// espejo, se hace UNA sin filtro de ejecutor y se parte acá: las dos mitades salen del
+// mismo `where`, el mismo rango y la misma timezone, así no pueden divergir y el total
+// combinado es por construcción `totalMinutes + agentMinutes`.
+//
+// Convención de nombres (la que ya usaban Reportes y la pestaña Horas del proyecto):
+//   totalMinutes / taskCount  → PERSONAS
+//   agentMinutes / agentTasks → AGENTES
+// El combinado y el % de presupuesto los arma quien pinta (frontend/src/utils/budget.js):
+// el backend manda los dos hechos, la política de "qué consume presupuesto" vive en un
+// solo lugar del frontend.
+
+// Lo mínimo que tiene que traer el `select` para poder partir y calcular minutos.
+const EXECUTOR_TASK_SELECT = Object.freeze({
+  startedAt: true, completedAt: true, pausedMinutes: true, minutesOverride: true, isAgentTask: true,
+})
+
+function emptyExecutorSplit() {
+  return { totalMinutes: 0, taskCount: 0, agentMinutes: 0, agentTasks: 0 }
+}
+
+// Acumula una tarea en un bucket con la convención de arriba y devuelve
+// `{ mins, isAgent }` para que el caller siga con su propio detalle (por usuario, por
+// proyecto, por agente) sin recalcular los minutos.
+function addExecutorMinutes(bucket, task) {
+  const mins = taskMins(task)
+  const isAgent = !!task.isAgentTask
+  if (isAgent) {
+    bucket.agentMinutes += mins
+    bucket.agentTasks   += 1
+  } else {
+    bucket.totalMinutes += mins
+    bucket.taskCount    += 1
+  }
+  return { mins, isAgent }
+}
+
+// Totales planos de una lista ya traída, para el caso sin agrupar.
+function splitByExecutor(tasks) {
+  const bucket = emptyExecutorSplit()
+  for (const t of tasks) addExecutorMinutes(bucket, t)
+  return bucket
+}
+
+// Detalle por agente de una lista de tareas de agente: una fila por token + nombre
+// declarado (varios agentes pueden compartir un token, ver `formatAgentName`).
+function agentDetail(tasks) {
+  const byKey = {}
+  for (const t of tasks) {
+    if (!t.isAgentTask) continue
+    const declared = t.agentName?.trim() || null
+    const key = `${t.agent?.id ?? 0}|${declared ?? ''}`
+    byKey[key] ??= {
+      agentId: t.agent?.id ?? null,
+      agentName: declared,
+      name: t.agent ? formatAgentName(t.agent, declared) : (declared ? `Agente eliminado · ${declared}` : 'Agente eliminado'),
+      minutes: 0,
+      taskCount: 0,
+    }
+    byKey[key].minutes   += taskMins(t)
+    byKey[key].taskCount += 1
+  }
+  return Object.values(byKey).sort((a, b) => b.minutes - a.minutes)
+}
+
 // Stats de los agentes de UNA persona en un período (actual vs previo, mismo criterio
 // que las de la persona: tareas completadas por fecha de completado, minutos con
 // taskMins). `tasks`: tareas de agente COMPLETADAS con completedDate ("YYYY-MM-DD"),
@@ -84,4 +153,7 @@ function formatAgentName(agent, declaredName) {
   return declared && declared !== base ? `${base} · ${declared}` : base
 }
 
-module.exports = { HUMAN_TASK_WHERE, PRESENCE_WORKDAY_WHERE, isPresenceTask, computeAgentStats, formatAgentName }
+module.exports = {
+  HUMAN_TASK_WHERE, PRESENCE_WORKDAY_WHERE, isPresenceTask, computeAgentStats, formatAgentName,
+  EXECUTOR_TASK_SELECT, emptyExecutorSplit, addExecutorMinutes, splitByExecutor, agentDetail,
+}

@@ -39,6 +39,11 @@ async function buildWorkspaceDigest(workspace) {
       hours: Math.round(s.current.totalMinutes / 60 * 10) / 10,
       tareasPct: s.delta.tareasPct,
       stuckTasks: s.stuckTasks,
+      // Referencia al trabajo de sus agentes de IA: el criterio de alerta (memberStatus)
+      // sigue mirando solo lo de la persona, pero quien lee el aviso tiene que poder ver
+      // si hay agentes activos detrás de esa persona antes de sacar conclusiones.
+      agentHours: Math.round((s.agents?.current?.minutes ?? 0) / 60 * 10) / 10,
+      agentCompleted: s.agents?.current?.completed ?? 0,
     })
   }
   flagged.sort((a, b) => ALERT_ORDER[a.status] - ALERT_ORDER[b.status])

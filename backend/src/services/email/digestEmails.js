@@ -1,7 +1,10 @@
 const { resend, getEmailFrom, emailShell, logEmail, escHtml } = require('./_shared')
 
 // Aviso semanal de Productividad a admins/owners: lista de personas en alerta.
-// digest = { flagged: [{ name, role, statusLabel, status, completed, hours, tareasPct, stuckTasks }], period }
+// digest = { flagged: [{ name, role, statusLabel, status, completed, hours, tareasPct, stuckTasks,
+//                        agentHours, agentCompleted }], period }
+// `hours` son las horas de la PERSONA (el criterio de alerta mira solo esas);
+// `agentHours` es la referencia de lo que hicieron sus agentes de IA.
 async function sendProductivityDigestEmail(emails, workspaceName, digest, appUrl, workspaceId, { isTest = false } = {}) {
   const from = await getEmailFrom(workspaceId)
   const n = digest.flagged.length
@@ -29,7 +32,7 @@ async function sendProductivityDigestEmail(emails, workspaceName, digest, appUrl
       </td>
       <td style="padding:10px 0;border-top:1px solid #f1f5f9;text-align:right;white-space:nowrap;vertical-align:top;">
         <span style="display:inline-block;background:${STATUS_COLOR[f.status]}1a;color:${STATUS_COLOR[f.status]};font-size:12px;font-weight:600;padding:2px 8px;border-radius:999px;">${f.statusLabel}</span>
-        <br><span style="color:#94a3b8;font-size:12px;">${f.completed}t · ${f.hours}h</span>
+        <br><span style="color:#94a3b8;font-size:12px;">${f.completed}t · ${f.hours}h${f.agentHours > 0 ? ` · +${f.agentHours}h de sus agentes de IA` : ''}</span>
       </td>
     </tr>`).join('')
 

@@ -6,6 +6,8 @@ import UserLink from '../../components/UserLink'
 import RoleBadge from '../../components/RoleBadge'
 import { linkify } from '../../utils/linkify'
 import { fmtMins, activeMinutes } from '../../utils/format'
+import { deriveBudget, budgetColor } from '../../utils/budget'
+import WorkedTime from '../../components/ui/WorkedTime'
 import { Card, CardHeader, TextButton, Avatar, EmptyNote } from './ui'
 import { Repeat, Bot } from 'lucide-react'
 import { Icon } from '../../components/ui/Icon'
@@ -51,7 +53,7 @@ function TaskLine({ task, user, onOpen, tone = 'default' }) {
 // Horas registradas en el mes vs. horas contratadas (100%, sin ponderar por días
 // transcurridos — mismo criterio que Reportes). Muestra también el avance del mes
 // para leer si el ritmo es razonable.
-function HoursCard({ projectId, timezone, goTab, openMins = 0 }) {
+function HoursCard({ projectId, timezone, goTab, openMins = 0, openAgentMins = 0 }) {
   const [state, setState] = useState({ loading: true })
 
   useEffect(() => {
@@ -68,21 +70,32 @@ function HoursCard({ projectId, timezone, goTab, openMins = 0 }) {
   if (state.error || !state.month) return null
 
   const { project, month } = state
-  const budget = project?.hoursEnabled && month.monthlyHours != null ? month.monthlyHours : null
-  const pct = budget ? Math.round((month.totalMinutes / (budget * 60)) * 100) : null
+  // Horas usadas = personas + agentes de IA (utils/budget.js, misma política que Reportes).
+  const b = deriveBudget({
+    hoursEnabled: project?.hoursEnabled,
+    monthlyHours: month.monthlyHours,
+    totalMinutes: month.totalMinutes,
+    agentMinutes: month.agentMinutes,
+  })
+  const budget = b.useBudget ? month.monthlyHours : null
+  const pct = b.pctRaw != null ? Math.round(b.pctRaw) : null
   const today = new Date().toLocaleDateString('en-CA', { timeZone: timezone || 'America/Argentina/Buenos_Aires' })
   const [y, m, d] = today.split('-').map(Number)
   const monthPct = Math.round((d / new Date(y, m, 0).getDate()) * 100)
-  const barColor = pct == null ? 'bg-primary-500' : pct > 100 ? 'bg-red-500' : pct >= 80 ? 'bg-amber-400' : 'bg-primary-500'
+  const barColor = budgetColor(b.pctRaw)
 
   return (
     <Card>
       <CardHeader title={`Horas · ${month.label}`} action={<TextButton onClick={() => goTab('horas')}>Ver detalle</TextButton>} />
       <div className="px-4 pb-4">
-        <p className="text-2xl font-bold text-gray-900 dark:text-white tabular-nums">
-          {fmtMins(month.totalMinutes) || '0m'}
-          {budget != null && <span className="text-sm font-medium text-gray-500 dark:text-gray-400"> / {budget}h</span>}
-        </p>
+        <div className="text-gray-900 dark:text-white">
+          <WorkedTime
+            person={month.totalMinutes}
+            agent={month.agentMinutes}
+            variant="hero"
+            label={budget != null ? `/ ${budget}h` : null}
+          />
+        </div>
         {budget != null ? (
           <>
             <div className="relative mt-3 h-2 rounded-full bg-gray-100 dark:bg-gray-700 overflow-hidden">
@@ -100,9 +113,11 @@ function HoursCard({ projectId, timezone, goTab, openMins = 0 }) {
             {month.taskCount} tarea{month.taskCount !== 1 ? 's' : ''} completada{month.taskCount !== 1 ? 's' : ''} este mes
           </p>
         )}
-        {openMins > 0 && (
+        {openMins + openAgentMins > 0 && (
           <p className="mt-2 text-xs text-gray-500 dark:text-gray-400" title="Las horas se registran al completar cada tarea, igual que en Reportes">
-            + {fmtMins(openMins)} en tareas abiertas · se suman al completarlas
+            + {fmtMins(openMins + openAgentMins)} en tareas abiertas
+            {openAgentMins > 0 && ` (personas ${fmtMins(openMins)} · agentes ${fmtMins(openAgentMins)})`}
+            {' '}· se suman al completarlas
           </p>
         )}
       </div>
@@ -258,8 +273,11 @@ export default function OverviewTab({ data, encodedId, authUser, onOpenComments,
   const members = (project.members ?? []).map(pm => pm.user)
   const links = project.linksEnabled !== false ? (project.links ?? []) : []
   const services = (project.services ?? []).map(ps => ps.service)
-  // Solo tareas de personas: las horas del proyecto no cuentan el tiempo de los agentes de IA.
-  const openMins = rows.filter(r => !r.task.isAgentTask).reduce((sum, r) => sum + activeMinutes(r.task), 0)
+  // Tiempo que todavía no se registró (se registra al completar), partido en las dos
+  // mitades: las dos suman a las horas del proyecto, pero se muestran por separado.
+  const sumOpen = list => list.reduce((sum, r) => sum + activeMinutes(r.task), 0)
+  const openMins      = sumOpen(rows.filter(r => !r.task.isAgentTask))
+  const openAgentMins = sumOpen(rows.filter(r => r.task.isAgentTask))
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
@@ -305,7 +323,7 @@ export default function OverviewTab({ data, encodedId, authUser, onOpenComments,
 
       {/* Columna lateral */}
       <aside className="space-y-4 min-w-0">
-        <HoursCard projectId={project.id} timezone={project.timezone} goTab={goTab} openMins={openMins} />
+        <HoursCard projectId={project.id} timezone={project.timezone} goTab={goTab} openMins={openMins} openAgentMins={openAgentMins} />
 
         {contentEnabled && <ContentCard projectId={project.id} />}
 

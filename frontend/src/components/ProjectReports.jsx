@@ -4,6 +4,8 @@ import LoadingSpinner from './LoadingSpinner'
 import RoleBadge from './RoleBadge'
 import { linkify } from '../utils/linkify'
 import { fmtMins } from '../utils/format'
+import { deriveBudget } from '../utils/budget'
+import WorkedTime from './ui/WorkedTime'
 import { Bot, ChartColumn, Pencil } from 'lucide-react'
 import { Icon } from './ui/Icon'
 
@@ -16,22 +18,15 @@ const STATUS_META = {
   near: { label: 'Cerca del límite',  cls: 'bg-yellow-100 text-yellow-800 border-yellow-300 dark:bg-yellow-900/30 dark:text-yellow-400 dark:border-yellow-800' },
 }
 
+// El consumo (persona + agentes de IA) sale de utils/budget.js, igual que en Reportes,
+// contra las horas contratadas VIGENTES EN ESE MES (m.monthlyHours ya viene historizado).
 function deriveMonthStatus(m, project) {
-  const useBudget = project.hoursEnabled && m.monthlyHours != null
-  const noBudget  = project.hoursEnabled && m.monthlyHours == null
-  const budgetMins = useBudget ? m.monthlyHours * 60 : 0
-  const pctRaw = useBudget ? (budgetMins > 0 ? (m.totalMinutes / budgetMins) * 100 : 0) : null
-
-  let status = 'untracked'
-  if (noBudget) status = 'noBudget'
-  else if (useBudget) {
-    if (m.totalMinutes === 0) status = 'noActivity'
-    else if (pctRaw > 100) status = 'over'
-    else if (pctRaw >= 80) status = 'near'
-    else status = 'onTrack'
-  }
-
-  return { ...m, useBudget, noBudget, pctRaw, status }
+  return { ...m, ...deriveBudget({
+    hoursEnabled: project.hoursEnabled,
+    monthlyHours: m.monthlyHours,
+    totalMinutes: m.totalMinutes,
+    agentMinutes: m.agentMinutes,
+  }) }
 }
 
 // "YYYY-MM" del día de hoy en una timezone dada.
@@ -158,7 +153,9 @@ function HoursLineChart({ points }) {
   const svgRef = useRef(null)
 
   const n = points.length
-  const hoursByMonth = points.map(p => p.totalMinutes / 60)
+  // Horas USADAS (personas + agentes): si graficara solo las humanas, el chart
+  // contradiría el número y el % de cada fila.
+  const hoursByMonth = points.map(p => p.usedMinutes / 60)
   // null en los meses sin presupuesto (hoursEnabled apagado o sin monthlyHours ese mes).
   const budgetSeries = points.map(p => (p.useBudget ? p.monthlyHours : null))
   const hasAnyBudget = budgetSeries.some(v => v != null)
@@ -338,9 +335,7 @@ export default function ProjectReports({ projectId }) {
 
   // Horas contratadas que quedan por usar este mes (puede ser negativo = excedido).
   const currentMonthEntry = enriched.find(m => m.month === currentMonth)
-  const remainingHours = currentMonthEntry?.useBudget
-    ? currentMonthEntry.monthlyHours - currentMonthEntry.totalMinutes / 60
-    : null
+  const remainingHours = currentMonthEntry?.useBudget ? currentMonthEntry.remainingHours : null
 
   function toggleMonth(key) {
     setExpandedMonth(expandedMonth === key ? null : key)
@@ -379,9 +374,14 @@ export default function ProjectReports({ projectId }) {
                             label="Horas disponibles este mes"
               value={`${remainingHours < 0 ? '−' : ''}${Math.abs(Math.round(remainingHours * 10) / 10)}h`}
               valueClassName={remainingHours < 0 ? 'text-red-600 dark:text-red-400' : undefined}
-              sub={remainingHours < 0
-                ? `Superaste las ${currentMonthEntry.monthlyHours}h contratadas`
-                : `de ${currentMonthEntry.monthlyHours}h contratadas`}
+              sub={[
+                remainingHours < 0
+                  ? `Superaste las ${currentMonthEntry.monthlyHours}h contratadas`
+                  : `de ${currentMonthEntry.monthlyHours}h contratadas`,
+                currentMonthEntry.hasAgent
+                  ? `incluye ${fmtMins(currentMonthEntry.agentMinutes)} de agentes de IA`
+                  : null,
+              ].filter(Boolean).join(' · ')}
             />
           )}
         </div>
@@ -390,8 +390,8 @@ export default function ProjectReports({ projectId }) {
       <div className="space-y-3">
         {enriched.map(m => {
           const { useBudget, noBudget, pctRaw, status } = m
-          const maxMinutes = Math.max(1, ...enriched.map(x => x.totalMinutes))
-          const pct = pctRaw != null ? Math.min(100, pctRaw) : (m.totalMinutes / maxMinutes) * 100
+          const maxMinutes = Math.max(1, ...enriched.map(x => x.usedMinutes))
+          const pct = pctRaw != null ? Math.min(100, pctRaw) : (m.usedMinutes / maxMinutes) * 100
           const barColor = status === 'over' ? 'bg-red-500' : status === 'near' ? 'bg-yellow-500' : 'bg-primary-500'
           const statusBadge = STATUS_META[status]
           const isCurrentMonth = m.month === currentMonth
@@ -412,8 +412,8 @@ export default function ProjectReports({ projectId }) {
                     {m.taskCount} tarea{m.taskCount !== 1 ? 's' : ''}
                   </span>
                 {m.agentTasks > 0 && (
-                  <span className="inline-flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400 shrink-0" title="Tareas completadas por agentes de IA: no suman a las horas de personas">
-                    <Icon as={Bot} size={12} />{m.agentTasks}
+                  <span className="inline-flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400 shrink-0" title="Tareas completadas por agentes de IA (su tiempo suma a las horas del proyecto)">
+                    <Icon as={Bot} size={12} />{m.agentTasks} de agentes
                   </span>
                 )}
                   {statusBadge && (
@@ -421,7 +421,11 @@ export default function ProjectReports({ projectId }) {
                   )}
                 </div>
                 <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-                  <span className="font-bold text-primary-600">{fmtMins(m.totalMinutes)}</span>
+                  <WorkedTime
+                    person={m.personMinutes}
+                    agent={m.agentMinutes}
+                    className="text-right [&>span:first-child]:font-bold [&>span:first-child]:text-primary-600"
+                  />
                   {useBudget && (
                     <span className="hidden sm:inline text-xs text-gray-500 dark:text-gray-400">/ {m.monthlyHours}h contratadas</span>
                   )}

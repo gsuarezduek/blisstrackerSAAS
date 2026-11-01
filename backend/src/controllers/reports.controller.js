@@ -1,7 +1,9 @@
 const prisma = require('../lib/prisma')
 const { getProductivityPeriod, taskMins, buildCompletedAtWhere } = require('../lib/timeMetrics')
 const { DEFAULT_TZ } = require('../utils/dates')
-const { HUMAN_TASK_WHERE, formatAgentName } = require('../lib/agentTasks')
+const {
+  HUMAN_TASK_WHERE, formatAgentName, emptyExecutorSplit, addExecutorMinutes,
+} = require('../lib/agentTasks')
 const {
   getWorkspaceStats, getAttendanceStats, getHoursHistory, computeBenchmark, memberStatus, median,
 } = require('../services/productivityStats.service')
@@ -23,6 +25,10 @@ const taskSelect = {
   minutesOverride: true,
   project: { select: { id: true, name: true, hoursEnabled: true, monthlyHours: true } },
   user:    { select: { id: true, name: true } },
+  // Para partir el agregado en tiempo de personas / tiempo de agentes (ver lib/agentTasks.js)
+  isAgentTask: true,
+  agentName:   true,
+  agent:       { select: { id: true, label: true } },
 }
 
 async function byProject(req, res, next) {
@@ -33,38 +39,48 @@ async function byProject(req, res, next) {
     if (!from && !to) ({ from, to } = defaultDateRange(tz))
     const completedAtRange = buildCompletedAtWhere(from, to, tz)
 
-    // Horas usadas vs contratadas = horas de PERSONAS. Lo que hicieron los agentes de IA
-    // se informa aparte (agentTasks/agentMinutes por proyecto), nunca suma a totalMinutes.
-    const [tasks, agentTasks] = await Promise.all([
-      prisma.task.findMany({
-        where: {
-          status: 'COMPLETED',
-          startedAt: { not: null },
-          completedAt: { not: null, ...completedAtRange },
-          workDay: { workspaceId },
-          ...HUMAN_TASK_WHERE,
-        },
-        select: taskSelect,
-        orderBy: { completedAt: 'desc' },
-      }),
-      prisma.task.findMany({
-        where: {
-          status: 'COMPLETED',
-          isAgentTask: true,
-          completedAt: { not: null, ...completedAtRange },
-          workDay: { workspaceId },
-        },
-        select: { startedAt: true, completedAt: true, pausedMinutes: true, minutesOverride: true, project: { select: { id: true, name: true, hoursEnabled: true, monthlyHours: true } } },
-      }),
-    ])
+    // Horas usadas vs contratadas = personas + agentes de IA. El tiempo de un agente es
+    // trabajo que se le informa al cliente, así que consume su presupuesto; se devuelve
+    // desglosado (`totalMinutes` personas / `agentMinutes` agentes) y el frontend arma el
+    // total y el % con utils/budget.js. UNA sola query sin filtro de ejecutor: las dos
+    // mitades salen del mismo `where`, mismo rango y misma tz, así no pueden divergir.
+    const tasks = await prisma.task.findMany({
+      where: {
+        status: 'COMPLETED',
+        startedAt: { not: null },
+        completedAt: { not: null, ...completedAtRange },
+        workDay: { workspaceId },
+      },
+      select: taskSelect,
+      orderBy: { completedAt: 'desc' },
+    })
+
+    const blank = project => ({ project, ...emptyExecutorSplit(), byUser: {}, byAgent: {} })
 
     const map = {}
     for (const t of tasks) {
-      const mins = taskMins(t)
-      const key  = t.project.id
-      if (!map[key]) map[key] = { project: t.project, totalMinutes: 0, taskCount: 0, byUser: {} }
-      map[key].totalMinutes += mins
-      map[key].taskCount += 1
+      const key = t.project.id
+      if (!map[key]) map[key] = blank(t.project)
+      const { mins, isAgent } = addExecutorMinutes(map[key], t)
+
+      // `byUser` es el detalle de las horas de PERSONAS (lo que se mira para saber quién
+      // puso qué). Lo de los agentes va en su propio detalle, no mezclado en esas filas.
+      if (isAgent) {
+        const declared = t.agentName?.trim() || null
+        const aKey = `${t.agent?.id ?? 0}|${declared ?? ''}`
+        if (!map[key].byAgent[aKey]) {
+          map[key].byAgent[aKey] = {
+            agentId: t.agent?.id ?? null,
+            agentName: declared,
+            name: t.agent ? formatAgentName(t.agent, declared) : (declared ? `Agente eliminado · ${declared}` : 'Agente eliminado'),
+            minutes: 0, tasks: 0, ownerName: t.user?.name ?? null,
+          }
+        }
+        map[key].byAgent[aKey].minutes += mins
+        map[key].byAgent[aKey].tasks   += 1
+        continue
+      }
+
       const uid = t.user.id
       if (!map[key].byUser[uid]) map[key].byUser[uid] = { user: t.user, minutes: 0, tasks: 0, taskList: [] }
       map[key].byUser[uid].minutes += mins
@@ -88,23 +104,13 @@ async function byProject(req, res, next) {
       select: { id: true, name: true, hoursEnabled: true, monthlyHours: true },
     })
     for (const project of idleBudgeted) {
-      map[project.id] = { project, totalMinutes: 0, taskCount: 0, byUser: {} }
+      map[project.id] = blank(project)
     }
 
-    // Trabajo de agentes por proyecto (un proyecto donde solo trabajaron agentes también
-    // aparece, con 0 horas de personas).
-    for (const t of agentTasks) {
-      const key = t.project.id
-      if (!map[key]) map[key] = { project: t.project, totalMinutes: 0, taskCount: 0, byUser: {} }
-      map[key].agentTasks   = (map[key].agentTasks || 0) + 1
-      map[key].agentMinutes = (map[key].agentMinutes || 0) + taskMins(t)
-    }
-
-    const result = Object.values(map).map(({ byUser, ...rest }) => ({
-      agentTasks: 0,
-      agentMinutes: 0,
+    const result = Object.values(map).map(({ byUser, byAgent, ...rest }) => ({
       ...rest,
-      byUser: Object.values(byUser),
+      byUser:  Object.values(byUser),
+      byAgent: Object.values(byAgent).sort((a, b) => b.minutes - a.minutes),
     }))
 
     res.json({ from, to, projects: result })
@@ -292,13 +298,21 @@ async function mineProductivity(req, res, next) {
         delta: s.delta,
         stuckTasks: s.stuckTasks,
         hoursHistory,
-      } : { completed: 0, hours: 0, tasaCompletado: 0, utilization: null, delta: { horasPct: null, tareasPct: null, tasaCompletadoPts: 0 }, stuckTasks: 0, hoursHistory },
-      // Trabajo de sus agentes de IA en el período — aparte, ya calculado por getWorkspaceStats
-      // (mismo computeAgentStats que alimenta el bloque "Sus agentes" de Productividad admin).
+        // Referencia al tiempo de sus agentes, al lado de la métrica de la persona: `hours`
+        // y `utilization` siguen midiendo solo lo suyo (si el tiempo del agente sumara, la
+        // ocupación podría pasar el 100% sin que ella haya trabajado más).
+        agentHours: Math.round((s.agents?.current?.minutes ?? 0) / 60 * 10) / 10,
+        agentCompleted: s.agents?.current?.completed ?? 0,
+        agentHoursHistory: hist.agentHistory?.get(userId) ?? null,
+      } : { completed: 0, hours: 0, tasaCompletado: 0, utilization: null, delta: { horasPct: null, tareasPct: null, tasaCompletadoPts: 0 }, stuckTasks: 0, hoursHistory, agentHours: 0, agentCompleted: 0, agentHoursHistory: null },
+      // Detalle del trabajo de sus agentes de IA en el período (por agente y por proyecto),
+      // ya calculado por getWorkspaceStats — mismo computeAgentStats que alimenta el bloque
+      // "Sus agentes" de Productividad admin.
       agents: s?.agents ?? null,
       benchmark: benchmark ? {
         completed: benchmark.completed,
         horas: benchmark.horas,
+        agentHoras: benchmark.agentHoras,
         tasaCompletado: benchmark.tasaCompletado,
         utilizationMedian,
         teamSize: benchmark.teamSize,

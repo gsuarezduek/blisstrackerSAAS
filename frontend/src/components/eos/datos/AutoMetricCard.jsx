@@ -1,7 +1,8 @@
 import { avatarUrl } from '../../../utils/avatarUrl'
+import { fmtMins } from '../../../utils/format'
 import { formatVal, goalStatus, goalDisplay, TODAY_WEEK, TODAY_MONTH } from './scorecardHelpers'
 import { AutoBadge } from './ScorecardNav'
-import { CircleAlert, CircleCheck } from 'lucide-react'
+import { Bot, CircleAlert, CircleCheck } from 'lucide-react'
 import { Icon } from '../../ui/Icon'
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -56,7 +57,9 @@ function autoRankRow(autoKey, p, i) {
   // Filas de solo nombre (proyectos / informes / objetivos / redes), con valor opcional al final.
   if (NAME_ROW_KEYS.has(autoKey)) {
     const suffix = p.value == null ? null
-      : autoKey === 'tareas_completadas_agentes' ? `${p.value} tarea${p.value === 1 ? '' : 's'}`
+      : autoKey === 'tareas_completadas_agentes'
+        // Conteo + tiempo registrado: ese tiempo cuenta como horas del proyecto.
+        ? `${p.value} tarea${p.value === 1 ? '' : 's'}${p.minutes > 0 ? ` · ${fmtMins(p.minutes)}` : ''}`
       : p.value > 0 ? `+${formatVal(p.value)}` : formatVal(p.value)
     return (
       <li key={`${p.name}-${i}`} className="flex items-center gap-2 text-xs">
@@ -79,8 +82,10 @@ function autoRankRow(autoKey, p, i) {
   } else if (autoKey === 'faltas') {
     detail = `${p.strikes} ${p.strikes === 1 ? 'falta' : 'faltas'}`
   } else if (p.util != null) {
-    // ocupación / Δ horas: solo si el dato trae `util` (evita "undefined%").
+    // ocupación / Δ horas: solo si el dato trae `util` (evita "undefined%"). El tiempo de
+    // sus agentes de IA va al lado, no dentro del %: la métrica es de la persona.
     detail = `${p.util}% · ${formatVal(p.registeredHours)}/${formatVal(p.availableHours)}h`
+    if (p.agentHours > 0) detail += ` · +${formatVal(p.agentHours)}h ag.`
   }
   return (
     <li key={p.userId} className="flex items-center gap-2 text-xs">
@@ -177,6 +182,15 @@ export default function AutoMetricCard({ metric, value, detail, period, monthSta
           <AutoEmptyValue metric={metric} period={period} status={monthStatus} />
         )}
       </div>
+
+      {/* Ocupación / Δ horas miden solo horas de personas; el tiempo de los agentes de IA
+          del equipo se informa acá al pie, sin entrar en el %. */}
+      {detail?.agentMinutes > 0 && (
+        <p className="text-[11px] text-gray-500 dark:text-gray-400 pt-2 border-t border-gray-100 dark:border-gray-700 inline-flex items-center gap-1">
+          <Icon as={Bot} size={11} />+{fmtMins(detail.agentMinutes)} de agentes de IA
+          <span className="text-gray-400 dark:text-gray-500">· no suma a esta métrica</span>
+        </p>
+      )}
 
       {top3.length > 0 ? (
         <div className="pt-2 border-t border-gray-100 dark:border-gray-700">

@@ -1337,7 +1337,7 @@ Así el agente sabe sus límites desde el primer mensaje, sin que tengas que exp
 Las que tienen efecto hacia afuera o consumen IA: mandarle algo al cliente (un WhatsApp, pedir aprobación, comentarios visibles en el portal, confirmar una propuesta), borrar (incluido mover o mandar a la papelera archivos de la Nube que no subió él), convertir un lead, y correr auditorías, informes, investigaciones o propuestas con IA, que gastan el presupuesto de tokens del workspace.`,
         tips: [
           'Pedile al agente que use executor "agent" en las tareas que va a hacer él: así no se mezclan con las tuyas.',
-          'El tiempo de tus agentes no suma a tus horas, a tu asistencia ni a las horas contratadas del proyecto: en Productividad se ve aparte, en "Sus agentes de IA".',
+          'El tiempo de tus agentes SÍ cuenta como horas del proyecto: se le informa al cliente como trabajo hecho y consume las horas contratadas, igual que el tuyo. Lo que no toca son las métricas con las que se te evalúa (tus horas, tu Δ horas, tu asistencia): esas siguen midiendo solo lo tuyo, y el dato de los agentes aparece al lado, en "Sus agentes de IA".',
           'Para pasarle una tarea tuya al agente: menú ⋯ de la tarea → "Delegar a mi agente". Al crear una tarea, en "Asignar a" elegí tu agente. Todo lo que hacen tus agentes está en la pestaña Agentes del Dashboard; si uno se traba, te avisa a vos.',
         ],
         related: ['agentes-ia-conectar', 'agentes-ia-seguridad', 'como-usa-la-ia'],

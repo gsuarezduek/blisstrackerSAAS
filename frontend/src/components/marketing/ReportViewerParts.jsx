@@ -2,6 +2,7 @@
 // Todas piezas sin estado (props → JSX); se comparten entre el viewer y entre sí.
 import { createContext, useContext } from 'react'
 import { avatarUrl } from '../../utils/avatarUrl'
+import { completedMinutes, fmtMins } from '../../utils/format'
 import { Bookmark, DollarSign, Eye, Heart, Megaphone, MessageCircle, MousePointerClick, Radio, Share2, ThumbsUp, TrendingUp, Trophy } from 'lucide-react'
 import { Icon } from '../ui/Icon'
 
@@ -69,6 +70,20 @@ export function ReportSignature({ signature }) {
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+// Fila de "Trabajo realizado en el mes" del informe al cliente: quién y cuánto.
+// El cliente NO distingue si lo ejecutó una persona o uno de sus agentes de IA — una
+// tarea de agente va con el nombre de la persona responsable y con su duración, igual
+// que las demás (ver "Agentes IA" en CLAUDE.md). `task.minutes` viene del backend ya
+// calculado con taskMins (el mismo minuto que consume las horas contratadas); el
+// fallback cubre los informes con `dataCache` escrito antes de que eso existiera.
+export function reportTaskLine(task) {
+  const mins = task.minutes ?? completedMinutes(task)
+  return {
+    who: task.user?.name ?? null,
+    duration: mins > 0 ? fmtMins(mins) : null,
+  }
+}
 
 export function fmt(n, decimals = 0) {
   if (n == null) return '—'

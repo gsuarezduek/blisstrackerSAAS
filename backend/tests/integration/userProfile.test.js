@@ -124,9 +124,32 @@ describe('GET /api/users/:id/completed', () => {
     expect(res.status).toBe(200)
     expect(res.body.period).toBe('month')
     expect(res.body.items).toHaveLength(2)
-    expect(res.body.total).toEqual({ count: 2, minutes: 60 })
+    expect(res.body.total).toEqual({ count: 2, minutes: 60, agentTasks: 0, agentMinutes: 0 })
     expect(res.body.items[0]).toHaveProperty('createdAt')
     expect(res.body.items[0]).toHaveProperty('completedAt')
     expect(res.body.items[0]).toHaveProperty('minutes')
+  })
+
+  it('lo que completaron sus agentes de IA va en la lista, rotulado y totalizado aparte', async () => {
+    // El tiempo de un agente es tiempo trabajado del proyecto, pero no se mezcla con el
+    // de la persona: `count`/`minutes` siguen siendo solo los suyos.
+    prisma.task.findMany.mockResolvedValue([
+      makeTask({ id: 1, status: 'COMPLETED', minutesOverride: 45, completedAt: new Date('2026-06-10T15:00:00Z') }),
+      makeTask({
+        id: 2, status: 'COMPLETED', minutesOverride: 90, completedAt: new Date('2026-06-11T15:00:00Z'),
+        isAgentTask: true, agent: { id: 7, label: 'Grok' }, agentName: null,
+      }),
+    ])
+
+    const res = await request(app)
+      .get(`/api/users/${TARGET}/completed`)
+      .query({ period: 'month', date: '2026-06-15' })
+      .set('Authorization', authHeader())
+      .set('X-Workspace', WORKSPACE_SLUG)
+
+    expect(res.status).toBe(200)
+    expect(res.body.total).toEqual({ count: 1, minutes: 45, agentTasks: 1, agentMinutes: 90 })
+    const agentItem = res.body.items.find(t => t.id === 2)
+    expect(agentItem).toMatchObject({ isAgentTask: true, minutes: 90, agent: { id: 7, label: 'Grok' } })
   })
 })

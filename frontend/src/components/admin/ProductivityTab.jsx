@@ -10,6 +10,7 @@ import DateRangeFilter from '../DateRangeFilter'
 import HowToButton from '../HowToButton'
 import { Bot, Clock, Palmtree, Pencil, Search, X } from 'lucide-react'
 import { Icon } from '../ui/Icon'
+import { fmtHours } from '../../utils/format'
 import AgentsBlock from '../productivity/AgentsBlock'
 
 // Arma los query params de período para cualquier request de Productividad, a partir del
@@ -127,7 +128,6 @@ function timeAgo(dateStr) {
   return new Date(dateStr).toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })
 }
 
-const fmtHours = h => (h >= 1 ? `${h}h` : h > 0 ? `${Math.round(h * 60)}m` : '—')
 
 const STATUS = {
   inactive: { label: 'inactivo',  cls: 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300' },
@@ -181,7 +181,7 @@ function AttendanceCell({ att }) {
 }
 
 // Bloque detallado "Horas y Asistencia" (fila expandida): Δ horas + disponibles/registradas + presencia + tardanzas.
-function HoursAttendanceBlock({ att }) {
+function HoursAttendanceBlock({ att, agentHours = 0, agentCompleted = 0 }) {
   if (!att) return <p className="text-xs text-gray-400 dark:text-gray-500 italic">Sin datos de asistencia.</p>
   const { businessDays, daysPresent, expectedDays, leaveDays, absentDays, lateDays, hasSchedule, availableHours, registeredHours, utilization } = att
   const utilPct = utilization != null ? Math.round(utilization * 100) : null
@@ -202,6 +202,20 @@ function HoursAttendanceBlock({ att }) {
         <span className="text-gray-500 dark:text-gray-400">Horas registradas</span>
         <strong className="tabular-nums">{fmtHours(registeredHours ?? 0)}</strong>
       </li>
+      {/* El tiempo de sus agentes de IA cuenta como horas del proyecto, pero no entra en
+          Δ horas ni en las horas registradas de la persona — va como referencia. */}
+      {agentHours > 0 && (
+        <li className="flex justify-between gap-2">
+          <span className="text-gray-500 dark:text-gray-400 inline-flex items-center gap-1">
+            <Icon as={Bot} size={12} />Sus agentes
+          </span>
+          <span className="tabular-nums text-gray-500 dark:text-gray-400">
+            {fmtHours(agentHours)}
+            {agentCompleted > 0 && ` · ${agentCompleted} tarea${agentCompleted === 1 ? '' : 's'}`}
+            <span className="text-gray-400 dark:text-gray-500"> · aparte de Δ horas</span>
+          </span>
+        </li>
+      )}
       <li className="flex justify-between gap-2">
         <span className="text-gray-500 dark:text-gray-400">Presencia</span>
         <span className="tabular-nums">
@@ -529,7 +543,7 @@ export function PersonProductivityDetail({ m, benchmark, mode, customRange, onRe
         <div className="space-y-3">
           <div>
             <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 mb-2">Horas y Asistencia</p>
-            <HoursAttendanceBlock att={s.attendance} />
+            <HoursAttendanceBlock att={s.attendance} agentHours={s.agentHours} agentCompleted={s.agentCompleted} />
           </div>
           {s.stuckTasks > 0 && (
             <p className="text-xs"><span className="font-bold text-amber-600 dark:text-amber-400">{s.stuckTasks}</span> <span className="text-gray-500 dark:text-gray-400">tarea{s.stuckTasks !== 1 ? 's' : ''} atascada{s.stuckTasks !== 1 ? 's' : ''} &gt;7d</span></p>
@@ -601,7 +615,10 @@ function PersonRow({ m, benchmark, expanded, onToggle, onRefresh, refreshing, mo
               <div className="flex items-center gap-2">
                 <RoleBadge role={m.role} userId={m.id} className="inline-block mt-0.5" />
                 {s.agents?.current?.completed > 0 && (
-                  <span className="inline-flex items-center gap-0.5 text-[11px] text-gray-500 dark:text-gray-400 mt-0.5" title="Tareas completadas por sus agentes de IA en el período (no suman a sus métricas)">
+                  <span
+                    className="inline-flex items-center gap-0.5 text-[11px] text-gray-500 dark:text-gray-400 mt-0.5"
+                    title="Tareas completadas por sus agentes de IA en el período. Su tiempo cuenta como horas del proyecto; las métricas de la persona siguen midiendo solo las suyas."
+                  >
                     <Icon as={Bot} size={11} />{s.agents.current.completed}
                   </span>
                 )}
@@ -616,6 +633,14 @@ function PersonRow({ m, benchmark, expanded, onToggle, onRefresh, refreshing, mo
         </td>
         <td className="py-2.5 px-3 text-center text-sm text-gray-700 dark:text-gray-300 tabular-nums">
           {fmtHours(s.hours)}{s.hasData && <VsTeam value={s.hours} median={benchmark?.horas} />}
+          {s.agentHours > 0 && (
+            <span
+              className="block text-[11px] text-gray-400 dark:text-gray-500 inline-flex items-center gap-0.5 justify-center"
+              title="Horas registradas por sus agentes de IA (aparte de las suyas)"
+            >
+              <Icon as={Bot} size={10} />+{fmtHours(s.agentHours)}
+            </span>
+          )}
         </td>
         <td className="py-2.5 px-3 text-center text-sm text-gray-700 dark:text-gray-300 tabular-nums">
           {s.hasData ? `${Math.round(s.tasaCompletado * 100)}%` : '—'}{s.hasData && <VsTeam value={s.tasaCompletado} median={benchmark?.tasaCompletado} />}

@@ -4,6 +4,7 @@ const { materializeForUser } = require('../../services/recurrence.service')
 const { taskInclude, requestAgentId, requestAgentName, assertOwnAgent } = require('./_shared')
 const { agentTasksQuery } = require('../workdays.controller')
 const { taskMins } = require('../../lib/timeMetrics')
+const { getOrCreateWorkDay } = require('../../lib/workDay')
 
 // Agentes IA (MCP) — ver concepto "Agentes IA" en backend/CLAUDE.md.
 // Una tarea de agente (Task.isAgentTask) la EJECUTA un agente; userId sigue siendo la
@@ -15,16 +16,8 @@ const OPEN_STATUSES = ['PENDING', 'IN_PROGRESS', 'PAUSED', 'BLOCKED']
 // WorkDay de hoy de la persona, creándolo si falta. A diferencia de getOrCreateToday
 // NO reabre una jornada cerrada: que el agente consulte su lista no debe "re-loguear"
 // a su dueño.
-async function ensureTodayWorkDay(userId, workspaceId, date) {
-  const key = { userId_workspaceId_date: { userId, workspaceId, date } }
-  const existing = await prisma.workDay.findUnique({ where: key })
-  if (existing) return existing
-  try {
-    return await prisma.workDay.create({ data: { userId, workspaceId, date } })
-  } catch (err) {
-    if (err.code === 'P2002') return prisma.workDay.findUnique({ where: key })
-    throw err
-  }
+function ensureTodayWorkDay(userId, workspaceId, date) {
+  return getOrCreateWorkDay(prisma, { userId, workspaceId, date })
 }
 
 // ─── GET /api/tasks/agent-queue ─────────────────────────────────────────────

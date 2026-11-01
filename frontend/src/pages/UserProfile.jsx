@@ -13,8 +13,9 @@ import { renderRichText } from '../utils/richText'
 import { fmtMins } from '../utils/format'
 import { useAuth } from '../context/AuthContext'
 import useMembers from '../hooks/useMembers'
-import { Ban } from 'lucide-react'
+import { Ban, Bot } from 'lucide-react'
 import { Icon } from '../components/ui/Icon'
+import AgentTag from '../components/ui/AgentTag'
 
 const STATUS_LABEL = { IN_PROGRESS: 'En curso', PENDING: 'Pendiente', PAUSED: 'Pausada', BLOCKED: 'Bloqueada' }
 const STATUS_CLASS = {
@@ -147,6 +148,14 @@ export default function UserProfile() {
               <p className="text-xs text-gray-400 dark:text-gray-500 uppercase tracking-wide">{label}</p>
               <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">{summary[key].count}</p>
               <p className="text-xs text-gray-500 dark:text-gray-400">completadas · {fmtMins(summary[key].minutes)}</p>
+              {summary[key].agentMinutes > 0 && (
+                <p
+                  className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 inline-flex items-center gap-1"
+                  title="Lo que completaron sus agentes de IA: cuenta como horas del proyecto, aparte de las suyas"
+                >
+                  <Icon as={Bot} size={11} />+{summary[key].agentTasks} · {fmtMins(summary[key].agentMinutes)}
+                </p>
+              )}
             </div>
           ))}
         </div>
@@ -224,6 +233,11 @@ export default function UserProfile() {
           <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
             <p className="text-sm font-semibold text-gray-900 dark:text-white">
               Completadas {completed && `(${completed.total.count} · ${fmtMins(completed.total.minutes)})`}
+              {completed?.total.agentMinutes > 0 && (
+                <span className="font-normal text-gray-400 dark:text-gray-500 inline-flex items-center gap-1 ml-1">
+                  <Icon as={Bot} size={11} />+{completed.total.agentTasks} de sus agentes · {fmtMins(completed.total.agentMinutes)}
+                </span>
+              )}
             </p>
             <div className="flex items-center gap-2">
               <div className="flex rounded-lg overflow-hidden border border-gray-200 dark:border-gray-600 text-xs">
@@ -266,6 +280,7 @@ export default function UserProfile() {
                     <p className="text-sm text-gray-600 dark:text-gray-300 leading-snug whitespace-pre-wrap break-words">{renderRichText(t.description, { members })}</p>
                     <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
                       {t.project?.name}
+                      {t.isAgentTask && <> · <AgentTag task={t} size={11} /></>}
                       {' · '}creada {fmtDate(t.createdAt)}
                       {' · '}finalizada {fmtDate(t.completedAt)}
                       {' · '}<span className="text-gray-500 dark:text-gray-400 font-medium">{fmtMins(t.minutes)}</span>

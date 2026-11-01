@@ -18,7 +18,8 @@ import AgentTasksPanel from '../components/dashboard/AgentTasksPanel'
 import AgentsWorkingStrip from '../components/dashboard/AgentsWorkingStrip'
 import useMyAgents from '../hooks/useMyAgents'
 import { useAuth } from '../context/AuthContext'
-import { completedMinutes } from '../utils/format'
+import { completedMinutes, fmtMins } from '../utils/format'
+import WorkedTime from '../components/ui/WorkedTime'
 import {
   SEGUIMIENTO_STATUS_PRIORITY, seguimientoSeenKey, loadSeguimientoSeen, seguimientoSignature, isSeguimientoNew,
   CompletedTaskRow, DailyInsightBlock, SeguimientoSection,
@@ -32,10 +33,6 @@ function todayLabel() {
 function greeting() {
   const h = Number(new Date().toLocaleString('en-US', { hour: 'numeric', hour12: false, timeZone: 'America/Argentina/Buenos_Aires' }))
   return h < 12 ? 'Buen día' : h < 20 ? 'Buenas tardes' : 'Buenas noches'
-}
-
-function fmtHM(mins) {
-  return mins >= 60 ? `${Math.floor(mins / 60)}h ${mins % 60}m` : `${mins}m`
 }
 
 const LATER_TAB_KEY = 'bliss_dashboard_later_tab'
@@ -668,6 +665,16 @@ export default function Dashboard() {
     return { completed, starred, blocked, totalMins }
   }, [focusTasks])
 
+  // Lo que completaron hoy sus agentes de IA: es tiempo trabajado del proyecto, así que
+  // entra al resumen del día — separado del propio, nunca mezclado en un solo número.
+  const { agentDoneCount, agentMins } = useMemo(() => {
+    const done = agentTasks.filter(t => t.status === 'COMPLETED')
+    return {
+      agentDoneCount: done.length,
+      agentMins: done.reduce((acc, t) => acc + (completedMinutes(t) ?? 0), 0),
+    }
+  }, [agentTasks])
+
   // Destacadas por prioridad (3 = roja primero).
   const starredSorted = useMemo(() => [...starred].sort((a, b) => (b.starred ?? 0) - (a.starred ?? 0)), [starred])
 
@@ -697,8 +704,17 @@ export default function Dashboard() {
             {workDay && (
               <p className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-500 dark:text-gray-400">
                 {!dayEnded && elapsed && <span>Jornada <span className="font-medium text-gray-700 dark:text-gray-200">{elapsed}</span></span>}
-                <span><span className="font-medium text-gray-700 dark:text-gray-200">{completed.length}</span> completada{completed.length === 1 ? '' : 's'}</span>
-                <span><span className="font-medium text-gray-700 dark:text-gray-200">{fmtHM(totalMins)}</span> registradas</span>
+                <span>
+                  <span className="font-medium text-gray-700 dark:text-gray-200">{completed.length + agentDoneCount}</span> completada{completed.length + agentDoneCount === 1 ? '' : 's'}
+                  {agentDoneCount > 0 && <span className="text-gray-400 dark:text-gray-500"> ({completed.length} vos · {agentDoneCount} tus agentes)</span>}
+                </span>
+                <WorkedTime
+                  person={totalMins}
+                  agent={agentMins}
+                  label="registradas"
+                  variant="inline"
+                  className="[&>span:first-child]:font-medium [&>span:first-child]:text-gray-700 dark:[&>span:first-child]:text-gray-200"
+                />
                 {!dayEnded && <span><span className="font-medium text-gray-700 dark:text-gray-200">{inFocus}</span> en foco</span>}
               </p>
             )}
@@ -951,7 +967,7 @@ export default function Dashboard() {
       <ConfirmModal
         open={finishOpen}
         title="¿Terminar la jornada?"
-        message={`Hoy completaste ${completed.length} tarea${completed.length === 1 ? '' : 's'} y registraste ${fmtHM(totalMins)}.${leftToday === 1 ? '\nLa que queda pendiente pasa a mañana.' : leftToday > 1 ? `\nLas ${leftToday} que quedan pendientes pasan a mañana.` : ''}${activeTask ? '\nLa tarea en curso se va a pausar.' : ''}\n\nSe cierra tu sesión.`}
+        message={`Hoy completaste ${completed.length} tarea${completed.length === 1 ? '' : 's'} y registraste ${fmtMins(totalMins)}.${agentMins > 0 ? `\nTus agentes de IA sumaron ${fmtMins(agentMins)} en ${agentDoneCount} tarea${agentDoneCount === 1 ? '' : 's'}.` : ''}${leftToday === 1 ? '\nLa que queda pendiente pasa a mañana.' : leftToday > 1 ? `\nLas ${leftToday} que quedan pendientes pasan a mañana.` : ''}${activeTask ? '\nLa tarea en curso se va a pausar.' : ''}\n\nSe cierra tu sesión.`}
         confirmLabel="Terminar jornada"
         danger={false}
         loading={finishing}
