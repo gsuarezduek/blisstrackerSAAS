@@ -68,7 +68,7 @@ export function AgentChannels({ token, onSaved }) {
               Webhook <span className="font-normal text-gray-400">(opcional)</span>
             </label>
             <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 mb-1.5 leading-relaxed">
-              Le mandamos un POST a esta URL cuando hay una novedad para este agente. Sirve si tenés algo escuchando (n8n, un script, un bot propio) que después pueda llamar a <code>tasks_agent_updates</code>. Grok en grok.com no puede recibirlo.
+              Le mandamos un POST a esta URL cuando hay una novedad para este agente. Sirve si tenés algo escuchando (n8n, un script, un bot propio) que después pida el detalle con <code>tasks_agent_updates</code>, por MCP y con el token de este agente (ese token no sirve contra la API REST). El aviso no incluye el contenido del trabajo, a propósito. Grok en grok.com no puede recibirlo.
             </p>
             <div className="flex items-center gap-2">
               <input

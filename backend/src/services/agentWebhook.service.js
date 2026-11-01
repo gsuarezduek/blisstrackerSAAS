@@ -49,8 +49,10 @@ function buildPayload({ event, task, token, workspaceSlug }) {
       project: task.project ? { id: task.project.id, name: task.project.name } : null,
     },
     headline: headline(event, task, agentLabel),
-    // Lo que tiene que hacer el receptor: pedir el detalle con el token del agente.
-    next: 'Llamá a la tool `tasks_agent_updates` (o GET /api/tasks/agent-updates) con el token de este agente.',
+    // Lo que tiene que hacer el receptor: pedir el detalle por MCP. El Bearer de un
+    // McpToken autentica SOLO contra /api/mcp (mcp/auth.js); la API REST usa el
+    // middleware `auth`, que valida JWT de sesión y no conoce estos tokens.
+    next: 'Pedí el detalle por MCP: la tool `tasks_agent_updates` contra POST /api/mcp con el Bearer de este agente. Ese token no sirve contra la API REST.',
   }
 }
 

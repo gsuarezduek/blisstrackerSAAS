@@ -1337,7 +1337,7 @@ Si lo que le contestaste no le alcanza, vuelve a bloquearla preguntando de nuevo
 
 En **Preferencias → Agentes IA**, cada agente tiene abajo "Avisarle cuando hay novedades", con dos opciones:
 
-- **Webhook** — le mandamos un aviso a una URL tuya cuando hay una novedad. Solo sirve si tenés algo escuchando (n8n, un script, un bot propio) que después vaya a buscar el detalle. Grok en grok.com no puede recibirlo: es un chat, no tiene dirección.
+- **Webhook** — le mandamos un aviso a una URL tuya cuando hay una novedad. Solo sirve si tenés algo escuchando (n8n, un script, un bot propio) que después vaya a buscar el detalle: el aviso trae el titular y el número de la tarea, no el trabajo en sí. Grok en grok.com no puede recibirlo: es un chat, no tiene dirección.
 - **Despertarlo automáticamente** — BlissTracker invoca al agente y le pasa la novedad, con sus mismas herramientas y permisos. Es el único que funciona sin que lo uses. Necesita una API key de xAI cargada por un admin (abajo en la misma pantalla) y gasta esa key en cada despertar. **Tené en cuenta que el agente que corre así es uno nuevo por API: no tiene la configuración ni la memoria del Grok con el que hablás en grok.com.**
 
 Y sin configurar nada: la próxima vez que uses el agente, sus novedades aparecen solas al final de la primera respuesta, sin que tenga que acordarse de buscarlas.
