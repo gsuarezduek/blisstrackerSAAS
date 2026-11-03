@@ -219,6 +219,7 @@ function isValidPaymentMethod(key)      { return key == null || PAYMENT_METHOD_K
 function isValidAccountApplication(key) { return key == null || ACCOUNT_APPLICATION_KEYS.includes(key) }
 function isValidCheckStatus(key)        { return CHECK_STATUS_KEYS.includes(key) }
 function isValidTransferReason(key)     { return TRANSFER_REASON_KEYS.includes(key) }
+function isFundTransferReason(key)      { return key === 'fund_contribution' || key === 'fund_redemption' }
 function isValidExtraStatus(key)        { return EXTRA_STATUS_KEYS.includes(key) }
 function isValidNextActionRecurrence(key) { return NEXT_ACTION_RECURRENCE_KEYS.includes(key) }
 function isValidTaskKind(key)           { return TASK_KIND_KEYS.includes(key) }
@@ -248,7 +249,7 @@ module.exports = {
   PAYMENT_METHODS, PAYMENT_METHOD_KEYS, isValidPaymentMethod,
   ACCOUNT_APPLICATIONS, ACCOUNT_APPLICATION_KEYS, isValidAccountApplication,
   CHECK_STATUSES, CHECK_STATUS_KEYS, isValidCheckStatus,
-  TRANSFER_REASONS, TRANSFER_REASON_KEYS, isValidTransferReason,
+  TRANSFER_REASONS, TRANSFER_REASON_KEYS, isValidTransferReason, isFundTransferReason,
   INVOICE_STATUSES,
   CUSTOMER_STATUSES,
   EXTRA_STATUSES, EXTRA_STATUS_KEYS, isValidExtraStatus,

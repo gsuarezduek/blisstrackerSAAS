@@ -166,6 +166,7 @@ export function paymentMethodLabel(key)      { return metaOf(PAYMENT_METHODS, ke
 export function accountApplicationLabel(key) { return metaOf(ACCOUNT_APPLICATIONS, key).label }
 export function checkStatusMeta(key)         { return metaOf(CHECK_STATUSES, key) }
 export function transferReasonLabel(key)     { return metaOf(TRANSFER_REASONS, key).label }
+export function isFundTransferReason(key)    { return key === 'fund_contribution' || key === 'fund_redemption' }
 export function invoiceStatusMeta(key)       { return metaOf(INVOICE_STATUSES, key) }
 export function arcaStatusMeta(key)          { return metaOf(ARCA_STATUSES, key) }
 export function invoiceKindMeta(key)         { return metaOf(INVOICE_KINDS, key) }

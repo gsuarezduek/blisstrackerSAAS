@@ -1,6 +1,6 @@
 const prisma = require('../../lib/prisma')
 const { toDecimal } = require('../../lib/financeMoney')
-const { parseDate } = require('./_shared')
+const { parseDate, transfersAfterValuation } = require('./_shared')
 
 /**
  * GET /api/finanzas/balances?from=&to= — sección 4.2 del spec.
@@ -19,8 +19,8 @@ const { parseDate } = require('./_shared')
  * `creditCheck` — así que acá "pending" es el único caso a excluir).
  *
  * Fondos (3.1) = el `value` de la última FinanceFundValuation registrada (es
- * un snapshot absoluto, no un delta) — si todavía no hay ninguna, aportes −
- * rescates acumulados (sin resultado de valuación todavía).
+ * un snapshot absoluto, no un delta) + aportes − rescates posteriores a ella.
+ * Si todavía no hay ninguna, aportes − rescates acumulados.
  */
 async function getBalances(req, res, next) {
   try {
@@ -38,7 +38,7 @@ async function getBalances(req, res, next) {
       const [
         incomePeriodAgg, expensePeriodAgg, transfersInPeriodAgg, transfersOutPeriodAgg,
         allTimeIncomeAgg, allTimeExpenseAgg, allTimeTransfersInAgg, allTimeTransfersOutAgg,
-        lastValuation, aportesAgg, rescatesAgg, pendingChecksAgg,
+        lastValuation, pendingChecksAgg,
         adjustmentsPeriodAgg, allTimeAdjustmentsAgg,
       ] = await Promise.all([
         prisma.financeMovement.aggregate({ where: { workspaceId, accountId: account.id, type: 'income', deletedAt: null, ...periodDateFilter }, _sum: { amount: true } }),
@@ -52,9 +52,7 @@ async function getBalances(req, res, next) {
         prisma.financeMovement.aggregate({ where: { workspaceId, accountId: account.id, type: 'expense', deletedAt: null }, _sum: { amount: true } }),
         prisma.financeTransfer.aggregate({ where: { workspaceId, toAccountId: account.id, toIsFund: false, deletedAt: null }, _sum: { toAmount: true } }),
         prisma.financeTransfer.aggregate({ where: { workspaceId, fromAccountId: account.id, fromIsFund: false, deletedAt: null }, _sum: { fromAmount: true } }),
-        account.hasInvestments ? prisma.financeFundValuation.findFirst({ where: { workspaceId, accountId: account.id, deletedAt: null }, orderBy: { date: 'desc' } }) : null,
-        account.hasInvestments ? prisma.financeTransfer.aggregate({ where: { workspaceId, toAccountId: account.id, toIsFund: true, deletedAt: null }, _sum: { toAmount: true } }) : null,
-        account.hasInvestments ? prisma.financeTransfer.aggregate({ where: { workspaceId, fromAccountId: account.id, fromIsFund: true, deletedAt: null }, _sum: { fromAmount: true } }) : null,
+        account.hasInvestments ? prisma.financeFundValuation.findFirst({ where: { workspaceId, accountId: account.id, deletedAt: null }, orderBy: [{ date: 'desc' }, { createdAt: 'desc' }] }) : null,
         prisma.financeMovement.aggregate({ where: { workspaceId, accountId: account.id, deletedAt: null, check: { status: 'pending' } }, _sum: { amount: true }, _count: true }),
         prisma.financeBalanceAdjustment.aggregate({ where: { workspaceId, accountId: account.id, deletedAt: null, ...periodDateFilter }, _sum: { amount: true } }),
         prisma.financeBalanceAdjustment.aggregate({ where: { workspaceId, accountId: account.id, deletedAt: null }, _sum: { amount: true } }),
@@ -69,9 +67,14 @@ async function getBalances(req, res, next) {
 
       let fondos = null
       if (account.hasInvestments) {
-        fondos = lastValuation
-          ? toDecimal(lastValuation.value)
-          : toDecimal(aportesAgg._sum.toAmount || 0).minus(toDecimal(rescatesAgg._sum.fromAmount || 0))
+        const sinceValuation = transfersAfterValuation(lastValuation)
+        const [aportesAgg, rescatesAgg] = await Promise.all([
+          prisma.financeTransfer.aggregate({ where: { workspaceId, toAccountId: account.id, toIsFund: true, deletedAt: null, ...sinceValuation }, _sum: { toAmount: true } }),
+          prisma.financeTransfer.aggregate({ where: { workspaceId, fromAccountId: account.id, fromIsFund: true, deletedAt: null, ...sinceValuation }, _sum: { fromAmount: true } }),
+        ])
+        fondos = toDecimal(lastValuation?.value || 0)
+          .plus(toDecimal(aportesAgg._sum.toAmount || 0))
+          .minus(toDecimal(rescatesAgg._sum.fromAmount || 0))
       }
 
       return {

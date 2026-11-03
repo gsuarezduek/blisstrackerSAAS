@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import api from '../../api/client'
 import { fmtMoney } from '../../utils/format'
-import { ACCOUNT_APPLICATIONS, TRANSFER_REASONS } from './financeCatalog'
+import { ACCOUNT_APPLICATIONS, TRANSFER_REASONS, isFundTransferReason } from './financeCatalog'
 import ItemPicker from './ItemPicker'
 import TaxesBlock from './TaxesBlock'
 
@@ -296,10 +296,8 @@ function TransferForm({ accounts, taxes, onClose, onSaved }) {
   const [reason, setReason] = useState(TRANSFER_REASONS[0].key)
   const [fromAccountId, setFromAccountId] = useState('')
   const [fromAmount, setFromAmount] = useState('')
-  const [fromIsFund, setFromIsFund] = useState(false)
   const [toAccountId, setToAccountId] = useState('')
   const [toAmount, setToAmount] = useState('')
-  const [toIsFund, setToIsFund] = useState(false)
   const [date, setDate] = useState(today())
   const [note, setNote] = useState('')
   const [taxIds, setTaxIds] = useState(new Set())
@@ -311,16 +309,29 @@ function TransferForm({ accounts, taxes, onClose, onSaved }) {
   const differentCurrency = fromAccount && toAccount && fromAccount.currency !== toAccount.currency
   const exchangeRate = differentCurrency && Number(fromAmount) > 0 && Number(toAmount) > 0
     ? Number(fromAmount) / Number(toAmount) : null
+  // Aporte y rescate son dentro de una sola cuenta: un solo selector y un solo monto.
+  const isFundMove = isFundTransferReason(reason)
+  const fundAccounts = accounts.filter(a => a.active && a.hasInvestments)
+
+  function handleReasonChange(next) {
+    setReason(next)
+    setError('')
+    if (isFundTransferReason(next) && !fromAccount?.hasInvestments) setFromAccountId('')
+  }
 
   async function handleSave() {
-    if (!fromAccountId || !toAccountId) { setError('Elegí las dos cuentas'); return }
-    if (!fromAmount || !toAmount || Number(fromAmount) <= 0 || Number(toAmount) <= 0) { setError('Montos inválidos'); return }
+    const destAccountId = isFundMove ? fromAccountId : toAccountId
+    const destAmount = isFundMove ? fromAmount : toAmount
+    if (isFundMove && !fromAccountId) { setError('Elegí la cuenta'); return }
+    if (!fromAccountId || !destAccountId) { setError('Elegí las dos cuentas'); return }
+    if (!isFundMove && fromAccountId === toAccountId) { setError('Elegí dos cuentas distintas. Si es dentro de la misma cuenta, usá Aporte o Rescate de fondo'); return }
+    if (!fromAmount || !destAmount || Number(fromAmount) <= 0 || Number(destAmount) <= 0) { setError(isFundMove ? 'Monto inválido' : 'Montos inválidos'); return }
 
     setSaving(true); setError('')
     try {
       await api.post('/finanzas/transfers', {
-        date, reason, fromAccountId: Number(fromAccountId), fromAmount: Number(fromAmount), fromIsFund,
-        toAccountId: Number(toAccountId), toAmount: Number(toAmount), toIsFund,
+        date, reason, fromAccountId: Number(fromAccountId), fromAmount: Number(fromAmount),
+        toAccountId: Number(destAccountId), toAmount: Number(destAmount),
         note: note.trim() || undefined, taxIds: [...taxIds],
       })
       onSaved()
@@ -333,52 +344,67 @@ function TransferForm({ accounts, taxes, onClose, onSaved }) {
     <div className="space-y-4">
       <div>
         <label className={label}>Qué es</label>
-        <select className={input} value={reason} onChange={e => setReason(e.target.value)}>
+        <select className={input} value={reason} onChange={e => handleReasonChange(e.target.value)}>
           {TRANSFER_REASONS.map(r => <option key={r.key} value={r.key}>{r.label}</option>)}
         </select>
       </div>
 
-      <div className="border border-red-200 dark:border-red-900/30 rounded-xl p-3 space-y-2">
-        <p className="text-xs font-semibold text-red-600 dark:text-red-400 uppercase">Sale de</p>
-        <div className="grid grid-cols-2 gap-2">
-          <select className={input} value={fromAccountId} onChange={e => setFromAccountId(e.target.value)}>
-            <option value="">Cuenta…</option>
-            {accounts.filter(a => a.active).map(a => <option key={a.id} value={a.id}>{a.name} · {a.currency}</option>)}
-          </select>
-          <input type="number" step="any" className={input} placeholder="Monto" value={fromAmount} onChange={e => setFromAmount(e.target.value)} />
+      {isFundMove ? (
+        <div className="border border-gray-200 dark:border-gray-700 rounded-xl p-3 space-y-2">
+          <p className="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase">Cuenta</p>
+          {fundAccounts.length > 0 ? (
+            <div className="grid grid-cols-2 gap-2">
+              <select className={input} value={fromAccountId} onChange={e => setFromAccountId(e.target.value)}>
+                <option value="">Cuenta…</option>
+                {fundAccounts.map(a => <option key={a.id} value={a.id}>{a.name} · {a.currency}</option>)}
+              </select>
+              <input type="number" step="any" className={input} placeholder="Monto" value={fromAmount} onChange={e => setFromAmount(e.target.value)} />
+            </div>
+          ) : (
+            <p className="text-sm text-gray-500 dark:text-gray-400">Ninguna cuenta tiene inversiones. Activá "Tiene inversiones" en la cuenta, desde Configuración.</p>
+          )}
         </div>
-        {fromAccount?.hasInvestments && (
-          <label className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
-            <input type="checkbox" checked={fromIsFund} onChange={e => setFromIsFund(e.target.checked)} /> Sale de los fondos de esta cuenta (rescate)
-          </label>
-        )}
-      </div>
+      ) : (
+        <>
+          <div className="border border-red-200 dark:border-red-900/30 rounded-xl p-3 space-y-2">
+            <p className="text-xs font-semibold text-red-600 dark:text-red-400 uppercase">Sale de</p>
+            <div className="grid grid-cols-2 gap-2">
+              <select className={input} value={fromAccountId} onChange={e => setFromAccountId(e.target.value)}>
+                <option value="">Cuenta…</option>
+                {accounts.filter(a => a.active).map(a => <option key={a.id} value={a.id}>{a.name} · {a.currency}</option>)}
+              </select>
+              <input type="number" step="any" className={input} placeholder="Monto" value={fromAmount} onChange={e => setFromAmount(e.target.value)} />
+            </div>
+          </div>
 
-      <div className="text-center text-gray-300 dark:text-gray-600">↓</div>
+          <div className="text-center text-gray-300 dark:text-gray-600">↓</div>
 
-      <div className="border border-green-200 dark:border-green-900/30 rounded-xl p-3 space-y-2">
-        <p className="text-xs font-semibold text-green-600 dark:text-green-400 uppercase">Entra a</p>
-        <div className="grid grid-cols-2 gap-2">
-          <select className={input} value={toAccountId} onChange={e => setToAccountId(e.target.value)}>
-            <option value="">Cuenta…</option>
-            {accounts.filter(a => a.active).map(a => <option key={a.id} value={a.id}>{a.name} · {a.currency}</option>)}
-          </select>
-          <input type="number" step="any" className={input} placeholder="Monto" value={toAmount} onChange={e => setToAmount(e.target.value)} />
-        </div>
-        {toAccount?.hasInvestments && (
-          <label className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
-            <input type="checkbox" checked={toIsFund} onChange={e => setToIsFund(e.target.checked)} /> Entra a los fondos de esta cuenta (aporte)
-          </label>
-        )}
-        {exchangeRate != null && (
-          <p className="text-xs text-gray-500 dark:text-gray-400">Tipo de cambio (calculado): {fmtMoney(exchangeRate, fromAccount.currency)}</p>
-        )}
-      </div>
+          <div className="border border-green-200 dark:border-green-900/30 rounded-xl p-3 space-y-2">
+            <p className="text-xs font-semibold text-green-600 dark:text-green-400 uppercase">Entra a</p>
+            <div className="grid grid-cols-2 gap-2">
+              <select className={input} value={toAccountId} onChange={e => setToAccountId(e.target.value)}>
+                <option value="">Cuenta…</option>
+                {accounts.filter(a => a.active).map(a => <option key={a.id} value={a.id}>{a.name} · {a.currency}</option>)}
+              </select>
+              <input type="number" step="any" className={input} placeholder="Monto" value={toAmount} onChange={e => setToAmount(e.target.value)} />
+            </div>
+            {exchangeRate != null && (
+              <p className="text-xs text-gray-500 dark:text-gray-400">Tipo de cambio (calculado): {fmtMoney(exchangeRate, fromAccount.currency)}</p>
+            )}
+          </div>
+        </>
+      )}
 
       {fromAccount && <TaxesBlock account={fromAccount} allTaxes={taxes} baseAmount={fromAmount} selectedTaxIds={taxIds} onChange={setTaxIds} />}
-      {taxIds.size > 0 && <p className="text-xs text-gray-400 -mt-2">Se cobran sobre la cuenta de la que sale la plata.</p>}
+      {!isFundMove && taxIds.size > 0 && <p className="text-xs text-gray-400 -mt-2">Se cobran sobre la cuenta de la que sale la plata.</p>}
 
-      <p className="text-xs text-gray-400 bg-gray-50 dark:bg-gray-900/40 rounded-lg p-2">No suma como ingreso ni como egreso. Baja el disponible de la cuenta de origen y aparece en la de destino. Los impuestos sí se registran como egreso.</p>
+      <p className="text-xs text-gray-400 bg-gray-50 dark:bg-gray-900/40 rounded-lg p-2">
+        No suma como ingreso ni como egreso.{' '}
+        {reason === 'fund_contribution' && 'Baja el disponible de la cuenta y sube sus fondos.'}
+        {reason === 'fund_redemption' && 'Baja los fondos de la cuenta y sube su disponible.'}
+        {!isFundMove && 'Baja el disponible de la cuenta de origen y aparece en la de destino.'}
+        {' '}Los impuestos sí se registran como egreso.
+      </p>
 
       <div>
         <label className={label}>Fecha</label>

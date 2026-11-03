@@ -1,7 +1,7 @@
 const prisma = require('../../lib/prisma')
 const { logFinanceAudit } = require('../../lib/financeAudit')
 const { toDecimal } = require('../../lib/financeMoney')
-const { parseDate } = require('./_shared')
+const { parseDate, transfersAfterValuation } = require('./_shared')
 
 // GET /api/finanzas/fund-valuations?accountId=
 async function listValuations(req, res, next) {
@@ -38,17 +38,17 @@ async function createValuation(req, res, next) {
     if (!valueDecimal.isFinite() || valueDecimal.lessThan(0)) return res.status(400).json({ error: 'Valor inválido' })
 
     const lastValuation = await prisma.financeFundValuation.findFirst({
-      where: { workspaceId, accountId, deletedAt: null }, orderBy: { date: 'desc' },
+      where: { workspaceId, accountId, deletedAt: null }, orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
     })
-    const since = lastValuation?.date || new Date(0)
+    const sinceValuation = transfersAfterValuation(lastValuation)
 
     const [aportesAgg, rescatesAgg] = await Promise.all([
       prisma.financeTransfer.aggregate({
-        where: { workspaceId, toAccountId: accountId, toIsFund: true, deletedAt: null, date: { gt: since, lte: parsedDate } },
+        where: { workspaceId, toAccountId: accountId, toIsFund: true, deletedAt: null, date: { lte: parsedDate }, ...sinceValuation },
         _sum: { toAmount: true },
       }),
       prisma.financeTransfer.aggregate({
-        where: { workspaceId, fromAccountId: accountId, fromIsFund: true, deletedAt: null, date: { gt: since, lte: parsedDate } },
+        where: { workspaceId, fromAccountId: accountId, fromIsFund: true, deletedAt: null, date: { lte: parsedDate }, ...sinceValuation },
         _sum: { fromAmount: true },
       }),
     ])

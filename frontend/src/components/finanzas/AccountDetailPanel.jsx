@@ -39,12 +39,18 @@ export default function AccountDetailPanel({ account, onClose, onChanged }) {
       label: m.item?.name || m.category?.name || '—',
       sub: m.category?.name, amount: m.amount,
     }))
-    const transferRows = trfRes.data.map(t => ({
-      kind: 'transfer', date: t.date, id: `t${t.id}`,
-      label: transferReasonLabel(t.reason),
-      sub: t.fromAccountId === account.id ? `→ ${t.toAccount.name}` : `← ${t.fromAccount.name}`,
-      amount: t.fromAccountId === account.id ? `-${t.fromAmount}` : t.toAmount,
-    }))
+    const transferRows = trfRes.data.map(t => {
+      const base = { kind: 'transfer', date: t.date, id: `t${t.id}`, label: transferReasonLabel(t.reason) }
+      // Dentro de la misma cuenta el monto se lee como efecto sobre el disponible.
+      if (t.fromAccountId === t.toAccountId) {
+        return t.fromIsFund
+          ? { ...base, sub: 'De fondos a disponible', amount: t.toAmount }
+          : { ...base, sub: 'De disponible a fondos', amount: `-${t.fromAmount}` }
+      }
+      return t.fromAccountId === account.id
+        ? { ...base, sub: `→ ${t.toAccount.name}`, amount: `-${t.fromAmount}` }
+        : { ...base, sub: `← ${t.fromAccount.name}`, amount: t.toAmount }
+    })
     const adjustmentRows = adjRes.data.map(a => ({
       kind: 'adjustment', date: a.date, id: `a${a.id}`, adjustmentId: a.id,
       label: a.note, sub: a.createdBy?.name, amount: a.amount,

@@ -1,7 +1,7 @@
 const prisma = require('../../lib/prisma')
 const { logFinanceAudit } = require('../../lib/financeAudit')
 const { toDecimal } = require('../../lib/financeMoney')
-const { isValidTransferReason } = require('../../lib/financeCatalog')
+const { isValidTransferReason, isFundTransferReason } = require('../../lib/financeCatalog')
 const { resolveAndApplyTaxes, parseDate } = require('./_shared')
 
 const TRANSFER_INCLUDE = {
@@ -32,20 +32,26 @@ async function listTransfers(req, res, next) {
 // POST /api/finanzas/transfers — entre cuentas, o entre disponible y fondos de una
 // misma cuenta (sección 4.7 del spec, selector "Entre cuentas"). No cuenta como
 // ingreso/egreso. Los impuestos tildados van sobre la cuenta de ORIGEN (3.2/3.3).
+// El lado de cada cuenta (disponible o fondos) sale del motivo, no lo elige el cliente.
 async function createTransfer(req, res, next) {
   try {
     const workspaceId = req.workspace.id
-    const { date, reason, fromAccountId, fromAmount, fromIsFund, toAccountId, toAmount, toIsFund, note, taxIds } = req.body
+    const { date, reason, fromAccountId, fromAmount, toAccountId, toAmount, note, taxIds } = req.body
 
     if (!isValidTransferReason(reason)) return res.status(400).json({ error: 'Motivo inválido' })
     const parsedDate = parseDate(date)
     if (!parsedDate) return res.status(400).json({ error: 'Fecha inválida' })
     if (!Number.isInteger(fromAccountId) || !Number.isInteger(toAccountId)) return res.status(400).json({ error: 'Cuentas requeridas' })
-    // Misma cuenta solo tiene sentido como aporte/rescate (un lado "fondos", el
-    // otro "disponible") — misma cuenta Y mismo lado (ambos disponible o ambos
-    // fondos) sería un movimiento sin efecto.
-    if (fromAccountId === toAccountId && !!fromIsFund === !!toIsFund) {
-      return res.status(400).json({ error: 'Elegí dos cuentas distintas, o la misma cuenta moviendo entre disponible y fondos' })
+    // Aporte y rescate son siempre dentro de una misma cuenta (entre su disponible
+    // y sus fondos); el resto de los motivos es entre dos cuentas, sobre el disponible.
+    const isFundMove = isFundTransferReason(reason)
+    const fromIsFund = reason === 'fund_redemption'
+    const toIsFund = reason === 'fund_contribution'
+    if (isFundMove && fromAccountId !== toAccountId) {
+      return res.status(400).json({ error: 'Un aporte o rescate se hace dentro de una misma cuenta' })
+    }
+    if (!isFundMove && fromAccountId === toAccountId) {
+      return res.status(400).json({ error: 'Elegí dos cuentas distintas. Si es dentro de la misma cuenta, usá Aporte o Rescate de fondo' })
     }
 
     let fromAmountDecimal, toAmountDecimal
@@ -56,6 +62,9 @@ async function createTransfer(req, res, next) {
     if (fromAmountDecimal.lessThanOrEqualTo(0) || toAmountDecimal.lessThanOrEqualTo(0)) {
       return res.status(400).json({ error: 'Montos inválidos' })
     }
+    if (isFundMove && !fromAmountDecimal.equals(toAmountDecimal)) {
+      return res.status(400).json({ error: 'En un aporte o rescate el monto que sale y el que entra son el mismo' })
+    }
 
     const [fromAccount, toAccount] = await Promise.all([
       prisma.financeAccount.findFirst({ where: { id: fromAccountId, workspaceId } }),
@@ -63,8 +72,7 @@ async function createTransfer(req, res, next) {
     ])
     if (!fromAccount) return res.status(400).json({ error: 'Cuenta de origen no encontrada' })
     if (!toAccount) return res.status(400).json({ error: 'Cuenta de destino no encontrada' })
-    if (fromIsFund && !fromAccount.hasInvestments) return res.status(400).json({ error: `"${fromAccount.name}" no tiene inversiones habilitadas` })
-    if (toIsFund && !toAccount.hasInvestments) return res.status(400).json({ error: `"${toAccount.name}" no tiene inversiones habilitadas` })
+    if (isFundMove && !fromAccount.hasInvestments) return res.status(400).json({ error: `"${fromAccount.name}" no tiene inversiones habilitadas` })
 
     const exchangeRate = fromAccount.currency !== toAccount.currency
       ? fromAmountDecimal.dividedBy(toAmountDecimal)
@@ -75,8 +83,8 @@ async function createTransfer(req, res, next) {
     const transferId = await prisma.$transaction(async (tx) => {
       const transfer = await tx.financeTransfer.create({
         data: {
-          workspaceId, date: parsedDate, reason, fromAccountId, fromAmount: fromAmountDecimal.toString(), fromIsFund: !!fromIsFund,
-          toAccountId, toAmount: toAmountDecimal.toString(), toIsFund: !!toIsFund,
+          workspaceId, date: parsedDate, reason, fromAccountId, fromAmount: fromAmountDecimal.toString(), fromIsFund,
+          toAccountId, toAmount: toAmountDecimal.toString(), toIsFund,
           exchangeRate: exchangeRate ? exchangeRate.toString() : null, note: note?.trim() || null, createdById: req.user.userId,
         },
       })

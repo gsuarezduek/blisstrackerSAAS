@@ -49,6 +49,15 @@ function parseDate(v) {
 }
 
 /**
+ * Filtro de transferencias que la valuación todavía no refleja. La fecha no alcanza
+ * sola: es por día, y un aporte/rescate del mismo día cuenta solo si se cargó después.
+ */
+function transfersAfterValuation(valuation) {
+  if (!valuation) return {}
+  return { OR: [{ date: { gt: valuation.date } }, { date: valuation.date, createdAt: { gt: valuation.createdAt } }] }
+}
+
+/**
  * Normaliza un valor de monto/porcentaje a string para pasarle a un campo
  * Decimal de Prisma (acepta number o string, nunca aritmética propia). Lanza
  * 400 si no es un número finito.
@@ -190,4 +199,4 @@ async function resolveAndApplyTaxes(tx, { workspaceId, accountId, taxIds, baseAm
   return createdLines
 }
 
-module.exports = { businessError, toDecimalInput, trimmedOrNull, normalizeCuit, assertNoTaxCycle, resolveAndApplyTaxes, parseDate, computeInvoiceStatus }
+module.exports = { businessError, toDecimalInput, trimmedOrNull, normalizeCuit, assertNoTaxCycle, resolveAndApplyTaxes, parseDate, transfersAfterValuation, computeInvoiceStatus }
