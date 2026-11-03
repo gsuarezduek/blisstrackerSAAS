@@ -4,24 +4,10 @@ import { Icon } from '../ui/Icon'
 import api from '../../api/client'
 import CategoryBreakdownCard from './CategoryBreakdownCard'
 import IncomeExpenseBarChart from './IncomeExpenseBarChart'
+import { currentMonthKey, shiftMonth, monthLabel } from './financeMonths'
 
 const input = 'border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500'
 
-const MONTH_NAMES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
-
-function currentMonthKey() {
-  const d = new Date()
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
-}
-function shiftMonth(key, delta) {
-  const [y, m] = key.split('-').map(Number)
-  const d = new Date(Date.UTC(y, m - 1 + delta, 1))
-  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`
-}
-function monthLabel(key) {
-  const [y, m] = key.split('-')
-  return `${MONTH_NAMES[Number(m) - 1]} ${y}`
-}
 function dateMonthsAgo(n) {
   const d = new Date()
   d.setMonth(d.getMonth() - n)

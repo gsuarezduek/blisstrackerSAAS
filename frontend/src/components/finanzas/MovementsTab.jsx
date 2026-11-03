@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import api from '../../api/client'
 import { fmtMoney } from '../../utils/format'
-import MovementsFilterBar, { EMPTY_MOVEMENT_FILTERS } from './MovementsFilterBar'
+import MovementsFilterBar, { emptyMovementFilters, movementDateParams } from './MovementsFilterBar'
 import MovementsTable from './MovementsTable'
 import EditMovementModal from './EditMovementModal'
 
@@ -9,14 +9,12 @@ import EditMovementModal from './EditMovementModal'
 // filtrado por `type`. `accounts/categories/items/taxes` llegan ya cargados
 // desde Finanzas.jsx (datos compartidos con el modal "+ Cargar").
 export default function MovementsTab({ type, accounts, categories, items, taxes, onDataChange, refreshKey }) {
-  const [filters, setFilters] = useState(EMPTY_MOVEMENT_FILTERS)
+  const [filters, setFilters] = useState(emptyMovementFilters)
   const [movements, setMovements] = useState(null)
   const [editing, setEditing] = useState(null)
 
   const load = useCallback(async () => {
-    const params = { type }
-    if (filters.from) params.from = filters.from
-    if (filters.to) params.to = filters.to
+    const params = { type, ...movementDateParams(filters) }
     if (filters.search) params.search = filters.search
     if (filters.categoryId) params.categoryId = filters.categoryId
     if (filters.accountId) params.accountId = filters.accountId

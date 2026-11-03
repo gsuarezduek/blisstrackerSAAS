@@ -92,7 +92,7 @@ export default function EditMovementModal({ movement, accounts, categories, item
             <div className={`space-y-4 ${readOnly ? 'opacity-50 pointer-events-none' : ''}`}>
               <div>
                 <label className={label}>Item</label>
-                <ItemPicker items={items} categories={categories} value={item?.id} onChange={setItem} />
+                <ItemPicker type={movement.type} items={items} categories={categories} value={item?.id} onChange={setItem} />
               </div>
 
               <div>

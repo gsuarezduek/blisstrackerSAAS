@@ -9,7 +9,9 @@ const input = 'w-full border border-gray-300 dark:border-gray-600 bg-white dark:
 // con la categoría habitual al lado de cada resultado, y "+ Crear item nuevo"
 // (nombre + categoría obligatoria) cuando no hay match. `items`/`categories` se
 // pasan ya cargados desde el padre (evita refetchear en cada carga del modal).
-export default function ItemPicker({ items, categories, value, onChange }) {
+// `type` (income|expense) limita a los items cuya categoría es de ese tipo; el
+// ya elegido se respeta aunque no lo sea (un movimiento viejo al editarlo).
+export default function ItemPicker({ type, items, categories, value, onChange }) {
   const selected = items.find(i => i.id === value) || null
   const [query, setQuery] = useState(selected?.name || '')
   const [open, setOpen] = useState(false)
@@ -19,7 +21,7 @@ export default function ItemPicker({ items, categories, value, onChange }) {
   const [error, setError] = useState('')
   const boxRef = useRef(null)
 
-  useEffect(() => { setQuery(selected?.name || '') }, [selected?.id])
+  useEffect(() => { setQuery(selected?.name || '') }, [selected?.id, type])
 
   useEffect(() => {
     function onClickOutside(e) { if (boxRef.current && !boxRef.current.contains(e.target)) { setOpen(false); setCreating(false) } }
@@ -27,7 +29,10 @@ export default function ItemPicker({ items, categories, value, onChange }) {
     return () => document.removeEventListener('mousedown', onClickOutside)
   }, [])
 
-  const matches = items.filter(i => i.active !== false && i.name.toLowerCase().includes(query.toLowerCase()))
+  const matches = items.filter(i =>
+    i.active !== false
+    && (i.category?.type === type || i.id === value)
+    && i.name.toLowerCase().includes(query.toLowerCase()))
 
   function pick(item) {
     onChange(item)
@@ -78,7 +83,7 @@ export default function ItemPicker({ items, categories, value, onChange }) {
               <p className="text-xs text-gray-500 dark:text-gray-400">Nuevo item: <strong>{query.trim() || '(sin nombre)'}</strong></p>
               <select className={input} value={newCategoryId} onChange={e => setNewCategoryId(e.target.value)}>
                 <option value="">Categoría habitual (obligatoria)</option>
-                {categories.filter(c => c.active).map(c => <option key={c.id} value={c.id}>{c.name} ({c.type === 'income' ? 'Ingreso' : 'Egreso'})</option>)}
+                {categories.filter(c => c.active && c.type === type).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
               {error && <p className="text-xs text-red-500">{error}</p>}
               <div className="flex gap-2">

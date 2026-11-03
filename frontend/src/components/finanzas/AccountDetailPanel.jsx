@@ -7,9 +7,24 @@ import { fmtMoney } from '../../utils/format'
 import { transferReasonLabel } from './financeCatalog'
 import UpdateFundValuationModal from './UpdateFundValuationModal'
 import AdjustBalanceModal from './AdjustBalanceModal'
+import LoadMovementModal from './LoadMovementModal'
+
+const input = 'border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500'
+
+const KIND_FILTERS = [
+  { key: '', label: 'Todas las operaciones' },
+  { key: 'income', label: 'Ingresos' },
+  { key: 'expense', label: 'Egresos' },
+  { key: 'adjustment', label: 'Ajustes de saldo' },
+  { key: 'transfer', label: 'Transferencias y fondos' },
+]
 
 function fmtDate(iso) {
   return new Date(iso).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+}
+
+function normalizeText(s) {
+  return (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
 }
 
 // Drill-down de una cuenta desde Saldos: sus movimientos + transferencias
@@ -17,11 +32,15 @@ function fmtDate(iso) {
 // usuario, sección "Saldos" del plan) y, si tiene inversiones, su historial
 // de valuaciones + acción para cargar una nueva. "Ajustar saldo" carga un
 // ajuste (monto con signo) que mueve el disponible sin ser ingreso/egreso.
-export default function AccountDetailPanel({ account, onClose, onChanged }) {
+// "Aporte"/"Rescate" abren el form de "+ Cargar" con esta cuenta ya elegida.
+export default function AccountDetailPanel({ account, accounts, taxes, onClose, onChanged }) {
   const [rows, setRows] = useState(null)
   const [valuations, setValuations] = useState([])
+  const [search, setSearch] = useState('')
+  const [kindFilter, setKindFilter] = useState('')
   const [showValuationModal, setShowValuationModal] = useState(false)
   const [showAdjustModal, setShowAdjustModal] = useState(false)
+  const [fundMoveReason, setFundMoveReason] = useState(null)
   const [adjustmentToDelete, setAdjustmentToDelete] = useState(null)
   const [deleting, setDeleting] = useState(false)
   const [toDeleteValuation, setToDeleteValuation] = useState(null)
@@ -74,6 +93,12 @@ export default function AccountDetailPanel({ account, onClose, onChanged }) {
     onChanged?.()
   }
 
+  function handleFundMoveSaved() {
+    setFundMoveReason(null)
+    load()
+    onChanged?.()
+  }
+
   async function handleDeleteAdjustment() {
     setDeleting(true)
     try {
@@ -103,20 +128,27 @@ export default function AccountDetailPanel({ account, onClose, onChanged }) {
     adjustment: { label: 'Ajuste de saldo', cls: 'text-purple-600 dark:text-purple-400' },
   }
 
+  const query = normalizeText(search.trim())
+  const visibleRows = (rows || []).filter(r =>
+    (!kindFilter || r.kind === kindFilter)
+    && (!query || normalizeText(`${r.label} ${r.sub || ''}`).includes(query)))
+
   return (
     <>
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={onClose}>
       <div className="relative bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-2xl max-h-[85vh] overflow-y-auto p-6" onClick={e => e.stopPropagation()}>
         <button onClick={onClose} aria-label="Cerrar" className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">✕</button>
-        <div className="flex items-start justify-between pr-8 mb-4">
-          <div>
-            <h2 className="text-lg font-bold text-gray-900 dark:text-white">{account.name}</h2>
-            <p className="text-xs text-gray-400">{account.currency} · Disponible {fmtMoney(account.disponible, account.currency)}{account.hasInvestments && ` · En fondos ${fmtMoney(account.fondos, account.currency)}`}</p>
-          </div>
-          <div className="flex gap-2 shrink-0">
+        <div className="pr-8 mb-4">
+          <h2 className="text-lg font-bold text-gray-900 dark:text-white">{account.name}</h2>
+          <p className="text-xs text-gray-400">{account.currency} · Disponible {fmtMoney(account.disponible, account.currency)}{account.hasInvestments && ` · En fondos ${fmtMoney(account.fondos, account.currency)}`}</p>
+          <div className="flex flex-wrap gap-2 mt-3">
             <button onClick={() => setShowAdjustModal(true)} className="border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg px-3 py-1.5 text-xs font-medium">Ajustar saldo</button>
             {account.hasInvestments && (
-              <button onClick={() => setShowValuationModal(true)} className="border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg px-3 py-1.5 text-xs font-medium">+ Valuación</button>
+              <>
+                <button onClick={() => setFundMoveReason('fund_contribution')} className="border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg px-3 py-1.5 text-xs font-medium">Aporte</button>
+                <button onClick={() => setFundMoveReason('fund_redemption')} className="border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg px-3 py-1.5 text-xs font-medium">Rescate</button>
+                <button onClick={() => setShowValuationModal(true)} className="border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg px-3 py-1.5 text-xs font-medium">+ Valuación</button>
+              </>
             )}
           </div>
         </div>
@@ -146,7 +178,14 @@ export default function AccountDetailPanel({ account, onClose, onChanged }) {
           <p className="text-sm text-gray-400 text-center py-8">Sin actividad todavía.</p>
         ) : (
           <div className="space-y-1">
-            {rows.map(r => (
+            <div className="flex flex-wrap gap-2 mb-2">
+              <input className={`${input} flex-1 min-w-[10rem]`} placeholder="Buscar por nombre…" aria-label="Buscar por nombre" value={search} onChange={e => setSearch(e.target.value)} />
+              <select className={input} aria-label="Tipo de operación" value={kindFilter} onChange={e => setKindFilter(e.target.value)}>
+                {KIND_FILTERS.map(k => <option key={k.key} value={k.key}>{k.label}</option>)}
+              </select>
+            </div>
+            {visibleRows.length === 0 && <p className="text-sm text-gray-400 text-center py-8">Ninguna operación coincide con el filtro.</p>}
+            {visibleRows.map(r => (
               <div key={r.id} className="flex items-center justify-between gap-2 text-sm py-1.5 border-b border-gray-50 dark:border-gray-700/50">
                 <span className="text-gray-400 w-20 shrink-0">{fmtDate(r.date)}</span>
                 <div className="flex-1 min-w-0">
@@ -171,6 +210,12 @@ export default function AccountDetailPanel({ account, onClose, onChanged }) {
     )}
     {showAdjustModal && (
       <AdjustBalanceModal account={account} onClose={() => setShowAdjustModal(false)} onSaved={handleAdjustmentSaved} />
+    )}
+    {fundMoveReason && (
+      <LoadMovementModal accounts={accounts} categories={[]} items={[]} taxes={taxes}
+        title={`Mover fondos · ${account.name}`}
+        transferPrefill={{ reason: fundMoveReason, accountId: account.id }}
+        onClose={() => setFundMoveReason(null)} onSaved={handleFundMoveSaved} />
     )}
     <ConfirmModal open={adjustmentToDelete != null} title="Eliminar ajuste" message="El disponible de la cuenta vuelve a como estaba antes del ajuste."
       confirmLabel="Eliminar" loading={deleting} onConfirm={handleDeleteAdjustment} onCancel={() => setAdjustmentToDelete(null)} />

@@ -18,8 +18,9 @@ const MODES = [
 // `prefill` (opcional) fija el item y arranca en Ingreso: { item, invoiceId? }
 // para cobrar una factura, o { item, amount, extraPaymentId } para "Registrar
 // cobro" de una cuota de un Extra (queda aplicado "A cuenta" + vinculado a la cuota).
-export default function LoadMovementModal({ accounts, categories, items, taxes, defaultMode = 'income', prefill, title, onClose, onSaved }) {
-  const [mode, setMode] = useState(prefill ? 'income' : defaultMode)
+// `transferPrefill` (opcional) arranca en "Entre cuentas" con { reason, accountId }.
+export default function LoadMovementModal({ accounts, categories, items, taxes, defaultMode = 'income', prefill, transferPrefill, title, onClose, onSaved }) {
+  const [mode, setMode] = useState(prefill ? 'income' : transferPrefill ? 'transfer' : defaultMode)
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={onClose}>
@@ -27,7 +28,7 @@ export default function LoadMovementModal({ accounts, categories, items, taxes, 
         <button onClick={onClose} aria-label="Cerrar" className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">✕</button>
         <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-4 pr-8">{title || 'Nuevo movimiento'}</h2>
 
-        {!prefill && (
+        {!prefill && !transferPrefill && (
           <div className="flex gap-1 bg-gray-100 dark:bg-gray-900 rounded-xl p-1 mb-5 w-fit">
             {MODES.map(m => (
               <button key={m.id} type="button" onClick={() => setMode(m.id)}
@@ -39,7 +40,7 @@ export default function LoadMovementModal({ accounts, categories, items, taxes, 
         )}
 
         {mode === 'transfer' ? (
-          <TransferForm accounts={accounts} taxes={taxes} onClose={onClose} onSaved={onSaved} />
+          <TransferForm accounts={accounts} taxes={taxes} prefill={transferPrefill} onClose={onClose} onSaved={onSaved} />
         ) : (
           <MovementForm type={mode} accounts={accounts} categories={categories} items={items} taxes={taxes} prefill={prefill} onClose={onClose} onSaved={onSaved} />
         )}
@@ -75,6 +76,15 @@ function MovementForm({ type, accounts, categories, items, taxes, prefill, onClo
   // Con cheque de un cliente, la aplicación a cuenta se elige dentro del bloque
   // del cheque ("Factura asociada"), no en el selector general.
   const checkForCustomer = isCheck && !!item?.tracksAccount
+
+  // Pasar de Ingreso a Egreso (o al revés) deja el form montado: el item y la
+  // categoría elegidos son del otro tipo. El resto de lo cargado se conserva.
+  useEffect(() => {
+    if (prefill) return
+    setItem(null)
+    setCategoryId('')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [type])
 
   useEffect(() => {
     if (!isIncome || !item?.tracksAccount || (accountApplication !== 'invoice' && !isCheck)) { setPendingInvoices([]); return }
@@ -162,7 +172,7 @@ function MovementForm({ type, accounts, categories, items, taxes, prefill, onClo
         {prefill?.item ? (
           <p className="text-sm text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-900/40 rounded-lg px-3 py-2">{prefill.item.name}</p>
         ) : (
-          <ItemPicker items={items} categories={categories} value={item?.id} onChange={handleItemChange} />
+          <ItemPicker type={type} items={items} categories={categories} value={item?.id} onChange={handleItemChange} />
         )}
       </div>
 
@@ -292,9 +302,9 @@ function MovementForm({ type, accounts, categories, items, taxes, prefill, onClo
   )
 }
 
-function TransferForm({ accounts, taxes, onClose, onSaved }) {
-  const [reason, setReason] = useState(TRANSFER_REASONS[0].key)
-  const [fromAccountId, setFromAccountId] = useState('')
+function TransferForm({ accounts, taxes, prefill, onClose, onSaved }) {
+  const [reason, setReason] = useState(prefill?.reason || TRANSFER_REASONS[0].key)
+  const [fromAccountId, setFromAccountId] = useState(prefill?.accountId ? String(prefill.accountId) : '')
   const [fromAmount, setFromAmount] = useState('')
   const [toAccountId, setToAccountId] = useState('')
   const [toAmount, setToAmount] = useState('')

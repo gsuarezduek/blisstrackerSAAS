@@ -106,7 +106,7 @@ export default function BalancesTab({ accounts: accountsCatalog, taxes }) {
       </div>
 
       {detailAccount && (
-        <AccountDetailPanel account={detailAccount} onClose={() => setDetailAccountId(null)} onChanged={handleChanged} />
+        <AccountDetailPanel account={detailAccount} accounts={accountsCatalog} taxes={taxes} onClose={() => setDetailAccountId(null)} onChanged={handleChanged} />
       )}
       {creditingCheck && (
         <CreditCheckModal check={creditingCheck} accounts={accountsCatalog} taxes={taxes}
