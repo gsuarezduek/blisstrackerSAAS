@@ -201,7 +201,8 @@ async function runOnPageAnalysis(auditId, workspaceId, projectId, seedUrl, userI
     await setStep(auditId, 'Chequeando enlaces internos…')
     const allInternal = new Set()
     for (const p of evaluated) for (const l of (p.internalLinks || [])) allInternal.add(l)
-    const notCrawled = [...allInternal].filter(u => !visited.has(u))
+    const crawled = new Set(evaluated.map(p => p.url))
+    const notCrawled = [...allInternal].filter(u => !crawled.has(u))
     const broken = await checkBrokenLinks(notCrawled)
 
     // ── Enlazado interno con IA (si hay presupuesto) ──
