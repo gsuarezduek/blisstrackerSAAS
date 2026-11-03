@@ -4,21 +4,28 @@ import { Icon } from '../ui/Icon'
 
 // ─── Breadcrumb + acciones (papelera / nueva carpeta / subir archivos) ───────
 
-export default function FilesToolbar({ folderId, path, onNavigate, onShowTrash, onNewFolder, onFilesSelected }) {
+const DROP_ACTIVE = 'rounded ring-2 ring-primary-500 bg-primary-50 dark:bg-primary-900/30'
+
+export default function FilesToolbar({ folderId, path, onNavigate, onShowTrash, onNewFolder, onFilesSelected, dropTargetProps, isDropTarget }) {
   const inputRef = useRef(null)
 
   return (
     <div className="flex items-center justify-between gap-3 flex-wrap">
       <div className="text-sm text-gray-500 dark:text-gray-400 flex items-center gap-1 flex-wrap min-w-0">
-        <button onClick={() => onNavigate(null)} className={`hover:text-primary-600 dark:hover:text-primary-400 ${!folderId ? 'font-semibold text-gray-800 dark:text-gray-100' : ''}`}>
+        <button
+          {...dropTargetProps(null)}
+          onClick={() => onNavigate(null)}
+          className={`hover:text-primary-600 dark:hover:text-primary-400 ${!folderId ? 'font-semibold text-gray-800 dark:text-gray-100' : ''} ${isDropTarget(null) ? DROP_ACTIVE : ''}`}
+        >
           Raíz
         </button>
         {path.map((p, i) => (
           <span key={p.id} className="flex items-center gap-1 min-w-0">
             <span>/</span>
             <button
+              {...dropTargetProps(p.id)}
               onClick={() => onNavigate(p.id)}
-              className={`truncate hover:text-primary-600 dark:hover:text-primary-400 ${i === path.length - 1 ? 'font-semibold text-gray-800 dark:text-gray-100' : ''}`}
+              className={`truncate hover:text-primary-600 dark:hover:text-primary-400 ${i === path.length - 1 ? 'font-semibold text-gray-800 dark:text-gray-100' : ''} ${isDropTarget(p.id) ? DROP_ACTIVE : ''}`}
             >
               {p.name}
             </button>

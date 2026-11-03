@@ -2,6 +2,21 @@
 // ProjectFiles — helpers compartidos
 // ═══════════════════════════════════════════════════════════════════════════════
 
+import api from '../../api/client'
+
+// Mueve cada ítem por separado, así que puede salir bien solo una parte:
+// `moved` son los que efectivamente cambiaron de carpeta. Lo usan el MoveModal y
+// el arrastre. `parentId` null = la raíz.
+export async function moveItems(projectId, items, parentId) {
+  const results = await Promise.allSettled(
+    items.map(it => api.patch(`/projects/${projectId}/files/${it.id}`, { parentId }))
+  )
+  const moved = items.filter((_, i) => results[i].status === 'fulfilled')
+  const failed = items.length - moved.length
+  const error = failed === 0 ? '' : failed === items.length ? 'No se pudo mover' : `${failed} de ${items.length} no se pudieron mover`
+  return { moved, error }
+}
+
 // Fecha corta: "3 sep" (o "3 sep 2025" si no es el año en curso) — se usa para
 // mostrar quién subió/borró algo sin ocupar mucho espacio en la grilla.
 export function fmtDate(iso) {

@@ -3,6 +3,7 @@ import api from '../../api/client'
 import LoadingSpinner from '../LoadingSpinner'
 import { Folder } from 'lucide-react'
 import { Icon } from '../ui/Icon'
+import { moveItems } from './projectFilesHelpers'
 
 // Selector de carpeta destino: navega el mismo árbol con el mismo endpoint de
 // listado (filtrando solo carpetas). La validación de "no mover dentro de sí
@@ -31,17 +32,10 @@ export default function MoveModal({ projectId, items, onClose, onMoved }) {
 
   async function handleMove() {
     setSaving(true); setError('')
-    const results = await Promise.allSettled(
-      items.map(it => api.patch(`/projects/${projectId}/files/${it.id}`, { parentId: folderId }))
-    )
-    const failed = results.filter(r => r.status === 'rejected').length
+    const { moved, error: moveError } = await moveItems(projectId, items, folderId)
     setSaving(false)
-    if (failed > 0) {
-      setError(failed === items.length ? 'No se pudo mover' : `${failed} de ${items.length} no se pudieron mover`)
-      if (failed < items.length) onMoved()
-    } else {
-      onMoved()
-    }
+    if (moveError) setError(moveError)
+    if (moved.length > 0) onMoved()
   }
 
   return (

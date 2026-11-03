@@ -5,7 +5,7 @@ import { Icon } from '../ui/Icon'
 
 // ─── Tarjeta de ítem (carpeta o archivo) con menú contextual ──────────────────
 
-export default function ItemCard({ item, projectId, menuOpen, onOpenMenu, onOpen, onRename, onMove, onDelete, onDownload, onCopyLink, onShare, onCreateTask, onLinkToContent, caption, selected, onToggleSelect }) {
+export default function ItemCard({ item, projectId, menuOpen, onOpenMenu, onOpen, onRename, onMove, onDelete, onDownload, onCopyLink, onShare, onCreateTask, onLinkToContent, caption, selected, onToggleSelect, dragProps, dropProps, dragging, dropActive }) {
   const isFolder = item.type === 'folder'
   const isImage = !isFolder && item.mimeType?.startsWith('image/')
   const isVideo = !isFolder && item.mimeType?.startsWith('video/')
@@ -17,16 +17,24 @@ export default function ItemCard({ item, projectId, menuOpen, onOpenMenu, onOpen
   // que se queda con el ícono por tipo.
   const thumbUrl = isFolder ? null : (item.posterUrl || (isImage ? item.url : null))
   return (
-    <div className={`relative group rounded-xl ${selected ? 'ring-2 ring-primary-500' : ''}`}>
+    <div
+      {...dragProps}
+      {...dropProps}
+      draggable={!!dragProps && !menuOpen}
+      className={`relative group rounded-xl ${selected || dropActive ? 'ring-2 ring-primary-500' : ''} ${dragging ? 'opacity-50' : ''}`}
+    >
       <button
         onClick={() => onOpen(item)}
-        className="w-full flex flex-col items-center gap-1.5 p-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:border-primary-300 dark:hover:border-primary-600 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors text-center"
+        className={`w-full flex flex-col items-center gap-1.5 p-3 rounded-xl border transition-colors text-center ${dropActive
+          ? 'border-primary-400 bg-primary-50 dark:bg-primary-900/30'
+          : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:border-primary-300 dark:hover:border-primary-600 hover:bg-gray-50 dark:hover:bg-gray-700/50'}`}
         title={item.name}
       >
         <div className="w-14 h-14 flex items-center justify-center rounded-lg bg-gray-50 dark:bg-gray-900/40 overflow-hidden relative">
           {thumbUrl ? (
             <>
-              <img src={thumbUrl} alt="" loading="lazy" className="w-full h-full object-cover" />
+              {/* draggable={false}: que se arrastre la tarjeta entera y no la imagen sola. */}
+              <img src={thumbUrl} alt="" loading="lazy" draggable={false} className="w-full h-full object-cover" />
               {/* Un video y una imagen con miniatura se ven igual — el ▸ es lo
                   que los distingue de un vistazo. */}
               {isVideo && (

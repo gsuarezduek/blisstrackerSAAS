@@ -17,6 +17,7 @@ import BulkActionBar from './projectFiles/BulkActionBar'
 import UploadQueue from './projectFiles/UploadQueue'
 import FilePreviewModals from './projectFiles/FilePreviewModals'
 import { fmtDate, fileDeepLink, sortItems } from './projectFiles/projectFilesHelpers'
+import { useFileDragMove } from './projectFiles/useFileDragMove'
 
 // ─── Componente principal ──────────────────────────────────────────────────
 
@@ -245,18 +246,34 @@ export default function ProjectFiles({ projectId, deepLinkFileId, onCreateTaskFr
     reload(folderId)
   }
 
+  const selectedItems = [...folders, ...files].filter(it => selectedIds.has(it.id))
+
+  // Sin reload(): saca solo lo que se movió, así la grilla no pasa por el spinner
+  // en cada arrastre y lo que falló sigue a la vista.
+  const fileDrag = useFileDragMove({
+    projectId,
+    folderId,
+    selectedItems,
+    onError: setError,
+    onMoved: moved => {
+      const ids = new Set(moved.map(it => it.id))
+      setFolders(prev => prev.filter(it => !ids.has(it.id)))
+      setFiles(prev => prev.filter(it => !ids.has(it.id)))
+      setSelectedIds(prev => new Set([...prev].filter(id => !ids.has(id))))
+    },
+  })
+
   function handleDrop(e) {
     e.preventDefault()
     setDragOver(false)
+    if (fileDrag.isDragging) return
     if (e.dataTransfer.files?.length) handleFiles(e.dataTransfer.files, folderId)
   }
-
-  const selectedItems = [...folders, ...files].filter(it => selectedIds.has(it.id))
 
   return (
     <div
       className={`space-y-3 rounded-2xl transition-colors ${dragOver ? 'ring-2 ring-primary-400 bg-primary-50/30 dark:bg-primary-900/10' : ''}`}
-      onDragOver={e => { e.preventDefault(); setDragOver(true) }}
+      onDragOver={e => { if (fileDrag.isDragging) return; e.preventDefault(); setDragOver(true) }}
       onDragLeave={e => { if (e.target === e.currentTarget) setDragOver(false) }}
       onDrop={handleDrop}
     >
@@ -267,6 +284,8 @@ export default function ProjectFiles({ projectId, deepLinkFileId, onCreateTaskFr
         onShowTrash={() => setShowTrash(true)}
         onNewFolder={() => setModal({ type: 'newFolder' })}
         onFilesSelected={fileList => handleFiles(fileList, folderId)}
+        dropTargetProps={fileDrag.dropTargetProps}
+        isDropTarget={fileDrag.isDropTarget}
       />
 
       <FilesSearchBar
@@ -353,13 +372,17 @@ export default function ProjectFiles({ projectId, deepLinkFileId, onCreateTaskFr
                 caption={item.uploadedBy ? `${item.uploadedBy.name} · ${fmtDate(item.createdAt)}` : fmtDate(item.createdAt)}
                 selected={selectedIds.has(item.id)}
                 onToggleSelect={toggleSelect}
+                dragProps={fileDrag.dragSourceProps(item)}
+                dropProps={item.type === 'folder' ? fileDrag.dropTargetProps(item.id) : undefined}
+                dragging={fileDrag.isItemDragging(item)}
+                dropActive={item.type === 'folder' && fileDrag.isDropTarget(item.id)}
               />
             </div>
           ))}
         </div>
       )}
 
-      <p className="text-xs text-gray-400 dark:text-gray-500">Hasta {fmtMb(MAX_FILE_BYTES)} por archivo.</p>
+      <p className="text-xs text-gray-400 dark:text-gray-500">Hasta {fmtMb(MAX_FILE_BYTES)} por archivo. Para mover algo, arrastralo a una carpeta o a la ruta de arriba.</p>
 
       {/* Modales */}
       {modal?.type === 'newFolder' && (
