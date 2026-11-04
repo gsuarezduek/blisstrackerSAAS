@@ -8,6 +8,12 @@
  * esa brecha sin necesidad de base: el DMMF sabe qué campos son relaciones y qué campos
  * son escalares, y está disponible con sólo importar el cliente generado.
  */
+// Importar el controller arrastra `src/lib/prisma`, que instancia un PrismaClient real
+// al cargarse. Con `--runInBand` eso deja un cliente vivo que contamina suites posteriores
+// (hacía fallar chat.controller.test.js). Acá no se usa el cliente, sólo el DMMF —que vive
+// en `@prisma/client`, otro módulo—, así que mockearlo no le quita nada al test.
+jest.mock('../../src/lib/prisma', () => ({}))
+
 const { Prisma } = require('@prisma/client')
 const { profileTaskInclude } = require('../../src/controllers/users.controller')
 
