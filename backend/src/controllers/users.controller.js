@@ -109,9 +109,10 @@ const profileTaskInclude = {
   user: { select: { id: true, name: true, avatar: true } },
   _count: { select: { comments: true } },
   // Quién la ejecuta: las listas del perfil rotulan las de agente (ver AgentTag).
+  // Ojo: `isAgentTask`/`agentName` son escalares y NO van acá. Un `include` los devuelve
+  // solos (devuelve todos los del modelo); nombrarlos es un error de validación de Prisma
+  // —"include statements only accept relation fields"— que tira 500 todo el endpoint.
   agent: { select: { id: true, label: true } },
-  agentName: true,
-  isAgentTask: true,
 }
 
 // Filtra tareas de proyectos privados que el usuario que está mirando el perfil
@@ -323,4 +324,7 @@ async function getUserCompleted(req, res, next) {
   } catch (err) { next(err) }
 }
 
-module.exports = { list, getAdminUserDetail, getUserProfile, getUserCompleted }
+// `profileTaskInclude` se exporta sólo para el test que valida su forma contra el DMMF
+// de Prisma: los tests de integración mockean el cliente, así que un include mal
+// armado no lo atrapa ninguno (fue justo lo que pasó).
+module.exports = { list, getAdminUserDetail, getUserProfile, getUserCompleted, profileTaskInclude }
