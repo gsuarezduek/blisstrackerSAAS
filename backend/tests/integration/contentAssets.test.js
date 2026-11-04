@@ -22,6 +22,7 @@ jest.mock('../../src/services/objectStorage.service', () => ({
   deleteObjects: jest.fn(),
   publicUrl:     jest.fn(key => `https://cdn.example.com/${key}`),
   presignGet:    jest.fn(),
+  putObject:     jest.fn(),
 }))
 
 jest.mock('../../src/lib/platformSettings', () => ({
@@ -91,6 +92,88 @@ beforeEach(() => {
   objectStorage.isConfigured.mockReturnValue(true)
   objectStorage.buildKey.mockReturnValue('content/1/new-uuid.png')
   objectStorage.presignPut.mockResolvedValue('https://r2.example.com/presigned-put-url')
+  objectStorage.putObject.mockImplementation(async (buf, mime) => ({ key: 'content/1/server-side.png', url: 'https://cdn.example.com/content/1/server-side.png', size: buf.length }))
+})
+
+// Imagen PNG mínima que pasa la detección por magic bytes (8 bytes de firma + relleno
+// hasta los 12 que mira detectImageType).
+const PNG_B64 = Buffer.concat([
+  Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+  Buffer.alloc(24, 1),
+]).toString('base64')
+
+// ─── Subida del lado del servidor (agentes por MCP) ──────────────────────────
+// El camino normal (presign → PUT desde el browser → confirm) no lo puede hacer un
+// agente: un tool-call manda JSON, no bytes.
+describe('POST /assets/direct', () => {
+  it('sube y deja el asset listo en un solo paso', async () => {
+    mockBase()
+    prisma.contentAsset.count.mockResolvedValue(0)
+    prisma.contentAsset.create.mockImplementation(({ data }) => Promise.resolve(dbAsset({ ...data, id: 3 })))
+
+    const res = await req('post', `${BASE}/direct`).send({ name: 'pastiza-nov.png', contentBase64: PNG_B64 })
+
+    expect(res.status).toBe(201)
+    expect(objectStorage.putObject).toHaveBeenCalledWith(expect.any(Buffer), 'image/png', { prefix: 'content/1' })
+    expect(prisma.contentAsset.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        status: 'ready', kind: 'image', mimeType: 'image/png',
+        objectKey: 'content/1/server-side.png', fileName: 'pastiza-nov.png',
+      }),
+    }))
+  })
+
+  // El tipo sale de los bytes, no del nombre ni del mimeType declarado: si no, bastaba
+  // con llamar "foto.png" a cualquier cosa.
+  it('400 si los bytes no son una imagen ni un video, aunque la extensión diga que sí', async () => {
+    mockBase()
+    const res = await req('post', `${BASE}/direct`)
+      .send({ name: 'foto.png', contentBase64: Buffer.from('<html>no soy una imagen</html>').toString('base64'), mimeType: 'image/png' })
+
+    expect(res.status).toBe(400)
+    expect(prisma.contentAsset.create).not.toHaveBeenCalled()
+    expect(objectStorage.putObject).not.toHaveBeenCalled()
+  })
+
+  it('400 con `content` (texto): un asset de Contenido es imagen o video', async () => {
+    mockBase()
+    const res = await req('post', `${BASE}/direct`).send({ name: 'notas.md', content: '# hola' })
+    expect(res.status).toBe(400)
+    expect(prisma.contentAsset.create).not.toHaveBeenCalled()
+  })
+
+  it('respeta el cupo de 8 archivos por pieza', async () => {
+    mockBase()
+    prisma.contentAsset.count.mockResolvedValue(8)
+    const res = await req('post', `${BASE}/direct`).send({ name: 'foto.png', contentBase64: PNG_B64 })
+    expect(res.status).toBe(400)
+    expect(objectStorage.putObject).not.toHaveBeenCalled()
+  })
+
+  it('respeta la cuota de storage del workspace', async () => {
+    mockBase()
+    getSettings.mockResolvedValue({ contentStorageMaxMbPerWorkspace: 1 })
+    prisma.contentAsset.count.mockResolvedValue(0)
+    prisma.contentAsset.aggregate.mockResolvedValue({ _sum: { sizeBytes: 1024 * 1024 } })
+
+    const res = await req('post', `${BASE}/direct`).send({ name: 'foto.png', contentBase64: PNG_B64 })
+    expect(res.status).toBe(413)
+    expect(res.body.code).toBe('STORAGE_QUOTA_EXCEEDED')
+  })
+
+  it('sin R2 guarda la imagen en la DB, igual que el fallback multipart', async () => {
+    mockBase()
+    objectStorage.isConfigured.mockReturnValue(false)
+    prisma.contentAsset.count.mockResolvedValue(0)
+    prisma.contentAsset.create.mockImplementation(({ data }) => Promise.resolve(dbAsset({ ...data, id: 4 })))
+
+    const res = await req('post', `${BASE}/direct`).send({ name: 'foto.png', contentBase64: PNG_B64 })
+
+    expect(res.status).toBe(201)
+    const { data } = prisma.contentAsset.create.mock.calls[0][0]
+    expect(data.objectKey).toBeNull()
+    expect(Buffer.isBuffer(data.imageData)).toBe(true)
+  })
 })
 
 describe('POST /assets/presign', () => {

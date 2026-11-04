@@ -7,6 +7,7 @@ const { validateMediaHeader } = require('../lib/mediaType')
 const { safeContentDisposition } = require('../lib/contentDisposition')
 const { resolveCtx, loadPiece, formatPiece, formatAsset } = require('./content/_shared')
 const { mirrorAssetToArchivos } = require('../services/contentFileMirror.service')
+const { resolveDirectUpload } = require('../lib/directUpload')
 
 // El asset cambió, pero lo que muestran las vistas (Kanban/Tabla/Calendario) es
 // la PIEZA con su array de assets embebido — se recarga y emite completa, mismo
@@ -237,6 +238,105 @@ async function confirmAsset(req, res, next) {
 }
 
 /**
+ * POST /api/contenido/projects/:id/pieces/:pid/assets/direct
+ * Body: { name, url | contentBase64, mimeType? }
+ *
+ * Subida DEL LADO DEL SERVIDOR, para los agentes conectados por MCP: el camino
+ * normal es presign → PUT directo a R2 desde el browser → confirm, y un tool-call
+ * de MCP manda JSON, no bytes. Misma vía que ya usan los adjuntos de tarea
+ * (`POST /tasks/:id/attachments/direct`) y la Nube (`POST /projects/:id/files/direct`),
+ * con el mismo resolvedor compartido (lib/directUpload.js: tope de 25MB, descarga
+ * de URL con assertPublicUrl en cada redirect por SSRF, tipo real por magic bytes).
+ *
+ * Lo que NO se relaja respecto de presign/confirm: el tipo se valida con
+ * `validateMediaHeader` sobre los bytes reales (no sobre lo que declaró el cliente),
+ * y siguen rigiendo el tope por tipo (15MB imagen / 150MB video), el cupo de 8
+ * archivos por pieza y la cuota de storage del workspace. La única diferencia es
+ * que acá el archivo nace 'ready' en un solo paso: no hay un objeto en R2 esperando
+ * un confirm que podría no llegar.
+ *
+ * `content` (texto plano) no se acepta: un asset de Contenido es una imagen o un
+ * video. Para adjuntar un texto a una pieza está el hilo de comentarios.
+ */
+async function directAsset(req, res, next) {
+  try {
+    const ctx = await resolveCtx(req, res, { write: true })
+    if (!ctx) return
+
+    const piece = await loadPiece(req.params.pid, ctx.projectId, ctx.workspaceId)
+    if (!piece) return res.status(404).json({ error: 'Pieza no encontrada' })
+
+    const { name, contentBase64, url, mimeType: declared } = req.body || {}
+    if (typeof req.body?.content === 'string' && req.body.content) {
+      return res.status(400).json({ error: 'Un asset de Contenido es una imagen o un video: mandá `url` o `contentBase64`, no `content`' })
+    }
+
+    let buffer, mimeType
+    try {
+      ({ buffer, mimeType } = await resolveDirectUpload({ name, contentBase64, url, mimeType: declared }))
+    } catch (err) {
+      if (err.status) return res.status(err.status).json(err.code ? { error: err.message, code: err.code } : { error: err.message })
+      throw err
+    }
+
+    const kind = ALLOWED_MIME.image.includes(mimeType) ? 'image'
+      : ALLOWED_MIME.video.includes(mimeType) ? 'video'
+      : null
+    if (!kind) {
+      return res.status(400).json({ error: `Formato no soportado (${mimeType}). Imágenes: PNG, JPG, WEBP, GIF. Videos: MP4, MOV, WEBM.` })
+    }
+    // Magic bytes sobre los bytes que efectivamente se van a guardar — mismo check
+    // que confirmAsset hace sobre el objeto ya subido.
+    const check = validateMediaHeader(buffer.subarray(0, 32), kind, ALLOWED_MIME[kind])
+    if (!check.ok) return res.status(400).json({ error: check.error })
+
+    if (buffer.length > MAX_BYTES[kind]) {
+      return res.status(413).json({ error: `El archivo supera el máximo permitido (${Math.round(MAX_BYTES[kind] / (1024 * 1024))}MB).` })
+    }
+
+    const slotError = await assertReadySlot(piece.id)
+    if (slotError) return res.status(400).json({ error: slotError })
+    const quotaError = await assertWithinQuota(ctx.workspaceId, buffer.length)
+    if (quotaError) return res.status(413).json({ error: quotaError, code: 'STORAGE_QUOTA_EXCEEDED' })
+
+    // Sin R2 configurado (dev local) sólo se puede guardar imagen en la DB, igual
+    // que el fallback multipart.
+    const storage = objectStorage.isConfigured()
+    if (!storage && kind !== 'image') {
+      return res.status(503).json({ error: 'La subida de videos no está configurada.', code: 'STORAGE_NOT_CONFIGURED' })
+    }
+    const put = storage
+      ? await objectStorage.putObject(buffer, check.mimeType, { prefix: `content/${ctx.workspaceId}` })
+      : null
+
+    const order = await prisma.contentAsset.count({ where: { pieceId: piece.id } })
+    const asset = await prisma.contentAsset.create({
+      data: {
+        pieceId: piece.id,
+        workspaceId: ctx.workspaceId,
+        kind,
+        status: 'ready',
+        mimeType: check.mimeType,
+        objectKey: put?.key ?? null,
+        imageData: put ? null : buffer,
+        sizeBytes: buffer.length,
+        fileName: sanitizeFileName(name),
+        order,
+        uploadedById: req.user.userId,
+        confirmedAt: new Date(),
+      },
+    })
+
+    await emitPieceUpdated(ctx.workspaceId, ctx.projectId, piece.id)
+    await mirrorAssetToArchivos({
+      workspaceId: ctx.workspaceId, projectId: ctx.projectId, timezone: ctx.timezone,
+      pieceId: piece.id, pieceTitle: piece.title, asset, uploaderId: req.user.userId,
+    })
+    res.status(201).json(formatAsset(asset))
+  } catch (err) { next(err) }
+}
+
+/**
  * POST /api/contenido/projects/:id/pieces/:pid/assets — multipart `file`.
  * Fallback SOLO imagen para cuando R2 no está configurado (dev local, o un
  * workspace corriendo sin object storage). En producción con R2 activo este
@@ -448,6 +548,7 @@ async function serveContentAsset(req, res, next) {
 module.exports = {
   presignAsset,
   confirmAsset,
+  directAsset,
   uploadAssetFallback,
   createLinkAsset,
   reorderAsset,

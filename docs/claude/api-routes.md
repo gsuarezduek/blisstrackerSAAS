@@ -74,10 +74,12 @@ PATCH  /api/tasks/:id?scope=series        # editar: scope=series actualiza la se
 DELETE /api/tasks/:id?scope=series        # borrar: scope=series elimina toda la serie recurrente
 POST   /api/tasks  body: { ..., scheduledFor?, recurrence? }  # tarea futura / recurrente
 POST   /api/tasks  body: { ..., executor?: 'agent'|'user', agentId? }  # executor:'agent' = la ejecuta un agente (solo para uno mismo)
-GET    /api/tasks/agent-queue            # tareas de agente abiertas de la persona (vía MCP: las de ese agente + las delegadas a cualquiera); materializa recurrentes sin reabrir la jornada
+GET    /api/tasks/agent-queue            # tareas de agente abiertas de la persona (vía MCP: las de ese agente + las delegadas a cualquiera); materializa recurrentes sin reabrir la jornada. Filtros: ?mine=true (solo las del nombre declarado + las sin dueño), ?from/?to (ventana de fechas; `to` default hoy — subirlo destapa lo programado a futuro)
 PATCH  /api/tasks/:id/agent?scope=series # body { executor:'agent'|'user', agentId? } — delegar a mi agente / devolver; no sobre tareas en curso ni completadas
 GET    /api/tasks/agent-updates          # solo MCP. Bandeja de novedades del agente: ?markSeen=false solo lee. kind 'completed' (tareas que creó y completaron) | 'unblocked' | 'comment' (lo que la persona le dejó en sus tareas)
 PATCH  /api/tasks/:id/working-on         # solo MCP. Deja lista una tarea planificada para que el agente la tome; devuelve { task, next: 'start'|'resume'|'unblock'|'none' }
+PATCH  /api/tasks/:id/logged-at          # solo MCP, solo tareas de AGENTE ya completadas. body { date } — reubica jornada + completedAt (+ startedAt y sesiones, por el mismo delta) en ese día. Tope: el 1° del mes en curso; nunca una fecha futura
+GET    /api/tasks/search                 # ?q=&projectId=&status=(coma|open)&executor=user|agent|any&userId=&from=&to=&take= — filas livianas, newest-first. Otra persona requiere admin/owner; los privados ajenos quedan afuera
 GET    /api/tasks/completed              # ?skip=N&before=YYYY-MM-DD, 10/page
 PATCH  /api/tasks/:id/duration           # task owner or admin
 DELETE /api/tasks/:id
@@ -333,6 +335,7 @@ GET    /api/contenido/projects/:id/summary                        # { byStatus, 
 POST   /api/contenido/projects/:id/request-approval               # { pieceIds? } — email a los contactos que pueden aprobar
 POST   /api/contenido/projects/:id/pieces/:pid/assets/presign     # { kind, mimeType, sizeBytes, fileName } → { assetId, uploadUrl }
 POST   /api/contenido/projects/:id/pieces/:pid/assets/:aid/confirm  # valida tamaño real (HeadObject) + magic bytes (ranged GET)
+POST   /api/contenido/projects/:id/pieces/:pid/assets/direct      # { name, url | contentBase64, mimeType? } — sube desde el servidor (agentes vía MCP), queda 'ready' en un paso. Mismos topes, cupo y cuota que presign/confirm; `content` (texto) no se acepta
 POST   /api/contenido/projects/:id/pieces/:pid/assets              # multipart, fallback sin R2 (solo imagen)
 PATCH  /api/contenido/projects/:id/pieces/:pid/assets/:aid         # reordenar
 DELETE /api/contenido/projects/:id/pieces/:pid/assets/:aid
@@ -388,6 +391,7 @@ POST   /api/marketing/projects/:id/integrations/connect-existing      # reutiliz
 POST   /api/marketing/projects/:id/integrations/instagram/connect-token  # conectar Instagram con token manual
 POST   /api/marketing/projects/:id/integrations/meta-ads/connect-token   # conectar Meta Ads con System User Token
 GET    /api/marketing/projects/:id/integrations             # lista integraciones del proyecto
+GET    /api/marketing/connections                           # ?projectId= opcional. Estado de TODAS las fuentes (active|expired|missing) + reconnectUrl a la pantalla de la app donde se conecta. Sin projectId: solo lo que falta de cada proyecto activo + `expired` aparte. Resuelve el gate de privados adentro (no cuelga de /projects/:id)
 PATCH  /api/marketing/projects/:id/integrations/:type       # actualizar propertyId / customerId
 DELETE /api/marketing/projects/:id/integrations/:type       # desconectar integración + revocar token
 

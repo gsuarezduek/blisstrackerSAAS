@@ -1,9 +1,9 @@
 const prisma = require('../../lib/prisma')
-const { todayString } = require('../../utils/dates')
+const { todayString, isYMD } = require('../../utils/dates')
 const { materializeForUser } = require('../../services/recurrence.service')
 const { taskInclude, requestAgentId, requestAgentName, assertOwnAgent } = require('./_shared')
 const { agentTasksQuery } = require('../workdays.controller')
-const { taskMins } = require('../../lib/timeMetrics')
+const { taskMins, zonedTimeToUtc } = require('../../lib/timeMetrics')
 const { getOrCreateWorkDay } = require('../../lib/workDay')
 const { createdNewsWhere, inboxNewsWhere } = require('../../lib/agentNews')
 
@@ -27,6 +27,17 @@ function ensureTodayWorkDay(userId, workspaceId, date) {
 // las delegadas a "cualquiera" (agentId null); desde la UI, las de todos sus agentes.
 // Materializa antes las recurrentes/futuras que vencieron, así una serie diaria del
 // agente aparece aunque su dueño no haya abierto el dashboard hoy.
+//
+// Dos filtros opcionales, para que un agente no tenga que leer la cola entera:
+//  - ?mine=true — solo las que llevan SU nombre declarado (`agentName`) + las que
+//    todavía no tiene nadie. Varios agentes pueden compartir un token (ver
+//    requestAgentName), y en ese caso el filtro por `agentId` no los separa. El
+//    nombre sale de la identidad de la request, no de un query param: así no hay
+//    dos fuentes de verdad sobre quién es quien llama.
+//  - ?from / ?to — ventana de fechas. La fecha efectiva de un ítem es su
+//    `scheduledFor` (si está programado) o el día de la jornada donde vive
+//    (`workDay.date`). `to` default = hoy, que es el tope de siempre: subirlo es
+//    la única forma de ver lo programado a futuro, que la cola esconde.
 async function agentQueue(req, res, next) {
   try {
     const userId = req.user.userId
@@ -58,6 +69,30 @@ async function agentQueue(req, res, next) {
     }
 
     const agentId = requestAgentId(req)
+
+    // Ventana de fechas. Al tope de `scheduledFor` (hoy, salvo que pidan más
+    // adelante) se le suma el mismo recorte sobre `workDay.date` de las tareas ya
+    // activas — pero solo si vino algún borde: sin parámetros la cola tiene que
+    // devolver exactamente lo de siempre (todo lo abierto, venga del día que venga).
+    const until = isYMD(req.query.to) ? req.query.to : today
+    const since = isYMD(req.query.from) ? req.query.from : null
+    const windowed = Boolean(since || isYMD(req.query.to))
+    const dateWindow = { lte: until, ...(since ? { gte: since } : {}) }
+
+    const filters = [{
+      OR: [
+        { scheduledFor: { not: null, ...dateWindow } },
+        { scheduledFor: null, ...(windowed ? { workDay: { date: dateWindow } } : {}) },
+      ],
+    }]
+    if (agentId) filters.push({ OR: [{ agentId }, { agentId: null }] })
+    // ?mine sin nombre declarado no filtra nada: no hay con qué distinguirlo de
+    // los demás agentes del token, y devolver una cola vacía ocultaría trabajo real.
+    const declaredName = requestAgentName(req)
+    if (req.query.mine === 'true' && declaredName) {
+      filters.push({ OR: [{ agentName: declaredName }, { agentName: null }] })
+    }
+
     const tasks = await prisma.task.findMany({
       where: {
         userId,
@@ -65,8 +100,7 @@ async function agentQueue(req, res, next) {
         status: { in: OPEN_STATUSES },
         workDay: { workspaceId },
         project: { active: true },
-        OR: [{ scheduledFor: null }, { scheduledFor: { lte: today } }],
-        ...(agentId ? { AND: [{ OR: [{ agentId }, { agentId: null }] }] } : {}),
+        AND: filters,
       },
       include: { ...taskInclude, agent: { select: { id: true, label: true } } },
       orderBy: { createdAt: 'asc' },
@@ -253,6 +287,93 @@ async function prepareWorkingOn(req, res, next) {
   } catch (err) { next(err) }
 }
 
+// ─── PATCH /api/tasks/:id/logged-at ─────────────────────────────────────────
+// "Esto lo hice el martes": reubica una tarea de agente YA COMPLETADA en la jornada
+// de otro día. Es el último paso de la tool MCP `task_log_done` — crear/tomar,
+// iniciar, completar y registrar los minutos pasan por los endpoints de siempre
+// (con todos sus efectos: to-dos vinculados, piezas de Contenido, avisos), y acá
+// sólo se corrige CUÁNDO.
+//
+// Hay que mover dos cosas porque el producto cuenta el tiempo por dos vías: el
+// Dashboard y el historial filtran por `workDay.date` (ver lib/workDay.js) y
+// Reportes/Productividad/el informe al cliente bucketean por `completedAt` (ver
+// lib/timeMetrics.js `buildCompletedAtWhere`). Mover una sola dejaría la tarea
+// contada en un día en una vista y en otro día en la otra.
+//
+// El resto de las marcas (startedAt, las sesiones) se corren por el MISMO delta en
+// vez de recalcularse: así la tarea queda igual de larga que lo que realmente
+// llevó, sólo desplazada. `pausedMinutes` y `minutesOverride` no se tocan.
+//
+// Solo vía MCP y solo sobre tareas de agente del dueño del token: el tiempo que
+// registró una persona no se reescribe desde acá.
+const BACKDATE_LIMIT_MSG = 'Solo se puede registrar dentro del mes en curso: un mes cerrado ya se le informó al cliente'
+
+async function setLoggedAt(req, res, next) {
+  try {
+    const agentId = requestAgentId(req)
+    if (!agentId) return res.status(400).json({ error: 'Solo disponible para agentes conectados por MCP' })
+    const userId = req.user.userId
+    const workspaceId = req.workspace.id
+    const tz = req.workspace.timezone
+    const id = Number(req.params.id)
+    const { date } = req.body || {}
+
+    if (!isYMD(date)) return res.status(400).json({ error: 'date inválida (formato YYYY-MM-DD)' })
+    const today = todayString(tz)
+    if (date > today) return res.status(400).json({ error: 'No se puede registrar trabajo en una fecha futura' })
+    // Tope: el 1° del mes en curso. El tiempo de agente consume las horas
+    // contratadas del proyecto y se le muestra al cliente, así que un mes ya
+    // cerrado (informe generado, horas reportadas) no se reescribe.
+    if (date < `${today.slice(0, 7)}-01`) return res.status(400).json({ error: BACKDATE_LIMIT_MSG })
+
+    const task = await prisma.task.findFirst({
+      where: { id, userId, workDay: { workspaceId } },
+      include: { workDay: { select: { date: true } }, sessions: { select: { id: true, startedAt: true, endedAt: true } } },
+    })
+    if (!task) return res.status(404).json({ error: 'Tarea no encontrada: tiene que ser una tarea de la persona para la que trabajás' })
+    if (!task.isAgentTask) return res.status(403).json({ error: 'Solo se puede cambiar la fecha de tus tareas de agente, no de las de la persona' })
+    if (task.status !== 'COMPLETED' || !task.completedAt) {
+      return res.status(400).json({ error: 'Solo se puede cambiar la fecha de una tarea ya completada' })
+    }
+
+    // Hora de cierre: las 18:00 de ese día (un final de jornada plausible), nunca
+    // en el futuro. La hora exacta no la declara el agente — lo que se registra es
+    // el día y la duración, no un horario que nadie midió.
+    const anchor = zonedTimeToUtc(date, tz, { h: 18 })
+    const now = new Date()
+    const completedAt = anchor > now ? now : anchor
+    const delta = completedAt.getTime() - new Date(task.completedAt).getTime()
+    const shift = d => (d ? new Date(new Date(d).getTime() + delta) : null)
+
+    const workDay = task.workDay?.date === date
+      ? null
+      : await getOrCreateWorkDay(prisma, { userId, workspaceId, date })
+    if (task.workDay?.date !== date && !workDay) {
+      return res.status(500).json({ error: 'No se pudo obtener la jornada de ese día' })
+    }
+
+    const updated = await prisma.$transaction(async (tx) => {
+      for (const session of task.sessions) {
+        await tx.taskSession.update({
+          where: { id: session.id },
+          data: { startedAt: shift(session.startedAt), endedAt: shift(session.endedAt) },
+        })
+      }
+      return tx.task.update({
+        where: { id },
+        data: {
+          completedAt,
+          startedAt: shift(task.startedAt),
+          ...(workDay ? { workDayId: workDay.id } : {}),
+        },
+        include: { ...taskInclude, agent: { select: { id: true, label: true } } },
+      })
+    })
+
+    res.json({ task: updated, date, workedMinutes: taskMins(updated) })
+  } catch (err) { next(err) }
+}
+
 // ─── PATCH /api/tasks/:id/agent ─────────────────────────────────────────────
 // "Delegar a mi agente" (executor:'agent') o devolverla a la persona (executor:'user').
 // Solo sobre tareas propias, abiertas y que no estén en curso (cambiar quién la
@@ -307,4 +428,4 @@ async function setExecutor(req, res, next) {
   } catch (err) { next(err) }
 }
 
-module.exports = { agentQueue, agentUpdates, prepareWorkingOn, setExecutor, ensureTodayWorkDay }
+module.exports = { agentQueue, agentUpdates, prepareWorkingOn, setExecutor, setLoggedAt, ensureTodayWorkDay }

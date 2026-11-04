@@ -69,6 +69,8 @@ router.post  ('/projects/:id/request-approval', approval.requestApproval)
 // Assets. presign/confirm es el camino normal (subida directa a R2); el
 // multipart es el fallback sin R2 configurado (solo imagen, ver contentAssets.controller.js).
 router.post  ('/projects/:id/pieces/:pid/assets/presign',        assets.presignAsset)
+// Subida del lado del servidor (agentes por MCP: un tool-call manda JSON, no bytes).
+router.post  ('/projects/:id/pieces/:pid/assets/direct',         assets.directAsset)
 router.post  ('/projects/:id/pieces/:pid/assets/:aid/confirm',   assets.confirmAsset)
 router.post  ('/projects/:id/pieces/:pid/assets',                uploadFallback.single('file'), assets.uploadAssetFallback)
 router.post  ('/projects/:id/pieces/:pid/assets/link',           assets.createLinkAsset)

@@ -26,6 +26,29 @@ const planSchema = z.object({
   serviceNames: z.array(z.string()).optional().describe('Servicios libres (no del catálogo)'),
 })
 
+// Versión corta de un proyecto para `list_projects` (ver el comentario de la tool).
+// Se queda con lo que un agente usa para trabajar y descarta la configuración de la
+// ficha (links, redes, integrationDefaults, URLs protegidas de canibalización,
+// secciones del informe, timestamps) y los avatares del equipo.
+function compactProject(p) {
+  if (p.locked) return { id: p.id, name: p.name, locked: true, note: 'Proyecto privado: no formás parte del equipo' }
+  const open = p.taskCounts
+    ? Object.fromEntries(Object.entries(p.taskCounts).filter(([k, v]) => v > 0 && k !== 'COMPLETED_WEEK'))
+    : null
+  return {
+    id: p.id,
+    name: p.name,
+    ...(p.websiteUrl ? { websiteUrl: p.websiteUrl } : {}),
+    ...(p.starred ? { starred: true } : {}),
+    ...(p.isPrivate ? { isPrivate: true } : {}),
+    ...(p.monthlyHours ? { monthlyHours: p.monthlyHours } : {}),
+    services: (p.services ?? []).map(s => ({ id: s.service?.id ?? s.serviceId, name: s.service?.name })),
+    team: (p.members ?? []).map(m => m.user?.name).filter(Boolean),
+    integrations: (p.integrations ?? []).map(i => i.type),
+    ...(open && Object.keys(open).length ? { openTasks: open } : {}),
+  }
+}
+
 const tools = [
   // ── Identidad ────────────────────────────────────────────────────────────
   // (bliss_guide, la otra tool "de arranque", no pega a la API: se registra
@@ -40,12 +63,32 @@ const tools = [
   // ── Proyectos ────────────────────────────────────────────────────────────
   {
     name: 'list_projects',
-    description: 'Lista todos los proyectos activos del workspace (nombre, websiteUrl, servicios, destacados). Punto de entrada: casi todas las demás tools necesitan un projectId de acá.',
-    inputSchema: {},
-    request: () => ({ method: 'GET', path: '/projects' }),
+    description: 'Lista todos los proyectos activos del workspace (nombre, servicios contratados con su id, equipo, integraciones conectadas, tareas abiertas, sitio web). Punto de entrada: casi todas las demás tools necesitan un projectId de acá. Por default devuelve la versión corta; `detail: "full"` trae la ficha completa de cada proyecto (links, redes, configuración) y pesa unas 10 veces más — pedila solo si necesitás un campo que la corta no trae.',
+    inputSchema: {
+      detail: z.enum(['compact', 'full']).optional().describe('compact (default) = lo necesario para trabajar; full = la ficha completa de cada proyecto'),
+    },
+    // La única tool con post-proceso de la respuesta: `GET /projects` devuelve la
+    // ficha completa de cada proyecto (~300KB en un workspace con 30 cuentas) porque
+    // es lo que necesita la grilla de Mis Proyectos. Un agente paga cada campo en
+    // tokens de contexto, y de todo eso usa el id, el nombre y los servicios. Se
+    // recorta acá y no con un `?fields=` en el endpoint para no cambiarle la
+    // respuesta al frontend, que sí usa el resto.
+    run: async ({ detail }, call) => {
+      const res = await call('GET', '/projects')
+      if (detail === 'full' || res.status >= 400 || !Array.isArray(res.data)) return res
+      return { status: res.status, data: res.data.map(compactProject) }
+    },
   },
 
   // ── Marketing: lectura ───────────────────────────────────────────────────
+  {
+    name: 'project_connections',
+    description: 'Estado de las fuentes de datos de un proyecto: qué está conectado, qué se venció y qué nunca se conectó (Google Analytics, Search Console, Google Ads, Meta Ads, Instagram, TikTok, LinkedIn, Facebook, YouTube, sitio web), con el link exacto de la app donde la persona lo conecta. Usala cuando una tool de Marketing devuelve "sin datos": muchas veces no es que no haya datos, es que falta la conexión. Sin `projectId` devuelve solo lo que falta en cada proyecto activo del workspace. Conectar requiere pasar por el navegador (OAuth): vos no podés hacerlo, pasale el link a la persona.',
+    inputSchema: {
+      projectId: z.number().int().optional().describe('Un proyecto puntual (con todas sus fuentes, conectadas incluidas). Sin esto, lo que falta en todo el workspace.'),
+    },
+    request: ({ projectId }) => ({ method: 'GET', path: '/marketing/connections', query: { projectId } }),
+  },
   {
     name: 'marketing_health_score',
     description: 'Score compuesto de salud de Marketing de un proyecto: GEO, Keywords, GA4 y PageSpeed.',
@@ -575,6 +618,24 @@ const tools = [
     request: ({ userId }) => ({ method: 'GET', path: '/workdays/today', query: { userId } }),
   },
   {
+    name: 'tasks_search',
+    description: 'Busca tareas por texto y filtros, con filas livianas. Usala ANTES de crear una tarea para no duplicar lo que ya existe (buscá 2 o 3 palabras clave del título, no la frase entera). Por default busca en las tareas de la persona para la que trabajás — las suyas y las de sus agentes —, cualquier estado, las más nuevas primero. Para ver las de otra persona hace falta que tu dueño sea admin/owner.',
+    inputSchema: {
+      q: z.string().optional().describe('Palabras del título de la tarea (no distingue mayúsculas). Sin esto, devuelve las últimas según los demás filtros.'),
+      projectId: z.number().int().optional().describe('Acotar a un proyecto (ver list_projects)'),
+      status: z.string().optional().describe('Estados separados por coma: PENDING, IN_PROGRESS, PAUSED, BLOCKED, COMPLETED. "open" = todas las abiertas.'),
+      executor: z.enum(['user', 'agent', 'any']).optional().describe('Quién la hace: "user" = la persona, "agent" = sus agentes, "any" (default) = las dos'),
+      userId: z.number().int().optional().describe('Tareas de otra persona (requiere admin/owner). Sin esto, las de tu dueño.'),
+      from: z.string().optional().describe('YYYY-MM-DD — desde qué día de la jornada'),
+      to: z.string().optional().describe('YYYY-MM-DD — hasta qué día de la jornada'),
+      take: z.number().int().optional().describe('Cuántas devolver (default 20, máximo 50)'),
+    },
+    request: ({ q, projectId, status, executor, userId, from, to, take }) => ({
+      method: 'GET', path: '/tasks/search',
+      query: { q, projectId, status, executor, userId, from, to, take },
+    }),
+  },
+  {
     name: 'task_create',
     description: 'Crea una tarea nueva en un proyecto, asignada al usuario conectado por defecto. Opcionalmente futura (scheduledFor) o recurrente (recurrence) — mutuamente excluyentes.',
     inputSchema: {
@@ -599,9 +660,16 @@ const tools = [
   },
   {
     name: 'tasks_agent_queue',
-    description: 'Tu lista de trabajo como agente: tareas de agente abiertas (pendientes/en curso/pausadas/bloqueadas) — las asignadas a vos y las que la persona delegó a "cualquiera de sus agentes". Revisala al empezar a trabajar.',
-    inputSchema: {},
-    request: () => ({ method: 'GET', path: '/tasks/agent-queue' }),
+    description: 'Tu lista de trabajo como agente: tareas de agente abiertas (pendientes/en curso/pausadas/bloqueadas) — las asignadas a vos y las que la persona delegó a "cualquiera de sus agentes". Revisala al empezar a trabajar. Por default trae todo lo que ya está para hacer; `to` con una fecha más adelante agrega lo PROGRAMADO hasta ese día (que la cola normalmente esconde), y `mine` la recorta a lo tuyo si compartís el conector con otros agentes.',
+    inputSchema: {
+      mine: z.boolean().optional().describe('true = solo las que llevan tu nombre de agente (el que mandás en `agentName`) más las que todavía no tiene nadie. Útil solo si varios agentes comparten este conector; sin `agentName` declarado no filtra nada.'),
+      from: z.string().optional().describe('YYYY-MM-DD — desde qué día mirar. Sin esto, todo lo abierto venga del día que venga (incluido lo arrastrado).'),
+      to: z.string().optional().describe('YYYY-MM-DD — hasta qué día mirar. Default: hoy. Subilo para ver lo que tenés programado para los próximos días.'),
+    },
+    request: ({ mine, from, to }) => ({
+      method: 'GET', path: '/tasks/agent-queue',
+      query: { mine: mine === true ? 'true' : undefined, from, to },
+    }),
   },
   {
     name: 'task_working_on',
@@ -625,6 +693,63 @@ const tools = [
       const created = await call('POST', '/tasks', { body: { description, projectId, executor: 'agent' } })
       if (created.status >= 400) return created
       return call('PATCH', `/tasks/${created.data.id}/start`)
+    },
+  },
+  {
+    name: 'task_log_done',
+    description: 'Registrá en UN paso algo que ya hiciste: queda como tarea tuya (de agente) completada, con los minutos que te llevó y, si hace falta, con la fecha del día en que lo hiciste. Reemplaza la secuencia crear/tomar → iniciar → completar → cargar duración. Dos formas: (1) `taskId` de una tarea que ya existe (de tu lista, del Backlog o programada para otro día): la toma y la cierra; (2) `description` + `projectId` si no estaba anotada. Tu tiempo cuenta como horas del proyecto frente al cliente: cargá minutos REALES de trabajo, no estimaciones infladas. Si todavía estás trabajando, usá `task_working_on` en vez de esto.',
+    inputSchema: {
+      minutes: z.number().int().min(0).max(1440).describe('Minutos reales que te llevó (máximo 1440 = 24h)'),
+      taskId: z.number().int().optional().describe('La tarea que ya existe (preferilo siempre que esté anotada, para no duplicar)'),
+      description: z.string().optional().describe('Si no estaba anotada: qué hiciste, como acción concreta ("Redactar 3 posteos de noviembre para Pastiza")'),
+      projectId: z.number().int().optional().describe('Si no estaba anotada: proyecto (ver list_projects)'),
+      date: z.string().optional().describe('YYYY-MM-DD — el día en que lo hiciste, si no fue hoy. Solo dentro del mes en curso: un mes cerrado ya se le informó al cliente.'),
+    },
+    // Compuesta (ver task_working_on): encadena los endpoints de siempre en vez de
+    // tener los suyos, así hereda los efectos de completar una tarea (to-dos
+    // vinculados, piezas de Contenido, próximas acciones de Ventas, avisos) sin
+    // duplicar nada. El único paso propio es el último, que corrige la fecha.
+    run: async ({ taskId, description, projectId, minutes, date }, call) => {
+      let id = taskId
+      if (id != null) {
+        const prep = await call('PATCH', `/tasks/${id}/working-on`)
+        if (prep.status >= 400) return prep
+        if (prep.data.next !== 'none') {
+          const step = await call('PATCH', `/tasks/${id}/${prep.data.next}`)
+          if (step.status >= 400) return step
+        }
+      } else {
+        if (!description?.trim() || projectId == null) {
+          return { status: 400, data: { error: 'Pasá `taskId` (una tarea que ya existe) o `description` + `projectId` (algo que no estaba anotado)' } }
+        }
+        const created = await call('POST', '/tasks', { body: { description, projectId, executor: 'agent' } })
+        if (created.status >= 400) return created
+        id = created.data.id
+        const started = await call('PATCH', `/tasks/${id}/start`)
+        if (started.status >= 400) return started
+      }
+
+      // Desde acá la tarea YA está en curso: si algo falla, se devuelve el error con
+      // el taskId y qué quedó a medias, para que el agente lo pueda arreglar en vez
+      // de volver a cargar todo y duplicar.
+      const partial = (res, warning) => ({ status: res.status, data: { taskId: id, warning, detail: res.data } })
+
+      const done = await call('PATCH', `/tasks/${id}/complete`)
+      if (done.status >= 400) return partial(done, `La tarea ${id} quedó EN CURSO: completala con task_complete.`)
+
+      let result = done
+      if (minutes != null) {
+        const dur = await call('PATCH', `/tasks/${id}/duration`, { body: { minutes } })
+        if (dur.status >= 400) return partial(dur, `La tarea ${id} quedó completada pero sin la duración: cargala con task_set_duration.`)
+        result = dur
+      }
+
+      if (date) {
+        const moved = await call('PATCH', `/tasks/${id}/logged-at`, { body: { date } })
+        if (moved.status >= 400) return partial(moved, `La tarea ${id} quedó completada con su duración, pero registrada HOY y no el ${date}.`)
+        return { status: 200, data: { ...moved.data.task, loggedOn: moved.data.date, workedMinutes: moved.data.workedMinutes } }
+      }
+      return result
     },
   },
   {
@@ -853,6 +978,21 @@ const tools = [
     description: 'Crea una tarea en el dashboard del responsable ACTUAL de la pieza ("enviar al dashboard"). 409 si el tramo anterior sigue en curso.',
     inputSchema: { ...projectIdParam, pieceId: z.number().int() },
     request: ({ projectId, pieceId }) => ({ method: 'POST', path: `/contenido/projects/${projectId}/pieces/${pieceId}/send-to-dashboard` }),
+  },
+  {
+    name: 'contenido_asset_upload',
+    description: 'Sube una imagen o un video a una pieza de contenido (lo que el cliente ve en el portal junto al copy). Mandá UNA fuente: `url` (lo normal — una imagen ya generada, hasta 25MB por esta vía) o `contentBase64` (binario chico: el request entero no puede pasar de ~1MB). Imágenes PNG/JPG/WEBP/GIF, videos MP4/MOV/WEBM; hasta 8 archivos por pieza. El archivo queda además espejado en la Nube del proyecto. Subir un asset NO le avisa nada al cliente: el único aviso por mail lo dispara contenido_request_approval.',
+    inputSchema: {
+      ...projectIdParam,
+      pieceId: z.number().int(),
+      name: z.string().describe('Nombre del archivo con extensión, ej. "pastiza-nov-01.jpg"'),
+      url: z.string().optional().describe('URL pública http(s) del archivo a descargar'),
+      contentBase64: z.string().optional().describe('Contenido binario en base64'),
+      mimeType: z.string().optional().describe('Opcional: tipo MIME, si la extensión no alcanza'),
+    },
+    request: ({ projectId, pieceId, ...body }) => ({
+      method: 'POST', path: `/contenido/projects/${projectId}/pieces/${pieceId}/assets/direct`, body,
+    }),
   },
   {
     name: 'contenido_request_approval',

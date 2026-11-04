@@ -5,6 +5,8 @@ const prisma               = require('../lib/prisma')
 const { encrypt, decrypt } = require('../lib/encryption')
 const { saveCurrentMonthSnapshotSafe } = require('../services/analyticsSnapshot.service')
 const { clearCache: clearGscCache } = require('../services/googleSearchConsole.service')
+const { SOURCES, resolveConnections } = require('../lib/connectionCatalog')
+const { isAdmin } = require('../lib/projectAccess')
 
 // GA4 y Search Console comparten el mismo scope set — una sola auth sirve para ambos
 const GOOGLE_COMBINED_SCOPES = [
@@ -358,6 +360,90 @@ async function listIntegrations(req, res, next) {
 }
 
 /**
+ * GET /api/marketing/connections[?projectId=X]
+ * Estado de TODAS las fuentes de datos (conectada / vencida / sin conectar) con el
+ * link a la pantalla donde se conecta cada una.
+ *
+ * Nació para los agentes: un agente se queda frenado porque falta Search Console o
+ * Google Ads en un proyecto y, con `GET .../integrations`, lo único que ve son las
+ * integraciones que SÍ existen — no hay forma de saber qué falta ni dónde arreglarlo.
+ * Lo que devuelve es el mismo cuadro que pinta el panel "Conexiones" de Prioridades
+ * (frontend/src/components/marketing/ConnectionsPanel.jsx), en JSON.
+ *
+ * Sin `projectId`: todos los proyectos activos, pero sólo con lo que falta de cada
+ * uno (el inventario completo de lo que ya funciona no es lo que se viene a buscar
+ * acá, y hace la respuesta inútilmente pesada).
+ *
+ * Importante: el link es a la app, NO una URL de OAuth — ver lib/connectionCatalog.js.
+ */
+async function connectionsStatus(req, res, next) {
+  try {
+    const workspaceId = req.workspace.id
+    const slug = req.workspace.slug
+    const viewerIsAdmin = isAdmin(req)
+
+    // Secciones de Marketing apagadas en Preferencias → Módulos: sus fuentes no se
+    // ofrecen (mismo filtro que el panel de la app). `req.workspace` trae la fila
+    // entera (resolveWorkspace usa `omit`, no `select`), así que el campo está.
+    let disabled = []
+    try { disabled = JSON.parse(req.workspace.marketingDisabledSections || '[]') } catch { disabled = [] }
+    const sectionByType = new Map(SOURCES.map(s => [s.type, s.section ?? null]))
+    const visible = c => !disabled.includes(sectionByType.get(c.type))
+
+    const one = Number(req.query.projectId)
+    const single = Number.isInteger(one) && one > 0
+
+    const projects = await prisma.project.findMany({
+      where: single ? { id: one, workspaceId } : { workspaceId, active: true },
+      select: {
+        id: true, name: true, websiteUrl: true, isPrivate: true, active: true,
+        integrations: { select: { type: true, status: true, propertyId: true, customerId: true, accountEmail: true, scopes: true, expiresAt: true } },
+        ...(viewerIsAdmin ? {} : { members: { where: { userId: req.user.userId }, select: { userId: true } } }),
+      },
+      orderBy: { name: 'asc' },
+    })
+    if (single && projects.length === 0) return res.status(404).json({ error: 'Proyecto no encontrado' })
+
+    // Proyectos privados: el contenido es sólo del equipo + admins (el nombre no es
+    // secreto, pero sus integraciones sí). Mismo criterio que requireProjectAccess,
+    // que no aplica acá porque esta ruta no cuelga de /projects/:id.
+    const allowed = projects.filter(p => viewerIsAdmin || !p.isPrivate || p.members?.length)
+    if (single && allowed.length === 0) {
+      return res.status(403).json({ error: 'Este proyecto es privado: no formás parte del equipo', code: 'PROJECT_PRIVATE' })
+    }
+
+    const build = (p) => {
+      const sources = resolveConnections({
+        integrations: p.integrations, websiteUrl: p.websiteUrl, slug, projectId: p.id,
+      }).filter(visible)
+      return {
+        projectId: p.id,
+        project: p.name,
+        connected: sources.filter(c => c.state === 'active').length,
+        total: sources.length,
+        sources,
+      }
+    }
+
+    if (single) {
+      const p = allowed[0]
+      return res.json({ ...build(p), active: p.active })
+    }
+
+    const rows = allowed.map(build)
+      .map(r => ({ ...r, sources: r.sources.filter(c => c.state !== 'active') }))
+      .filter(r => r.sources.length > 0)
+    res.json({
+      projects: rows,
+      pendingProjects: rows.length,
+      // Lo urgente: una conexión vencida corta datos NUEVOS de un proyecto que ya
+      // estaba midiendo, y por eso pesa distinto que una que nunca se conectó.
+      expired: rows.flatMap(r => r.sources.filter(c => c.state === 'expired').map(c => ({ projectId: r.projectId, project: r.project, ...c }))),
+    })
+  } catch (err) { next(err) }
+}
+
+/**
  * PATCH /api/marketing/projects/:id/integrations/:type
  * Actualiza propertyId o customerId de una integración.
  */
@@ -469,4 +555,4 @@ async function disconnect(req, res, next) {
   }
 }
 
-module.exports = { getAuthUrl, handleCallback, connectExisting, listIntegrations, updateIntegration, disconnect }
+module.exports = { getAuthUrl, handleCallback, connectExisting, listIntegrations, connectionsStatus, updateIntegration, disconnect }

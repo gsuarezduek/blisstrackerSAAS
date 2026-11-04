@@ -89,6 +89,10 @@ router.get('/projects/:id/integrations/meta-ads/pending/:pendingId', metaIntegra
 router.post('/projects/:id/integrations/meta-ads/connect-pending', metaIntegrations.connectMetaAdsPending)
 router.post('/projects/:id/integrations/connect-existing',    integrations.connectExisting)
 router.get('/projects/:id/integrations',                      integrations.listIntegrations)
+// Estado de TODAS las fuentes (conectadas, vencidas y sin conectar) + a dónde ir a
+// conectarlas. Cross-proyecto sin `projectId`, así que va fuera del prefijo
+// '/projects/:id' y resuelve el gate de proyectos privados adentro del handler.
+router.get('/connections',                                    integrations.connectionsStatus)
 router.patch('/projects/:id/integrations/:type',              integrations.updateIntegration)
 router.delete('/projects/:id/integrations/:type',             integrations.disconnect)
 

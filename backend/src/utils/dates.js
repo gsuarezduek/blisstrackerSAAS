@@ -21,4 +21,9 @@ function dateStringInTz(date, tz) {
   return d.toLocaleDateString('en-CA', { timeZone: safeZone })
 }
 
-module.exports = { todayString, dateStringInTz, DEFAULT_TZ }
+/** true si el string es una fecha "YYYY-MM-DD" bien formada. */
+function isYMD(s) {
+  return typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s)
+}
+
+module.exports = { todayString, dateStringInTz, isYMD, DEFAULT_TZ }

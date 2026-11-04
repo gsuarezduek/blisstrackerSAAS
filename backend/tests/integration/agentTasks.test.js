@@ -1,4 +1,5 @@
-jest.mock('../../src/lib/prisma', () => ({
+jest.mock('../../src/lib/prisma', () => {
+  const m = {
   workspace:       { findUnique: jest.fn() },
   workspaceMember: { findUnique: jest.fn(), findMany: jest.fn() },
   project:         { findFirst: jest.fn() },
@@ -15,7 +16,7 @@ jest.mock('../../src/lib/prisma', () => ({
     deleteMany: jest.fn(),
   },
   taskRecurrence: { update: jest.fn(), findMany: jest.fn(), count: jest.fn(), findUnique: jest.fn(), delete: jest.fn() },
-  taskSession:    { create: jest.fn(), updateMany: jest.fn() },
+  taskSession:    { create: jest.fn(), update: jest.fn(), updateMany: jest.fn() },
   workDay: {
     findUnique: jest.fn(),
     create:     jest.fn(),
@@ -30,8 +31,12 @@ jest.mock('../../src/lib/prisma', () => ({
   projectMember:      { findMany: jest.fn() },
   taskFollow:         { findMany: jest.fn() },
   projectMeetingParticipant: { findUnique: jest.fn() },
-  $transaction: jest.fn(ops => Promise.all(ops)),
-}))
+  }
+  // Las dos formas de $transaction: array de operaciones (lo que usa el resto de
+  // tasks) y callback con el cliente transaccional (lo que usa setLoggedAt).
+  m.$transaction = jest.fn(arg => (typeof arg === 'function' ? arg(m) : Promise.all(arg)))
+  return m
+})
 
 // Los canales de salida (webhook / despertador) tienen su propio test unitario
 // (tests/unit/agentOutboundChannels.test.js); acá solo se verifica el cable: que el
@@ -526,7 +531,7 @@ describe('GET /api/tasks/agent-queue', () => {
     expect(res.status).toBe(200)
     const { where } = prisma.task.findMany.mock.calls[0][0]
     expect(where).toEqual(expect.objectContaining({ userId: 1, isAgentTask: true }))
-    expect(where.AND).toEqual([{ OR: [{ agentId: AGENT_ID }, { agentId: null }] }])
+    expect(where.AND).toContainEqual({ OR: [{ agentId: AGENT_ID }, { agentId: null }] })
   })
 
   it('view=dashboard devuelve abiertas + completadas hoy sin materializar', async () => {
@@ -551,7 +556,8 @@ describe('GET /api/tasks/agent-queue', () => {
 
     const { where } = prisma.task.findMany.mock.calls[0][0]
     expect(where.isAgentTask).toBe(true)
-    expect(where.AND).toBeUndefined()
+    // Sin agente que la pida, el único filtro es la ventana de fechas.
+    expect(where.AND.some(f => f.OR?.some(o => 'agentId' in o))).toBe(false)
   })
 
   it('no reabre la jornada de la persona', async () => {
@@ -563,6 +569,65 @@ describe('GET /api/tasks/agent-queue', () => {
       .set('X-Workspace', WORKSPACE_SLUG)
 
     expect(prisma.workDay.create).not.toHaveBeenCalled()
+  })
+
+  // Sin parámetros el tope sigue siendo hoy: la cola no destapa lo programado a futuro.
+  it('sin fechas topea lo programado en hoy y no recorta las tareas ya activas', async () => {
+    await request(app)
+      .get('/api/tasks/agent-queue')
+      .set('Authorization', authHeader({ mcpTokenId: AGENT_ID }))
+      .set('X-Workspace', WORKSPACE_SLUG)
+
+    const { where } = prisma.task.findMany.mock.calls[0][0]
+    const [scheduled, active] = where.AND[0].OR
+    expect(scheduled.scheduledFor).toEqual({ not: null, lte: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/) })
+    expect(scheduled.scheduledFor.gte).toBeUndefined()
+    expect(active).toEqual({ scheduledFor: null })   // sin filtro por día de jornada
+  })
+
+  it('con `to` más adelante trae lo programado hasta ese día', async () => {
+    await request(app)
+      .get('/api/tasks/agent-queue?to=2099-12-31')
+      .set('Authorization', authHeader({ mcpTokenId: AGENT_ID }))
+      .set('X-Workspace', WORKSPACE_SLUG)
+
+    const { where } = prisma.task.findMany.mock.calls[0][0]
+    const [scheduled, active] = where.AND[0].OR
+    expect(scheduled.scheduledFor.lte).toBe('2099-12-31')
+    expect(active.workDay).toEqual({ date: { lte: '2099-12-31' } })
+  })
+
+  it('una fecha mal formada se ignora en vez de romper la cola', async () => {
+    await request(app)
+      .get('/api/tasks/agent-queue?to=mañana')
+      .set('Authorization', authHeader({ mcpTokenId: AGENT_ID }))
+      .set('X-Workspace', WORKSPACE_SLUG)
+
+    const { where } = prisma.task.findMany.mock.calls[0][0]
+    expect(where.AND[0].OR[0].scheduledFor.lte).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+    expect(where.AND[0].OR[1].workDay).toBeUndefined()
+  })
+
+  it('`mine` filtra por el nombre declarado + las que no tiene nadie', async () => {
+    await request(app)
+      .get('/api/tasks/agent-queue?mine=true')
+      .set('Authorization', authHeader({ mcpTokenId: AGENT_ID, mcpAgentName: 'SEO' }))
+      .set('X-Workspace', WORKSPACE_SLUG)
+
+    const { where } = prisma.task.findMany.mock.calls[0][0]
+    expect(where.AND).toContainEqual({ OR: [{ agentName: 'SEO' }, { agentName: null }] })
+  })
+
+  // Sin nombre declarado no hay con qué distinguirlo de los otros agentes del token:
+  // devolver una cola vacía le esconderia trabajo real.
+  it('`mine` sin nombre declarado no filtra nada', async () => {
+    await request(app)
+      .get('/api/tasks/agent-queue?mine=true')
+      .set('Authorization', authHeader({ mcpTokenId: AGENT_ID }))
+      .set('X-Workspace', WORKSPACE_SLUG)
+
+    const { where } = prisma.task.findMany.mock.calls[0][0]
+    expect(where.AND.some(f => f.OR?.some(o => 'agentName' in o))).toBe(false)
   })
 })
 
@@ -884,6 +949,115 @@ describe('PATCH /api/tasks/:id — agentes', () => {
     prisma.task.findFirst.mockResolvedValue(makeTask())
     const res = await patch({ description: '  ' })
     expect(res.status).toBe(400)
+  })
+})
+
+// ─── Cerrar con fecha hacia atrás ─────────────────────────────────────────────
+
+describe('PATCH /api/tasks/:id/logged-at', () => {
+  const TZ = 'America/Argentina/Buenos_Aires'
+  const today = new Date().toLocaleDateString('en-CA', { timeZone: TZ })
+  const monthStart = `${today.slice(0, 7)}-01`
+
+  function completedAgentTask(overrides = {}) {
+    return makeTask({
+      status: 'COMPLETED',
+      isAgentTask: true,
+      agentId: AGENT_ID,
+      startedAt: new Date('2026-11-03T13:00:00Z'),
+      completedAt: new Date('2026-11-03T13:45:00Z'),
+      minutesOverride: 45,
+      workDay: { date: today },
+      sessions: [{ id: 5, startedAt: new Date('2026-11-03T13:00:00Z'), endedAt: new Date('2026-11-03T13:45:00Z') }],
+      ...overrides,
+    })
+  }
+
+  function loggedAt(date, { mcpTokenId = AGENT_ID } = {}) {
+    return request(app)
+      .patch('/api/tasks/1/logged-at')
+      .set('Authorization', authHeader({ mcpTokenId }))
+      .set('X-Workspace', WORKSPACE_SLUG)
+      .send({ date })
+  }
+
+  beforeEach(() => {
+    prisma.task.update.mockImplementation(({ data }) => Promise.resolve(makeTask({ ...data, id: 1 })))
+    prisma.taskSession.update.mockResolvedValue({})
+  })
+
+  it('mueve la jornada, el cierre y las sesiones al día indicado', async () => {
+    // Una jornada de otro día: la tarea tiene que terminar colgada de ESA, no de la de hoy.
+    prisma.task.findFirst.mockResolvedValue(completedAgentTask({ workDay: { date: today } }))
+    prisma.workDay.findUnique.mockResolvedValue({ id: 77, date: monthStart })
+
+    const res = await loggedAt(monthStart)
+    expect(res.status).toBe(200)
+
+    const { data } = prisma.task.update.mock.calls[0][0]
+    expect(data.workDayId).toBe(77)
+    // El día del cierre, en la timezone del workspace, es el pedido.
+    expect(data.completedAt.toLocaleDateString('en-CA', { timeZone: TZ })).toBe(monthStart)
+    // startedAt se corre por el MISMO delta: la tarea sigue durando lo que duró.
+    expect(data.completedAt - data.startedAt).toBe(45 * 60 * 1000)
+    // La sesión acompaña, si no el detalle de la tarea mostraría otro día que la jornada.
+    expect(prisma.taskSession.update).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 5 } }))
+    const session = prisma.taskSession.update.mock.calls[0][0].data
+    expect(session.startedAt.toLocaleDateString('en-CA', { timeZone: TZ })).toBe(monthStart)
+  })
+
+  it('no toca la jornada si ya es la de ese día', async () => {
+    prisma.task.findFirst.mockResolvedValue(completedAgentTask())
+    const res = await loggedAt(today)
+    expect(res.status).toBe(200)
+    expect(prisma.workDay.create).not.toHaveBeenCalled()
+    expect(prisma.task.update.mock.calls[0][0].data.workDayId).toBeUndefined()
+  })
+
+  // El tiempo de agente consume horas contratadas y se le informa al cliente: un mes
+  // cerrado ya se reportó.
+  it('400 antes del 1° del mes en curso', async () => {
+    prisma.task.findFirst.mockResolvedValue(completedAgentTask())
+    const prevMonth = new Date(`${monthStart}T12:00:00Z`)
+    prevMonth.setUTCDate(0)
+    const res = await loggedAt(prevMonth.toISOString().slice(0, 10))
+    expect(res.status).toBe(400)
+    expect(res.body.error).toMatch(/mes en curso/)
+    expect(prisma.task.update).not.toHaveBeenCalled()
+  })
+
+  it('400 con una fecha futura', async () => {
+    prisma.task.findFirst.mockResolvedValue(completedAgentTask())
+    const res = await loggedAt('2099-01-15')
+    expect(res.status).toBe(400)
+    expect(prisma.task.update).not.toHaveBeenCalled()
+  })
+
+  it('400 con una fecha mal formada', async () => {
+    prisma.task.findFirst.mockResolvedValue(completedAgentTask())
+    const res = await loggedAt('3 de noviembre')
+    expect(res.status).toBe(400)
+  })
+
+  // El tiempo que registró una persona no se reescribe desde acá.
+  it('403 sobre una tarea de la persona', async () => {
+    prisma.task.findFirst.mockResolvedValue(completedAgentTask({ isAgentTask: false, agentId: null }))
+    const res = await loggedAt(monthStart)
+    expect(res.status).toBe(403)
+    expect(prisma.task.update).not.toHaveBeenCalled()
+  })
+
+  it('400 si la tarea todavía no está completada', async () => {
+    prisma.task.findFirst.mockResolvedValue(completedAgentTask({ status: 'IN_PROGRESS', completedAt: null }))
+    const res = await loggedAt(monthStart)
+    expect(res.status).toBe(400)
+  })
+
+  it('400 desde la app (sin agente): es un paso de la tool, no una acción de la UI', async () => {
+    prisma.task.findFirst.mockResolvedValue(completedAgentTask())
+    const res = await loggedAt(monthStart, { mcpTokenId: null })
+    expect(res.status).toBe(400)
+    expect(prisma.task.findFirst).not.toHaveBeenCalled()
   })
 })
 

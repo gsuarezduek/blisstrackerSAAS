@@ -30,7 +30,7 @@ Reglas que no se negocian:
 
 // Prefijo de nombre de tool → sección de la guía. El orden define el orden de aparición.
 const AREAS = [
-  { key: 'general',    label: 'General',                match: n => ['bliss_guide', 'bliss_tools', 'bliss_run', 'whoami', 'list_projects', 'services_list', 'project_update_services'].includes(n) || n.startsWith('project_situation_') },
+  { key: 'general',    label: 'General',                match: n => ['bliss_guide', 'bliss_tools', 'bliss_run', 'whoami', 'list_projects', 'project_connections', 'services_list', 'project_update_services'].includes(n) || n.startsWith('project_situation_') },
   { key: 'nube',       label: 'Nube del proyecto',      match: n => n.startsWith('project_file') || n === 'project_folder_create' },
   { key: 'tareas',     label: 'Tareas y jornada',       match: n => n.startsWith('task') },
   { key: 'equipo',     label: 'Equipo y productividad', match: n => n.startsWith('team_') },
@@ -59,8 +59,9 @@ const SECTIONS = {
 - Antes de decirle al usuario que algo no se puede hacer por MCP, revisá \`bliss_tools\`.
 
 ## Proyectos y servicios
-- \`list_projects\` es el punto de entrada: trae id, nombre, sitio web, servicios contratados y equipo. Casi todo lo demás necesita un \`projectId\`.
+- \`list_projects\` es el punto de entrada: trae id, nombre, sitio web, servicios contratados (con su id), equipo, integraciones conectadas y tareas abiertas. Casi todo lo demás necesita un \`projectId\`. Es la versión corta; \`detail: "full"\` trae la ficha completa de cada proyecto y pesa unas 10 veces más — pedila solo si te falta un campo.
 - \`project_update_services\` REEMPLAZA la lista completa de servicios (no suma). Leé los actuales primero y mandá todos. Solo admin/owner.
+- \`project_connections\` dice qué fuentes de datos tiene conectadas un proyecto, cuáles se vencieron y cuáles faltan, con el link de la app donde se conectan. **Si una tool de Marketing o SEO devuelve "sin datos", chequeá esto antes de dar por perdido el dato**: muchas veces falta la conexión, no los datos. Conectar requiere OAuth en el navegador: no lo podés hacer vos, pasale el link a la persona y decile qué tarea tuya queda frenada hasta entonces.
 
 ## Situación de la cuenta
 - Cada proyecto tiene una Situación de la cuenta hecha de **hojas** que se acumulan: la más nueva es la actual (la que el equipo ve en el Resumen del proyecto) y las anteriores quedan como historial de solo lectura.
@@ -93,6 +94,7 @@ Modelo mental (igual que en la app):
 - \`task_block\` exige motivo y notifica al equipo del proyecto: usalo solo si de verdad algo frena el trabajo.
 
 Crear tareas (\`task_create\`):
+- **Buscá antes de crear**: \`tasks_search\` con 2 o 3 palabras clave te dice si ya existe (en cualquier estado, de la persona o de sus agentes). Duplicar una tarea que ya estaba anotada ensucia el dashboard de la persona y las horas del proyecto.
 - Escribí la descripción como acción concreta y verificable ("Enviar propuesta de pauta a Juan", no "Pauta").
 - Por defecto se asigna a la persona del token; \`targetUserId\` la asigna a otro miembro (ID de \`team_list\`). Se le notifica.
 - \`scheduledFor\` (YYYY-MM-DD) = tarea futura: no aparece hasta esa fecha. \`recurrence\` = serie recurrente (diaria/semanal con días/mensual/anual, con \`endDate\` opcional). Son excluyentes.
@@ -100,8 +102,9 @@ Crear tareas (\`task_create\`):
 
 ## Tareas de agente (tu lista de trabajo)
 - **\`task_working_on\` — registrá lo que estás haciendo AHORA**, en un solo paso: queda como tarea tuya en curso y la persona lo ve en la app. Con \`taskId\` arranca una tarea ya planificada (de tu lista, del Backlog o programada para otro día de la semana: la trae a hoy; una tarea de la persona que vas a hacer vos pasa a ser tuya, salvo que ella la tenga en curso). Con \`description\` + \`projectId\` crea una nueva y la inicia. **Si la tarea ya estaba planificada, usá su \`taskId\`**: no dupliques lo que la persona organizó para la semana.
+- **\`task_log_done\` — para lo que YA terminaste**, en un solo paso: crea (o toma) la tarea, la completa, carga los minutos que te llevó y, con \`date\`, la registra en el día en que la hiciste (solo dentro del mes en curso: un mes cerrado ya se le informó al cliente). Es lo que tenés que usar cuando trabajaste primero y registrás después; \`task_working_on\` es para cuando estás arrancando algo ahora. Si falla a mitad de camino, la respuesta te dice qué quedó a medias y con qué tool arreglarlo — no vuelvas a cargar todo, que duplicás.
 - **Recordatorio**: si usás tools sin tener ninguna tarea en curso, al final de la respuesta aparece un "Recordatorio de BlissTracker" con tus tareas planificadas para hoy. Si estás trabajando en algo, registralo; si era una consulta rápida, ignoralo. La persona elige cada cuánto (Preferencias → Agentes IA).
-- \`tasks_agent_queue\`: tus tareas abiertas (las tuyas + las que la persona delegó a "cualquiera de sus agentes"). Revisala al empezar a trabajar: la persona puede delegarte tareas desde la app.
+- \`tasks_agent_queue\`: tus tareas abiertas (las tuyas + las que la persona delegó a "cualquiera de sus agentes"). Revisala al empezar a trabajar: la persona puede delegarte tareas desde la app. Trae lo que ya está para hacer; con \`to\` (YYYY-MM-DD) agregás lo que tenés PROGRAMADO hasta ese día, y con \`mine: true\` la recortás a lo tuyo si compartís el conector con otros agentes.
 - Ejecutá con el mismo ciclo: \`task_start\` → \`task_complete\`. Podés tener varias en curso. Si algo te frena, \`task_block\` con un motivo claro: es la forma de pedirle ayuda a la persona (en una tarea tuya el aviso le llega solo a ella, no al equipo del proyecto). **Preguntá lo que necesitas saber en el motivo**: es lo que ella lee para destrabarte.
 - **Cuando te destraban, la tarea queda PAUSADA, no en curso** (nadie estaba trabajando mientras esperabas). Te llega como novedad \`unblocked\` en \`tasks_agent_updates\`: leé el último comentario — ahí está la respuesta a lo que preguntaste, o la aprobación que pediste — y retomala con \`task_resume\` (o \`task_working_on\` con su \`taskId\`). Si la respuesta no te alcanza, volvé a bloquearla preguntando de nuevo, no la completes a medias.
 - No dejes tareas en curso indefinidamente: completalas o pausalas al terminar de trabajar.
@@ -156,7 +159,9 @@ Calendario de piezas de redes con aprobación del cliente.
 - \`contenido_piece_comment_add\`: \`visibility: "internal"\` (default, solo el equipo) o \`"client"\` — **lo ve el cliente en su portal**. Usá "client" solo si el usuario lo pide explícitamente.
 - \`contenido_request_approval\` **manda un email al cliente**. Confirmá antes.
 - \`contenido_piece_send_to_dashboard\` crea la tarea en el dashboard del responsable actual de la pieza.
-- No se puede por MCP: subir imágenes/videos (la subida es directa del navegador al storage), aprobar en nombre del cliente ni publicar en las redes.`,
+- \`contenido_asset_upload\` sube la imagen o el video de la pieza (lo normal: \`url\` de un archivo ya generado, hasta 25MB; \`contentBase64\` solo para binarios chicos). Hasta 8 archivos por pieza, y queda espejado en la Nube del proyecto.
+- **Mover una pieza de estado NO le avisa nada al cliente** (tampoco a "aprobacion"): el único mail lo manda \`contenido_request_approval\`. Así que la revisión interna del equipo se hace con \`contenido_piece_update\` y \`status\`, sin riesgo de escribirle al cliente. Lo que sí ve el cliente en su portal, en cualquier estado, son el título, el copy y los assets — \`designDetails\` e \`internalNotes\` nunca viajan.
+- No se puede por MCP: aprobar en nombre del cliente ni publicar en las redes.`,
 
   ventas: `## Ventas / CRM (requiere acceso a Ventas: admin o rol habilitado)
 - Estructura: Empresa → Contactos; Lead (oportunidad) vinculado a una empresa, con estado, responsable, timeline (notas), próximas acciones, investigaciones IA y propuestas.
@@ -188,8 +193,8 @@ Estos módulos existen en la app pero no tienen tools: si el usuario lo pide, ex
 - Finanzas (facturación electrónica, ingresos/egresos), RRHH (vacaciones, legajos, beneficios), EOS, Gamification.
 - WhatsApp: plantillas, adjuntos, bot y automatizaciones (responder con texto dentro de la ventana de 24hs sí, ver sección WhatsApp).
 - Administración: invitar o desactivar personas, roles, preferencias, módulos, facturación/plan del workspace.
-- Subir imágenes a Contenido o archivos al chat interno. A una tarea sí (\`task_attach_file\`) y a la Nube del proyecto también (\`project_file_upload\`).
-- Conectar integraciones (Google/Meta/TikTok/LinkedIn): requieren OAuth en el navegador.
+- Subir archivos al chat interno. A una tarea sí (\`task_attach_file\`), a la Nube del proyecto también (\`project_file_upload\`) y a una pieza de Contenido también (\`contenido_asset_upload\`).
+- Conectar integraciones (Google/Meta/TikTok/LinkedIn): requieren OAuth en el navegador. Lo que sí podés es ver qué falta y pasarle el link a la persona con \`project_connections\`.
 
 ## Buenas prácticas
 - Leé antes de escribir: confirmá IDs y estado actual con una tool de lectura.
