@@ -163,3 +163,102 @@ describe('list_projects', () => {
     expect(res).toEqual({ status: 403, data: { error: 'sin permiso' } })
   })
 })
+
+// ─── Recorte de las respuestas de tareas (shape) ──────────────────────────────
+// `taskInclude` trae la ficha ENTERA del proyecto más el array de sesiones, porque
+// es lo que necesita el Dashboard. Al agente eso le cuesta tokens de contexto.
+describe('shape de las tools de tareas', () => {
+  const { shapeResult, compactTask } = require('../../src/mcp/toolCatalog')
+
+  const dbTask = (over = {}) => ({
+    id: 5, description: 'Redactar posteos', status: 'COMPLETED', isAgentTask: true,
+    startedAt: '2026-11-01T13:00:00.000Z', completedAt: '2026-11-01T13:45:00.000Z',
+    pausedMinutes: 0, minutesOverride: null, blockedReason: null, starred: 0,
+    project: {
+      id: 7, name: 'Pastiza', websiteUrl: 'https://pastiza.com',
+      connections: '{"instagram":"@pastiza"}', integrationDefaults: '{}',
+      cannibalProtectedUrls: '[]', reportSections: null, timezone: 'America/Argentina/Buenos_Aires',
+      createdAt: '2026-01-01', updatedAt: '2026-01-01',
+    },
+    sessions: [{ startedAt: '2026-11-01T13:00:00.000Z', endedAt: '2026-11-01T13:45:00.000Z' }],
+    createdBy: { id: 1, name: 'Ana' },
+    agent: { id: 3, label: 'grokbot' },
+    _count: { comments: 2, files: 0 },
+    ...over,
+  })
+
+  it('el proyecto queda en {id,name} y las sesiones se vuelven workedMinutes', () => {
+    const out = compactTask(dbTask())
+    expect(out.project).toEqual({ id: 7, name: 'Pastiza' })
+    expect(out.sessions).toBeUndefined()
+    expect(out.workedMinutes).toBe(45)
+    expect(out.createdBy).toBe('Ana')
+  })
+
+  it('conserva todos los campos propios de la tarea', () => {
+    const out = compactTask(dbTask({ scheduledFor: '2026-12-01', recurrenceId: 4 }))
+    for (const key of ['id', 'description', 'status', 'isAgentTask', 'scheduledFor', 'recurrenceId', '_count', 'agent']) {
+      expect(out[key]).toBeDefined()
+    }
+  })
+
+  it('la duración editada a mano manda sobre el cálculo', () => {
+    expect(compactTask(dbTask({ minutesOverride: 20 })).workedMinutes).toBe(20)
+  })
+
+  // El invariante no es un porcentaje (depende de cuántos campos tenga el proyecto
+  // en ese momento) sino que lo gordo no viaje: la configuración de la ficha del
+  // proyecto no le sirve de nada al agente y es casi todo el peso de la fila.
+  it('no arrastra la configuración del proyecto', () => {
+    const json = JSON.stringify(compactTask(dbTask()))
+    for (const field of ['connections', 'integrationDefaults', 'cannibalProtectedUrls', 'reportSections', 'timezone', 'websiteUrl', 'updatedAt']) {
+      expect(json).not.toContain(field)
+    }
+    expect(JSON.stringify(compactTask(dbTask())).length).toBeLessThan(JSON.stringify(dbTask()).length)
+  })
+
+  it('shape "tasks" recorta un array', () => {
+    const out = shapeResult('tasks', [dbTask(), dbTask({ id: 6 })])
+    expect(out).toHaveLength(2)
+    expect(out[1].project).toEqual({ id: 7, name: 'Pastiza' })
+  })
+
+  it('shape "taskLists" recorta los arrays de tareas de la jornada', () => {
+    const out = shapeResult('taskLists', {
+      workDay: { id: 1, date: '2026-11-01' },
+      tasks: [dbTask()],
+      carryOverTasks: [],
+      agentTasks: [dbTask({ id: 9 })],
+      summary: { completed: 1 },
+    })
+    expect(out.tasks[0].sessions).toBeUndefined()
+    expect(out.agentTasks[0].project).toEqual({ id: 7, name: 'Pastiza' })
+    expect(out.workDay).toEqual({ id: 1, date: '2026-11-01' })   // lo que no son tareas no se toca
+    expect(out.summary).toEqual({ completed: 1 })
+  })
+
+  // task_log_done devuelve {taskId, warning, detail} cuando algo falla a mitad de
+  // camino: eso no es una tarea y no tiene que pasar por el recorte.
+  it('no toca un objeto que no es una tarea', () => {
+    const partial = { taskId: 5, warning: 'quedó sin duración', detail: { error: 'x' } }
+    expect(shapeResult('task', partial)).toEqual(partial)
+    expect(shapeResult('task', null)).toBeNull()
+  })
+
+  it('sin shape declarado la respuesta pasa tal cual', () => {
+    const data = { cualquier: 'cosa' }
+    expect(shapeResult(undefined, data)).toBe(data)
+  })
+
+  it('todas las tools que devuelven tareas declaran shape', () => {
+    const { tools } = require('../../src/mcp/toolCatalog')
+    const esperadas = [
+      'tasks_today', 'tasks_agent_queue', 'task_create', 'task_start', 'task_pause',
+      'task_resume', 'task_complete', 'task_block', 'task_unblock', 'task_set_duration',
+      'task_set_executor', 'task_update', 'task_reassign', 'task_working_on', 'task_log_done',
+    ]
+    for (const name of esperadas) {
+      expect(tools.find(t => t.name === name).shape).toBeDefined()
+    }
+  })
+})

@@ -3,6 +3,7 @@ const { isYMD } = require('../../utils/dates')
 const { taskMins } = require('../../lib/timeMetrics')
 const { isAdmin } = require('../../lib/projectAccess')
 const { formatAgentName } = require('../../lib/agentTasks')
+const { buildTextSearchFilters } = require('../../lib/textSearch')
 
 // ─── GET /api/tasks/search ──────────────────────────────────────────────────
 // Búsqueda de tareas por texto y filtros, con filas livianas. Nació para los
@@ -86,7 +87,12 @@ async function searchTasks(req, res, next) {
     const take = Math.min(MAX_TAKE, Math.max(1, Number(req.query.take) || DEFAULT_TAKE))
 
     const where = { userId, workDay: { workspaceId } }
-    if (q) where.description = { contains: q, mode: 'insensitive' }
+    // Las palabras se combinan con AND (en cualquier orden, con lo que sea en el
+    // medio) y cada una tolera tildes — ver lib/textSearch.js. Buscar la frase
+    // exacta y distinguiendo tildes hacía que el agente creyera que la tarea no
+    // existía y la duplicara, que es justo lo que esta tool viene a evitar.
+    const textFilters = buildTextSearchFilters(q, 'description')
+    if (textFilters) where.AND = textFilters
     if (statuses) where.status = { in: statuses.list }
 
     if (req.query.projectId != null && req.query.projectId !== '') {

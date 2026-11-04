@@ -2,7 +2,7 @@ const { McpServer } = require('@modelcontextprotocol/sdk/server/mcp.js')
 const { StreamableHTTPServerTransport } = require('@modelcontextprotocol/sdk/server/streamableHttp.js')
 const { isInitializeRequest } = require('@modelcontextprotocol/sdk/types.js')
 const { randomUUID } = require('crypto')
-const { tools } = require('./toolCatalog')
+const { tools, shapeResult } = require('./toolCatalog')
 const { callApi } = require('./apiBridge')
 const { INSTRUCTIONS, buildGuide, GUIDE_TOPICS } = require('./guide')
 const { describeTools, prepareRun } = require('./liveTools')
@@ -112,7 +112,11 @@ async function runTool(identity, tool, args) {
       result = await call(method, path, { query, body })
     }
     const { status, data } = result
-    const text = JSON.stringify(data, null, 2)
+    // `shape` recorta lo que devuelve el endpoint a lo que un agente usa (ver
+    // compactTask en toolCatalog.js): el mismo payload que necesita el Dashboard
+    // le cuesta tokens de contexto al agente. Los errores van tal cual — el
+    // mensaje es lo que tiene que leer para corregir.
+    const text = JSON.stringify(status >= 400 ? data : shapeResult(tool.shape, data), null, 2)
     if (status >= 400) return textResult(`Error ${status}: ${text}`, true)
     // Las novedades van primero: pueden cambiar lo que el agente iba a hacer.
     const extras = [

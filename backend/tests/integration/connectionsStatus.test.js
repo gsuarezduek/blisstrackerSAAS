@@ -102,7 +102,7 @@ describe('GET /api/marketing/connections', () => {
     expect(types).toContain('google_search_console')
   })
 
-  it('sin projectId devuelve solo lo que falta de cada proyecto, y aparte lo vencido', async () => {
+  it('sin projectId devuelve solo lo que falta de cada proyecto', async () => {
     mockWorkspace()
     prisma.project.findMany.mockResolvedValue([
       project({ id: 1, name: 'Todo conectado', websiteUrl: 'https://x.com', integrations: require('../../src/lib/connectionCatalog').SOURCES.filter(s => s.type !== 'website').map(s => ({ type: s.type, status: 'active' })) }),
@@ -112,7 +112,56 @@ describe('GET /api/marketing/connections', () => {
     const res = await get()
     expect(res.body.projects.map(p => p.projectId)).toEqual([2]) // el que está completo no aparece
     expect(res.body.projects[0].sources.every(s => s.state !== 'active')).toBe(true)
-    expect(res.body.expired).toEqual([expect.objectContaining({ projectId: 2, project: 'Con faltantes', type: 'google_ads' })])
+    expect(res.body.state).toBe('pending')
+    expect(res.body.expiredCount).toBe(1)
+    // Antes la lista de lo vencido viajaba DOS veces (en sources y otra vez entera):
+    // el detalle sale de state:'expired', acá alcanza el conteo.
+    expect(res.body.expired).toBeUndefined()
+  })
+
+  // Lo que pidió el agente: la vista de todo el workspace le pesaba 76 KB.
+  it('state=expired deja solo lo que se cayó', async () => {
+    mockWorkspace()
+    prisma.project.findMany.mockResolvedValue([
+      project({ id: 2, name: 'Mixto', integrations: [{ type: 'google_ads', status: 'expired' }] }),
+    ])
+
+    const res = await get('?state=expired')
+    expect(res.body.state).toBe('expired')
+    expect(res.body.projects[0].sources.map(s => s.type)).toEqual(['google_ads'])
+    // `connected`/`total` siguen describiendo el proyecto entero, no el recorte.
+    expect(res.body.projects[0].total).toBeGreaterThan(1)
+  })
+
+  it('state inválido es 400, no un filtro vacío', async () => {
+    mockWorkspace()
+    prisma.project.findMany.mockResolvedValue([project()])
+    const res = await get('?state=vencidas')
+    expect(res.status).toBe(400)
+  })
+
+  // Lo que confundió al agente: el access token de Google vence cada hora y se
+  // renueva solo, así que una fecha pasada al lado de "conectada" es lo normal.
+  it('no informa un vencimiento ya pasado en una conexión activa', async () => {
+    mockWorkspace()
+    prisma.project.findMany.mockResolvedValue([project({
+      integrations: [{ type: 'google_analytics', status: 'active', expiresAt: new Date(Date.now() - 3600e3) }],
+    })])
+
+    const res = await get(`?projectId=${PROJECT_ID}`)
+    expect(sourceOf(res.body, 'google_analytics').state).toBe('active')
+    expect(sourceOf(res.body, 'google_analytics').expiresAt).toBeUndefined()
+  })
+
+  it('pero sí un plazo futuro, que es un vencimiento real', async () => {
+    mockWorkspace()
+    const futuro = new Date(Date.now() + 60 * 86400e3)
+    prisma.project.findMany.mockResolvedValue([project({
+      integrations: [{ type: 'meta_ads', status: 'active', expiresAt: futuro }],
+    })])
+
+    const res = await get(`?projectId=${PROJECT_ID}`)
+    expect(sourceOf(res.body, 'meta_ads').expiresAt).toBe(futuro.toISOString())
   })
 
   // Esta ruta no cuelga de /projects/:id, así que el gate de privados lo resuelve

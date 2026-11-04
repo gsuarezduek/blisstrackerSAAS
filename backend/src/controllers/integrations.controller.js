@@ -374,6 +374,11 @@ async function listIntegrations(req, res, next) {
  * uno (el inventario completo de lo que ya funciona no es lo que se viene a buscar
  * acá, y hace la respuesta inútilmente pesada).
  *
+ * `?state=` recorta por estado: 'pending' (default cross-proyecto: vencidas + sin
+ * conectar), 'expired' (solo lo que se cayó — lo urgente, y lo que menos pesa),
+ * 'missing', o 'all' (default con `projectId`). Un workspace con muchas cuentas sin
+ * conectar da una respuesta de decenas de KB si no se filtra.
+ *
  * Importante: el link es a la app, NO una URL de OAuth — ver lib/connectionCatalog.js.
  */
 async function connectionsStatus(req, res, next) {
@@ -392,6 +397,15 @@ async function connectionsStatus(req, res, next) {
 
     const one = Number(req.query.projectId)
     const single = Number.isInteger(one) && one > 0
+
+    // Con un proyecto puntual el default es mostrar todo (es lo que se vino a ver);
+    // cross-proyecto, solo lo que hay que arreglar.
+    const STATES = { all: null, pending: ['expired', 'missing'], expired: ['expired'], missing: ['missing'] }
+    const stateKey = req.query.state || (single ? 'all' : 'pending')
+    if (!(stateKey in STATES)) {
+      return res.status(400).json({ error: `state inválido. Opciones: ${Object.keys(STATES).join(', ')}` })
+    }
+    const keepStates = STATES[stateKey]
 
     const projects = await prisma.project.findMany({
       where: single ? { id: one, workspaceId } : { workspaceId, active: true },
@@ -425,20 +439,25 @@ async function connectionsStatus(req, res, next) {
       }
     }
 
+    // `connected`/`total` se calculan sobre TODAS las fuentes del proyecto, antes de
+    // recortar por estado: son el panorama del proyecto, no del recorte.
+    const applyState = r => (keepStates ? { ...r, sources: r.sources.filter(c => keepStates.includes(c.state)) } : r)
+
     if (single) {
       const p = allowed[0]
-      return res.json({ ...build(p), active: p.active })
+      return res.json({ ...applyState(build(p)), active: p.active, state: stateKey })
     }
 
-    const rows = allowed.map(build)
-      .map(r => ({ ...r, sources: r.sources.filter(c => c.state !== 'active') }))
-      .filter(r => r.sources.length > 0)
+    const rows = allowed.map(build).map(applyState).filter(r => r.sources.length > 0)
     res.json({
+      state: stateKey,
       projects: rows,
       pendingProjects: rows.length,
-      // Lo urgente: una conexión vencida corta datos NUEVOS de un proyecto que ya
-      // estaba midiendo, y por eso pesa distinto que una que nunca se conectó.
-      expired: rows.flatMap(r => r.sources.filter(c => c.state === 'expired').map(c => ({ projectId: r.projectId, project: r.project, ...c }))),
+      // Antes acá viajaba otra vez la lista entera de lo vencido (proyecto + fuente +
+      // link), duplicando el payload para no agregar un dato nuevo. El conteo alcanza
+      // como señal de urgencia: el detalle sale de `state: 'expired'`, que además es
+      // la respuesta más liviana de las tres.
+      expiredCount: rows.reduce((n, r) => n + r.sources.filter(c => c.state === 'expired').length, 0),
     })
   } catch (err) { next(err) }
 }

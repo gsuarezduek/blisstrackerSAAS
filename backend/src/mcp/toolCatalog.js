@@ -26,6 +26,66 @@ const planSchema = z.object({
   serviceNames: z.array(z.string()).optional().describe('Servicios libres (no del catálogo)'),
 })
 
+// Versión corta de una TAREA para las tools que devuelven tareas. `taskInclude`
+// (controllers/tasks/_shared.js) trae `project: true` — la ficha ENTERA del proyecto,
+// con sus JSON de redes, defaults de integraciones y URLs protegidas — más el array
+// de sesiones, porque es lo que necesita el Dashboard. Una cola de 10 tareas de
+// agente son decenas de KB de los que el agente usa el id, el título y el nombre del
+// proyecto. Se recorta acá y no en `taskInclude` porque ese include lo comparte el
+// frontend, que sí usa el resto.
+//
+// Se queda con TODOS los campos propios de la tarea (son escalares baratos y
+// cualquiera puede importarle) y sustituye lo gordo: el proyecto pasa a {id,name} y
+// las sesiones a `workedMinutes` ya calculado, que es lo que el agente iba a querer
+// sacar de ellas.
+function compactTask(t) {
+  if (!t || typeof t !== 'object' || t.id == null) return t
+  const { project, sessions, createdBy, contentPiece, ...task } = t
+  return {
+    ...task,
+    ...(project ? { project: { id: project.id, name: project.name } } : {}),
+    ...(createdBy ? { createdBy: createdBy.name ?? null } : {}),
+    ...(contentPiece ? { contentPieceId: contentPiece.id } : {}),
+    workedMinutes: taskMinutes(t),
+  }
+}
+
+// Minutos efectivos de una tarea, con el mismo criterio que lib/timeMetrics.js
+// `taskMins` (la duración editada manda; si no, inicio → fin menos pausas, tope 8h).
+// Se reimplementa acá en vez de importarse porque el catálogo del MCP no depende de
+// nada del backend: es un mapa de tools a endpoints.
+function taskMinutes(t) {
+  if (t.minutesOverride != null) return t.minutesOverride
+  if (t.startedAt && t.completedAt) {
+    const raw = Math.round((new Date(t.completedAt) - new Date(t.startedAt)) / 60000)
+    return Math.min(480, Math.max(0, raw - (t.pausedMinutes || 0)))
+  }
+  return 0
+}
+
+// Aplica el recorte a lo que devolvió un endpoint, según el `shape` que declara la
+// tool: una tarea, un array de tareas, o un objeto con arrays de tareas adentro
+// (la jornada de hoy). Lo llama `runTool` de server.js.
+const SHAPERS = {
+  task:  data => compactTask(data),
+  tasks: data => (Array.isArray(data) ? data.map(compactTask) : data),
+  taskLists: data => {
+    if (!data || typeof data !== 'object') return data
+    const out = { ...data }
+    for (const [key, value] of Object.entries(out)) {
+      if (Array.isArray(value) && value.some(v => v && typeof v === 'object' && v.id != null && 'status' in v)) {
+        out[key] = value.map(compactTask)
+      }
+    }
+    return out
+  },
+}
+
+function shapeResult(shape, data) {
+  const shaper = SHAPERS[shape]
+  return shaper ? shaper(data) : data
+}
+
 // Versión corta de un proyecto para `list_projects` (ver el comentario de la tool).
 // Se queda con lo que un agente usa para trabajar y descarta la configuración de la
 // ficha (links, redes, integrationDefaults, URLs protegidas de canibalización,
@@ -83,11 +143,12 @@ const tools = [
   // ── Marketing: lectura ───────────────────────────────────────────────────
   {
     name: 'project_connections',
-    description: 'Estado de las fuentes de datos de un proyecto: qué está conectado, qué se venció y qué nunca se conectó (Google Analytics, Search Console, Google Ads, Meta Ads, Instagram, TikTok, LinkedIn, Facebook, YouTube, sitio web), con el link exacto de la app donde la persona lo conecta. Usala cuando una tool de Marketing devuelve "sin datos": muchas veces no es que no haya datos, es que falta la conexión. Sin `projectId` devuelve solo lo que falta en cada proyecto activo del workspace. Conectar requiere pasar por el navegador (OAuth): vos no podés hacerlo, pasale el link a la persona.',
+    description: 'Estado de las fuentes de datos de un proyecto: qué está conectado, qué se venció y qué nunca se conectó (Google Analytics, Search Console, Google Ads, Meta Ads, Instagram, TikTok, LinkedIn, Facebook, YouTube, sitio web), con el link exacto de la app donde la persona lo conecta. Usala cuando una tool de Marketing devuelve "sin datos": muchas veces no es que no haya datos, es que falta la conexión. Sin `projectId` devuelve solo lo que falta en cada proyecto activo del workspace — si eso te vuelve mucho, pedí `state: "expired"`, que es lo urgente. Conectar requiere pasar por el navegador (OAuth): vos no podés hacerlo, pasale el link a la persona. Nota: `expiresAt` solo aparece si es una fecha FUTURA (un plazo real); el vencimiento del token que se renueva solo no se informa, porque no hay nada que hacer con él.',
     inputSchema: {
       projectId: z.number().int().optional().describe('Un proyecto puntual (con todas sus fuentes, conectadas incluidas). Sin esto, lo que falta en todo el workspace.'),
+      state: z.enum(['all', 'pending', 'expired', 'missing']).optional().describe('Qué fuentes devolver. "expired" = solo las que se cayeron (lo urgente y lo más liviano), "missing" = las que nunca se conectaron, "pending" = las dos (default sin projectId), "all" = todas (default con projectId).'),
     },
-    request: ({ projectId }) => ({ method: 'GET', path: '/marketing/connections', query: { projectId } }),
+    request: ({ projectId, state }) => ({ method: 'GET', path: '/marketing/connections', query: { projectId, state } }),
   },
   {
     name: 'marketing_health_score',
@@ -613,15 +674,16 @@ const tools = [
   // ── Tareas (resto del sistema) ───────────────────────────────────────────
   {
     name: 'tasks_today',
+    shape: 'taskLists',
     description: 'La jornada de hoy: tareas pendientes/en curso/bloqueadas/completadas de hoy. Sin userId, la del usuario conectado. Con userId de otra persona, vista de SOLO LECTURA (requiere admin/owner) — no crea ni reabre la jornada de esa persona, ni materializa tareas futuras/recurrentes como sí hace para el dueño.',
     inputSchema: { userId: z.number().int().optional().describe('Ver la jornada de otra persona (admin/owner). Sin esto, la propia.') },
     request: ({ userId }) => ({ method: 'GET', path: '/workdays/today', query: { userId } }),
   },
   {
     name: 'tasks_search',
-    description: 'Busca tareas por texto y filtros, con filas livianas. Usala ANTES de crear una tarea para no duplicar lo que ya existe (buscá 2 o 3 palabras clave del título, no la frase entera). Por default busca en las tareas de la persona para la que trabajás — las suyas y las de sus agentes —, cualquier estado, las más nuevas primero. Para ver las de otra persona hace falta que tu dueño sea admin/owner.',
+    description: 'Busca tareas por texto y filtros, con filas livianas. Usala ANTES de crear una tarea para no duplicar lo que ya existe. **Cómo combina las palabras**: `q` se parte en palabras y TODAS tienen que aparecer en el título, en cualquier orden y con cualquier cosa en el medio ("redactar posteos" encuentra "Redactar 3 posteos de noviembre"), y no distingue mayúsculas ni tildes ("aprobacion" encuentra "aprobación"). Buscá 2 o 3 palabras clave, no la frase entera: cada palabra de más es un filtro de más. Por default busca en las tareas de la persona para la que trabajás — las suyas y las de sus agentes —, cualquier estado, las más nuevas primero. Para ver las de otra persona hace falta que tu dueño sea admin/owner.',
     inputSchema: {
-      q: z.string().optional().describe('Palabras del título de la tarea (no distingue mayúsculas). Sin esto, devuelve las últimas según los demás filtros.'),
+      q: z.string().optional().describe('Palabras del título. Todas tienen que aparecer, en cualquier orden; no distingue mayúsculas ni tildes. Sin esto, devuelve las últimas según los demás filtros.'),
       projectId: z.number().int().optional().describe('Acotar a un proyecto (ver list_projects)'),
       status: z.string().optional().describe('Estados separados por coma: PENDING, IN_PROGRESS, PAUSED, BLOCKED, COMPLETED. "open" = todas las abiertas.'),
       executor: z.enum(['user', 'agent', 'any']).optional().describe('Quién la hace: "user" = la persona, "agent" = sus agentes, "any" (default) = las dos'),
@@ -637,6 +699,7 @@ const tools = [
   },
   {
     name: 'task_create',
+    shape: 'task',
     description: 'Crea una tarea nueva en un proyecto, asignada al usuario conectado por defecto. Opcionalmente futura (scheduledFor) o recurrente (recurrence) — mutuamente excluyentes.',
     inputSchema: {
       ...projectIdParam,
@@ -660,6 +723,7 @@ const tools = [
   },
   {
     name: 'tasks_agent_queue',
+    shape: 'tasks',
     description: 'Tu lista de trabajo como agente: tareas de agente abiertas (pendientes/en curso/pausadas/bloqueadas) — las asignadas a vos y las que la persona delegó a "cualquiera de sus agentes". Revisala al empezar a trabajar. Por default trae todo lo que ya está para hacer; `to` con una fecha más adelante agrega lo PROGRAMADO hasta ese día (que la cola normalmente esconde), y `mine` la recorta a lo tuyo si compartís el conector con otros agentes.',
     inputSchema: {
       mine: z.boolean().optional().describe('true = solo las que llevan tu nombre de agente (el que mandás en `agentName`) más las que todavía no tiene nadie. Útil solo si varios agentes comparten este conector; sin `agentName` declarado no filtra nada.'),
@@ -673,6 +737,7 @@ const tools = [
   },
   {
     name: 'task_working_on',
+    shape: 'task',
     description: 'Registrá en un paso en qué estás trabajando AHORA: queda como tarea tuya (de agente) EN CURSO y la persona lo ve en la app. Usala apenas empezás algo. Dos formas: (1) `taskId` de una tarea ya planificada — de tu lista (`tasks_agent_queue`), del Backlog o programada para otro día de la semana: la trae a hoy si hace falta, la toma para vos y la inicia/retoma/desbloquea; también una tarea de la persona que vas a hacer vos (pasa a ser tuya, salvo que ella la tenga en curso). (2) `description` + `projectId` si es algo nuevo: crea la tarea y la inicia. Preferí siempre (1) si la tarea ya existe, para no duplicar lo planificado. Al terminar, `task_complete`.',
     inputSchema: {
       taskId: z.number().int().optional().describe('Tarea ya planificada que vas a hacer ahora'),
@@ -697,6 +762,7 @@ const tools = [
   },
   {
     name: 'task_log_done',
+    shape: 'task',
     description: 'Registrá en UN paso algo que ya hiciste: queda como tarea tuya (de agente) completada, con los minutos que te llevó y, si hace falta, con la fecha del día en que lo hiciste. Reemplaza la secuencia crear/tomar → iniciar → completar → cargar duración. Dos formas: (1) `taskId` de una tarea que ya existe (de tu lista, del Backlog o programada para otro día): la toma y la cierra; (2) `description` + `projectId` si no estaba anotada. Tu tiempo cuenta como horas del proyecto frente al cliente: cargá minutos REALES de trabajo, no estimaciones infladas. Si todavía estás trabajando, usá `task_working_on` en vez de esto.',
     inputSchema: {
       minutes: z.number().int().min(0).max(1440).describe('Minutos reales que te llevó (máximo 1440 = 24h)'),
@@ -762,6 +828,7 @@ const tools = [
   },
   {
     name: 'task_set_executor',
+    shape: 'task',
     description: 'Cambia quién ejecuta una tarea propia que NO esté en curso ni completada: "agent" = te la tomás vos (pasa a tu lista de trabajo), "user" = se la devolvés a la persona. scope "series" en una tarea recurrente aplica a toda la serie.',
     inputSchema: {
       taskId: z.number().int(),
@@ -776,6 +843,7 @@ const tools = [
   },
   {
     name: 'task_update',
+    shape: 'task',
     description: 'Corrige una tarea de la persona para la que trabajás (incluidas tus tareas de agente): el texto (la descripción ES el título de la tarea, no hay campos separados), el proyecto o la fecha de una tarea futura. Las @menciones nuevas en el texto avisan a quien se menciona. scope "series" en una tarea recurrente aplica texto y proyecto a toda la serie abierta. En una tarea completada solo se puede corregir el texto.',
     inputSchema: {
       taskId: z.number().int(),
@@ -792,6 +860,7 @@ const tools = [
   },
   {
     name: 'task_reassign',
+    shape: 'task',
     description: 'Pasa una tarea de la persona para la que trabajás a otro miembro activo del workspace (ids con team_list); le llega un aviso. Si era una tarea de agente, pasa a ser una tarea común de esa persona (no se puede mientras esté en curso). No sirve para tareas completadas.',
     inputSchema: {
       taskId: z.number().int(),
@@ -847,42 +916,49 @@ const tools = [
   },
   {
     name: 'task_start',
+    shape: 'task',
     description: 'Inicia una tarea (pasa a IN_PROGRESS). En una tarea humana falla si la persona ya tiene otra en curso; las tareas de agente no tienen ese límite.',
     inputSchema: { taskId: z.number().int() },
     request: ({ taskId }) => ({ method: 'PATCH', path: `/tasks/${taskId}/start` }),
   },
   {
     name: 'task_pause',
+    shape: 'task',
     description: 'Pausa una tarea en curso.',
     inputSchema: { taskId: z.number().int() },
     request: ({ taskId }) => ({ method: 'PATCH', path: `/tasks/${taskId}/pause` }),
   },
   {
     name: 'task_resume',
+    shape: 'task',
     description: 'Reanuda una tarea pausada.',
     inputSchema: { taskId: z.number().int() },
     request: ({ taskId }) => ({ method: 'PATCH', path: `/tasks/${taskId}/resume` }),
   },
   {
     name: 'task_complete',
+    shape: 'task',
     description: 'Marca una tarea como completada.',
     inputSchema: { taskId: z.number().int() },
     request: ({ taskId }) => ({ method: 'PATCH', path: `/tasks/${taskId}/complete` }),
   },
   {
     name: 'task_block',
+    shape: 'task',
     description: 'Bloquea una tarea en curso con un motivo. En una tarea tuya (de agente) el aviso le llega solo a la persona dueña, que es quien te destraba: poné en el motivo exactamente qué necesitás saber o qué tiene que aprobarte. Cuando lo haga te queda como novedad en `tasks_agent_updates` (la tarea vuelve PAUSADA, no en curso). En una tarea de una persona notifica al equipo del proyecto.',
     inputSchema: { taskId: z.number().int(), reason: z.string().describe('Motivo del bloqueo') },
     request: ({ taskId, reason }) => ({ method: 'PATCH', path: `/tasks/${taskId}/block`, body: { reason } }),
   },
   {
     name: 'task_unblock',
+    shape: 'task',
     description: 'Desbloquea una tarea y la deja en curso: usala cuando VOS resolviste lo que te frenaba. Si la destraba la persona desde la app es distinto — la tarea queda PAUSADA y te llega como novedad en `tasks_agent_updates`, para retomarla con `task_resume`.',
     inputSchema: { taskId: z.number().int() },
     request: ({ taskId }) => ({ method: 'PATCH', path: `/tasks/${taskId}/unblock` }),
   },
   {
     name: 'task_set_duration',
+    shape: 'task',
     description: 'Edita el tiempo registrado de una tarea ya completada (en minutos). Solo funciona sobre tareas COMPLETED; sobreescribe el tiempo que cuenta en Reportes/Productividad. Tu tiempo SÍ cuenta como horas del proyecto frente al cliente: registrá minutos reales de trabajo, no estimaciones infladas. Máximo 1440 (24h).',
     inputSchema: { taskId: z.number().int(), minutes: z.number().int().min(0).max(1440).describe('Minutos totales a registrar (máximo 1440 = 24h)') },
     request: ({ taskId, minutes }) => ({ method: 'PATCH', path: `/tasks/${taskId}/duration`, body: { minutes } }),
@@ -1524,4 +1600,4 @@ const tools = [
   },
 ]
 
-module.exports = { tools }
+module.exports = { tools, shapeResult, compactTask }

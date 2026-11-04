@@ -49,13 +49,33 @@ beforeEach(() => {
 })
 
 describe('GET /api/tasks/search', () => {
-  it('busca por texto en las tareas propias, sin distinguir mayúsculas', async () => {
+  it('busca por texto en las tareas propias', async () => {
     const res = await search('?q=posteos')
     expect(res.status).toBe(200)
-    expect(whereOf()).toEqual(expect.objectContaining({
-      userId: 1,
-      description: { contains: 'posteos', mode: 'insensitive' },
-    }))
+    expect(whereOf().userId).toBe(1)
+    const [word] = whereOf().AND
+    expect(word.OR).toContainEqual({ description: { contains: 'posteos', mode: 'insensitive' } })
+  })
+
+  // Lo que encontró el agente: "aprobacion" no encontraba "aprobación", y la frase
+  // tenía que estar exacta. Las dos cosas le hacen creer que la tarea no existe y
+  // duplicarla, que es justo lo que esta tool viene a evitar. Ver lib/textSearch.js.
+  it('no distingue tildes', async () => {
+    await search('?q=aprobacion')
+    const [word] = whereOf().AND
+    expect(word.OR.map(c => c.description.contains)).toContain('aprobación')
+  })
+
+  it('las palabras se combinan con AND, en cualquier orden', async () => {
+    await search('?q=redactar%20posteos')
+    expect(whereOf().AND).toHaveLength(2)
+    expect(whereOf().AND[0].OR[0].description.contains).toBe('redactar')
+    expect(whereOf().AND[1].OR[0].description.contains).toBe('posteos')
+  })
+
+  it('sin q no filtra por texto', async () => {
+    await search('?projectId=7')
+    expect(whereOf().AND).toBeUndefined()
   })
 
   // Lo que se paga en tokens es cada campo de cada fila: la respuesta es el recorte,

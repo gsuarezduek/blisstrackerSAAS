@@ -79,7 +79,7 @@ PATCH  /api/tasks/:id/agent?scope=series # body { executor:'agent'|'user', agent
 GET    /api/tasks/agent-updates          # solo MCP. Bandeja de novedades del agente: ?markSeen=false solo lee. kind 'completed' (tareas que creó y completaron) | 'unblocked' | 'comment' (lo que la persona le dejó en sus tareas)
 PATCH  /api/tasks/:id/working-on         # solo MCP. Deja lista una tarea planificada para que el agente la tome; devuelve { task, next: 'start'|'resume'|'unblock'|'none' }
 PATCH  /api/tasks/:id/logged-at          # solo MCP, solo tareas de AGENTE ya completadas. body { date } — reubica jornada + completedAt (+ startedAt y sesiones, por el mismo delta) en ese día. Tope: el 1° del mes en curso; nunca una fecha futura
-GET    /api/tasks/search                 # ?q=&projectId=&status=(coma|open)&executor=user|agent|any&userId=&from=&to=&take= — filas livianas, newest-first. Otra persona requiere admin/owner; los privados ajenos quedan afuera
+GET    /api/tasks/search                 # ?q=&projectId=&status=(coma|open)&executor=user|agent|any&userId=&from=&to=&take= — filas livianas, newest-first. `q` se parte en palabras (AND, cualquier orden) y tolera tildes (lib/textSearch.js). Otra persona requiere admin/owner; los privados ajenos quedan afuera
 GET    /api/tasks/completed              # ?skip=N&before=YYYY-MM-DD, 10/page
 PATCH  /api/tasks/:id/duration           # task owner or admin
 DELETE /api/tasks/:id
@@ -391,7 +391,7 @@ POST   /api/marketing/projects/:id/integrations/connect-existing      # reutiliz
 POST   /api/marketing/projects/:id/integrations/instagram/connect-token  # conectar Instagram con token manual
 POST   /api/marketing/projects/:id/integrations/meta-ads/connect-token   # conectar Meta Ads con System User Token
 GET    /api/marketing/projects/:id/integrations             # lista integraciones del proyecto
-GET    /api/marketing/connections                           # ?projectId= opcional. Estado de TODAS las fuentes (active|expired|missing) + reconnectUrl a la pantalla de la app donde se conecta. Sin projectId: solo lo que falta de cada proyecto activo + `expired` aparte. Resuelve el gate de privados adentro (no cuelga de /projects/:id)
+GET    /api/marketing/connections                           # ?projectId= y ?state=all|pending|expired|missing. Estado de TODAS las fuentes (active|expired|missing) + reconnectUrl a la pantalla de la app donde se conecta. Default: `all` con projectId, `pending` sin él. `expiresAt` solo si es futuro (el token con refresh se renueva solo). Resuelve el gate de privados adentro (no cuelga de /projects/:id)
 PATCH  /api/marketing/projects/:id/integrations/:type       # actualizar propertyId / customerId
 DELETE /api/marketing/projects/:id/integrations/:type       # desconectar integración + revocar token
 

@@ -65,7 +65,14 @@ function resolveConnections({ integrations, websiteUrl, slug, projectId }) {
       if (row.customerId) out.customerId = row.customerId
       if (row.accountEmail) out.accountEmail = row.accountEmail
       if (row.scopes === 'scrape') out.mode = 'scrape'
-      if (row.expiresAt) out.expiresAt = row.expiresAt
+      // `expiresAt` es el vencimiento del access token, que en las integraciones con
+      // refresh token (todas las de Google) se renueva solo cada hora: una fecha YA
+      // PASADA al lado de "conectada" es lo normal, no un problema, y leerla como
+      // alarma es exactamente lo que confundió a un agente. Si el token estuviera
+      // muerto de verdad, `status` sería 'expired'. Así que solo viaja cuando es una
+      // fecha FUTURA, que ahí sí es un plazo real (ej. un token de Business Manager
+      // que vence en 60 días y hay que renovar a mano).
+      if (row.expiresAt && new Date(row.expiresAt) > new Date()) out.expiresAt = row.expiresAt
     }
     if (state !== 'active') out.reconnectUrl = reconnectUrl(source, { slug, projectId })
     return out
