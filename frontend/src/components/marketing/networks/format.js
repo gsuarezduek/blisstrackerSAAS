@@ -80,6 +80,7 @@ export const FOLLOWER_FILTERS = [
 export function connectionMode(integration) {
   const s = integration?.scopes ?? ''
   if (s === 'scrape') return 'scrape'
+  if (s === 'api_key') return 'apikey'
   if (s.startsWith('fb_graph')) return 'token'
   if (integration?.type === 'meta_ads' && integration?.expiresAt === null) return 'token'
   return 'official'

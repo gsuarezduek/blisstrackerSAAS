@@ -4,11 +4,12 @@ import CreateTaskModal from './CreateTaskModal'
 import { CirclePause, Dot, Lightbulb, TrendingUp, TriangleAlert, Wrench } from 'lucide-react'
 import { Icon } from '../ui/Icon'
 
-// Compartido entre MetaAdsTab y GoogleAdsTab — solo cambia el path del endpoint y el
-// prefijo de las tareas creadas ("Meta Ads - " / "Google Ads - ").
+// Compartido entre las tres pestañas de anuncios — solo cambia el path del endpoint
+// y el prefijo de las tareas creadas ("Meta Ads - " / "Google Ads - " / "ChatGPT Ads - ").
 const PLATFORM_META = {
-  meta_ads:   { label: 'Meta Ads',   prefix: 'Meta Ads',   path: 'meta-ads' },
-  google_ads: { label: 'Google Ads', prefix: 'Google Ads', path: 'google-ads' },
+  meta_ads:    { label: 'Meta Ads',    prefix: 'Meta Ads',    path: 'meta-ads' },
+  google_ads:  { label: 'Google Ads',  prefix: 'Google Ads',  path: 'google-ads' },
+  chatgpt_ads: { label: 'ChatGPT Ads', prefix: 'ChatGPT Ads', path: 'chatgpt-ads' },
 }
 
 const PRIORITY_STYLES = {

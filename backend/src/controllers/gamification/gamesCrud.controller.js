@@ -11,7 +11,7 @@ const {
   quizParticipationPoints, reconcileOrphanAnswers,
 } = require('./_shared')
 
-const ADS_PLATFORMS = ['meta_ads', 'google_ads']
+const ADS_PLATFORMS = ['meta_ads', 'google_ads', 'chatgpt_ads']
 
 // Normaliza/valida la regla de visibilidad. Devuelve { error } o { rule }.
 function validateVisibility(raw, def) {

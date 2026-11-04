@@ -330,8 +330,10 @@ async function geoScore(projectId, workspaceId) {
 }
 
 // Ads: CTR (ponderado por impresiones) o inversión (suma de spend) del período.
+const ADS_METRIC_TYPES = new Set(['meta_ads', 'google_ads', 'chatgpt_ads'])
+
 async function adsMetric(which, projectId, workspaceId, platform, months) {
-  const type = platform === 'google_ads' ? 'google_ads' : 'meta_ads'
+  const type = ADS_METRIC_TYPES.has(platform) ? platform : 'meta_ads'
   const rows = await prisma.adsSnapshot.findMany({ where: { projectId, workspaceId, type, month: { in: months } }, select: { spend: true, clicks: true, impressions: true, ctr: true } })
   if (!rows.length) return { value: null, detail: { platform: type, disconnected: true } }
   if (which === 'spend') {

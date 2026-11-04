@@ -22,7 +22,7 @@ const { refreshScrapeForIntegration: refreshLinkedinScrape }  = require('../cont
 const ALL_SOURCES = [
   'analytics', 'search_console', 'domain_rating', 'keywords',
   'instagram', 'facebook', 'linkedin', 'tiktok', 'youtube',
-  'google_ads', 'meta_ads', 'pagespeed',
+  'google_ads', 'meta_ads', 'chatgpt_ads', 'pagespeed',
 ]
 // pagespeed consume cuota real de la API de Google (2 llamadas por proyecto) —
 // queda afuera del default, solo corre si se pide explícito en `sources`.
@@ -38,6 +38,7 @@ const INTEGRATION_TYPE = {
   youtube:        'google_youtube',
   google_ads:     'google_ads',
   meta_ads:       'meta_ads',
+  chatgpt_ads:    'chatgpt_ads',
 }
 
 const LIVE_PATH = {
@@ -46,8 +47,9 @@ const LIVE_PATH = {
   linkedin:   id => `/marketing/projects/${id}/linkedin`,
   tiktok:     id => `/marketing/projects/${id}/tiktok`,
   youtube:    id => `/marketing/projects/${id}/youtube`,
-  google_ads: id => `/marketing/projects/${id}/google-ads`,
-  meta_ads:   id => `/marketing/projects/${id}/meta-ads`,
+  google_ads:  id => `/marketing/projects/${id}/google-ads`,
+  meta_ads:    id => `/marketing/projects/${id}/meta-ads`,
+  chatgpt_ads: id => `/marketing/projects/${id}/chatgpt-ads`,
 }
 
 const SCRAPE_REFRESH = {
@@ -133,7 +135,8 @@ async function runForProjectSource(source, project, integrationsByType, identity
       case 'tiktok':
       case 'youtube':
       case 'google_ads':
-      case 'meta_ads': {
+      case 'meta_ads':
+      case 'chatgpt_ads': {
         const integ = integrationsByType[INTEGRATION_TYPE[source]]
         if (!integ) return { status: 'not_connected' }
         return await liveGet(source, project.id, identity)

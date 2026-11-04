@@ -22,6 +22,7 @@ const LIVE_SECTIONS = [
   { key: 'facebook',    label: 'Facebook'},
   { key: 'metaAds',     label: 'Meta Ads'},
   { key: 'googleAds',   label: 'Google Ads'},
+  { key: 'chatgptAds',  label: 'ChatGPT Ads'},
   { key: 'competitors', label: 'Competidores'},
   { key: 'tasks',       label: 'Trabajo realizado'},
 ]

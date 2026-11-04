@@ -55,8 +55,9 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
     const objectivesResults = wants('objectives')
       ? await computeObjectives({
           projectId, workspaceId, dataMonth,
-          googleAds: cachedData.sections?.googleAds ?? null,
-          metaAds:   cachedData.sections?.metaAds   ?? null,
+          googleAds:  cachedData.sections?.googleAds  ?? null,
+          metaAds:    cachedData.sections?.metaAds    ?? null,
+          chatgptAds: cachedData.sections?.chatgptAds ?? null,
         })
       : []
     const history = await loadReportHistory({
@@ -318,10 +319,10 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
     }
   }
 
-  // ── Google Ads + Meta Ads (fetch async con el rango de fechas REAL del informe) ──
+  // ── Anuncios (Google + Meta + ChatGPT; fetch async con el rango REAL del informe) ──
   // Ads es range-native: para informes parciales o multi-mes trae el rango exacto.
   const dateRange = { startDate: period.start, endDate: period.end }
-  const { googleAds, metaAds } = await buildAdsSections({ wants, warn, integrations, dateRange, workspaceId })
+  const { googleAds, metaAds, chatgptAds } = await buildAdsSections({ wants, warn, integrations, dateRange, workspaceId })
 
   // ── GEO ──────────────────────────────────────────────────────────────────────
   const geo = buildGeoSection(geoAudit, geoAuditHistory)
@@ -382,7 +383,7 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
   // ── Secciones (filtradas según enabledSections) ───────────────────────────────
   // Si el informe define secciones habilitadas, las demás se excluyen por completo
   // (no se guardan en el caché ni viajan al link público del cliente).
-  const allSections = { geo, analytics, evolution, instagram, tiktok, youtube, linkedin, facebook, seo, keywords, googleAds, metaAds, performance, tasks, competitors }
+  const allSections = { geo, analytics, evolution, instagram, tiktok, youtube, linkedin, facebook, seo, keywords, googleAds, metaAds, chatgptAds, performance, tasks, competitors }
   const sections = {}
   for (const [key, val] of Object.entries(allSections)) {
     sections[key] = wants(key) ? val : null
@@ -392,7 +393,7 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
   const objectivesResults = wants('objectives')
     ? await computeObjectives({
         projectId, workspaceId, dataMonth,
-        googleAds: sections.googleAds, metaAds: sections.metaAds,
+        googleAds: sections.googleAds, metaAds: sections.metaAds, chatgptAds: sections.chatgptAds,
       })
     : []
 
@@ -409,7 +410,7 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
         geo: sections.geo, analytics: sections.analytics, instagram: sections.instagram,
         tiktok: sections.tiktok, youtube: sections.youtube, linkedin: sections.linkedin, facebook: sections.facebook, keywords: sections.keywords,
         seo: sections.seo, performance: sections.performance, googleAds: sections.googleAds,
-        metaAds: sections.metaAds, competitors: sections.competitors,
+        metaAds: sections.metaAds, chatgptAds: sections.chatgptAds, competitors: sections.competitors,
         workspaceId, objectives: objectivesResults, services, briefs })
 
   return {

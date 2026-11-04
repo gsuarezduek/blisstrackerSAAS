@@ -36,12 +36,12 @@ const METRICS = {
   inversion:      { category: 'ads',  label: 'Monto a invertir',     unit: '$',   direction: 'info',   aggregation: 'flow',  param: 'platform' },
   clicks:         { category: 'ads',  label: 'Clicks',               unit: '',    direction: 'higher', aggregation: 'flow',  param: 'platform' },
   ctr:            { category: 'ads',  label: 'CTR',                  unit: '%',    direction: 'higher', aggregation: 'stock', param: 'platform' },
-  ventas_web:     { category: 'ads',  label: 'Ventas en el sitio web', unit: '',  direction: 'higher', aggregation: 'flow',  param: 'platform', platforms: ['meta_ads'] },
+  ventas_web:     { category: 'ads',  label: 'Ventas en el sitio web', unit: '',  direction: 'higher', aggregation: 'flow',  param: 'platform', platforms: ['meta_ads', 'chatgpt_ads'] },
 }
 
 const CATEGORIES = ['web', 'seo', 'rrss', 'ads']
 const PERIODICITIES = ['monthly', 'quarterly', 'annual']
-const AD_PLATFORMS = ['meta_ads', 'google_ads']
+const AD_PLATFORMS = ['meta_ads', 'google_ads', 'chatgpt_ads']
 const RRSS_PLATFORMS = ['instagram', 'tiktok', 'linkedin']
 
 function metricDef(metric)                { return METRICS[metric] || null }

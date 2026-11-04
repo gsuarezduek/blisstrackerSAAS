@@ -327,6 +327,12 @@ const tools = [
     request: ({ projectId, datePreset }) => ({ method: 'GET', path: `/marketing/projects/${projectId}/google-ads`, query: { datePreset } }),
   },
   {
+    name: 'marketing_chatgpt_ads',
+    description: 'Datos de ChatGPT Ads (gasto, impresiones, clicks, CTR, conversiones) de un proyecto.',
+    inputSchema: { ...projectIdParam, datePreset: z.string().optional().describe('ej. last_30d, this_month') },
+    request: ({ projectId, datePreset }) => ({ method: 'GET', path: `/marketing/projects/${projectId}/chatgpt-ads`, query: { datePreset } }),
+  },
+  {
     name: 'marketing_competitors',
     description: 'Lista los competidores trackeados (Instagram/LinkedIn/Facebook) de un proyecto, con seguidores nuevos del mes.',
     inputSchema: { ...projectIdParam, platform: z.enum(['instagram', 'linkedin', 'facebook']).optional() },
@@ -653,13 +659,13 @@ const tools = [
   },
   {
     name: 'marketing_refresh_run',
-    description: 'Dispara un refresco masivo de fuentes de Marketing (GA4, Search Console, Domain Rating, Keywords, Instagram/Facebook/LinkedIn/TikTok/YouTube, Google Ads, Meta Ads, PageSpeed) — vuelve a traer los datos de cada fuente, lo que automáticamente deja al día el progreso de los objetivos de marketing y el health score (ninguno de los dos se cachea: se recalculan solos en cada lectura, no hace falta nada más). Async: devuelve un jobId al instante, consultar con marketing_refresh_status. Sigue con las demás fuentes/proyectos si una falla.',
+    description: 'Dispara un refresco masivo de fuentes de Marketing (GA4, Search Console, Domain Rating, Keywords, Instagram/Facebook/LinkedIn/TikTok/YouTube, Google Ads, Meta Ads, ChatGPT Ads, PageSpeed) — vuelve a traer los datos de cada fuente, lo que automáticamente deja al día el progreso de los objetivos de marketing y el health score (ninguno de los dos se cachea: se recalculan solos en cada lectura, no hace falta nada más). Async: devuelve un jobId al instante, consultar con marketing_refresh_status. Sigue con las demás fuentes/proyectos si una falla.',
     inputSchema: {
       projectId: z.number().int().optional().describe('Proyecto puntual. Sin esto, actualiza todos los proyectos activos del workspace.'),
       sources: z.array(z.enum([
         'analytics', 'search_console', 'domain_rating', 'keywords',
         'instagram', 'facebook', 'linkedin', 'tiktok', 'youtube',
-        'google_ads', 'meta_ads', 'pagespeed',
+        'google_ads', 'meta_ads', 'chatgpt_ads', 'pagespeed',
       ])).optional().describe('Sin esto, usa las fuentes que cada proyecto tenga conectadas (excepto pagespeed, que consume cuota de la API de Google y solo corre si se pide explícito).'),
     },
     request: ({ projectId, sources }) => ({ method: 'POST', path: '/marketing/refresh', body: { projectId, sources } }),

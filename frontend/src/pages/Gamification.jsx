@@ -402,7 +402,7 @@ function GameEditor({ game, catalog, metrics, metricCategories, members, project
     if (!type) return setError('Elegí un tipo de juego')
     if (!title.trim()) return setError('El enunciado es obligatorio')
     if (def?.metricRequired && !metric) return setError('Elegí la métrica de la competencia')
-    if (metricDef?.needsPlatform && !adsPlatform) return setError('Elegí la plataforma de anuncios (Meta o Google)')
+    if (metricDef?.needsPlatform && !adsPlatform) return setError('Elegí la plataforma de anuncios (Meta, Google o ChatGPT)')
     if (def?.requiresPeriod && (!startDate || !endDate)) return setError('Este juego necesita fecha de inicio y fin')
     if (scoring === 'quiz') {
       if (activate && questions.length === 0) return setError('Agregá al menos una pregunta para activar el cuestionario')
@@ -589,6 +589,7 @@ function GameEditor({ game, catalog, metrics, metricCategories, members, project
                       <option value="">Plataforma de anuncios…</option>
                       <option value="meta_ads">Meta Ads</option>
                       <option value="google_ads">Google Ads</option>
+                      <option value="chatgpt_ads">ChatGPT Ads</option>
                     </select>
                   )}
                 </Field>

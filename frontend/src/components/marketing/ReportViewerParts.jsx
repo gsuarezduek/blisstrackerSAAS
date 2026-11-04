@@ -446,6 +446,7 @@ export function BestAd({ ad, accent = 'blue' }) {
   const ACCENT = {
     blue:  { box: 'border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-900/10',   text: 'text-blue-700 dark:text-blue-300' },
     green: { box: 'border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-900/10', text: 'text-green-700 dark:text-green-300' },
+    slate: { box: 'border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30', text: 'text-slate-700 dark:text-slate-300' },
   }[accent] ?? {}
   const spend = ad.spend ?? ad.cost
   return (

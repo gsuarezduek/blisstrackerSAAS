@@ -217,14 +217,15 @@ export function RRSSSection({ s, contextRRSS, canEdit, contextEditing }) {
 
 // ── 3. Publicidad ────────────────────────────────────────────────────────────
 export function PublicidadSection({ s, contextPublicidad, canEdit, contextEditing }) {
-  const hasAds = !!(s.metaAds || s.googleAds)
-  if (!hasAds) return null
+  // Las plataformas presentes en ESTE informe (puede haber 1, 2 o 3).
+  const adCards = ['metaAds', 'googleAds', 'chatgptAds'].filter(k => s[k])
+  if (adCards.length === 0) return null
 
   return (
     <>
-      <GroupHeader title="Publicidad" groupKeys={['metaAds', 'googleAds']} />
+      <GroupHeader title="Publicidad" groupKeys={['metaAds', 'googleAds', 'chatgptAds']} />
       <ContextNote sectionKey="publicidad" analysisKey="contextPublicidad" contextValue={contextPublicidad} canEdit={canEdit} contextEditing={contextEditing} />
-      <div className={`grid gap-5 ${s.metaAds && s.googleAds ? 'sm:grid-cols-2' : 'grid-cols-1'}`}>
+      <div className={`grid gap-5 ${adCards.length > 1 ? 'sm:grid-cols-2' : 'grid-cols-1'}`}>
         {s.metaAds && (
           <SectionCard title="Meta Ads" sectionKey="metaAds">
             <KpiGrid items={[
@@ -249,6 +250,19 @@ export function PublicidadSection({ s, contextPublicidad, canEdit, contextEditin
             ]} />
             <BestAd ad={s.googleAds.topAds?.[0]} accent="green" />
             <SectionHistory sectionKey="googleAds" />
+          </SectionCard>
+        )}
+        {s.chatgptAds && (
+          <SectionCard title="ChatGPT Ads" sectionKey="chatgptAds">
+            <KpiGrid items={[
+              { label: 'Inversión',   value: s.chatgptAds.cost != null ? `$${fmt(s.chatgptAds.cost)}` : '—' },
+              { label: 'Impresiones', value: fmt(s.chatgptAds.impressions) },
+              { label: 'Clics',       value: fmt(s.chatgptAds.clicks) },
+              { label: 'CTR',         value: s.chatgptAds.ctr != null ? `${Number(s.chatgptAds.ctr).toFixed(2)}%` : '—' },
+              ...(s.chatgptAds.conversions != null && s.chatgptAds.conversions > 0 ? [{ label: 'Conversiones', value: fmt(s.chatgptAds.conversions) }] : []),
+            ]} />
+            <BestAd ad={s.chatgptAds.topAds?.[0]} accent="slate" />
+            <SectionHistory sectionKey="chatgptAds" />
           </SectionCard>
         )}
       </div>

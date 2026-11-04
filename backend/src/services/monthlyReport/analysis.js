@@ -39,7 +39,7 @@ function emptyAnalysis(error) {
   return { resumen: '', highlights: [], alertas: [], nextSteps: [], _error: error }
 }
 
-async function generateAnalysis({ project, month, periodLabel, geo, analytics, instagram, tiktok, youtube, linkedin, facebook, keywords, seo, performance, googleAds, metaAds, competitors, workspaceId, objectives = [], services = [], briefs = null }) {
+async function generateAnalysis({ project, month, periodLabel, geo, analytics, instagram, tiktok, youtube, linkedin, facebook, keywords, seo, performance, googleAds, metaAds, chatgptAds, competitors, workspaceId, objectives = [], services = [], briefs = null }) {
   // Cumplimiento de objetivos (array calculado por computeObjectives)
   const fmtVal = (v, unit) => v == null ? '—' : (unit === '$' ? `$${v}` : unit === '%' ? `${v}%` : unit === 'pos' ? `#${v}` : `${v}`)
   const objCtx = (Array.isArray(objectives) ? objectives : [])
@@ -134,6 +134,12 @@ async function generateAnalysis({ project, month, periodLabel, geo, analytics, i
       clicks:    metaAds.clicks,
       ctr:       `${metaAds.ctr}%`,
       alcance:   metaAds.reach,
+    } : null,
+    chatgptAds: chatgptAds ? {
+      inversion:    `$${chatgptAds.cost.toFixed(2)}`,
+      clicks:       chatgptAds.clicks,
+      ctr:          `${chatgptAds.ctr}%`,
+      conversiones: chatgptAds.conversions,
     } : null,
   }, null, 2)
 

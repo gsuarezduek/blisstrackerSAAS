@@ -192,11 +192,18 @@ export function AccountPicker({ accounts, onPick, onBack, busy, renderSub, backL
 }
 
 /**
- * Cuerpo de un método por token de Business Manager (System User Token).
+ * Cuerpo de un método por token/clave pegada a mano: el System User Token de
+ * Business Manager o la API key de ChatGPT Ads.
  * Si el token ve varias cuentas, el backend devuelve `accounts` y se muestra el
- * selector; elegir una reenvía el token con `accountParam` = id elegido.
+ * selector; elegir una reenvía el token con `accountParam` = id elegido (una API
+ * key scopeada a una sola cuenta no pasa por ahí: no manda `accounts`).
  */
-export function TokenMethod({ brand, endpoint, accountParam, steps, onConnected, renderAccountSub }) {
+export function TokenMethod({
+  brand, endpoint, accountParam, steps, onConnected, renderAccountSub,
+  placeholder = 'Pegá el System User Token (EAAB…)',
+  label = 'System User Token',
+  cta = 'Conectar con token',
+}) {
   const [token,    setToken]    = useState('')
   const [accounts, setAccounts] = useState(null)
   const [loading,  setLoading]  = useState(false)
@@ -232,9 +239,9 @@ export function TokenMethod({ brand, endpoint, accountParam, steps, onConnected,
           <div className="mt-2 leading-relaxed">{steps}</div>
         </details>
       )}
-      <TextField textarea value={token} onChange={e => setToken(e.target.value)} placeholder="Pegá el System User Token (EAAB…)" aria-label="System User Token" />
+      <TextField textarea value={token} onChange={e => setToken(e.target.value)} placeholder={placeholder} aria-label={label} />
       <FormError>{error}</FormError>
-      <BrandButton brand={brand} type="submit" loading={loading} loadingLabel="Verificando…" disabled={!token.trim()}>Conectar con token</BrandButton>
+      <BrandButton brand={brand} type="submit" loading={loading} loadingLabel="Verificando…" disabled={!token.trim()}>{cta}</BrandButton>
     </form>
   )
 }

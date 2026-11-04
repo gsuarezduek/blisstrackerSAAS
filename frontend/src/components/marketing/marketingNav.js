@@ -55,6 +55,7 @@ export const NAV = [
     subs: [
       { id: 'meta-ads',     label: 'Meta Ads' },
       { id: 'google-ads',   label: 'Google Ads' },
+      { id: 'chatgpt-ads',  label: 'ChatGPT Ads' },
     ],
   },
   {
@@ -71,7 +72,7 @@ export const SECTION_DESCRIPTIONS = {
   'geo-seo':  'Diagnóstico (GEO, SEO, On-Page, canibalización), keywords y contenido SEO.',
   web:        'Analytics (GA4) y Performance (PageSpeed).',
   rrss:       'Instagram, TikTok, LinkedIn, Facebook, YouTube y Competidores.',
-  anuncios:   'Meta Ads y Google Ads.',
+  anuncios:   'Meta Ads, Google Ads y ChatGPT Ads.',
   informes:   'Informes mensuales para compartir con el cliente.',
 }
 

@@ -42,6 +42,11 @@ const SCOPES = {
 // Tipos que comparten tokens entre sí
 const GOOGLE_LINKED_TYPES = ['google_analytics', 'google_search_console']
 
+// Integraciones cuyo `accessToken` es un token de Google y por lo tanto se puede
+// (y conviene) revocar contra Google al desconectar. Las demás guardan en ese
+// mismo campo un secreto de otro proveedor — ver `disconnect`.
+const GOOGLE_REVOCABLE_TYPES = new Set(Object.keys(DATA_SCOPES))
+
 // IDs recordados por tipo (Project.integrationDefaults, JSON guardado como string).
 // Permiten repoblar propertyId/customerId/country al reconectar sin volver a buscarlos.
 function parseIntegrationDefaults(raw) {
@@ -535,7 +540,12 @@ async function disconnect(req, res, next) {
       where: { projectId_type: { projectId, type } },
     })
 
-    if (integration?.accessToken) {
+    // Revocar el token SOLO si es de Google: `revokeCredentials` le manda el token
+    // al endpoint de revocación de Google, y para una integración que no es de
+    // Google eso nunca pudo funcionar (Meta/TikTok/LinkedIn) y encima significa
+    // mandarle un secreto nuestro a un tercero — con la API key de ChatGPT Ads,
+    // que se guarda en este mismo campo, sería filtrarla.
+    if (integration?.accessToken && GOOGLE_REVOCABLE_TYPES.has(type)) {
       try {
         const client = buildOAuthClient()
         client.setCredentials({ access_token: decrypt(integration.accessToken) })

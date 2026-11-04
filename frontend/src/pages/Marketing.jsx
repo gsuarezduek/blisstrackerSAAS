@@ -23,6 +23,7 @@ import FacebookTab  from '../components/marketing/FacebookTab'
 import CompetitorsTab from '../components/marketing/CompetitorsTab'
 import MetaAdsTab    from '../components/marketing/MetaAdsTab'
 import GoogleAdsTab  from '../components/marketing/GoogleAdsTab'
+import ChatGptAdsTab from '../components/marketing/ChatGptAdsTab'
 import ProjectSearchSelect from '../components/marketing/ProjectSearchSelect'
 import SocialIcon from '../components/marketing/SocialIcon'
 import { useFeatureFlag } from '../hooks/useFeatureFlag'
@@ -173,6 +174,7 @@ export default function Marketing() {
     if (tab === 'rrss'     && sub === 'competidores') return <CompetitorsTab projectId={projectId} onSelectProject={handleProjectChange} />
     if (tab === 'anuncios' && sub === 'meta-ads')    return <MetaAdsTab    projectId={projectId} onSelectProject={handleProjectChange} projects={projects} />
     if (tab === 'anuncios' && sub === 'google-ads')  return <GoogleAdsTab  projectId={projectId} onSelectProject={handleProjectChange} projects={projects} />
+    if (tab === 'anuncios' && sub === 'chatgpt-ads') return <ChatGptAdsTab projectId={projectId} onSelectProject={handleProjectChange} projects={projects} />
 
     return <ComingSoon label={activeSub?.label ?? activeNav.label} />
   }

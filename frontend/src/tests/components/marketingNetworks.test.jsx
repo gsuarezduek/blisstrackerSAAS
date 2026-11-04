@@ -8,8 +8,9 @@ import AccountHeader from '../../components/marketing/networks/AccountHeader'
 vi.mock('../../api/client', () => ({ default: { get: vi.fn(), post: vi.fn() } }))
 
 describe('networks/format', () => {
-  it('distingue scraping, token de Business Manager y login oficial', () => {
+  it('distingue scraping, token de Business Manager, API key y login oficial', () => {
     expect(connectionMode({ scopes: 'scrape' })).toBe('scrape')
+    expect(connectionMode({ type: 'chatgpt_ads', scopes: 'api_key', expiresAt: null })).toBe('apikey')
     expect(connectionMode({ scopes: 'fb_graph,pages_show_list' })).toBe('token')
     expect(connectionMode({ type: 'meta_ads', scopes: 'ads_read', expiresAt: null })).toBe('token')
     expect(connectionMode({ type: 'meta_ads', scopes: 'ads_read', expiresAt: '2026-12-01T00:00:00Z' })).toBe('official')

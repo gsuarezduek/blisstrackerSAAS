@@ -390,6 +390,7 @@ GET    /api/marketing/integrations/tiktok/auth-url          # ?projectId=
 POST   /api/marketing/projects/:id/integrations/connect-existing      # reutiliza tokens vigentes del workspace (mismo type)
 POST   /api/marketing/projects/:id/integrations/instagram/connect-token  # conectar Instagram con token manual
 POST   /api/marketing/projects/:id/integrations/meta-ads/connect-token   # conectar Meta Ads con System User Token
+POST   /api/marketing/projects/:id/integrations/chatgpt-ads/connect-token # conectar ChatGPT Ads con la API key de Ads Manager (sin OAuth: la key está scopeada a una cuenta)
 GET    /api/marketing/projects/:id/integrations             # lista integraciones del proyecto
 GET    /api/marketing/connections                           # ?projectId= y ?state=all|pending|expired|missing. Estado de TODAS las fuentes (active|expired|missing) + reconnectUrl a la pantalla de la app donde se conecta. Default: `all` con projectId, `pending` sin él. `expiresAt` solo si es futuro (el token con refresh se renueva solo). Resuelve el gate de privados adentro (no cuelga de /projects/:id)
 PATCH  /api/marketing/projects/:id/integrations/:type       # actualizar propertyId / customerId
@@ -406,6 +407,9 @@ GET    /api/marketing/projects/:id/google-ads               # ?datePreset= — r
 
 # Marketing — Meta Ads
 GET    /api/marketing/projects/:id/meta-ads                 # ?datePreset= — usa token de ProjectIntegration type=meta_ads
+
+# Marketing — ChatGPT Ads (OpenAI Advertiser API)
+GET    /api/marketing/projects/:id/chatgpt-ads              # ?datePreset= — usa la API key de ProjectIntegration type=chatgpt_ads
 
 # Marketing — Instagram
 POST   /api/marketing/projects/:id/integrations/instagram/connect-scrape  # conectar por scraping, body: { url | username }
@@ -518,8 +522,8 @@ GET    /api/marketing/projects/:id/content-gaps/:gapId      # detalle (polling)
 DELETE /api/marketing/projects/:id/content-gaps/:gapId
 
 # Marketing — Ads Snapshots
-POST   /api/marketing/projects/:id/ads-snapshots            # body: { month, type: "meta_ads"|"google_ads" } — guardar snapshot manual
-GET    /api/marketing/projects/:id/ads-snapshots            # ?type=meta_ads|google_ads&months=6 — historial
+POST   /api/marketing/projects/:id/ads-snapshots            # body: { month, type: "meta_ads"|"google_ads"|"chatgpt_ads" } — guardar snapshot manual
+GET    /api/marketing/projects/:id/ads-snapshots            # ?type=meta_ads|google_ads|chatgpt_ads&months=6 — historial
 
 # Marketing — Refresco masivo (GA4, Search Console, Domain Rating, Keywords, RRSS, Ads, PageSpeed)
 POST   /api/marketing/refresh                               # body: { projectId?, sources?: [...] } — async, devuelve { jobId }
@@ -533,7 +537,7 @@ GET    /api/marketing/summary/tiktok                        # TikTokSnapshot má
 GET    /api/marketing/summary/youtube                       # YouTubeSnapshot más reciente por proyecto, ordenado por suscriptores desc
 GET    /api/marketing/summary/linkedin                      # LinkedinSnapshot más reciente por proyecto, ordenado por seguidores desc
 GET    /api/marketing/summary/facebook                      # FacebookSnapshot más reciente por proyecto, ordenado por seguidores desc
-GET    /api/marketing/summary/ads                           # AdsSnapshot más reciente por proyecto, ?type=meta_ads|google_ads, ordenado por spend desc
+GET    /api/marketing/summary/ads                           # AdsSnapshot más reciente por proyecto, ?type=meta_ads|google_ads|chatgpt_ads, ordenado por spend desc
 GET    /api/marketing/summary/reports                       # todos los MonthlyReport del workspace, ?limit=20&offset=0
 GET    /api/marketing/summary/seo                           # sitios web del workspace ordenados por Domain Rating (Ahrefs) desc
 

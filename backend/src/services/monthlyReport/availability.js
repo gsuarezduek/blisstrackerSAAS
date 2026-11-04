@@ -14,7 +14,7 @@ const prisma = require('../../lib/prisma')
 async function getAvailableSections(projectId, workspaceId) {
   const [
     integrations, project, analyticsSnap, pageSpeed, geoAudit, seoSnap,
-    keyword, igSnap, tkSnap, ytSnap, liSnap, fbSnap, metaAdsSnap, googleAdsSnap, competitor, objective,
+    keyword, igSnap, tkSnap, ytSnap, liSnap, fbSnap, metaAdsSnap, googleAdsSnap, chatgptAdsSnap, competitor, objective,
   ] = await Promise.all([
     prisma.projectIntegration.findMany({ where: { projectId }, select: { type: true, status: true } }),
     prisma.project.findUnique({ where: { id: projectId }, select: { websiteUrl: true, reportSections: true } }),
@@ -30,6 +30,7 @@ async function getAvailableSections(projectId, workspaceId) {
     prisma.facebookSnapshot.findFirst({ where: { projectId, workspaceId }, select: { id: true } }),
     prisma.adsSnapshot.findFirst({ where: { projectId, workspaceId, type: 'meta_ads' }, select: { id: true } }),
     prisma.adsSnapshot.findFirst({ where: { projectId, workspaceId, type: 'google_ads' }, select: { id: true } }),
+    prisma.adsSnapshot.findFirst({ where: { projectId, workspaceId, type: 'chatgpt_ads' }, select: { id: true } }),
     prisma.competitorAccount.findFirst({ where: { projectId, platform: 'instagram' }, select: { id: true } }),
     prisma.marketingObjective.findFirst({ where: { projectId, workspaceId }, select: { id: true } }),
   ])
@@ -58,6 +59,7 @@ async function getAvailableSections(projectId, workspaceId) {
     facebook:        build(has('facebook')              || !!fbSnap,        'facebook'),
     metaAds:         build(has('meta_ads')              || !!metaAdsSnap,   'meta_ads'),
     googleAds:       build(has('google_ads')            || !!googleAdsSnap, 'google_ads'),
+    chatgptAds:      build(has('chatgpt_ads')           || !!chatgptAdsSnap, 'chatgpt_ads'),
     competitors:     build(!!competitor, null),
     objectives:      build(!!objective, null),
     tasks:           build(true, null),

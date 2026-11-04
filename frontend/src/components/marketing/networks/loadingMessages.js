@@ -47,6 +47,7 @@ export const TIKTOK_LOADING_MESSAGES     = forNetwork('TikTok')
 export const YOUTUBE_LOADING_MESSAGES    = forNetwork('YouTube')
 export const META_ADS_LOADING_MESSAGES   = forNetwork('Meta')
 export const GOOGLE_ADS_LOADING_MESSAGES = forNetwork('Google Ads')
+export const CHATGPT_ADS_LOADING_MESSAGES = forNetwork('ChatGPT Ads')
 
 // Frases por sección de Análisis con IA (Marketing → GEO/SEO/Web) — cada lista
 // está adaptada al contexto puntual de esa pantalla, no son intercambiables.

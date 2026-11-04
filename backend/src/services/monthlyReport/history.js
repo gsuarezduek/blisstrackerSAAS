@@ -102,6 +102,16 @@ const SOURCES = {
       { key: 'ctr',    label: 'CTR',       get: field('ctr'), format: 'percent', chart: 'line' },
     ],
   },
+  chatgptAds: {
+    model: 'adsSnapshot', adsType: 'chatgpt_ads',
+    select: { spend: true, clicks: true, conversions: true, ctr: true },
+    metrics: [
+      { key: 'conversions', label: 'Conversiones', get: field('conversions') },
+      { key: 'clicks',      label: 'Clics',        get: field('clicks') },
+      { key: 'spend',       label: 'Inversión',    get: field('spend'), format: 'money' },
+      { key: 'ctr',         label: 'CTR',          get: field('ctr'), format: 'percent', chart: 'line' },
+    ],
+  },
   googleAds: {
     model: 'adsSnapshot', adsType: 'google_ads',
     select: { spend: true, clicks: true, conversions: true, ctr: true },
@@ -146,7 +156,8 @@ function adsRowFromSection(type, section, month) {
   if (!section) return null
   return {
     month,
-    spend:       type === 'googleAds' ? section.cost : section.spend,
+    // Meta expone el gasto de la sección como `spend`; Google y ChatGPT, como `cost`.
+    spend:       type === 'metaAds' ? section.spend : section.cost,
     clicks:      section.clicks,
     ctr:         section.ctr,
     reach:       section.reach ?? null,

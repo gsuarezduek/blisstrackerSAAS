@@ -2,7 +2,7 @@ const prisma = require('../lib/prisma')
 const { METRICS, CATEGORIES, PERIODICITIES, AD_PLATFORMS, RRSS_PLATFORMS, metricDef } = require('../lib/objectiveCatalog')
 const { computeObjectives } = require('../services/marketingObjectives.service')
 const { saveMonthSnapshot } = require('../services/analyticsSnapshot.service')
-const { saveMetaAdsSnapshot, saveGoogleAdsSnapshot } = require('../services/adsSnapshot.service')
+const { saveMetaAdsSnapshot, saveGoogleAdsSnapshot, saveChatgptAdsSnapshot } = require('../services/adsSnapshot.service')
 const { todayString } = require('../utils/dates')
 
 async function assertProject(req) {
@@ -59,7 +59,7 @@ async function validatePayload(body, projectId, workspaceId) {
 
   // Params requeridos según métrica
   if (def.param === 'platform') {
-    if (!AD_PLATFORMS.includes(body.platform)) return { error: 'Plataforma inválida (meta_ads | google_ads)' }
+    if (!AD_PLATFORMS.includes(body.platform)) return { error: `Plataforma inválida (${AD_PLATFORMS.join(' | ')})` }
     if (def.platforms && !def.platforms.includes(body.platform)) return { error: `${def.label} solo está disponible en Meta Ads` }
     data.platform = body.platform
   }
@@ -182,10 +182,18 @@ async function getObjectivesProgress(req, res, next) {
       const jobs = []
       if (objs.some(o => o.category === 'web' && (o.metric === 'visitas' || o.metric === 'leads')))
         jobs.push(saveMonthSnapshot(projectId, workspaceId, month).catch(() => null))
-      if (objs.some(o => o.category === 'ads' && o.platform === 'meta_ads'))
-        jobs.push(saveMetaAdsSnapshot(projectId, workspaceId, month).catch(() => null))
-      if (objs.some(o => o.category === 'ads' && o.platform === 'google_ads'))
-        jobs.push(saveGoogleAdsSnapshot(projectId, workspaceId, month).catch(() => null))
+      // Un snapshot del mes en curso por plataforma que tenga objetivos: el progreso
+      // se calcula sobre AdsSnapshot, y el del mes abierto lo escribe el cron recién
+      // el 1° del mes siguiente.
+      const ADS_SNAPSHOT_BY_PLATFORM = {
+        meta_ads:    saveMetaAdsSnapshot,
+        google_ads:  saveGoogleAdsSnapshot,
+        chatgpt_ads: saveChatgptAdsSnapshot,
+      }
+      for (const [platform, save] of Object.entries(ADS_SNAPSHOT_BY_PLATFORM)) {
+        if (objs.some(o => o.category === 'ads' && o.platform === platform))
+          jobs.push(save(projectId, workspaceId, month).catch(() => null))
+      }
       if (jobs.length) await Promise.all(jobs)
     }
 

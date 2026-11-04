@@ -76,6 +76,15 @@ function IconGoogleAds() {
   )
 }
 
+function IconChatGptAds() {
+  return (
+    <svg viewBox="0 0 20 20" className="w-3.5 h-3.5" aria-label="ChatGPT Ads">
+      <rect width="20" height="20" rx="5" fill="#0d0d0d"/>
+      <path d="M10 4l1.1 3.1L14 8.2l-2.9 1.1L10 12.4 8.9 9.3 6 8.2l2.9-1.1L10 4zm4 7l.6 1.6 1.6.6-1.6.6-.6 1.6-.6-1.6-1.6-.6 1.6-.6.6-1.6z" fill="#10A37F"/>
+    </svg>
+  )
+}
+
 const INTEGRATION_ICONS = {
   google_analytics:    { Icon: IconGA,         label: 'Google Analytics' },
   google_search_console: { Icon: IconGSC,      label: 'Search Console' },
@@ -83,6 +92,7 @@ const INTEGRATION_ICONS = {
   meta_ads:            { Icon: IconMetaAds,    label: 'Meta Ads' },
   tiktok:              { Icon: IconTikTok,     label: 'TikTok' },
   google_ads:          { Icon: IconGoogleAds,  label: 'Google Ads' },
+  chatgpt_ads:         { Icon: IconChatGptAds, label: 'ChatGPT Ads' },
 }
 
 const COUNT_CONFIG = [

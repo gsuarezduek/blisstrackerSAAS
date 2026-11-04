@@ -1,17 +1,22 @@
 /**
  * adsSummary.controller.js
- * Vistas globales cross-proyecto de inversión publicitaria (Meta Ads / Google Ads).
+ * Vistas globales cross-proyecto de inversión publicitaria (Meta Ads / Google Ads /
+ * ChatGPT Ads).
  */
 
 const prisma = require('../../lib/prisma')
 const { computeObjectives } = require('../../services/marketingObjectives.service')
 const { getValidFbToken, fetchMetaAdsData } = require('../../services/metaAds.service')
 const { fetchGoogleAdsData }                = require('../../services/googleAds.service')
+const { fetchChatGptAdsData }               = require('../../services/chatgptAds.service')
 const { todayString, DEFAULT_TZ } = require('../../utils/dates')
 
 function safeParseArr(v) {
   try { return JSON.parse(v) } catch { return [] }
 }
+
+// Plataformas de anuncios con panel cross-proyecto.
+const ADS_TYPES = ['meta_ads', 'google_ads', 'chatgpt_ads']
 
 // Marca `starred` (preferencia personal, mismo criterio que "Mis Proyectos" y el panel
 // de Prioridades) sobre una lista de filas con `projectId`, para que el frontend pueda
@@ -76,8 +81,8 @@ async function getAdsSummary(req, res, next) {
     const workspaceId = req.workspace.id
     const { type }    = req.query
 
-    if (!['meta_ads', 'google_ads'].includes(type)) {
-      return res.status(400).json({ error: 'Parámetro type requerido: meta_ads | google_ads' })
+    if (!ADS_TYPES.includes(type)) {
+      return res.status(400).json({ error: `Parámetro type requerido: ${ADS_TYPES.join(' | ')}` })
     }
 
     const snapshots = await prisma.adsSnapshot.findMany({
@@ -127,9 +132,9 @@ async function getAdsSummary(req, res, next) {
 
 // Mapea nuestra clave de período interna al date_preset que espera cada plataforma.
 const ADS_LIVE_PERIODS = {
-  today:      { meta_ads: 'today',              google_ads: 'today' },
-  this_week:  { meta_ads: 'this_week_mon_today', google_ads: 'this_week' },
-  this_month: { meta_ads: 'this_month',          google_ads: 'this_month' },
+  today:      { meta_ads: 'today',               google_ads: 'today',       chatgpt_ads: 'today' },
+  this_week:  { meta_ads: 'this_week_mon_today', google_ads: 'this_week',   chatgpt_ads: 'this_week' },
+  this_month: { meta_ads: 'this_month',          google_ads: 'this_month',  chatgpt_ads: 'this_month' },
 }
 
 async function fetchAdsLiveData(type, ig, datePreset, dateRange = null) {
@@ -142,6 +147,18 @@ async function fetchAdsLiveData(type, ig, datePreset, dateRange = null) {
         spend: data.spend, impressions: data.impressions, clicks: data.clicks, ctr: data.ctr,
         reach: data.reach ?? null, cpm: data.cpm ?? null, cpc: data.cpc ?? null,
         conversions: null, avgCpc: null, campaignsCount: (data.campaigns ?? []).length,
+      },
+    }
+  }
+  if (type === 'chatgpt_ads') {
+    const data = await fetchChatGptAdsData(ig, datePreset, dateRange)
+    return {
+      raw: data,
+      row: {
+        spend: data.cost, impressions: data.impressions, clicks: data.clicks, ctr: data.ctr,
+        reach: null, cpm: data.cpm ?? null, cpc: data.avgCpc ?? null,
+        conversions: data.conversions ?? null, avgCpc: data.avgCpc ?? null,
+        campaignsCount: (data.campaigns ?? []).length,
       },
     }
   }
@@ -197,8 +214,8 @@ async function getAdsSummaryLive(req, res, next) {
     const period       = ADS_LIVE_PERIODS[req.query.period] ? req.query.period : 'this_month'
     const currentMonth = todayString(tz).slice(0, 7)
 
-    if (!['meta_ads', 'google_ads'].includes(type)) {
-      return res.status(400).json({ error: 'Parámetro type requerido: meta_ads | google_ads' })
+    if (!ADS_TYPES.includes(type)) {
+      return res.status(400).json({ error: `Parámetro type requerido: ${ADS_TYPES.join(' | ')}` })
     }
     const datePreset = ADS_LIVE_PERIODS[period][type]
     const prevRange  = previousRangeFor(period, todayString(tz))
@@ -220,9 +237,12 @@ async function getAdsSummaryLive(req, res, next) {
 
     const results = await Promise.all(integrations.map(async (ig) => {
       const base = { projectId: ig.projectId, projectName: ig.project.name }
-      const connected = type === 'meta_ads'
-        ? (ig.status === 'active' && !!ig.propertyId)
-        : (ig.status === 'active' && !!ig.customerId)
+      // Qué hace falta además de `status: active` para que la fuente traiga datos:
+      // la cuenta publicitaria en Meta, el Customer ID en Google, la API key en ChatGPT.
+      const idField = type === 'meta_ads' ? ig.propertyId
+        : type === 'google_ads' ? ig.customerId
+        : ig.accessToken
+      const connected = ig.status === 'active' && !!idField
       if (!connected) return { ...base, status: 'disconnected' }
 
       try {
@@ -243,8 +263,9 @@ async function getAdsSummaryLive(req, res, next) {
           if (monthRaw) {
             const objResults = await computeObjectives({
               projectId: ig.projectId, workspaceId, dataMonth: currentMonth,
-              googleAds: type === 'google_ads' ? monthRaw : null,
-              metaAds:   type === 'meta_ads'   ? monthRaw : null,
+              googleAds:  type === 'google_ads'  ? monthRaw : null,
+              metaAds:    type === 'meta_ads'    ? monthRaw : null,
+              chatgptAds: type === 'chatgpt_ads' ? monthRaw : null,
             })
             const o = objResults.find(r => r.id === obj.id)
             if (o && o.actual != null) {

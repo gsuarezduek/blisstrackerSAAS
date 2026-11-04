@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import api from '../../api/client'
 import SocialIcon from './SocialIcon'
-import { Globe, ChartColumn, Search, Megaphone } from 'lucide-react'
+import { Globe, ChartColumn, Search, Megaphone, Sparkles } from 'lucide-react'
 import { Icon } from '../ui/Icon'
 
 // Fuentes de datos de Marketing de un proyecto, en el orden en que se recorren las
@@ -19,6 +19,7 @@ export const CONNECTION_SOURCES = [
   { type: 'google_youtube',        label: 'YouTube',         network: 'youtube',   section: 'rrss', link: { tab: 'rrss', sub: 'youtube' } },
   { type: 'meta_ads',              label: 'Meta Ads',        icon: Megaphone, section: 'anuncios', link: { tab: 'anuncios', sub: 'meta-ads' } },
   { type: 'google_ads',            label: 'Google Ads',      icon: Megaphone, section: 'anuncios', link: { tab: 'anuncios', sub: 'google-ads' } },
+  { type: 'chatgpt_ads',           label: 'ChatGPT Ads',     icon: Sparkles,  section: 'anuncios', link: { tab: 'anuncios', sub: 'chatgpt-ads' } },
 ]
 
 const STATE = {

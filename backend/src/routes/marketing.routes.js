@@ -24,6 +24,7 @@ const linkedin             = require('../controllers/linkedin.controller')
 const facebook             = require('../controllers/facebook.controller')
 const metaAds           = require('../controllers/metaAds.controller')
 const googleAds         = require('../controllers/googleAds.controller')
+const chatgptAds        = require('../controllers/chatgptAds.controller')
 const monthlyReport = {
   ...require('../controllers/monthlyReport/reportCrud.controller'),
   ...require('../controllers/monthlyReport/reportGeneration.controller'),
@@ -85,6 +86,7 @@ router.get('/integrations/meta-ads/auth-url',                  metaIntegrations.
 router.post('/projects/:id/integrations/instagram/connect-token',  metaIntegrations.connectInstagramToken)
 router.post('/projects/:id/integrations/instagram/connect-scrape', instagram.connectScrape)
 router.post('/projects/:id/integrations/meta-ads/connect-token',   metaIntegrations.connectMetaAdsToken)
+router.post('/projects/:id/integrations/chatgpt-ads/connect-token', chatgptAds.connectChatgptAdsToken)
 router.get('/projects/:id/integrations/meta-ads/pending/:pendingId', metaIntegrations.getMetaAdsPendingAccounts)
 router.post('/projects/:id/integrations/meta-ads/connect-pending', metaIntegrations.connectMetaAdsPending)
 router.post('/projects/:id/integrations/connect-existing',    integrations.connectExisting)
@@ -111,6 +113,11 @@ router.post('/projects/:id/meta-ads/advisor',  adsAdvisor.runMetaAdvisor)
 // Google Ads
 router.get('/projects/:id/google-ads',           googleAds.getGoogleAdsData)
 router.post('/projects/:id/google-ads/advisor',  adsAdvisor.runGoogleAdvisor)
+
+// ChatGPT Ads (OpenAI Advertiser API) — la conexión es por API key, sin OAuth,
+// así que no hay auth-url ni callback: sólo el connect-token de más arriba.
+router.get('/projects/:id/chatgpt-ads',           chatgptAds.getChatgptAdsData)
+router.post('/projects/:id/chatgpt-ads/advisor',  adsAdvisor.runChatgptAdvisor)
 
 // Instagram
 router.get('/projects/:id/instagram/snapshots',  instagram.getSnapshots)

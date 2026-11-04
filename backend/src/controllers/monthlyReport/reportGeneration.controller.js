@@ -10,6 +10,7 @@ const { saveLinkedinSnapshot }  = require('../../services/linkedinSnapshot.servi
 const { saveFacebookSnapshot }  = require('../../services/facebookSnapshot.service')
 const { fetchGoogleAdsData }               = require('../../services/googleAds.service')
 const { fetchMetaAdsData, getValidFbToken } = require('../../services/metaAds.service')
+const { fetchChatGptAdsData }              = require('../../services/chatgptAds.service')
 const { SECTION_KEYS, reportPeriod, reportLabel, sanitizeSections, safeParseArr, loadBriefs, loadSignature } = require('./_shared')
 
 // Valida un rango recibido del cliente. Devuelve { periodStart, periodEnd } (Date) o null si inválido/ausente.
@@ -71,15 +72,16 @@ async function checkRrssSection(key, cfg, projectId, workspaceId, dataMonth) {
   }
 }
 
+const ADS_CHECKS = {
+  googleAds:  { label: 'Google Ads',  probe: (ig, range) => fetchGoogleAdsData(ig, 'this_month', range) },
+  metaAds:    { label: 'Meta Ads',    probe: (ig, range) => getValidFbToken(ig).then(t => fetchMetaAdsData(ig.propertyId, t, 'this_month', range)) },
+  chatgptAds: { label: 'ChatGPT Ads', probe: (ig, range) => fetchChatGptAdsData(ig, 'this_month', range) },
+}
+
 async function checkAdsSection(type, integration, dateRange) {
-  const label = type === 'googleAds' ? 'Google Ads' : 'Meta Ads'
+  const { label, probe } = ADS_CHECKS[type]
   try {
-    if (type === 'googleAds') {
-      await fetchGoogleAdsData(integration, 'this_month', dateRange)
-    } else {
-      const token = await getValidFbToken(integration)
-      await fetchMetaAdsData(integration.propertyId, token, 'this_month', dateRange)
-    }
+    await probe(integration, dateRange)
     return { section: type, label, ok: true }
   } catch (err) {
     return { section: type, label, ok: false, message: safeCheckMessage(err, label) }
@@ -144,6 +146,10 @@ async function getGenerationReadiness(req, res, next) {
     const metaIntegration = byType('meta_ads')
     if (sectionSet.has('metaAds') && metaIntegration && metaIntegration.propertyId) {
       checks.push(checkAdsSection('metaAds', metaIntegration, dateRange))
+    }
+    const gptIntegration = byType('chatgpt_ads')
+    if (sectionSet.has('chatgptAds') && gptIntegration && gptIntegration.accessToken) {
+      checks.push(checkAdsSection('chatgptAds', gptIntegration, dateRange))
     }
 
     const results = await Promise.all(checks)

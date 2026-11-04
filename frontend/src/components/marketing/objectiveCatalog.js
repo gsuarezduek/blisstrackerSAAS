@@ -35,7 +35,7 @@ export const METRICS = {
   inversion:       { category: 'ads',  label: 'Monto a invertir',      unit: '$',   param: 'platform',         hasTarget: true,  help: 'Presupuesto a invertir; el informe compara contra el gasto real.' },
   clicks:          { category: 'ads',  label: 'Clicks',                unit: '',    param: 'platform',         hasTarget: true,  help: 'Clicks objetivo de la plataforma.' },
   ctr:             { category: 'ads',  label: 'CTR',                   unit: '%',   param: 'platform',         hasTarget: true,  help: 'CTR objetivo (%) de la plataforma.' },
-  ventas_web:      { category: 'ads',  label: 'Ventas en el sitio web', unit: '',   param: 'platform',         hasTarget: true,  platforms: ['meta_ads'], help: 'Compras en el sitio web atribuidas a los anuncios (columna "Resultados" del administrador de anuncios). Requiere el píxel de Meta con el evento de compra.' },
+  ventas_web:      { category: 'ads',  label: 'Ventas en el sitio web', unit: '',   param: 'platform',         hasTarget: true,  platforms: ['meta_ads', 'chatgpt_ads'], help: 'Compras en el sitio web atribuidas a los anuncios. En Meta sale de la columna "Resultados" y requiere el píxel con el evento de compra; en ChatGPT Ads, del evento order_created de la Conversions API.' },
 }
 
 export const PERIODICITIES = [
@@ -45,8 +45,9 @@ export const PERIODICITIES = [
 ]
 
 export const AD_PLATFORMS = [
-  { key: 'meta_ads',   label: 'Meta Ads' },
-  { key: 'google_ads', label: 'Google Ads' },
+  { key: 'meta_ads',    label: 'Meta Ads' },
+  { key: 'google_ads',  label: 'Google Ads' },
+  { key: 'chatgpt_ads', label: 'ChatGPT Ads' },
 ]
 
 // Plataformas de anuncios en las que existe una métrica.
@@ -63,7 +64,7 @@ export const RRSS_PLATFORMS = [
 
 // Etiqueta legible de cualquier plataforma (ads o rrss).
 export const PLATFORM_LABEL = {
-  meta_ads: 'Meta', google_ads: 'Google',
+  meta_ads: 'Meta', google_ads: 'Google', chatgpt_ads: 'ChatGPT',
   instagram: 'Instagram', tiktok: 'TikTok', linkedin: 'LinkedIn',
 }
 

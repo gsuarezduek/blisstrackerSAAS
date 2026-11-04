@@ -20,7 +20,7 @@ function statusFromPct(pct) {
   return 'fail'
 }
 
-const PLATFORM_LABEL = { meta_ads: 'Meta Ads', google_ads: 'Google Ads' }
+const PLATFORM_LABEL = { meta_ads: 'Meta Ads', google_ads: 'Google Ads', chatgpt_ads: 'ChatGPT Ads' }
 const NETWORK_LABEL  = { instagram: 'Instagram', tiktok: 'TikTok', linkedin: 'LinkedIn' }
 const RRSS_NETWORKS  = ['instagram', 'tiktok', 'linkedin']
 
@@ -94,7 +94,7 @@ async function interactionsForNetwork(network, projectId, workspaceId, months) {
 // ─── Cómputo por objetivo ──────────────────────────────────────────────────────
 
 async function computeOne(obj, ctx) {
-  const { projectId, workspaceId, dataMonth, googleAds, metaAds } = ctx
+  const { projectId, workspaceId, dataMonth } = ctx
   const def = metricDef(obj.metric)
   if (!def) return null
 
@@ -373,7 +373,7 @@ async function computeCompetitor(obj, base, ctx) {
 
 // Inversión / clicks / CTR / ventas web de Ads (snapshots del período + live para el mes en curso).
 async function computeAds(obj, base, def, ctx, months) {
-  const { projectId, workspaceId, dataMonth, googleAds, metaAds } = ctx
+  const { projectId, workspaceId, dataMonth } = ctx
   const platform = obj.platform
   base.label = `${def.label} ${PLATFORM_LABEL[platform] ?? ''}`.trim()
   base.detail.platform = platform
@@ -383,18 +383,22 @@ async function computeAds(obj, base, def, ctx, months) {
     select: { month: true, spend: true, clicks: true, ctr: true, impressions: true, websitePurchases: true },
   })
   const byMonth = new Map(snaps.map(s => [s.month, s]))
-  const live = platform === 'google_ads' ? googleAds : metaAds
+  // Datos en vivo del mes en curso, si quien llamó los trajo para esta plataforma.
+  const live = ctx.liveAds?.[platform] ?? null
 
   // valor por mes: snapshot, o live solo para el mes en curso (dataMonth)
   function monthRow(m) {
     if (byMonth.has(m)) return byMonth.get(m)
     if (m === dataMonth && live) {
       return {
-        spend:       platform === 'google_ads' ? (live.cost ?? null) : (live.spend ?? null),
+        // Meta expone el gasto como `spend`; Google y ChatGPT, como `cost`.
+        spend:       platform === 'meta_ads' ? (live.spend ?? null) : (live.cost ?? null),
         clicks:      live.clicks ?? null,
         ctr:         live.ctr ?? null,
         impressions: live.impressions ?? null,
-        websitePurchases: live.websitePurchases?.purchases ?? null,
+        // Meta devuelve `{ purchases, value }`; ChatGPT Ads, el número directo
+        // (mismo shape que la columna del snapshot donde termina).
+        websitePurchases: live.websitePurchases?.purchases ?? live.websitePurchases ?? null,
       }
     }
     return null
@@ -442,7 +446,7 @@ async function computeAds(obj, base, def, ctx, months) {
  * Calcula el progreso de todos los objetivos de un proyecto contra los datos reales.
  * @returns {Promise<Array>} un resultado por objetivo (ver shape en computeOne).
  */
-async function computeObjectives({ projectId, workspaceId, dataMonth, googleAds = null, metaAds = null }) {
+async function computeObjectives({ projectId, workspaceId, dataMonth, googleAds = null, metaAds = null, chatgptAds = null }) {
   const objectives = await prisma.marketingObjective.findMany({
     where:   { projectId, workspaceId },
     include: {
@@ -453,7 +457,11 @@ async function computeObjectives({ projectId, workspaceId, dataMonth, googleAds 
   })
   if (objectives.length === 0) return []
 
-  const ctx = { projectId, workspaceId, dataMonth, googleAds, metaAds }
+  // Datos en vivo de ads indexados por plataforma. Puede venir más de uno a la vez
+  // (el informe mensual trae todas las secciones de anuncios que tenga el proyecto),
+  // así que es un mapa y no un único "la plataforma que se está mirando".
+  const liveAds = { google_ads: googleAds, meta_ads: metaAds, chatgpt_ads: chatgptAds }
+  const ctx = { projectId, workspaceId, dataMonth, liveAds }
   const results = []
   for (const obj of objectives) {
     try {

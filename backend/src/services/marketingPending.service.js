@@ -20,8 +20,8 @@ const AUTO_SNOOZE_DAYS = 30
 const FUZZY_SOURCES = new Set(['geo', 'ads_advisor', 'rrss_advisor'])
 const SIMILARITY_THRESHOLD = 0.5
 
-const ADS_PLATFORM_LABEL = { meta_ads: 'Meta Ads', google_ads: 'Google Ads' }
-const ADS_PLATFORM_SUB   = { meta_ads: 'meta-ads', google_ads: 'google-ads' }
+const ADS_PLATFORM_LABEL = { meta_ads: 'Meta Ads', google_ads: 'Google Ads', chatgpt_ads: 'ChatGPT Ads' }
+const ADS_PLATFORM_SUB   = { meta_ads: 'meta-ads', google_ads: 'google-ads', chatgpt_ads: 'chatgpt-ads' }
 // Pestaña de origen de cada hallazgo del plan SEO (antes todos llevaban al viejo
 // "Plan de acción", que se fusionó en Prioridades).
 const SEO_SOURCE_LINK = {

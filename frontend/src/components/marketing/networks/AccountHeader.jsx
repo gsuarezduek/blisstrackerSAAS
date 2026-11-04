@@ -5,6 +5,7 @@ import { connectionMode } from './format'
 const MODE = {
   official: { text: 'API oficial',  cls: 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300' },
   token:    { text: 'Token de Business Manager', cls: 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300' },
+  apikey:   { text: 'API key',      cls: 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300' },
   scrape:   { text: 'Scraping · datos públicos', cls: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300' },
 }
 

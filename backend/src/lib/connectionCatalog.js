@@ -24,6 +24,7 @@ const SOURCES = [
   { type: 'google_youtube',        label: 'YouTube',          section: 'rrss',     tab: 'rrss',    sub: 'youtube' },
   { type: 'meta_ads',              label: 'Meta Ads',         section: 'anuncios', tab: 'anuncios', sub: 'meta-ads' },
   { type: 'google_ads',            label: 'Google Ads',       section: 'anuncios', tab: 'anuncios', sub: 'google-ads' },
+  { type: 'chatgpt_ads',           label: 'ChatGPT Ads',      section: 'anuncios', tab: 'anuncios', sub: 'chatgpt-ads' },
 ]
 
 /** Base pública del workspace: https://<slug>.<APP_DOMAIN> */

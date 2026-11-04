@@ -47,4 +47,19 @@ async function runGoogleAdvisor(req, res, next) {
   } catch (err) { handleAdvisorError(err, res, next) }
 }
 
-module.exports = { runMetaAdvisor, runGoogleAdvisor }
+/**
+ * POST /api/marketing/projects/:id/chatgpt-ads/advisor?datePreset=this_month
+ */
+async function runChatgptAdvisor(req, res, next) {
+  try {
+    const projectId  = Number(req.params.id)
+    const datePreset = req.query.datePreset || 'this_month'
+    const result = await generateAdsAdvisor({
+      projectId, workspaceId: req.workspace.id, userId: req.user.userId,
+      platform: 'chatgpt_ads', datePreset, tz: req.workspace.timezone,
+    })
+    res.json(result)
+  } catch (err) { handleAdvisorError(err, res, next) }
+}
+
+module.exports = { runMetaAdvisor, runGoogleAdvisor, runChatgptAdvisor }

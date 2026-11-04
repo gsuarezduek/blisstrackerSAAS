@@ -5,11 +5,12 @@ const { createMessage } = require('../lib/claude')
 const { todayString, DEFAULT_TZ } = require('../utils/dates')
 const { getValidFbToken, fetchMetaAdsData } = require('./metaAds.service')
 const { fetchGoogleAdsData } = require('./googleAds.service')
+const { fetchChatGptAdsData } = require('./chatgptAds.service')
 const { computeObjectives } = require('./marketingObjectives.service')
 const { enabledWorkspaceIds } = require('../lib/featureFlags')
 const { hasTokenBudget } = require('../lib/tokenBudget')
 
-const PLATFORM_LABEL = { meta_ads: 'Meta Ads (Facebook/Instagram)', google_ads: 'Google Ads' }
+const PLATFORM_LABEL = { meta_ads: 'Meta Ads (Facebook/Instagram)', google_ads: 'Google Ads', chatgpt_ads: 'ChatGPT Ads' }
 
 // Etiquetas legibles de los campos del brief "Performance / Meta Ads" que le interesan
 // al prompt (objetivo real, economía del negocio, tono) — mismo patrón que SEO_LABELS
@@ -57,6 +58,10 @@ async function resolveIntegration(projectId, workspaceId, platform) {
     const e = new Error('Falta el Customer ID de Google Ads. Configuralo desde la pestaña Google Ads.')
     e.status = 400; e.code = 'NO_INTEGRATION'; throw e
   }
+  if (platform === 'chatgpt_ads' && !integration.accessToken) {
+    const e = new Error('Falta la API key de ChatGPT Ads. Conectala desde la pestaña ChatGPT Ads.')
+    e.status = 400; e.code = 'NO_INTEGRATION'; throw e
+  }
   return integration
 }
 
@@ -64,6 +69,9 @@ async function fetchLiveData(integration, platform, datePreset) {
   if (platform === 'meta_ads') {
     const token = await getValidFbToken(integration)
     return fetchMetaAdsData(integration.propertyId, token, datePreset)
+  }
+  if (platform === 'chatgpt_ads') {
+    return fetchChatGptAdsData(integration, datePreset)
   }
   if (!process.env.GOOGLE_ADS_DEVELOPER_TOKEN) {
     const e = new Error('GOOGLE_ADS_DEVELOPER_TOKEN no configurado en el servidor.')
@@ -110,7 +118,8 @@ function adsBlockMeta(topAds) {
   ).join('\n')
 }
 
-function adsBlockGoogle(topAds) {
+// Google Ads y ChatGPT Ads: anuncios de texto (título + descripción), sin alcance.
+function adsBlockText(topAds) {
   if (!topAds?.length) return '  (sin anuncios individuales con actividad en el período)'
   return topAds.slice(0, 6).map(a =>
     `  - [${a.campaignName}] "${a.headline || a.name}": impresiones ${a.impressions}, clicks ${a.clicks}, CTR ${a.ctr.toFixed(2)}%, conversiones ${a.conversions}`
@@ -151,8 +160,9 @@ async function generateAdsAdvisor({ projectId, workspaceId, userId, platform, da
 
   const objectiveResults = await computeObjectives({
     projectId, workspaceId, dataMonth: currentMonth,
-    googleAds: platform === 'google_ads' ? liveData : null,
-    metaAds:   platform === 'meta_ads'   ? liveData : null,
+    googleAds:  platform === 'google_ads'  ? liveData : null,
+    metaAds:    platform === 'meta_ads'    ? liveData : null,
+    chatgptAds: platform === 'chatgpt_ads' ? liveData : null,
   }).then(all => all.filter(o => o.category === 'ads' && o.detail?.platform === platform))
 
   const adsAnswers   = briefs.find(b => b.type === 'meta_ads')?.answers || {}
@@ -160,12 +170,17 @@ async function generateAdsAdvisor({ projectId, workspaceId, userId, platform, da
   const briefCtx      = briefLines(adsAnswers, ADS_BRIEF_LABELS)
   const marcaCtx       = briefDump(marcaAnswers)
 
-  const isGoogle = platform === 'google_ads'
-  const spend    = isGoogle ? liveData.cost : liveData.spend
+  // Meta expone el gasto como `spend`; Google Ads y ChatGPT Ads, como `cost`.
+  const spend = platform === 'meta_ads' ? liveData.spend : liveData.cost
 
-  const copyInstructions = isGoogle
-    ? 'Para "nuevosCopys": son anuncios de búsqueda de texto (Responsive Search Ads). "headline" debe tener HASTA 30 caracteres y "texto" (la descripción) HASTA 90 caracteres — son límites duros de Google Ads, respetalos estrictamente.'
-    : 'Para "nuevosCopys": son anuncios de Meta (Facebook/Instagram). No generás la imagen/video — "headline" es el título corto del anuncio y "texto" es el texto principal (primary text). Si el cliente no tiene material audiovisual propio (ver brief), decilo en "motivo" para que se sepa que hay que producir el creativo.'
+  const COPY_INSTRUCTIONS = {
+    google_ads:  'Para "nuevosCopys": son anuncios de búsqueda de texto (Responsive Search Ads). "headline" debe tener HASTA 30 caracteres y "texto" (la descripción) HASTA 90 caracteres — son límites duros de Google Ads, respetalos estrictamente.',
+    meta_ads:    'Para "nuevosCopys": son anuncios de Meta (Facebook/Instagram). No generás la imagen/video — "headline" es el título corto del anuncio y "texto" es el texto principal (primary text). Si el cliente no tiene material audiovisual propio (ver brief), decilo en "motivo" para que se sepa que hay que producir el creativo.',
+    // El formato nativo de ChatGPT Ads es la "chat card": aparece dentro de una
+    // conversación, así que el texto tiene que sonar a respuesta útil y no a aviso.
+    chatgpt_ads: 'Para "nuevosCopys": son anuncios de ChatGPT (formato "chat card": aparecen dentro de una conversación con el asistente). "headline" (el título) debe tener HASTA 50 caracteres y "texto" (el cuerpo) HASTA 100 caracteres — son límites duros de la plataforma, respetalos estrictamente. El anuncio se muestra cuando alguien le está preguntando algo al asistente: escribilo como la respuesta corta y concreta a esa intención, no como un aviso publicitario. No generás la imagen.',
+  }
+  const copyInstructions = COPY_INSTRUCTIONS[platform] ?? COPY_INSTRUCTIONS.meta_ads
 
   const prompt = `Sos un media buyer senior especializado en ${PLATFORM_LABEL[platform]}. Analizá la cuenta publicitaria de un cliente de una agencia de marketing y dale al equipo interno recomendaciones ACCIONABLES para el día a día — no un resumen genérico de "optimizá tus anuncios".
 
@@ -178,7 +193,7 @@ CAMPAÑAS:
 ${campaignsBlock(liveData.campaigns)}
 
 ANUNCIOS INDIVIDUALES:
-${isGoogle ? adsBlockGoogle(liveData.topAds) : adsBlockMeta(liveData.topAds)}
+${platform === 'meta_ads' ? adsBlockMeta(liveData.topAds) : adsBlockText(liveData.topAds)}
 
 TENDENCIA (meses anteriores ya cerrados):
 ${trendBlock(snapshots)}
@@ -259,20 +274,19 @@ async function runWeeklyAdsAdvisor() {
   const wsById = new Map(workspaces.map(w => [w.id, w]))
   const wsIds = [...wsById.keys()]
 
-  const [metaIntegrations, googleIntegrations] = await Promise.all([
+  // Qué campo necesita cada plataforma además de `status: active` para traer datos.
+  const PLATFORM_READY = {
+    meta_ads:    { propertyId:  { not: null } },
+    google_ads:  { customerId:  { not: null } },
+    chatgpt_ads: { accessToken: { not: null } },
+  }
+  const perPlatform = await Promise.all(Object.entries(PLATFORM_READY).map(([platform, ready]) =>
     prisma.projectIntegration.findMany({
-      where:  { type: 'meta_ads', status: 'active', propertyId: { not: null }, workspaceId: { in: wsIds }, project: { active: true } },
+      where:  { type: platform, status: 'active', ...ready, workspaceId: { in: wsIds }, project: { active: true } },
       select: { projectId: true, workspaceId: true },
-    }),
-    prisma.projectIntegration.findMany({
-      where:  { type: 'google_ads', status: 'active', customerId: { not: null }, workspaceId: { in: wsIds }, project: { active: true } },
-      select: { projectId: true, workspaceId: true },
-    }),
-  ])
-  const jobs = [
-    ...metaIntegrations.map(i => ({ ...i, platform: 'meta_ads' })),
-    ...googleIntegrations.map(i => ({ ...i, platform: 'google_ads' })),
-  ]
+    }).then(rows => rows.map(i => ({ ...i, platform }))),
+  ))
+  const jobs = perPlatform.flat()
 
   let ok = 0, skipped = 0, failed = 0
   for (const job of jobs) {

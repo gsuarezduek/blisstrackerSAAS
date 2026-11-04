@@ -69,7 +69,7 @@ const GAME_TYPES = {
 //   ads_ctr       → CTR del período (AdsSnapshot, ponderado por impresiones)
 //   ads_spend     → inversión del período (AdsSnapshot, suma de spend)
 // Todas son "mayor es mejor". `growth: true` marca un delta (se muestra con +).
-// `needsPlatform: true` requiere elegir meta_ads | google_ads.
+// `needsPlatform: true` requiere elegir meta_ads | google_ads | chatgpt_ads.
 
 const MARKETING_METRICS = {
   followers_instagram:   { category: 'rrss', label: 'Más seguidores · Instagram', kind: 'followers', network: 'instagram', unit: '', growth: true },

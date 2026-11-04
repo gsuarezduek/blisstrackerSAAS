@@ -1736,7 +1736,7 @@ model ProjectIntegration {
   id          Int    @id @default(autoincrement())
   workspaceId Int
   projectId   Int
-  type        String // "google_analytics" | "google_ads" | "instagram" | "tiktok" | "meta_ads" | "linkedin"
+  type        String // "google_analytics" | "google_ads" | "instagram" | "tiktok" | "meta_ads" | "linkedin" | "chatgpt_ads"
   status      String @default("active") // "active" | "expired" (se marca al detectar invalid_grant / token vencido)
 
   propertyId String? // GA4: "properties/123456789"
@@ -2422,7 +2422,7 @@ model AdsSnapshot {
   workspaceId Int
   projectId   Int
   month       String // "YYYY-MM"
-  type        String // "meta_ads" | "google_ads"
+  type        String // "meta_ads" | "google_ads" | "chatgpt_ads"
 
   // Métricas comunes
   spend       Float @default(0) // gasto total en USD
@@ -2435,12 +2435,13 @@ model AdsSnapshot {
   cpm   Float? // costo por 1000 impresiones
   cpc   Float? // costo por click
 
-  // Google Ads específico
+  // Google Ads y ChatGPT Ads
   conversions Float? // conversiones totales
   avgCpc      Float? // CPC promedio
 
-  // Meta Ads: compras en el sitio web (evento Purchase del píxel). null = no aplica
-  // (sin píxel o sin ventas que medir), distinto de 0 compras.
+  // Ventas atribuidas a los anuncios. Meta Ads: compras en el sitio web (evento
+  // Purchase del píxel). ChatGPT Ads: evento `order_created` de la Conversions API.
+  // null = no aplica (sin píxel/eventos o sin ventas que medir), distinto de 0 compras.
   websitePurchases     Int?
   websitePurchaseValue Float?
 
@@ -2448,9 +2449,10 @@ model AdsSnapshot {
   topCampaigns String @default("[]")
 
   // Top anuncios individuales (JSON):
-  //   Meta:   [{ id, name, thumbnailUrl, reach, impressions, clicks, ctr, spend }]
-  //   Google: [{ id, name, type, headline, description, impressions, clicks, ctr, cost, conversions }]
-  // La thumbnailUrl de Meta se cachea (SocialImage/R2) al guardar el snapshot.
+  //   Meta:    [{ id, name, thumbnailUrl, reach, impressions, clicks, ctr, spend }]
+  //   Google:  [{ id, name, type, headline, description, impressions, clicks, ctr, cost, conversions }]
+  //   ChatGPT: [{ id, name, headline, description, thumbnailUrl, impressions, clicks, ctr, cost, conversions }]
+  // Las thumbnailUrl de Meta y ChatGPT se cachean (SocialImage/R2) al guardar el snapshot.
   topAds String @default("[]")
 
   // Metadata
@@ -2476,7 +2478,7 @@ model AdsAdvisorResult {
   id          Int    @id @default(autoincrement())
   workspaceId Int
   projectId   Int
-  platform    String // "meta_ads" | "google_ads"
+  platform    String // "meta_ads" | "google_ads" | "chatgpt_ads"
 
   diagnostico String // JSON: [{ ambito, referencia, tipo, prioridad, titulo, detalle }]
   nuevosCopys String // JSON: [{ angulo, headline, texto, motivo }]

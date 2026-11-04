@@ -259,7 +259,7 @@ export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, o
       items.push({ label: 'Clics orgánicos', value: fmt(s.seo.clicks), delta: s.seo.delta?.clicks })
     }
     // Inversión publicitaria total (Google Ads + Meta Ads)
-    const totalAdSpend = (s.googleAds?.cost ?? 0) + (s.metaAds?.spend ?? 0)
+    const totalAdSpend = (s.googleAds?.cost ?? 0) + (s.metaAds?.spend ?? 0) + (s.chatgptAds?.cost ?? 0)
     if (totalAdSpend > 0) {
       items.push({ label: 'Inversión en ads', value: `$${totalAdSpend.toLocaleString('es-AR', { maximumFractionDigits: 0 })}` })
     }
