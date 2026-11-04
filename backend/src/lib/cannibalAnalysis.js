@@ -172,6 +172,21 @@ function buildConflict(query, urls, protectedSet) {
   }
 }
 
+// Conteos por severidad e impresiones en riesgo de un conjunto de conflictos. Una sola
+// definición de "impresiones en riesgo" (Alta + Media): la usa el run completo y también
+// las lecturas que recalculan sobre los conflictos ABIERTOS, después de descontar los
+// que el equipo ya marcó resueltos (ver lib/cannibalResolution.js).
+function summarizeConflicts(conflicts = []) {
+  return {
+    criticalCount: conflicts.filter(c => c.severity === 'Alta').length,
+    warningCount:  conflicts.filter(c => c.severity === 'Media').length,
+    lowCount:      conflicts.filter(c => c.severity === 'Baja').length,
+    trafficAtRisk: conflicts
+      .filter(c => c.severity === 'Alta' || c.severity === 'Media')
+      .reduce((s, c) => s + (c.totalImpressions || 0), 0),
+  }
+}
+
 /**
  * Orquestador central: agrupa filas planas de Search Console en conflictos de
  * canibalización, hallazgos de hreflang y URLs indexadas por error.
@@ -281,16 +296,9 @@ function groupConflicts(rows, { protectedUrls = [], languageFilter = null, langu
   conflicts.sort((a, b) => b.severityScore - a.severityScore)
   hreflangIssues.sort((a, b) => b.totalImpressions - a.totalImpressions)
 
-  const criticalCount = conflicts.filter(c => c.severity === 'Alta').length
-  const warningCount  = conflicts.filter(c => c.severity === 'Media').length
-  const lowCount      = conflicts.filter(c => c.severity === 'Baja').length
-  const trafficAtRisk = conflicts
-    .filter(c => c.severity === 'Alta' || c.severity === 'Media')
-    .reduce((s, c) => s + c.totalImpressions, 0)
-
   return {
     conflicts, hreflangIssues, indexedByMistake,
-    criticalCount, warningCount, lowCount, trafficAtRisk,
+    ...summarizeConflicts(conflicts),
     hreflangCount: hreflangIssues.length,
     indexedByMistakeCount: indexedByMistake.length,
   }
@@ -304,5 +312,6 @@ module.exports = {
   normalizeUrlForCompare,
   pickMainUrl,
   buildRecommendation,
+  summarizeConflicts,
   groupConflicts,
 }

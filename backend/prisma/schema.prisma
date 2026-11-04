@@ -168,6 +168,7 @@ model Workspace {
   searchConsoleSnapshots     SearchConsoleSnapshot[]
   seoAiInsights              SeoAiInsight[]
   cannibalReports            CannibalReport[]
+  cannibalResolutions        CannibalResolution[]
   adsSnapshots               AdsSnapshot[]
   adsAdvisorResults          AdsAdvisorResult[]
   rrssAdvisorResults         RrssAdvisorResult[]
@@ -416,6 +417,7 @@ model User {
   taskComments                      TaskComment[]
   situationEntriesCreated           ProjectSituationEntry[]     @relation("SituationEntryCreatedBy")
   situationEntriesUpdated           ProjectSituationEntry[]     @relation("SituationEntryUpdatedBy")
+  cannibalResolutions               CannibalResolution[]
   taskFollows                       TaskFollow[]                @relation("TaskFollower")
   deletedNoticesAssigned            DeletedTaskNotice[]         @relation("DeletedNoticeAssignee")
   deletedNoticesDelegated           DeletedTaskNotice[]         @relation("DeletedNoticeCreatedBy")
@@ -713,6 +715,7 @@ model Project {
   searchConsoleSnapshots   SearchConsoleSnapshot[]
   seoAiInsights            SeoAiInsight[]
   cannibalReports          CannibalReport[]
+  cannibalResolutions      CannibalResolution[]
   adsSnapshots             AdsSnapshot[]
   adsAdvisorResults        AdsAdvisorResult[]
   rrssAdvisorResults       RrssAdvisorResult[]
@@ -3179,6 +3182,67 @@ model CannibalReport {
   @@index([workspaceId])
 }
 
+// Conflicto de canibalización que el equipo (o un agente) ya arregló: 301 aplicado,
+// canonical, noindex, intención diferenciada. Es la FUENTE DE VERDAD y se aplica EN
+// LECTURA sobre los conflictos del reporte (ver cannibalization.controller.js
+// `getReport` y seoActionPlan.service.js) — así marcar resuelto surte efecto al
+// instante en la pestaña y en Prioridades, sin re-correr el análisis ni tocar el
+// JSON de ningún CannibalReport.
+//
+// `status` pasa a 'reopened' SOLO con evidencia de Search Console posterior a
+// `resolvedAt` (lib/cannibalResolution.js): el análisis mira una ventana de
+// 30/90/180 días hacia atrás, que incluye los datos previos al arreglo, así que
+// "el conflicto sigue apareciendo en el reporte" no prueba nada. Un conflicto
+// reabierto vuelve a contar como abierto, conservando el historial del arreglo
+// anterior (resolvedAt + action + reopenCount) — que es justo lo que delata un 301
+// que no quedó aplicado o un CMS que regeneró la página.
+model CannibalResolution {
+  id          Int    @id @default(autoincrement())
+  projectId   Int
+  workspaceId Int
+
+  // Identidad del conflicto: query + idioma, el mismo par con el que lo agrupa
+  // cannibalAnalysis.js (la query guardada conserva mayúsculas/espacios para
+  // mostrarla y para filtrar en Search Console; la comparación es normalizada).
+  query    String
+  language String @default("default")
+
+  action String  @default("otro") // '301' | 'canonical' | 'noindex' | 'diferenciado' | 'otro'
+  note   String? // nota libre del equipo, ej. "301 de /blog/alquiler-autos hacia /alquiler-autos"
+
+  status     String   @default("resolved") // 'resolved' | 'reopened'
+  resolvedAt DateTime @default(now()) // fecha del arreglo (editable: puede ser anterior a hoy)
+
+  // Contexto al momento de resolver — para el historial y para que la verificación
+  // reconozca las URLs cuyo idioma se había resuelto con un fetch de <html lang>.
+  mainUrl String?
+  urls    String  @default("[]") // JSON: string[] de las URLs que competían
+
+  // Verificación contra Search Console (solo la corre el análisis, que es quien
+  // tiene el token y el sitio).
+  lastCheckedAt  DateTime?
+  reopenedAt     DateTime?
+  reopenCount    Int       @default(0)
+  reopenEvidence String? // JSON: { from, to, days, totalImpressions, urls:[{url,impressions,clicks,share}] }
+
+  resolvedById        Int?
+  resolvedBy          User?     @relation(fields: [resolvedById], references: [id], onDelete: SetNull)
+  // Agentes IA: lo marcó resuelto un agente (McpToken) vía MCP en nombre del usuario.
+  resolvedByAgentId   Int?
+  resolvedByAgent     McpToken? @relation(fields: [resolvedByAgentId], references: [id], onDelete: SetNull)
+  resolvedByAgentName String? // nombre que declaró el agente (param `agentName`), si comparte token
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  project   Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, query, language])
+  @@index([projectId, status])
+  @@index([workspaceId])
+}
+
 // ─── EOS (Entrepreneurial Operating System) ──────────────────────────────────
 
 model EOSData {
@@ -4798,6 +4862,7 @@ model McpToken {
   situationEntriesUpdated ProjectSituationEntry[] @relation("SituationEntryUpdatedByAgent")
   whatsappMessages        WhatsappMessage[]       @relation("WhatsappMessageAgent")
   whatsappControls        WhatsappConversation[]  @relation("WhatsappConversationAgentControl")
+  cannibalResolutions     CannibalResolution[]
 
   @@index([workspaceId])
 }

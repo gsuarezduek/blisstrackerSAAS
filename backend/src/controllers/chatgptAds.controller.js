@@ -32,6 +32,9 @@ async function connectChatgptAdsToken(req, res, next) {
     try {
       account = await fetchAdAccount(accessToken.trim())
     } catch (err) {
+      // Dejar rastro en los logs del servidor: sin esto, un alta fallida no deja
+      // ninguna huella y hay que deducirla desde el navegador.
+      console.error(`[ChatGptAds] Alta fallida (proyecto ${projectId}): ${err.code || '?'} HTTP ${err.httpStatus ?? '?'} — ${err.message}`)
       const msg = err.code === 'TOKEN_EXPIRED'
         ? 'La API key no es válida o fue revocada. Generá una nueva en Ads Manager → Settings.'
         : `No pudimos validar la API key: ${err.message}`

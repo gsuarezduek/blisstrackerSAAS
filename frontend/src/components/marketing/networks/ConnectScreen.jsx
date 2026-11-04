@@ -86,6 +86,26 @@ export function BrandButton({ brand, onClick, disabled, loading, loadingLabel = 
   )
 }
 
+/**
+ * Mensaje de error de una llamada a la API, sin inventar diagnósticos.
+ *
+ * El default de antes ("Token inválido o sin permisos suficientes") se mostraba
+ * también cuando NO hubo respuesta del servidor — es decir, mandaba a revisar el
+ * token en casos donde el token nunca se había llegado a validar (CORS, el backend
+ * caído, un 502 del proxy con cuerpo HTML). Distinguir los tres casos es la
+ * diferencia entre saber qué arreglar y probar tokens a ciegas.
+ */
+export function apiErrorMessage(err, fallback) {
+  const data = err?.response?.data
+  if (typeof data?.error === 'string') return data.error        // nuestro JSON
+  if (!err?.response) {                                        // nunca llegó respuesta
+    return `No se pudo contactar al servidor (${err?.message || 'sin respuesta'}). `
+      + 'Si la consola del navegador muestra un error de CORS, el origen desde el que '
+      + 'estás abriendo la app no está en la lista del backend.'
+  }
+  return `El servidor respondió ${err.response.status} sin detalle. ${fallback}`
+}
+
 export function FormError({ children }) {
   if (!children) return null
   return <p role="alert" className="text-xs text-red-600 dark:text-red-400">{children}</p>
@@ -120,7 +140,7 @@ export function OAuthMethod({ brand, getAuthUrl, onConnected, cta, closedMessage
       const list = await pendingAccounts.list(id)
       setAccounts(list)
     } catch (err) {
-      setPickerError(err.response?.data?.error || 'No se pudieron traer las cuentas encontradas.')
+      setPickerError(apiErrorMessage(err, 'No se pudieron traer las cuentas encontradas.'))
     } finally { setLoadingAccounts(false) }
   }
 
@@ -130,7 +150,7 @@ export function OAuthMethod({ brand, getAuthUrl, onConnected, cta, closedMessage
       await pendingAccounts.finalize(pendingId, accountId)
       onConnected?.()
     } catch (err) {
-      setPickerError(err.response?.data?.error || 'No se pudo conectar esa cuenta.')
+      setPickerError(apiErrorMessage(err, 'No se pudo conectar esa cuenta.'))
     } finally { setFinalizing(false) }
   }
 
@@ -219,7 +239,7 @@ export function TokenMethod({
       if (data.accounts) { setAccounts(data.accounts); return }
       onConnected?.()
     } catch (err) {
-      setError(err.response?.data?.error || 'Token inválido o sin permisos suficientes.')
+      setError(apiErrorMessage(err, 'Revisá que el token/la key sean correctos y tengan permisos de lectura.'))
     } finally { setLoading(false) }
   }
 
@@ -263,7 +283,7 @@ export function ScrapeMethod({ brand, endpoint, placeholder, help, onConnected }
       await api.post(endpoint, { url: value.trim() })
       onConnected?.()
     } catch (err) {
-      setError(err.response?.data?.error || 'No se pudo conectar por scraping.')
+      setError(apiErrorMessage(err, 'No se pudo conectar por scraping.'))
     } finally { setLoading(false) }
   }
 

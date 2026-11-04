@@ -5,7 +5,10 @@ const { getValidAccessToken } = require('./tokenRefresh.service')
 const { querySearchConsole }  = require('./googleSearchConsole.service')
 const { normalizeSiteUrl }    = require('../utils/seo')
 const { fetchPublicUrl }      = require('../lib/safeUrl')
-const { detectLanguage, classifyJunkUrl, groupConflicts } = require('../lib/cannibalAnalysis')
+const { detectLanguage, classifyJunkUrl, groupConflicts, summarizeConflicts } = require('../lib/cannibalAnalysis')
+const {
+  conflictKey, postFixWindow, verifyResolution, splitByResolution, MIN_VERIFY_DAYS,
+} = require('../lib/cannibalResolution')
 
 const { anthropic, assertTokenBudget } = require('../lib/claude')
 
@@ -62,6 +65,96 @@ async function resolveLanguageOverrides(rows, junkUrls) {
     }))
   }
   return overrides
+}
+
+const VERIFY_MAX_PER_RUN  = 25 // tope de consultas extra a GSC por run (latencia acotada)
+const VERIFY_CONCURRENCY  = 5
+
+/**
+ * Revisa los conflictos ya marcados como resueltos que SIGUEN apareciendo en este run
+ * y decide si alguno volvió de verdad.
+ *
+ * El reporte mira 30/90/180 días hacia atrás, así que un 301 hecho hace una semana
+ * sigue produciendo el conflicto: los datos previos al arreglo están en la ventana.
+ * Por eso cada resolución se verifica con una consulta propia a Search Console,
+ * acotada a su keyword y a los días POSTERIORES al arreglo (ver lib/cannibalResolution.js).
+ *
+ * Best-effort, como el fetch de idioma: un fallo por resolución no corta el análisis.
+ * Devuelve las filas vigentes (con el status ya actualizado) para aplicarlas al reporte.
+ */
+async function verifyResolutions({ projectId, workspaceId, accessToken, siteUrl, conflicts, endDate, rangeDays }) {
+  const resolutions = await prisma.cannibalResolution.findMany({ where: { projectId, workspaceId } })
+  if (resolutions.length === 0) return resolutions
+
+  // Solo lo que todavía aparece detectado: si el conflicto ya no está en los datos,
+  // no hay nada que reabrir.
+  const detected = new Set(conflicts.map(c => conflictKey(c.query, c.language)))
+  const pending = resolutions
+    .filter(r => r.status === 'resolved' && detected.has(conflictKey(r.query, r.language)))
+    .slice(0, VERIFY_MAX_PER_RUN)
+
+  const byId = new Map(resolutions.map(r => [r.id, r]))
+
+  for (let i = 0; i < pending.length; i += VERIFY_CONCURRENCY) {
+    const batch = pending.slice(i, i + VERIFY_CONCURRENCY)
+    await Promise.all(batch.map(async row => {
+      try {
+        const window = postFixWindow(row.resolvedAt, endDate)
+        // Search Console publica con 2-3 días de atraso: sin ventana suficiente no se
+        // decide nada (y no se gasta la consulta), el conflicto sigue resuelto.
+        if (!window || window.days < MIN_VERIFY_DAYS) {
+          const updated = await prisma.cannibalResolution.update({
+            where: { id: row.id }, data: { lastCheckedAt: new Date() },
+          })
+          byId.set(row.id, updated)
+          return
+        }
+
+        const rawRows = await querySearchConsole(accessToken, siteUrl, {
+          startDate:  window.startDate,
+          endDate:    window.endDate,
+          type:       'web',
+          dimensions: ['page'],
+          dimensionFilterGroups: [{ filters: [{ dimension: 'query', operator: 'equals', expression: row.query }] }],
+          rowLimit:   100,
+        })
+
+        let knownUrls = []
+        try { knownUrls = JSON.parse(row.urls || '[]') } catch { /* ignore */ }
+
+        const result = verifyResolution({
+          rows: (rawRows || []).map(r => ({ url: r.keys[0], impressions: r.impressions, clicks: r.clicks })),
+          language: row.language,
+          knownUrls,
+          windowDays: window.days,
+          rangeDays,
+        })
+
+        const data = result.decision === 'reopen'
+          ? {
+              status:      'reopened',
+              reopenedAt:  new Date(),
+              reopenCount: { increment: 1 },
+              lastCheckedAt: new Date(),
+              reopenEvidence: JSON.stringify({
+                from: window.startDate, to: window.endDate, days: window.days,
+                totalImpressions: result.totalImpressions, urls: result.urls,
+              }),
+            }
+          : { lastCheckedAt: new Date() }
+
+        const updated = await prisma.cannibalResolution.update({ where: { id: row.id }, data })
+        byId.set(row.id, updated)
+        if (result.decision === 'reopen') {
+          console.log(`[Cannibalization] Reabierto "${row.query}" (${row.language}) — ${result.urls.length} URLs compiten desde ${window.startDate}`)
+        }
+      } catch (err) {
+        console.error(`[Cannibalization] Error verificando resolución ${row.id}:`, err.message)
+      }
+    }))
+  }
+
+  return [...byId.values()]
 }
 
 /**
@@ -137,14 +230,26 @@ async function runCannibalizationAnalysis(reportId, projectId, workspaceId, date
     // ── 4. Agrupar conflictos / hreflang / URLs indexadas por error ──────────
     const {
       conflicts, hreflangIssues, indexedByMistake,
-      criticalCount, warningCount, lowCount, trafficAtRisk,
       hreflangCount, indexedByMistakeCount,
     } = groupConflicts(rows, { protectedUrls, languageFilter: language || null, languageOverrides })
 
-    // ── 5. Análisis IA (solo si hay conflictos) ───────────────────────────────
+    // ── 5. Verificar lo que ya se arregló ─────────────────────────────────────
+    // Los conflictos marcados como resueltos salen de los conteos y del resumen IA:
+    // lo que el equipo tiene que mirar son los ABIERTOS. El JSON guarda igual TODOS
+    // los detectados, así que desmarcar una resolución los devuelve a la lista sin
+    // re-correr el análisis (el split se vuelve a aplicar en cada lectura, ver
+    // cannibalization.controller.js `getReport`).
+    const resolutions = await verifyResolutions({
+      projectId, workspaceId, accessToken, siteUrl, conflicts, endDate,
+      rangeDays: parseInt(dateRange) || 90,
+    })
+    const { open: openConflicts, resolved: resolvedConflicts } = splitByResolution(conflicts, resolutions)
+    const { criticalCount, warningCount, lowCount, trafficAtRisk } = summarizeConflicts(openConflicts)
+
+    // ── 6. Análisis IA (solo si hay conflictos abiertos) ──────────────────────
     let resumenGeneral = null
-    if (conflicts.length > 0) {
-      const top5 = conflicts.slice(0, 5).map(c => (
+    if (openConflicts.length > 0) {
+      const top5 = openConflicts.slice(0, 5).map(c => (
         `- "${c.query}": ${c.urls.length} URLs compitiendo, ` +
         `impresiones=${c.totalImpressions}, spread posiciones=${c.positionSpread}, ` +
         `severidad=${c.severity}`
@@ -159,7 +264,8 @@ async function runCannibalizationAnalysis(reportId, projectId, workspaceId, date
             role: 'user',
             content: `Eres un experto en SEO técnico. Analiza este resumen de canibalización de keywords del sitio "${siteUrl}":
 
-Total de conflictos: ${conflicts.length} (Alta: ${criticalCount}, Media: ${warningCount}, Baja: ${lowCount})
+Total de conflictos abiertos: ${openConflicts.length} (Alta: ${criticalCount}, Media: ${warningCount}, Baja: ${lowCount})${resolvedConflicts.length > 0 ? `
+Además hay ${resolvedConflicts.length} conflicto(s) que el equipo ya marcó como resueltos (301/canonical aplicado) y que todavía aparecen en los datos porque la ventana analizada incluye días previos al arreglo — no los menciones como pendientes.` : ''}
 Impresiones en riesgo: ${trafficAtRisk}
 Período analizado: últimos ${dateRange}
 Además se detectaron ${hreflangCount} posibles problemas de hreflang y ${indexedByMistakeCount} URLs indexadas por error (fuera de este conteo de conflictos).
@@ -177,12 +283,14 @@ Escribí un resumen ejecutivo de 2-3 oraciones explicando el impacto en el posic
       }
     }
 
-    // ── 6. Guardar resultado ──────────────────────────────────────────────────
+    // ── 7. Guardar resultado ──────────────────────────────────────────────────
     await prisma.cannibalReport.update({
       where: { id: reportId },
       data:  {
         status:                'completed',
-        totalConflicts:        conflicts.length,
+        // Abiertos, no detectados: los resueltos salen del conteo (el array `conflicts`
+        // de abajo igual los guarda todos).
+        totalConflicts:        openConflicts.length,
         criticalCount,
         warningCount,
         lowCount,
@@ -199,7 +307,7 @@ Escribí un resumen ejecutivo de 2-3 oraciones explicando el impacto en el posic
       },
     })
 
-    console.log(`[Cannibalization] Completado reportId=${reportId}: ${conflicts.length} conflictos, ${hreflangCount} hreflang, ${indexedByMistakeCount} indexadas por error`)
+    console.log(`[Cannibalization] Completado reportId=${reportId}: ${openConflicts.length} conflictos abiertos (${resolvedConflicts.length} resueltos), ${hreflangCount} hreflang, ${indexedByMistakeCount} indexadas por error`)
   } catch (err) {
     console.error('[Cannibalization] Error fatal:', err.message)
     await prisma.cannibalReport.update({
