@@ -254,10 +254,15 @@ async function runCannibalizationAnalysis(reportId, projectId, workspaceId, date
     // ── 6. Análisis IA (solo si hay conflictos abiertos) ──────────────────────
     let resumenGeneral = null
     if (openConflicts.length > 0) {
+      // Se le pasa la URL principal ya elegida (y el aviso de segmentación geográfica
+      // si lo hay) para que el resumen coincida con las recomendaciones de abajo en vez
+      // de improvisar su propio plan.
       const top5 = openConflicts.slice(0, 5).map(c => (
         `- "${c.query}": ${c.urls.length} URLs compitiendo, ` +
         `impresiones=${c.totalImpressions}, spread posiciones=${c.positionSpread}, ` +
-        `severidad=${c.severity}`
+        `severidad=${c.severity}, URL principal sugerida=${c.recommendation?.mainUrl ?? 's/d'}` +
+        `${c.countries?.length ? `, país principal=${c.countries[0].code} (${Math.round(c.countries[0].share * 100)}%)` : ''}` +
+        `${c.recommendation?.geoNote ? ', OJO: las URLs ganan en países distintos, puede ser segmentación geográfica' : ''}`
       )).join('\n')
 
       try {
@@ -271,14 +276,20 @@ async function runCannibalizationAnalysis(reportId, projectId, workspaceId, date
 
 Total de conflictos abiertos: ${openConflicts.length} (Alta: ${criticalCount}, Media: ${warningCount}, Baja: ${lowCount})${resolvedConflicts.length > 0 ? `
 Además hay ${resolvedConflicts.length} conflicto(s) que el equipo ya marcó como resueltos (301/canonical aplicado) y que todavía aparecen en los datos porque la ventana analizada incluye días previos al arreglo — no los menciones como pendientes.` : ''}
-Impresiones en riesgo: ${trafficAtRisk}
+Impresiones involucradas en esos conflictos: ${trafficAtRisk}
 Período analizado: últimos ${dateRange}
 Además se detectaron ${hreflangCount} posibles problemas de hreflang y ${indexedByMistakeCount} URLs indexadas por error (fuera de este conteo de conflictos).
 
 Top 5 conflictos más críticos:
 ${top5}
 
-Escribí un resumen ejecutivo de 2-3 oraciones explicando el impacto en el posicionamiento SEO y las prioridades de acción. Sé directo y específico. Sin bullets, solo texto corrido.`,
+Escribí un resumen ejecutivo de 2 o 3 oraciones, texto corrido, sin bullets y sin título.
+
+Reglas de contenido:
+- Tono medido y profesional, de alguien que ya vio esto cien veces. Nada de alarmismo: no uses "crítico", "grave", "urgente", "pérdida de tráfico" ni porcentajes de daño inventados. Que dos URLs compitan por una keyword diluye señales; no es tráfico perdido ni una penalización.
+- Las impresiones involucradas son el tamaño del asunto, NO una pérdida estimada. No las presentes como algo que se está perdiendo.
+- El primer paso SIEMPRE es diagnóstico, en este orden: revisar si las URLs responden a intenciones de búsqueda distintas (y si la diferencia es por país, revisar la segmentación geográfica), después enlazado interno con anchor exacto hacia la URL principal, después canonical. **No propongas 301 ni noindex como primer paso ni como recomendación general**: son el último recurso y solo cuando el contenido es realmente el mismo. Si los mencionás, que quede claro que van al final.
+- Podés nombrar 1 o 2 keywords concretas del top 5 y la URL principal sugerida para esas, pero no inventes datos que no estén acá arriba ni prometas resultados.`,
           }],
         })
         resumenGeneral = message.content[0].text.trim()

@@ -104,27 +104,111 @@ function normalizeUrlForCompare(url) {
   }
 }
 
-// URL principal sugerida dentro de un conflicto: más clics > más impresiones >
-// mejor posición promedio. Devuelve { url, reason }.
-function pickMainUrl(urls) {
-  const sorted = [...urls].sort((a, b) => {
+// Palabras sin valor para medir intención: preposiciones/artículos de es/en y el
+// prefijo de idioma de la ruta, que matchearía "en" como si fuera una palabra.
+const STOPWORDS = new Set([
+  'de', 'del', 'la', 'el', 'los', 'las', 'un', 'una', 'y', 'o', 'en', 'con', 'por', 'para',
+  'the', 'of', 'for', 'and', 'in', 'on', 'at', 'to', 'a', 'my', 'your',
+])
+
+function significantTerms(query) {
+  return [...new Set(
+    String(query || '')
+      .toLowerCase()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .split(/[^a-z0-9]+/)
+      .filter(t => t.length >= 3 && !STOPWORDS.has(t)),
+  )]
+}
+
+/**
+ * Cuántas palabras de la búsqueda aparecen en la RUTA de la URL — la señal de
+ * intención que los datos de Search Console no dan: para "car hire mendoza airport",
+ * /en/car-rental-mendoza-airport/ matchea 3 (car, mendoza, airport) y la home 0.
+ * Se mira solo el pathname: el dominio repetiría la marca en todas las URLs.
+ */
+function slugMatchScore(url, query) {
+  let path
+  try { path = new URL(url).pathname } catch { path = String(url || '') }
+  const haystack = path.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  const terms = significantTerms(query)
+  return terms.filter(t => haystack.includes(t)).length
+}
+
+/**
+ * URL principal sugerida dentro de un conflicto: más clics → la ruta que mejor
+ * responde a la búsqueda → más impresiones → mejor posición promedio.
+ *
+ * Los clics siguen primero porque son resultado real, no una inferencia. Pero cuando
+ * NADIE tiene clics (el caso más común en los conflictos que importan) ordenar por
+ * impresiones elegía la home: una home junta impresiones de todas las búsquedas,
+ * así que ganaba siempre contra la landing específica que de verdad responde a la
+ * query. Ahí entra `slugMatchScore` como desempate antes de las impresiones.
+ *
+ * Devuelve { url, reason }.
+ */
+function pickMainUrl(urls, query = '') {
+  const scored = urls.map(u => ({ ...u, slugScore: slugMatchScore(u.url, query) }))
+  const nobodyHasClicks = scored.every(u => !u.clicks)
+
+  const sorted = [...scored].sort((a, b) => {
     if (b.clicks !== a.clicks) return b.clicks - a.clicks
+    if (nobodyHasClicks && b.slugScore !== a.slugScore) return b.slugScore - a.slugScore
     if (b.impressions !== a.impressions) return b.impressions - a.impressions
     return (a.position || 999) - (b.position || 999)
   })
+
   const main = sorted[0]
   const runnerUp = sorted[1]
+  const termCount = significantTerms(query).length
   let reason
   if (!runnerUp || main.clicks > runnerUp.clicks) reason = `más clics (${main.clicks})`
+  else if (nobodyHasClicks && main.slugScore > runnerUp.slugScore) {
+    reason = `la ruta responde a la búsqueda (${main.slugScore} de ${termCount} palabra${termCount === 1 ? '' : 's'}) y ninguna tiene clics`
+  }
   else if (main.impressions > runnerUp.impressions) reason = `más impresiones (${main.impressions})`
   else reason = `mejor posición promedio (${main.position != null ? main.position.toFixed(1) : 's/d'})`
   return { url: main.url, reason }
 }
 
+// Top países por impresiones de un mapa { ARG: 120, USA: 40 } — el dato ya viene de
+// Search Console (dimensión `country`) y hasta ahora se descartaba al armar el
+// conflicto. Códigos ISO alpha-3 en mayúscula, como los devuelve la API.
+function topCountries(countries = {}, limit = 3) {
+  const entries = Object.entries(countries).filter(([, imp]) => imp > 0)
+  const total = entries.reduce((s, [, imp]) => s + imp, 0)
+  if (total === 0) return []
+  return entries
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, limit)
+    .map(([code, impressions]) => ({
+      code: String(code).toUpperCase(),
+      impressions,
+      share: Math.round((impressions / total) * 100) / 100,
+    }))
+}
+
+// Dos URLs que ganan en países distintos pueden ser segmentación geográfica y no
+// canibalización — el mismo criterio con el que un conflicto entre idiomas se manda a
+// hreflangIssues. Se avisa solo si cada una está concentrada en su país (≥60% de sus
+// impresiones), para no leer una diferencia de cola larga como una señal.
+const GEO_CONCENTRATION = 0.6
+
+function geoSplitNote(mainUrl, urlsSorted) {
+  const main = urlsSorted.find(u => u.url === mainUrl)
+  const other = urlsSorted.find(u => u.url !== mainUrl)
+  if (!main || !other) return null
+  const [mainTop] = topCountries(main.countries, 1)
+  const [otherTop] = topCountries(other.countries, 1)
+  if (!mainTop || !otherTop || mainTop.code === otherTop.code) return null
+  if (mainTop.share < GEO_CONCENTRATION || otherTop.share < GEO_CONCENTRATION) return null
+  return `Las búsquedas vienen de países distintos: ${mainTop.code} va mayormente a ${mainUrl} (${Math.round(mainTop.share * 100)}%) y ${otherTop.code} a ${other.url} (${Math.round(otherTop.share * 100)}%). Puede ser segmentación geográfica y no canibalización — revisalo antes de consolidar.`
+}
+
 // Recomendación no destructiva, en orden de prioridad: diferenciar intención →
 // enlazado interno → canonical → 301/noindex (solo sobre URLs no protegidas).
 function buildRecommendation(urlsSorted, query, protectedSet) {
-  const { url: mainUrl, reason: mainUrlReason } = pickMainUrl(urlsSorted)
+  const { url: mainUrl, reason: mainUrlReason } = pickMainUrl(urlsSorted, query)
   const secondary = urlsSorted.filter(u => u.url !== mainUrl)
   const protectedUrls = secondary.filter(u => protectedSet.has(normalizeUrlForCompare(u.url))).map(u => u.url)
   const actionableUrls = secondary.filter(u => !protectedSet.has(normalizeUrlForCompare(u.url))).map(u => u.url)
@@ -144,7 +228,7 @@ function buildRecommendation(urlsSorted, query, protectedSet) {
     )
   }
 
-  return { mainUrl, mainUrlReason, steps, protectedUrls }
+  return { mainUrl, mainUrlReason, steps, protectedUrls, geoNote: geoSplitNote(mainUrl, urlsSorted) }
 }
 
 function buildConflict(query, urls, protectedSet) {
@@ -156,18 +240,30 @@ function buildConflict(query, urls, protectedSet) {
   const urlsSorted = [...urls].sort((a, b) => b.impressions - a.impressions)
   const recommendation = buildRecommendation(urlsSorted, query, protectedSet)
 
+  // País de la búsqueda: viene de la dimensión `country` de Search Console, agregado
+  // por URL en groupConflicts. Se expone por URL (dónde gana cada una — ahí se ve una
+  // segmentación geográfica disfrazada de canibalización) y sumado para el conflicto.
+  const conflictCountries = {}
+  for (const u of urls) {
+    for (const [code, imp] of Object.entries(u.countries || {})) {
+      conflictCountries[code] = (conflictCountries[code] || 0) + imp
+    }
+  }
+
   return {
     query,
     language: urls[0].language,
     urls: urlsSorted.map(u => ({
       url: u.url, clicks: u.clicks, impressions: u.impressions, ctr: u.ctr, position: u.position,
       protected: protectedSet.has(normalizeUrlForCompare(u.url)),
+      countries: topCountries(u.countries),
     })),
     severity,
     severityScore,
     totalImpressions,
     totalClicks,
     positionSpread: Math.round(positionSpread * 10) / 10,
+    countries: topCountries(conflictCountries),
     recommendation,
   }
 }
@@ -312,6 +408,10 @@ module.exports = {
   normalizeUrlForCompare,
   pickMainUrl,
   buildRecommendation,
+  significantTerms,
+  slugMatchScore,
+  topCountries,
+  geoSplitNote,
   summarizeConflicts,
   groupConflicts,
 }

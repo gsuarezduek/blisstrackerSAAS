@@ -1,6 +1,6 @@
 const {
   detectLanguage, classifyJunkUrl, pickMainUrl, normalizeUrlForCompare,
-  calcSeverity, groupConflicts,
+  calcSeverity, groupConflicts, slugMatchScore, topCountries, geoSplitNote,
 } = require('../../src/lib/cannibalAnalysis')
 
 describe('detectLanguage', () => {
@@ -203,5 +203,122 @@ describe('groupConflicts — escenario MDZ (ES default + /en/ + /pt/)', () => {
     expect(hreflangIssues).toHaveLength(0)
     expect(conflicts).toHaveLength(1)
     expect(conflicts[0].language).toBe('pt')
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Intención (ruta vs búsqueda) y país de la búsqueda
+// ─────────────────────────────────────────────────────────────────────────────
+
+const SITE = 'https://mdzrentacar.com'
+
+describe('slugMatchScore', () => {
+  it('cuenta las palabras de la búsqueda que están en la ruta', () => {
+    expect(slugMatchScore(`${SITE}/en/car-rental-mendoza-airport/`, 'car hire mendoza airport')).toBe(3)
+    expect(slugMatchScore(`${SITE}/en/`, 'car hire mendoza airport')).toBe(0)
+  })
+
+  it('ignora preposiciones, artículos y el prefijo de idioma', () => {
+    // "en" es stopword Y el prefijo de idioma: no puede valer como coincidencia.
+    expect(slugMatchScore(`${SITE}/en/`, 'car rental in mendoza')).toBe(0)
+    expect(slugMatchScore(`${SITE}/alquiler-de-autos`, 'alquiler de autos')).toBe(2)
+  })
+
+  it('tolera tildes en la búsqueda', () => {
+    expect(slugMatchScore(`${SITE}/alquiler-de-autos-aeropuerto`, 'alquiler autos aeropuerto')).toBe(3)
+    expect(slugMatchScore(`${SITE}/camion-y-remolque`, 'camión remolque')).toBe(2)
+  })
+
+  it('no cuenta el dominio — la marca está en todas las URLs', () => {
+    expect(slugMatchScore('https://autosmendoza.com/contacto', 'autos mendoza')).toBe(0)
+  })
+
+  it('URL inválida no lanza', () => {
+    expect(slugMatchScore('no-es-url', 'autos')).toBe(0)
+  })
+})
+
+describe('pickMainUrl — intención cuando nadie tiene clics', () => {
+  const home    = { url: `${SITE}/en/`, clicks: 0, impressions: 900, position: 18 }
+  const landing = { url: `${SITE}/en/car-rental-mendoza-airport/`, clicks: 0, impressions: 120, position: 12 }
+
+  it('elige la landing específica sobre la home con más impresiones', () => {
+    // El caso reportado: una home junta impresiones de TODAS las búsquedas, así que
+    // ordenando por impresiones ganaba siempre contra la landing que responde la query.
+    const r = pickMainUrl([home, landing], 'car hire mendoza airport')
+    expect(r.url).toBe(landing.url)
+    expect(r.reason).toMatch(/responde a la búsqueda/)
+  })
+
+  it('los clics siguen mandando sobre la intención', () => {
+    const homeConClicks = { ...home, clicks: 30 }
+    const r = pickMainUrl([homeConClicks, landing], 'car hire mendoza airport')
+    expect(r.url).toBe(homeConClicks.url)
+    expect(r.reason).toMatch(/más clics/)
+  })
+
+  it('sin señal de intención en ninguna ruta, vuelve al criterio de siempre', () => {
+    const a = { url: `${SITE}/flota`, clicks: 0, impressions: 500, position: 10 }
+    const b = { url: `${SITE}/precios`, clicks: 0, impressions: 100, position: 8 }
+    const r = pickMainUrl([a, b], 'car hire mendoza airport')
+    expect(r.url).toBe(a.url)
+    expect(r.reason).toMatch(/más impresiones/)
+  })
+
+  it('con una sola URL no inventa un desempate', () => {
+    expect(pickMainUrl([landing], 'car hire mendoza airport').reason).toMatch(/más clics/)
+  })
+})
+
+describe('topCountries', () => {
+  it('ordena por impresiones, recorta a 3 y calcula la porción', () => {
+    const r = topCountries({ arg: 600, usa: 300, bra: 80, chl: 20 })
+    expect(r.map(c => c.code)).toEqual(['ARG', 'USA', 'BRA'])
+    expect(r[0].share).toBe(0.6)
+  })
+
+  it('sin datos de país devuelve lista vacía', () => {
+    expect(topCountries({})).toEqual([])
+    expect(topCountries(undefined)).toEqual([])
+    expect(topCountries({ arg: 0 })).toEqual([])
+  })
+})
+
+describe('geoSplitNote', () => {
+  const main  = { url: `${SITE}/alquiler-autos`, countries: { arg: 900, usa: 100 } }
+  const other = { url: `${SITE}/en/car-rental`, countries: { usa: 800, arg: 50 } }
+
+  it('avisa cuando cada URL gana en un país distinto', () => {
+    const note = geoSplitNote(main.url, [main, other])
+    expect(note).toMatch(/ARG/)
+    expect(note).toMatch(/USA/)
+    expect(note).toMatch(/segmentación geográfica/)
+  })
+
+  it('no avisa si las dos vienen del mismo país', () => {
+    expect(geoSplitNote(main.url, [main, { ...other, countries: { arg: 700, usa: 50 } }])).toBeNull()
+  })
+
+  it('no avisa si el país no está concentrado — una diferencia de cola larga no es señal', () => {
+    const difusa = { url: `${SITE}/en/car-rental`, countries: { usa: 300, arg: 280, bra: 200 } }
+    expect(geoSplitNote(main.url, [main, difusa])).toBeNull()
+  })
+
+  it('sin datos de país no avisa', () => {
+    expect(geoSplitNote(main.url, [{ url: main.url }, { url: other.url }])).toBeNull()
+  })
+})
+
+describe('groupConflicts — país en el resultado', () => {
+  it('conserva el país de la búsqueda por URL y para el conflicto', () => {
+    const rows = [
+      { query: 'alquiler de autos', page: `${SITE}/alquiler-autos`, country: 'arg', clicks: 0, impressions: 400, ctr: 0, position: 8 },
+      { query: 'alquiler de autos', page: `${SITE}/alquiler-autos`, country: 'usa', clicks: 0, impressions: 50, ctr: 0, position: 14 },
+      { query: 'alquiler de autos', page: `${SITE}/blog/alquiler-autos`, country: 'arg', clicks: 0, impressions: 200, ctr: 0, position: 15 },
+    ]
+    const { conflicts } = groupConflicts(rows)
+    expect(conflicts).toHaveLength(1)
+    expect(conflicts[0].countries.map(c => c.code)).toEqual(['ARG', 'USA'])
+    expect(conflicts[0].urls[0].countries[0]).toEqual({ code: 'ARG', impressions: 400, share: 0.89 })
   })
 })

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import api from '../../api/client'
-import { Search, Trash2, ShieldCheck, Languages, AlertTriangle, FileWarning, CheckCircle2, RotateCcw, Bot } from 'lucide-react'
+import { Search, Trash2, ShieldCheck, Languages, AlertTriangle, FileWarning, CheckCircle2, RotateCcw, Bot, Globe } from 'lucide-react'
 import { Icon } from '../ui/Icon'
 import LoadingSpinner from '../LoadingSpinner'
 import FunLoader from './networks/FunLoader'
@@ -53,6 +53,13 @@ function resolutionLine(r) {
   return [ACTION_LABEL[r.action] ?? r.action, fmtDay(r.resolvedAt), autor].filter(Boolean).join(' · ')
 }
 
+// "ARG 62% · USA 24%" — países de donde vienen las búsquedas (dimensión `country`
+// de Search Console, códigos ISO alpha-3 como los devuelve la API).
+function fmtCountries(list, limit = 3) {
+  if (!list?.length) return null
+  return list.slice(0, limit).map(c => `${c.code} ${Math.round(c.share * 100)}%`).join(' · ')
+}
+
 function fmtNum(n) {
   if (n == null) return '—'
   return n.toLocaleString('es-AR')
@@ -73,7 +80,7 @@ function SeverityBadge({ label }) {
 }
 
 function ConflictCard({ conflict, expanded, onToggle, onResolve }) {
-  const { query, language, urls, severity, severityScore, totalImpressions, totalClicks, positionSpread, recommendation, resolution } = conflict
+  const { query, language, urls, severity, severityScore, totalImpressions, totalClicks, positionSpread, countries, recommendation, resolution } = conflict
   const reopened = resolution?.status === 'reopened'
 
   return (
@@ -113,6 +120,12 @@ function ConflictCard({ conflict, expanded, onToggle, onResolve }) {
             <span>Score: <strong className="text-gray-700 dark:text-gray-300">{severityScore}/100</strong></span>
             <span>Spread posiciones: <strong className="text-gray-700 dark:text-gray-300">{positionSpread}</strong></span>
             <span>Clics totales: <strong className="text-gray-700 dark:text-gray-300">{fmtNum(totalClicks)}</strong></span>
+            {fmtCountries(countries) && (
+              <span className="inline-flex items-center gap-1">
+                <Icon as={Globe} size={12} className="text-gray-400" />
+                Países: <strong className="text-gray-700 dark:text-gray-300">{fmtCountries(countries)}</strong>
+              </span>
+            )}
           </div>
 
           {/* Tabla de URLs */}
@@ -125,6 +138,7 @@ function ConflictCard({ conflict, expanded, onToggle, onResolve }) {
                   <th className="text-right px-3 py-2 font-semibold text-gray-500 dark:text-gray-400">Impresiones</th>
                   <th className="text-right px-3 py-2 font-semibold text-gray-500 dark:text-gray-400">Clics</th>
                   <th className="text-right px-3 py-2 font-semibold text-gray-500 dark:text-gray-400">CTR</th>
+                  <th className="text-left px-3 py-2 font-semibold text-gray-500 dark:text-gray-400">País</th>
                 </tr>
               </thead>
               <tbody>
@@ -158,6 +172,12 @@ function ConflictCard({ conflict, expanded, onToggle, onResolve }) {
                     <td className="text-right px-3 py-2 text-gray-600 dark:text-gray-400">{fmtNum(u.impressions)}</td>
                     <td className="text-right px-3 py-2 text-gray-600 dark:text-gray-400">{fmtNum(u.clicks)}</td>
                     <td className="text-right px-3 py-2 text-gray-600 dark:text-gray-400">{fmtPct(u.ctr)}</td>
+                    <td
+                      className="px-3 py-2 text-gray-500 dark:text-gray-400 whitespace-nowrap"
+                      title={u.countries?.map(c => `${c.code}: ${fmtNum(c.impressions)} imp.`).join(' · ') || ''}
+                    >
+                      {fmtCountries(u.countries, 2) ?? '—'}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -167,6 +187,12 @@ function ConflictCard({ conflict, expanded, onToggle, onResolve }) {
           {/* Recomendación */}
           {recommendation ? (
             <div className="text-xs text-gray-600 dark:text-gray-300 space-y-1.5">
+              {recommendation.geoNote && (
+                <p className="rounded-lg border border-sky-200 dark:border-sky-800 bg-sky-50/60 dark:bg-sky-900/10 p-2.5 text-sky-800 dark:text-sky-300 flex items-start gap-1.5">
+                  <Icon as={Globe} size={13} className="flex-shrink-0 mt-0.5" />
+                  <span>{recommendation.geoNote}</span>
+                </p>
+              )}
               <p>
                 <strong className="text-gray-700 dark:text-gray-200">URL principal sugerida:</strong>{' '}
                 {recommendation.mainUrl?.replace(/^https?:\/\/[^/]+/, '') || recommendation.mainUrl}
