@@ -314,6 +314,7 @@ backend/
       chatgptAds.test.js                  # ChatGPT Ads: presets → rango de fechas en la tz de la cuenta, CTR ratio → %, estados a mayúscula, conversiones best-effort (null ≠ 0), clasificación de 401/403/429
       mfa.test.js                         # verifyTotp (códigos con espacios, basura, secret inválido), hasMfa (enrolamiento sin confirmar ≠ activo), códigos de recuperación (alfabeto, normalización, un solo uso, carrera entre requests), verifySecondFactor
       agentOutboundChannels.test.js       # canales de salida hacia un agente: el aviso pegado a la respuesta de una tool (no marca visto, throttle), el webhook (firma HMAC, no filtra el trabajo, reintento, SSRF) y el despertador (identidad del agente, args inválidos, tope de pasos)
+      cannibalResolution.test.js          # conflictos de canibalización resueltos: identidad (query+idioma), ventana posterior al arreglo, corte de volumen prorrateado y la regla de reapertura (impresiones residuales de un 301 ≠ "volvió")
       textSearch.test.js                  # búsqueda tolerante a tildes: variantes de una palabra (lineales, por la regla de "una tilde por palabra" del español) y combinación de palabras con AND
       connectionCatalog.test.js           # estado de las fuentes de datos de un proyecto (active/expired/missing), el link de reconexión apunta a la app y no a OAuth, y el espejo con ConnectionsPanel.jsx del frontend
       mcpComposedTools.test.js            # tools que encadenan endpoints: el orden de los pasos de `task_log_done` (duración antes que fecha), qué devuelve cuando falla a mitad de camino, y el recorte de `list_projects`
@@ -331,6 +332,7 @@ backend/
       mfaSetup.test.js                    # setup/confirm/disable/regenerate: el secret se guarda cifrado y nunca sale en GET /profile, confirm valida el primer código, disable pide contraseña Y código
       agentTasks.test.js                  # tareas de agente: crear/iniciar/delegar/borrar vía MCP, la bandeja de novedades (las dos fuentes), y el desbloqueo desde la app (PAUSED + respuesta como comentario + disparo de los canales de salida), los filtros de la cola (por bot y por fecha) y el cierre con fecha hacia atrás (`logged-at`: jornada + completedAt juntos, tope del mes en curso)
       taskSearch.test.js                  # búsqueda de tareas: filas recortadas, atajo "open", admin para ver las de otra persona, proyectos privados afuera
+      cannibalResolution.test.js          # marcar/desmarcar un conflicto como resuelto (persona y agente), el split abierto/resuelto en la lectura del reporte con los conteos recalculados, y los permisos (canWrite)
       connectionsStatus.test.js           # GET /marketing/connections: los tres estados + reconnectUrl, secciones apagadas, vista de todo el workspace y gate de proyectos privados resuelto en el handler
 
 frontend/

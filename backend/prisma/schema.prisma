@@ -3202,8 +3202,9 @@ model CannibalResolution {
   workspaceId Int
 
   // Identidad del conflicto: query + idioma, el mismo par con el que lo agrupa
-  // cannibalAnalysis.js (la query guardada conserva mayúsculas/espacios para
-  // mostrarla y para filtrar en Search Console; la comparación es normalizada).
+  // cannibalAnalysis.js. La query se guarda normalizada (trim + minúsculas): es como
+  // la devuelve Search Console y es lo que la verificación le manda como filtro
+  // `query equals`, así que cualquier otra forma no matchearía ninguna fila.
   query    String
   language String @default("default")
 

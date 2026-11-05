@@ -1,5 +1,6 @@
 const prisma = require('../lib/prisma')
 const { DEFAULT_TZ } = require('../utils/dates')
+const { splitByResolution } = require('../lib/cannibalResolution')
 
 const PRIORITY_WEIGHT = { high: 3, medium: 2, low: 1 }
 
@@ -41,7 +42,7 @@ async function computeSeoActionItems({ projectId, workspaceId }) {
   const project = await prisma.project.findFirst({ where: { id: projectId, workspaceId }, select: { id: true, name: true } })
   if (!project) return null
 
-  const [geoAudit, cannibal, psMobile, psDesktop, kwRankings, brief] = await Promise.all([
+  const [geoAudit, cannibal, psMobile, psDesktop, kwRankings, brief, cannibalResolutions] = await Promise.all([
     prisma.geoAudit.findFirst({
       where: { projectId, workspaceId, status: 'completed' },
       orderBy: { createdAt: 'desc' },
@@ -70,6 +71,12 @@ async function computeSeoActionItems({ projectId, workspaceId }) {
       where: { projectId_type: { projectId, type: 'seo_sem' } },
       select: { answers: true },
     }),
+    // Conflictos de canibalización que el equipo ya arregló: salen del backlog sin
+    // esperar un análisis nuevo (ver lib/cannibalResolution.js).
+    prisma.cannibalResolution.findMany({
+      where:  { projectId, workspaceId },
+      select: { query: true, language: true, status: true },
+    }),
   ])
 
   const items = []
@@ -90,11 +97,13 @@ async function computeSeoActionItems({ projectId, workspaceId }) {
     }
   }
 
-  // Canibalización (top conflictos por severidad)
+  // Canibalización (top conflictos abiertos por severidad)
+  let openCannibal = []
   if (cannibal?.conflicts) {
     let conflicts = []
     try { conflicts = JSON.parse(cannibal.conflicts) } catch {}
-    conflicts
+    openCannibal = splitByResolution(conflicts, cannibalResolutions).open
+    openCannibal
       .slice()
       .sort((a, b) => (b.severityScore || 0) - (a.severityScore || 0))
       .slice(0, 10)
@@ -155,7 +164,14 @@ async function computeSeoActionItems({ projectId, workspaceId }) {
     focus,
     sources: {
       geo:       geoAudit  ? { present: true, date: geoAudit.createdAt,  score: geoAudit.score } : { present: false },
-      cannibal:  cannibal  ? { present: true, date: cannibal.createdAt,  critical: cannibal.criticalCount, warning: cannibal.warningCount } : { present: false },
+      // Conteos sobre los conflictos ABIERTOS (los resueltos ya salieron), no los del
+      // snapshot del run: si no, un proyecto con todo arreglado seguiría mostrando
+      // "3 críticos" acá.
+      cannibal:  cannibal  ? {
+        present: true, date: cannibal.createdAt,
+        critical: openCannibal.filter(c => c.severity === 'Alta').length,
+        warning:  openCannibal.filter(c => c.severity === 'Media').length,
+      } : { present: false },
       pagespeed: (psMobile || psDesktop) ? { present: true, mobile: psMobile?.performanceScore ?? null, desktop: psDesktop?.performanceScore ?? null } : { present: false },
       keywords:  { present: kwRankings.length > 0, count: kwRankings.length, month },
     },

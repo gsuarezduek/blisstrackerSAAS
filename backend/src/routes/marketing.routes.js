@@ -218,6 +218,10 @@ router.post('/projects/:id/cannibal',                     cannibalization.runAna
 router.get('/projects/:id/cannibal',                      cannibalization.listReports)
 router.get('/projects/:id/cannibal/protected-urls',       cannibalization.getProtectedUrls)
 router.put('/projects/:id/cannibal/protected-urls',       cannibalization.setProtectedUrls)
+// Antes de /:rid, que si no se come "resolutions" como id de reporte.
+router.get('/projects/:id/cannibal/resolutions',          cannibalization.listResolutions)
+router.post('/projects/:id/cannibal/resolutions',         cannibalization.resolveConflict)
+router.delete('/projects/:id/cannibal/resolutions/:rid',  cannibalization.unresolveConflict)
 router.get('/projects/:id/cannibal/:rid',                 cannibalization.getReport)
 router.delete('/projects/:id/cannibal/:rid',              cannibalization.deleteReport)
 

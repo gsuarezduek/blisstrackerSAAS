@@ -502,7 +502,10 @@ POST   /api/marketing/projects/:id/cannibal                 # dispara análisis 
 GET    /api/marketing/projects/:id/cannibal                 # lista reportes
 GET    /api/marketing/projects/:id/cannibal/protected-urls  # lista URLs protegidas del proyecto (nunca 301/noindex)
 PUT    /api/marketing/projects/:id/cannibal/protected-urls  # reemplaza la lista completa (canWrite: admin/owner o equipo del proyecto)
-GET    /api/marketing/projects/:id/cannibal/:rid            # detalle de un reporte (conflicts + hreflangIssues + indexedByMistake)
+GET    /api/marketing/projects/:id/cannibal/resolutions     # conflictos marcados como resueltos (+ los reabiertos, con evidencia)
+POST   /api/marketing/projects/:id/cannibal/resolutions     # marcar resuelto (body: query, language?, action?, note?, resolvedAt?, mainUrl?, urls?) — upsert por (query, idioma), canWrite
+DELETE /api/marketing/projects/:id/cannibal/resolutions/:rid # desmarcar: vuelve a la lista de abiertos (canWrite)
+GET    /api/marketing/projects/:id/cannibal/:rid            # detalle de un reporte (conflicts ABIERTOS + resolvedConflicts + hreflangIssues + indexedByMistake; conteos recalculados sobre los abiertos)
 DELETE /api/marketing/projects/:id/cannibal/:rid            # eliminar reporte
 
 # Marketing — SEO Fase 1-4 (Oportunidades, Content Brief, On-Page, Content Gap)

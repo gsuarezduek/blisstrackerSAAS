@@ -433,6 +433,37 @@ const tools = [
     request: ({ projectId, reportId }) => ({ method: 'DELETE', path: `/marketing/projects/${projectId}/cannibal/${reportId}` }),
   },
   {
+    name: 'marketing_cannibal_resolutions_list',
+    description: 'Lista los conflictos de canibalización que el equipo ya marcó como resueltos en un proyecto, con la acción aplicada (301, canonical, noindex...), la nota, la fecha y quién lo marcó. Incluye los que volvieron a aparecer: `status:"reopened"` con `reopenEvidence` (las URLs que volvieron a competir despues del arreglo).',
+    inputSchema: { ...projectIdParam },
+    request: ({ projectId }) => ({ method: 'GET', path: `/marketing/projects/${projectId}/cannibal/resolutions` }),
+  },
+  {
+    name: 'marketing_cannibal_resolve',
+    description: 'Marca un conflicto de canibalización como resuelto: deja de aparecer en la lista de conflictos y en Prioridades, sin tener que correr el análisis de nuevo. Se reabre solo si Search Console muestra que las URLs volvieron a competir DESPUÉS de `resolvedAt` (el análisis mira 30/90/180 días hacia atrás, así que el conflicto sigue apareciendo en los datos un tiempo después del arreglo — eso es normal y no significa que no se arregló). Usalo cuando el arreglo ya está hecho y verificado, no para ocultar algo pendiente.',
+    inputSchema: {
+      ...projectIdParam,
+      query: z.string().describe('La keyword del conflicto, igual a como viene en marketing_cannibal_get'),
+      language: z.string().optional().describe('Idioma del conflicto, igual a como viene en el reporte ("default" si no tiene prefijo de idioma). Default: "default"'),
+      action: z.enum(['301', 'canonical', 'noindex', 'diferenciado', 'otro']).optional().describe('Qué se hizo. "diferenciado" = se cambió el contenido/intención de las páginas en vez de consolidarlas. Default: "otro"'),
+      note: z.string().optional().describe('Nota corta de qué se hizo, ej. "301 de /blog/alquiler-autos hacia /alquiler-autos" (máx 500 caracteres)'),
+      resolvedAt: z.string().optional().describe('Fecha del arreglo en ISO (YYYY-MM-DD). Puede ser anterior a hoy si se arregló antes; nunca futura. Default: ahora. Es la fecha contra la que se verifica si el conflicto volvió, así que poner la fecha real importa'),
+      mainUrl: z.string().optional().describe('URL que quedó como principal'),
+      urls: z.array(z.string()).optional().describe('URLs que competían en el conflicto (las del reporte), para el historial'),
+    },
+    request: ({ projectId, query, language, action, note, resolvedAt, mainUrl, urls }) => ({
+      method: 'POST',
+      path: `/marketing/projects/${projectId}/cannibal/resolutions`,
+      body: { query, language, action, note, resolvedAt, mainUrl, urls },
+    }),
+  },
+  {
+    name: 'marketing_cannibal_unresolve',
+    description: 'Desmarca un conflicto de canibalización resuelto: vuelve a la lista de conflictos abiertos. Usalo si el arreglo se revirtió o si se marcó por error.',
+    inputSchema: { ...projectIdParam, resolutionId: z.number().int().describe('ID de la resolución (ver marketing_cannibal_resolutions_list)') },
+    request: ({ projectId, resolutionId }) => ({ method: 'DELETE', path: `/marketing/projects/${projectId}/cannibal/resolutions/${resolutionId}` }),
+  },
+  {
     name: 'marketing_cannibal_protected_urls_get',
     description: 'Lista las URLs protegidas de un proyecto: el análisis de canibalización nunca les recomienda 301 ni noindex.',
     inputSchema: { ...projectIdParam },

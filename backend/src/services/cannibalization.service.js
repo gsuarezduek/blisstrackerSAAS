@@ -242,6 +242,11 @@ async function runCannibalizationAnalysis(reportId, projectId, workspaceId, date
     const resolutions = await verifyResolutions({
       projectId, workspaceId, accessToken, siteUrl, conflicts, endDate,
       rangeDays: parseInt(dateRange) || 90,
+    }).catch(err => {
+      // Un problema verificando lo ya arreglado no vale perder el análisis entero:
+      // sin resoluciones el reporte sale como salía antes (todo abierto).
+      console.error('[Cannibalization] Error verificando resoluciones:', err.message)
+      return []
     })
     const { open: openConflicts, resolved: resolvedConflicts } = splitByResolution(conflicts, resolutions)
     const { criticalCount, warningCount, lowCount, trafficAtRisk } = summarizeConflicts(openConflicts)

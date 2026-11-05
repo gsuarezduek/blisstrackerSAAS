@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef } from 'react'
 import api from '../../api/client'
-import { Search, Trash2, ShieldCheck, Languages, AlertTriangle, FileWarning } from 'lucide-react'
+import { Search, Trash2, ShieldCheck, Languages, AlertTriangle, FileWarning, CheckCircle2, RotateCcw, Bot } from 'lucide-react'
 import { Icon } from '../ui/Icon'
 import LoadingSpinner from '../LoadingSpinner'
 import FunLoader from './networks/FunLoader'
 import { CANNIBALIZATION_LOADING_MESSAGES } from './networks/loadingMessages'
 import ProtectedUrlsModal from './ProtectedUrlsModal'
+import ResolveConflictModal, { ACTION_LABEL } from './ResolveConflictModal'
 
 const LANGUAGE_LABELS = { default: 'Principal (sin prefijo)' }
 function languageLabel(lang) {
@@ -33,6 +34,24 @@ function fmtDate(iso) {
   })
 }
 
+// Fecha sola (sin hora) — para "resuelto el 4 nov".
+function fmtDay(iso) {
+  if (!iso) return '—'
+  return new Date(iso).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' })
+}
+
+// Clave estable de un conflicto: la misma identidad que usa el backend
+// (query + idioma), para que dos idiomas de la misma keyword no colisionen.
+function keyOf(c) {
+  return `${c.query}|${c.language ?? 'default'}`
+}
+
+// "301 hecho · 4 nov · Gastón" — el pie de un conflicto resuelto.
+function resolutionLine(r) {
+  const autor = r.agent ? `${r.resolvedBy ?? 'alguien'} vía ${r.agent}` : r.resolvedBy
+  return [ACTION_LABEL[r.action] ?? r.action, fmtDay(r.resolvedAt), autor].filter(Boolean).join(' · ')
+}
+
 function fmtNum(n) {
   if (n == null) return '—'
   return n.toLocaleString('es-AR')
@@ -52,8 +71,9 @@ function SeverityBadge({ label }) {
   )
 }
 
-function ConflictCard({ conflict, expanded, onToggle }) {
-  const { query, language, urls, severity, severityScore, totalImpressions, totalClicks, positionSpread, recommendation } = conflict
+function ConflictCard({ conflict, expanded, onToggle, onResolve }) {
+  const { query, language, urls, severity, severityScore, totalImpressions, totalClicks, positionSpread, recommendation, resolution } = conflict
+  const reopened = resolution?.status === 'reopened'
 
   return (
     <div className="border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
@@ -71,6 +91,14 @@ function ConflictCard({ conflict, expanded, onToggle }) {
         <span className="flex-1 font-medium text-gray-800 dark:text-gray-100 truncate text-sm">
           {query}
         </span>
+        {reopened && (
+          <span
+            title={`Se había marcado como resuelto (${resolutionLine(resolution)}) y volvió a aparecer después de esa fecha`}
+            className="flex-shrink-0 inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400"
+          >
+            <Icon as={RotateCcw} size={11} /> Volvió
+          </span>
+        )}
         <span className="flex-shrink-0 text-xs text-gray-400 dark:text-gray-500 mr-2">
           {urls.length} URLs · {fmtNum(totalImpressions)} imp.
         </span>
@@ -152,8 +180,67 @@ function ConflictCard({ conflict, expanded, onToggle }) {
           ) : (
             <p className="text-xs text-gray-500 dark:text-gray-400 italic">Sin recomendación disponible para este conflicto.</p>
           )}
+
+          {/* Historial: ya se había arreglado una vez y volvió — mirar si el cambio
+              sigue aplicado antes de rehacerlo. */}
+          {reopened && (
+            <div className="text-xs rounded-lg border border-orange-200 dark:border-orange-800 bg-orange-50/60 dark:bg-orange-900/10 p-3 space-y-1">
+              <p className="text-orange-800 dark:text-orange-300 font-semibold">
+                Ya se había resuelto ({resolutionLine(resolution)}) y volvió.
+              </p>
+              {resolution.note && <p className="text-orange-700 dark:text-orange-400">“{resolution.note}”</p>}
+              {resolution.reopenEvidence && (
+                <p className="text-orange-600 dark:text-orange-400/80">
+                  Entre el {resolution.reopenEvidence.from} y el {resolution.reopenEvidence.to} volvieron a competir:{' '}
+                  {(resolution.reopenEvidence.urls ?? []).map(u => `${u.url.replace(/^https?:\/\/[^/]+/, '') || '/'} (${fmtNum(u.impressions)} imp.)`).join(' · ')}.
+                  Revisá que el cambio siga aplicado.
+                </p>
+              )}
+            </div>
+          )}
+
+          <div className="pt-1">
+            <button
+              onClick={() => onResolve?.(conflict)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-green-200 dark:border-green-800 text-xs font-semibold text-green-700 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/20 transition-colors"
+            >
+              <Icon as={CheckCircle2} size={14} /> {reopened ? 'Volver a marcar resuelto' : 'Marcar como resuelto'}
+            </button>
+          </div>
         </div>
       )}
+    </div>
+  )
+}
+
+/**
+ * Un conflicto ya arreglado: fuera de la lista principal y de los conteos, pero
+ * visible y reversible. Sigue apareciendo en los datos del análisis hasta que la
+ * ventana (30/90/180 días) deje atrás los días previos al arreglo — eso es normal
+ * y se explica acá para que nadie lo lea como "no se arregló".
+ */
+function ResolvedRow({ conflict, onUndo, undoing }) {
+  const r = conflict.resolution ?? {}
+  return (
+    <div className="flex items-start gap-3 px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-xl bg-gray-50/60 dark:bg-gray-800/30">
+      <Icon as={CheckCircle2} size={15} className="text-green-500 flex-shrink-0 mt-0.5" />
+      <div className="flex-1 min-w-0">
+        <p className="text-sm text-gray-700 dark:text-gray-200 truncate">{conflict.query}</p>
+        <p className="text-xs text-gray-400 dark:text-gray-500 flex items-center gap-1 flex-wrap">
+          {r.agent && <Icon as={Bot} size={11} className="text-primary-500" />}
+          {resolutionLine(r)}
+          {r.reopenCount > 0 && <span className="text-orange-500">· volvió {r.reopenCount}x antes</span>}
+        </p>
+        {r.note && <p className="text-xs text-gray-500 dark:text-gray-400 italic mt-0.5 break-words">“{r.note}”</p>}
+      </div>
+      <button
+        onClick={() => onUndo(r.id)}
+        disabled={undoing}
+        title="Vuelve a la lista de conflictos abiertos"
+        className="flex-shrink-0 text-xs text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 transition-colors disabled:opacity-50"
+      >
+        Reabrir
+      </button>
     </div>
   )
 }
@@ -172,6 +259,9 @@ export default function CanibalizacionTab({ projectId }) {
   const [deleteModal,   setDeleteModal]   = useState(null)
   const [deleting,      setDeleting]      = useState(false)
   const [protectedModalOpen, setProtectedModalOpen] = useState(false)
+  const [resolveTarget,  setResolveTarget]  = useState(null)   // conflicto a marcar resuelto
+  const [showResolved,   setShowResolved]   = useState(false)
+  const [undoing,        setUndoing]        = useState(false)
   const pollRef = useRef(null)
 
   // ── Cargar lista de reportes ────────────────────────────────────────────────
@@ -264,8 +354,28 @@ export default function CanibalizacionTab({ projectId }) {
     setDeleting(false)
   }
 
+  // ── Resueltos ───────────────────────────────────────────────────────────────
+  // Después de marcar/desmarcar se recarga el reporte: el backend reparte abiertos y
+  // resueltos y recalcula los conteos en la misma lectura, así no hay dos criterios.
+  function handleResolved() {
+    setResolveTarget(null)
+    if (activeReport?.id) loadReport(activeReport.id)
+  }
+
+  async function handleUndoResolution(resolutionId) {
+    setUndoing(true)
+    try {
+      await api.delete(`/marketing/projects/${projectId}/cannibal/resolutions/${resolutionId}`)
+      if (activeReport?.id) await loadReport(activeReport.id)
+    } catch (err) {
+      alert(err.response?.data?.error ?? 'Error al reabrir el conflicto')
+    }
+    setUndoing(false)
+  }
+
   // ── Filtrar conflictos ───────────────────────────────────────────────────────
   const conflicts = activeReport?.conflicts ?? []
+  const resolvedConflicts = activeReport?.resolvedConflicts ?? []
   const hreflangIssues = activeReport?.hreflangIssues ?? []
   const indexedByMistake = activeReport?.indexedByMistake ?? []
   const availableLanguages = [...new Set(conflicts.map(c => c.language).filter(Boolean))]
@@ -394,6 +504,9 @@ export default function CanibalizacionTab({ projectId }) {
               <div>
                 <p className="text-xs text-gray-400 dark:text-gray-500 mb-1">
                   {DATE_RANGE_LABELS[activeReport.dateRange] ?? activeReport.dateRange} · {fmtDate(activeReport.createdAt)}
+                  {resolvedConflicts.length > 0 && (
+                    <span className="text-green-600 dark:text-green-500"> · {resolvedConflicts.length} resuelto{resolvedConflicts.length === 1 ? '' : 's'} (no cuentan acá)</span>
+                  )}
                 </p>
                 <div className="flex flex-wrap gap-4">
                   {/* KPIs */}
@@ -445,11 +558,17 @@ export default function CanibalizacionTab({ projectId }) {
               </div>
             )}
 
-            {/* Sin conflictos */}
+            {/* Sin conflictos abiertos */}
             {activeReport.totalConflicts === 0 && activeReport.status === 'completed' && (
               <div className="mt-4 p-4 rounded-lg bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-700 text-center">
-                <p className="text-green-700 dark:text-green-400 font-semibold">No se detectaron conflictos de canibalización</p>
-                <p className="text-xs text-green-600 dark:text-green-500 mt-1">Cada keyword relevante apunta a una única URL dominante. Excelente trabajo.</p>
+                <p className="text-green-700 dark:text-green-400 font-semibold">
+                  {resolvedConflicts.length > 0 ? 'No quedan conflictos abiertos' : 'No se detectaron conflictos de canibalización'}
+                </p>
+                <p className="text-xs text-green-600 dark:text-green-500 mt-1">
+                  {resolvedConflicts.length > 0
+                    ? `Los ${resolvedConflicts.length} que siguen en los datos están marcados como resueltos.`
+                    : 'Cada keyword relevante apunta a una única URL dominante. Excelente trabajo.'}
+                </p>
               </div>
             )}
 
@@ -517,12 +636,14 @@ export default function CanibalizacionTab({ projectId }) {
                 ) : (
                   filteredConflicts.map(conflict => (
                     <ConflictCard
-                      key={conflict.query}
+                      key={keyOf(conflict)}
                       conflict={conflict}
-                      expanded={expanded.has(conflict.query)}
+                      expanded={expanded.has(keyOf(conflict))}
+                      onResolve={setResolveTarget}
                       onToggle={() => setExpanded(prev => {
                         const next = new Set(prev)
-                        next.has(conflict.query) ? next.delete(conflict.query) : next.add(conflict.query)
+                        const k = keyOf(conflict)
+                        next.has(k) ? next.delete(k) : next.add(k)
                         return next
                       })}
                     />
@@ -530,6 +651,39 @@ export default function CanibalizacionTab({ projectId }) {
                 )}
               </div>
             </>
+          )}
+
+          {/* Conflictos ya resueltos (siguen en los datos hasta que la ventana los deje atrás) */}
+          {resolvedConflicts.length > 0 && (
+            <div className="space-y-2">
+              <button
+                onClick={() => setShowResolved(v => !v)}
+                className="text-sm font-semibold text-gray-700 dark:text-gray-300 flex items-center gap-1.5 hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
+              >
+                <Icon as={CheckCircle2} size={16} className="text-green-500" />
+                Resueltos ({resolvedConflicts.length})
+                <span className="text-gray-400 dark:text-gray-500 text-xs">{showResolved ? '▲' : '▼'}</span>
+              </button>
+              {showResolved && (
+                <>
+                  <p className="text-xs text-gray-400 dark:text-gray-500">
+                    Fuera de los conteos y de Prioridades. Siguen apareciendo en los datos porque el
+                    análisis mira hasta 180 días hacia atrás; vuelven solos a la lista si las URLs
+                    compiten de nuevo después de la fecha del arreglo.
+                  </p>
+                  <div className="space-y-2">
+                    {resolvedConflicts.map(c => (
+                      <ResolvedRow
+                        key={keyOf(c)}
+                        conflict={c}
+                        undoing={undoing}
+                        onUndo={handleUndoResolution}
+                      />
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
           )}
 
           {/* Posible problema de hreflang */}
@@ -607,6 +761,15 @@ export default function CanibalizacionTab({ projectId }) {
             </div>
           )}
         </div>
+      )}
+
+      {resolveTarget && (
+        <ResolveConflictModal
+          projectId={projectId}
+          conflict={resolveTarget}
+          onClose={() => setResolveTarget(null)}
+          onSaved={handleResolved}
+        />
       )}
 
       {/* Modal de confirmación de eliminación */}
