@@ -45,6 +45,7 @@ export default function CustomersTab({ accounts, categories, items, taxes, issue
   if (openId) {
     return (
       <CustomerDetail itemId={openId} accounts={accounts} categoriesList={categories} items={items} taxes={taxes} issuers={issuers} financeIvaMode={financeIvaMode}
+        onDataChange={onDataChange}
         onBack={() => { setOpenId(null); load(); onDataChange?.() }} />
     )
   }

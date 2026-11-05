@@ -15,7 +15,7 @@ const SUBTABS = [{ id: 'movimientos', label: 'Movimientos' }, { id: 'facturas', 
 
 // Detalle del cliente (sección 4.5): header + saldo + pestañas Movimientos/
 // Facturas + columna lateral (Próximas acciones, Facturas pendientes, Datos).
-export default function CustomerDetail({ itemId, accounts, categoriesList, items, taxes, issuers, financeIvaMode, onBack }) {
+export default function CustomerDetail({ itemId, accounts, categoriesList, items, taxes, issuers, financeIvaMode, onBack, onDataChange }) {
   const [customer, setCustomer] = useState(null)
   const [actions, setActions] = useState([])
   const [tasks, setTasks] = useState([])
@@ -46,6 +46,9 @@ export default function CustomerDetail({ itemId, accounts, categoriesList, items
   function handleChanged() {
     load()
     setRefreshKey(k => k + 1)
+    // El nombre del cliente se puede editar desde acá (CustomerInfoCard) y viaja
+    // en la lista de items que comparten el modal "+ Cargar" y los selectores.
+    onDataChange?.()
   }
 
   if (!customer) return <p className="text-sm text-gray-400 text-center py-10">Cargando…</p>
@@ -95,7 +98,7 @@ export default function CustomerDetail({ itemId, accounts, categoriesList, items
         <div className="space-y-5">
           <NextActionsList itemId={itemId} actions={actions} tasks={tasks} onChanged={handleChanged} />
           <PendingInvoicesList invoices={customer.invoices} currency={currency} onRegisterPayment={(inv) => setPaymentContext({ invoiceId: inv.id })} />
-          <CustomerInfoCard customer={customer} issuers={issuers} onChanged={handleChanged} />
+          <CustomerInfoCard customer={customer} issuers={issuers} onChanged={handleChanged} onDeleted={onBack} />
         </div>
       </div>
 

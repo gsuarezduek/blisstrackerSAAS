@@ -1,10 +1,11 @@
 import { useEffect, useState, useCallback } from 'react'
-import { Download, Eye, FileText, FileMinus, RefreshCw, Trash2 } from 'lucide-react'
+import { Download, Eye, FileText, FileMinus, Pencil, RefreshCw, Trash2 } from 'lucide-react'
 import { Icon } from '../ui/Icon'
 import api from '../../api/client'
 import { fmtMoney } from '../../utils/format'
 import { invoiceStatusMeta, arcaStatusMeta, invoiceKindMeta, STATUS_BADGE } from './financeCatalog'
 import NewNoteModal from './NewNoteModal'
+import EditInvoiceModal from './EditInvoiceModal'
 
 const input = 'border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 dark:text-gray-100 rounded-lg px-2.5 py-1.5 text-sm'
 
@@ -60,7 +61,7 @@ async function viewBlob(url, filename) {
 // "Facturas" (sección 4.5b): TODAS las facturas del cliente, buscador,
 // filtro año/estado, selección múltiple + Descargar (zip si son varias) /
 // Enviar por mail.
-export default function CustomerInvoicesPanel({ itemId, currency, refreshKey, onInvoiceClick, customer, issuers, financeIvaMode }) {
+export default function CustomerInvoicesPanel({ itemId, currency, refreshKey, customer, issuers, financeIvaMode }) {
   const [search, setSearch] = useState('')
   const [year, setYear] = useState('')
   const [status, setStatus] = useState('')
@@ -68,6 +69,7 @@ export default function CustomerInvoicesPanel({ itemId, currency, refreshKey, on
   const [selected, setSelected] = useState(new Set())
   const [sending, setSending] = useState(false)
   const [noteInvoice, setNoteInvoice] = useState(null)
+  const [editInvoice, setEditInvoice] = useState(null)
   const [reconcilingId, setReconcilingId] = useState(null)
 
   const load = useCallback(async () => {
@@ -185,10 +187,14 @@ export default function CustomerInvoicesPanel({ itemId, currency, refreshKey, on
               const meta = invoiceStatusMeta(inv.status)
               const kindMeta = invoiceKindMeta(inv.kind)
               const canReconcile = inv.arcaStatus === 'indeterminate' || inv.arcaStatus === 'conflict'
+              // Sin emisor = factura informativa, cargada a mano: se puede corregir.
+              // Un comprobante de ARCA no (con CAE es un documento legal, sin CAE
+              // se reconcilia o se elimina) — ver updateInvoice en el backend.
+              const canEdit = !inv.issuerId
               return (
                 <tr key={inv.id} className="border-b border-gray-50 dark:border-gray-700/50 hover:bg-gray-50 dark:hover:bg-gray-900/30">
                   <td className="py-2 pr-2"><input type="checkbox" checked={selected.has(inv.id)} onChange={() => toggle(inv.id)} /></td>
-                  <td className="py-2 pr-2 text-gray-900 dark:text-white cursor-pointer" onClick={() => onInvoiceClick?.(inv)}>
+                  <td className={`py-2 pr-2 text-gray-900 dark:text-white ${canEdit ? 'cursor-pointer' : ''}`} onClick={() => canEdit && setEditInvoice(inv)}>
                     {kindMeta.short && <span className="mr-1 text-[10px] font-semibold text-gray-400 border border-gray-300 dark:border-gray-600 rounded px-1 align-middle">{kindMeta.short}</span>}
                     {inv.number || <span className="text-gray-400 italic">pendiente de ARCA</span>}
                   </td>
@@ -234,6 +240,11 @@ export default function CustomerInvoicesPanel({ itemId, currency, refreshKey, on
                           <Icon as={Download} size={14} />
                         </button>
                       )}
+                      {canEdit && (
+                        <button title="Editar" onClick={() => setEditInvoice(inv)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
+                          <Icon as={Pencil} size={14} />
+                        </button>
+                      )}
                       {!inv.cae && (
                         <button title="Eliminar" onClick={() => handleDelete(inv)} className="text-gray-400 hover:text-red-600 dark:hover:text-red-400">
                           <Icon as={Trash2} size={14} />
@@ -256,6 +267,13 @@ export default function CustomerInvoicesPanel({ itemId, currency, refreshKey, on
           <button onClick={handleDownloadZip} className="border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-white dark:hover:bg-gray-800 rounded-lg px-3 py-1.5 text-xs font-medium">Descargar</button>
           <button onClick={handleSendEmail} disabled={sending} className="bg-primary-600 hover:bg-primary-700 text-white rounded-lg px-3 py-1.5 text-xs font-medium disabled:opacity-50">Enviar por mail</button>
         </div>
+      )}
+
+      {editInvoice && (
+        <EditInvoiceModal invoice={editInvoice}
+          onClose={() => { setEditInvoice(null); load() }}
+          onSaved={() => { setEditInvoice(null); load() }}
+        />
       )}
 
       {noteInvoice && (

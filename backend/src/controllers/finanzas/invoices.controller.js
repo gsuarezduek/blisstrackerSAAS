@@ -337,20 +337,34 @@ async function createInvoice(req, res, next) {
   } catch (err) { next(err) }
 }
 
-// PATCH /api/finanzas/invoices/:id
+// PATCH /api/finanzas/invoices/:id — corregir una factura **informativa** (sin
+// emisor ARCA): número, fechas, concepto y monto los tipeó una persona, así
+// que corregirlos es editar un registro interno. Los adjuntos van por su
+// propio endpoint y no pasan por acá.
 async function updateInvoice(req, res, next) {
   try {
     const workspaceId = req.workspace.id
     const id = Number(req.params.id)
-    const existing = await prisma.financeInvoice.findFirst({ where: { id, workspaceId }, include: { item: { select: { name: true } } } })
+    const existing = await prisma.financeInvoice.findFirst({
+      where: { id, workspaceId },
+      include: { item: { select: { name: true } }, collections: { where: { deletedAt: null }, select: { amount: true } } },
+    })
     if (!existing) return res.status(404).json({ error: 'Factura no encontrada' })
 
     const { number, issueDate, dueDate, concept, amount } = req.body
+    const touchesVoucher = number !== undefined || issueDate !== undefined || dueDate !== undefined || concept !== undefined || amount !== undefined
     // Comprobante legal ya autorizado por ARCA (tiene CAE) — amount/concept/
     // fechas/número quedan fijos. La única forma de "corregir" es una nota de
     // crédito (Etapa 4). Nota/adjuntos siguen editables libremente.
-    if (existing.cae && (number !== undefined || issueDate !== undefined || dueDate !== undefined || concept !== undefined || amount !== undefined)) {
+    if (existing.cae && touchesVoucher) {
       return res.status(409).json({ error: 'Esta factura ya tiene CAE — es un comprobante legal autorizado, no se puede editar. Emití una nota de crédito para corregirla.' })
+    }
+    // Pasó por ARCA pero todavía no tiene CAE (rejected/indeterminate/conflict):
+    // tampoco se edita. El número y el monto son los que se le mandaron a ARCA,
+    // y un `indeterminate` puede volver `authorized` al reconciliar (Etapa 5) —
+    // editarlo a mano dejaría la fila distinta del comprobante que ARCA guardó.
+    if (existing.issuerId && touchesVoucher) {
+      return res.status(409).json({ error: 'Esta factura se emitió por ARCA — no se edita a mano. Si quedó pendiente de confirmar, reconciliá con ARCA; si la rechazó, eliminá esta y cargá una nueva.' })
     }
 
     const data = {}
@@ -362,6 +376,14 @@ async function updateInvoice(req, res, next) {
       let amountDecimal
       try { amountDecimal = toDecimal(amount) } catch { return res.status(400).json({ error: 'Monto inválido' }) }
       if (!amountDecimal.isFinite() || amountDecimal.lessThanOrEqualTo(0)) return res.status(400).json({ error: 'Monto inválido' })
+      // Bajar el monto por debajo de lo ya cobrado rompería el mismo invariante
+      // que `resolveMovementFields` cuida al aplicar un cobro a una factura
+      // ("el monto supera el saldo pendiente"): quedaría una factura cobrada de
+      // más, con saldo negativo en la cuenta corriente del cliente.
+      const collected = existing.collections.reduce((s, m) => s.plus(toDecimal(m.amount)), toDecimal(0))
+      if (amountDecimal.lessThan(collected)) {
+        return res.status(409).json({ error: `Esta factura ya tiene cobros aplicados por $ ${collected.toString()} — el monto no puede quedar por debajo.` })
+      }
       data.amount = amountDecimal.toString()
     }
 

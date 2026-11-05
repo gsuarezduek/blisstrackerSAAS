@@ -1,8 +1,9 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Card, CardHeader, TextButton } from '../../pages/project-detail/ui.jsx'
 import AutosaveNotes from '../AutosaveNotes'
 import api from '../../api/client'
 import { ITEM_IVA_CONDITIONS, itemIvaConditionLabel, normalizeCuit } from './financeCatalog'
+import DeleteCustomerModal from './DeleteCustomerModal'
 
 const input = 'w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 dark:text-gray-100 rounded-lg px-2.5 py-1.5 text-sm'
 
@@ -21,14 +22,24 @@ function Row({ label, children }) {
 
 const CUIT_RE = /^\d{2}-\d{8}-\d$/
 
-// "Datos" (sección 4.5, columna lateral): botón Editar; razón social, contacto, teléfono,
-// mail, CUIT, servicio contratado; métricas; notas con autoguardado.
-export default function CustomerInfoCard({ customer, issuers, onChanged }) {
+// "Datos" (sección 4.5, columna lateral): botón Editar; nombre, razón social,
+// contacto, teléfono, mail, CUIT, servicio contratado, proyecto vinculado;
+// métricas; notas con autoguardado. Al pie, dar de baja al cliente.
+export default function CustomerInfoCard({ customer, issuers, onChanged, onDeleted }) {
   const [editing, setEditing] = useState(false)
   const [form, setForm] = useState(null)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
   const [looking, setLooking] = useState(false)
+  const [projects, setProjects] = useState([])
+  const [deleting, setDeleting] = useState(false)
+
+  // Los proyectos se piden solo cuando se abre el editor — la tarjeta en modo
+  // lectura ya recibe el proyecto vinculado dentro de `customer`.
+  useEffect(() => {
+    if (!editing || projects.length) return
+    api.get('/projects').then(r => setProjects(r.data.filter(pr => !pr.locked))).catch(() => {})
+  }, [editing, projects.length])
 
   async function handleLookup() {
     const normalized = normalizeCuit(form.taxId)
@@ -50,14 +61,17 @@ export default function CustomerInfoCard({ customer, issuers, onChanged }) {
 
   function startEdit() {
     setForm({
+      name: customer.name || '',
       legalName: customer.legalName || '', contactName: customer.contactName || '', phone: customer.phone || '', email: customer.email || '',
       taxId: customer.taxId || '', address: customer.address || '', contractedService: customer.contractedService || '',
       ivaCondition: customer.ivaCondition || '', defaultIssuerId: customer.defaultIssuer?.id ? String(customer.defaultIssuer.id) : '',
+      projectId: customer.project?.id ? String(customer.project.id) : '',
     })
     setEditing(true); setError('')
   }
 
   async function handleSave() {
+    if (!form.name.trim()) { setError('Nombre requerido'); return }
     if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) { setError('Mail inválido'); return }
     const normalizedTaxId = form.taxId ? normalizeCuit(form.taxId) : form.taxId
     if (normalizedTaxId && !CUIT_RE.test(normalizedTaxId)) { setError('CUIT inválido (debe tener 11 dígitos)'); return }
@@ -65,9 +79,11 @@ export default function CustomerInfoCard({ customer, issuers, onChanged }) {
     try {
       await api.patch(`/finanzas/items/${customer.id}`, {
         ...form,
+        name: form.name.trim(),
         taxId: normalizedTaxId,
         ivaCondition: form.ivaCondition || null,
         defaultIssuerId: form.defaultIssuerId ? Number(form.defaultIssuerId) : null,
+        projectId: form.projectId ? Number(form.projectId) : null,
       })
       setEditing(false)
       onChanged()
@@ -82,6 +98,7 @@ export default function CustomerInfoCard({ customer, issuers, onChanged }) {
       <div className="px-4 pb-4">
         {editing ? (
           <div className="space-y-2">
+            <input className={input} placeholder="Nombre (como lo ves en la app)" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} />
             <input className={input} placeholder="Razón social (la que sale en la factura)" value={form.legalName} onChange={e => setForm({ ...form, legalName: e.target.value })} />
             <input className={input} placeholder="Contacto" value={form.contactName} onChange={e => setForm({ ...form, contactName: e.target.value })} />
             <input className={input} placeholder="Teléfono" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} />
@@ -100,6 +117,12 @@ export default function CustomerInfoCard({ customer, issuers, onChanged }) {
               <option value="">Emisor habitual (ninguno)</option>
               {issuers?.map(is => <option key={is.id} value={is.id}>{is.name}</option>)}
             </select>
+            <select className={input} value={form.projectId} onChange={e => setForm({ ...form, projectId: e.target.value })}>
+              <option value="">Proyecto vinculado (ninguno)</option>
+              {/* El proyecto ya vinculado va igual, aunque sea privado y no venga en la lista. */}
+              {customer.project && !projects.some(pr => pr.id === customer.project.id) && <option value={customer.project.id}>{customer.project.name}</option>}
+              {projects.map(pr => <option key={pr.id} value={pr.id}>{pr.name}</option>)}
+            </select>
             {error && <p className="text-xs text-red-500">{error}</p>}
             <div className="flex gap-2 pt-1">
               <button onClick={() => setEditing(false)} className="flex-1 border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 rounded-lg py-1.5 text-xs font-medium">Cancelar</button>
@@ -108,6 +131,7 @@ export default function CustomerInfoCard({ customer, issuers, onChanged }) {
           </div>
         ) : (
           <dl>
+            <Row label="Nombre">{customer.name}</Row>
             <Row label="Razón social">{customer.legalName}</Row>
             <Row label="Contacto">{customer.contactName}</Row>
             <Row label="Teléfono">{customer.phone}</Row>
@@ -117,7 +141,7 @@ export default function CustomerInfoCard({ customer, issuers, onChanged }) {
             <Row label="Servicio contratado">{customer.contractedService}</Row>
             <Row label="Condición de IVA">{customer.ivaCondition ? itemIvaConditionLabel(customer.ivaCondition) : null}</Row>
             <Row label="Emisor habitual">{customer.defaultIssuer?.name}</Row>
-            {customer.project && <Row label="Proyecto">{customer.project.name}</Row>}
+            <Row label="Proyecto">{customer.project?.name}</Row>
           </dl>
         )}
 
@@ -136,7 +160,20 @@ export default function CustomerInfoCard({ customer, issuers, onChanged }) {
             onSave={async (html) => { await api.patch(`/finanzas/items/${customer.id}`, { notes: html }) }}
           />
         </div>
+
+        {onDeleted && (
+          <div className="border-t border-gray-100 dark:border-gray-700 mt-3 pt-3">
+            <button onClick={() => setDeleting(true)} className="text-xs font-medium text-red-600 dark:text-red-400 hover:underline">Eliminar cliente</button>
+          </div>
+        )}
       </div>
+
+      {deleting && (
+        <DeleteCustomerModal customer={customer}
+          onClose={() => setDeleting(false)}
+          onDone={() => { setDeleting(false); onDeleted() }}
+        />
+      )}
     </Card>
   )
 }

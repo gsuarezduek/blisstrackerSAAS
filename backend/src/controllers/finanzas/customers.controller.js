@@ -108,6 +108,11 @@ async function getCustomer(req, res, next) {
         project: { select: { id: true, name: true } },
         defaultIssuer: { select: { id: true, name: true, taxCondition: true } },
         invoices: INVOICE_WITH_COLLECTIONS,
+        // Uso real del item, sin el filtro de `deletedAt` — mismo criterio que
+        // `deleteItem` usa para decidir si todavía se puede borrar (una factura
+        // en la papelera sigue siendo historial). El frontend lo necesita para
+        // ofrecer "Eliminar" o solamente "Desactivar".
+        _count: { select: { movements: true, invoices: true, extras: true, nextActions: true } },
       },
     })
     if (!item) return res.status(404).json({ error: 'Cliente no encontrado' })
@@ -150,6 +155,7 @@ async function getCustomer(req, res, next) {
       ivaCondition: item.ivaCondition, defaultIssuer: item.defaultIssuer,
       invoices: summary.invoices, facturado: summary.facturado, cobrado: summary.cobrado, saldo: summary.saldo, status: summary.status,
       metrics: { invoiceCount, avgDaysToCollect, lastPaymentAt: lastPayment?.date || null },
+      counts: item._count,
     })
   } catch (err) { next(err) }
 }
