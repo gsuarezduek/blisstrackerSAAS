@@ -465,6 +465,14 @@ const PLATFORM_SETTINGS = [
     label:   'Posts a traer por scrape de Facebook',
     help:    'Cantidad de posts recientes que trae cada scrape de Facebook (debe cubrir el mes completo). 0 = usa la variable de entorno APIFY_FACEBOOK_POSTS_LIMIT o el default (30). Subir si una página postea mucho y los meses quedan incompletos.',
   },
+  {
+    key:     'apifyFacebookPostsActor',
+    type:    'string',
+    default: '',
+    group:   'scraping',
+    label:   'Actor de Apify para posts de Facebook (2ª llamada)',
+    help:    'El actor de Páginas (ej. `apify~facebook-pages-scraper`) devuelve SOLO la ficha de la página — seguidores, categoría, teléfono, horarios — y ningún post, así que sin esto los posts del mes y el engagement quedan en 0. Con este actor se hace una 2ª llamada que trae los posts y se fusiona con lo de la 1ª (los seguidores siguen saliendo de la ficha). Recomendado: `apify~facebook-posts-scraper`. Se acepta "usuario/actor" o "usuario~actor". Costo Apify ~2x por scrape de Facebook (los competidores NO la corren). Vacío = usa la env APIFY_FACEBOOK_POSTS_ACTOR; si ambos vacíos → no se hace la 2ª llamada (comportamiento anterior). Para desactivar explícitamente: poné "none".',
+  },
 
   // ─── Notificaciones de plataforma ──────────────────────────────────────────
   // Casilla interna del equipo BlissTracker que recibe avisos operativos

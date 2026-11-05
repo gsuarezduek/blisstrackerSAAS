@@ -35,10 +35,13 @@ const PLATFORM_SCRAPERS = {
   },
   facebook: {
     parseId: parseFacebookPage,
-    // El actor de Páginas trae seguidores (no posts) → engagement/avgLikes quedan
-    // en null. scrapeFacebookPage devuelve el nombre en page.name; mapeamos al shape común.
+    // skipPostsActor: mismo criterio que Instagram — para trackear crecimiento de
+    // seguidores alcanza con la ficha de la página, así no duplicamos el costo de
+    // Apify. Con lo que trae el actor de Páginas (seguidores, no posts),
+    // engagement/avgLikes quedan en null. scrapeFacebookPage devuelve el nombre en
+    // page.name; mapeamos al shape común.
     scrape:  async (slug, opts) => {
-      const m = await scrapeFacebookPage(slug, opts)
+      const m = await scrapeFacebookPage(slug, { ...opts, skipPostsActor: true })
       return {
         ...m,
         name:          m.name ?? m.page?.name ?? slug,

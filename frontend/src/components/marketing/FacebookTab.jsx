@@ -282,7 +282,21 @@ export default function FacebookTab({ projectId, onSelectProject, projects = [] 
                 <span>posts detectados: {debugData.normalized?.postsDetected}</span>
                 <span>seguidores: {debugData.normalized?.followers ?? '—'}</span>
                 <span>engagement: {debugData.metricsSummary?.engagementRate ?? '—'}</span>
+                {debugData.fuentes && (
+                  <span>de la ficha: {debugData.fuentes.pagina?.count ?? 0} · del actor de posts: {debugData.fuentes.posts?.count ?? 0}</span>
+                )}
+                {debugData.postsActor && (
+                  <span>actor de posts: {debugData.postsActor.configured ? 'configurado' : 'sin configurar'}</span>
+                )}
               </div>
+              {debugData.postsActor?.error && (
+                <p className="text-[11px] text-red-600 dark:text-red-400">El actor de posts falló: {debugData.postsActor.error}</p>
+              )}
+              {debugData.postsActor && !debugData.postsActor.configured && (
+                <p className="text-[11px] text-amber-700 dark:text-amber-300">
+                  El actor de Páginas trae la ficha (seguidores) pero no los posts. Para que haya posts y engagement hay que configurar el <strong>actor de posts</strong> en SuperAdmin → Configuración → "Actor de Apify para posts de Facebook" (recomendado <code className="font-mono">apify~facebook-posts-scraper</code>).
+                </p>
+              )}
               <p className="text-[11px] text-blue-600/80 dark:text-blue-300/80">
                 Si "items" es 0 → el actor no recibió bien la entrada. Si hay items pero posts/seguidores en 0 → el actor usa otros nombres de campo. Copiá este JSON y pasámelo para ajustar el mapeo.
               </p>

@@ -1,7 +1,7 @@
 const { computeInstagramMetrics } = require('../instagram.service')
 const { getSetting } = require('../../lib/platformSettings')
 const { DEFAULT_TZ } = require('../../utils/dates')
-const { scrapeError, getApifyTokens, runApifyActor, alertScrapeFailure, parseSocialHandle } = require('./_shared')
+const { scrapeError, getApifyTokens, runApifyActor, alertScrapeFailure, parseSocialHandle, mergeById } = require('./_shared')
 
 // Cantidad de publicaciones recientes a traer por scrape. Debe ser suficiente para
 // cubrir un mes calendario completo (computeInstagramMetrics filtra por mes), así que
@@ -146,18 +146,10 @@ function normalizeApifyPost(p) {
   }
 }
 
-/**
- * Fusiona dos listas de media (perfil + actor de posts) deduplicando por id.
- * Prioriza la publicación de `primary` cuando el id se repite (más completa).
- */
-function mergeMediaById(primary = [], secondary = []) {
-  const byId = new Map()
-  for (const m of secondary) if (m.id) byId.set(m.id, m)
-  for (const m of primary)   if (m.id) byId.set(m.id, m)
-  // Posts sin id (raro) se conservan tal cual.
-  const noId = [...primary, ...secondary].filter(m => !m.id)
-  return [...byId.values(), ...noId]
-}
+// Fusiona dos listas de media (perfil + actor de posts) deduplicando por id, con
+// prioridad para `primary`. Es el helper compartido `mergeById` (lo usa igual la 2ª
+// llamada de Facebook); se mantiene el nombre histórico para los consumidores.
+const mergeMediaById = mergeById
 
 /**
  * Normaliza un item de perfil de Apify al shape interno { profile, media }.

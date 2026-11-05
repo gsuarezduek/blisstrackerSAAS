@@ -178,18 +178,56 @@ function toCount(v) {
 }
 
 /**
+ * Normaliza una fecha de post a ISO string. Los actores de Apify mandan la fecha de
+ * tres formas: ISO ("2026-06-05T12:00:00Z"), epoch en **segundos** (1780000000 — lo
+ * que usa `apify~facebook-posts-scraper` en su campo `timestamp`) o epoch en ms.
+ * Un epoch en segundos pasado crudo a `new Date()` se lee como ms y cae en 1970, así
+ * que el filtro por mes calendario descartaba TODOS los posts (síntoma:
+ * `postsThisMonth: 0` con posts traídos). Devuelve null si no parsea.
+ */
+function toTimestamp(v) {
+  if (v == null || v === '') return null
+  // number o string puramente numérica → epoch (segundos si tiene ≤ 11 dígitos)
+  const n = typeof v === 'number' ? v : (/^\d+$/.test(String(v).trim()) ? Number(String(v).trim()) : NaN)
+  if (Number.isFinite(n)) {
+    const ms = n < 1e12 ? n * 1000 : n
+    const d = new Date(ms)
+    return isNaN(d.getTime()) ? null : d.toISOString()
+  }
+  const d = new Date(String(v))
+  return isNaN(d.getTime()) ? null : d.toISOString()
+}
+
+/**
  * Normaliza un post crudo de un actor de Apify a un shape fijo de campos, resolviendo
  * cada campo contra una lista de alias posibles (los actores de LinkedIn/Facebook no
- * comparten un esquema único). `fields`: { outKey: { aliases, count?, default? } }.
- * `count: true` pasa el valor por toCount(); si no hay match, usa `default` (o null).
+ * comparten un esquema único). `fields`: { outKey: { aliases, count?, ts?, default? } }.
+ * `count: true` pasa el valor por toCount(), `ts: true` por toTimestamp(); si no hay
+ * match, usa `default` (o null).
  */
 function normalizeGenericPost(p, fields) {
   const out = {}
   for (const [key, cfg] of Object.entries(fields)) {
     const raw = pick(p, cfg.aliases)
-    out[key] = cfg.count ? toCount(raw) : (raw ?? (cfg.default !== undefined ? cfg.default : null))
+    if (cfg.count)   out[key] = toCount(raw)
+    else if (cfg.ts) out[key] = toTimestamp(raw) ?? (cfg.default !== undefined ? cfg.default : null)
+    else             out[key] = raw ?? (cfg.default !== undefined ? cfg.default : null)
   }
   return out
+}
+
+/**
+ * Fusiona dos listas de posts/media deduplicando por `id`. Prioriza los de `primary`
+ * cuando el id se repite (son los más completos). Los que no tienen id se conservan
+ * tal cual. Lo comparten la 2ª llamada de Instagram (perfil + actor de posts) y la de
+ * Facebook (ficha de página + actor de posts).
+ */
+function mergeById(primary = [], secondary = []) {
+  const byId = new Map()
+  for (const m of secondary) if (m.id) byId.set(m.id, m)
+  for (const m of primary)   if (m.id) byId.set(m.id, m)
+  const noId = [...primary, ...secondary].filter(m => !m.id)
+  return [...byId.values(), ...noId]
 }
 
 module.exports = {
@@ -202,5 +240,7 @@ module.exports = {
   parseSocialHandle,
   pick,
   toCount,
+  toTimestamp,
   normalizeGenericPost,
+  mergeById,
 }
