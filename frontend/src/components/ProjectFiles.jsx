@@ -11,12 +11,13 @@ import MoveModal from './projectFiles/MoveModal'
 import ShareFolderModal from './projectFiles/ShareFolderModal'
 import TrashModal from './projectFiles/TrashModal'
 import ItemCard from './projectFiles/ItemCard'
+import FilesList from './projectFiles/FilesList'
 import FilesToolbar from './projectFiles/FilesToolbar'
 import FilesSearchBar from './projectFiles/FilesSearchBar'
 import BulkActionBar from './projectFiles/BulkActionBar'
 import UploadQueue from './projectFiles/UploadQueue'
 import FilePreviewModals from './projectFiles/FilePreviewModals'
-import { fmtDate, fileDeepLink, sortItems } from './projectFiles/projectFilesHelpers'
+import { fmtDate, fileDeepLink, sortItems, loadViewMode, saveViewMode } from './projectFiles/projectFilesHelpers'
 import { useFileDragMove } from './projectFiles/useFileDragMove'
 
 // ─── Componente principal ──────────────────────────────────────────────────
@@ -30,13 +31,15 @@ export default function ProjectFiles({ projectId, deepLinkFileId, onCreateTaskFr
   const [files, setFiles] = useState([])
   const [loading, setLoading] = useState(true)
   const [dragOver, setDragOver] = useState(false)
-  const [menuOpenId, setMenuOpenId] = useState(null)
   const [modal, setModal] = useState(null) // null | {type:'newFolder'|'rename'|'move'|'delete'|'copyLink'|'bulkMove'|'bulkDelete', item?, items?}
   const [error, setError] = useState('')
   const [lightbox, setLightbox] = useState(null) // url de imagen a mostrar en grande
   const [preview, setPreview] = useState(null) // null | { item, status:'loading'|'ready'|'error', src }
   const [highlightId, setHighlightId] = useState(null) // resalta brevemente el ítem abierto por deep-link
   const [sortBy, setSortBy] = useState('name-asc')
+  // 'grid' (miniaturas) | 'list' (columnas). Se recuerda por navegador, no en
+  // la DB: es cómo mirar, no un dato del proyecto.
+  const [viewMode, setViewMode] = useState(loadViewMode)
   const [selectedIds, setSelectedIds] = useState(() => new Set())
   const [downloadingZip, setDownloadingZip] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
@@ -103,6 +106,11 @@ export default function ProjectFiles({ projectId, deepLinkFileId, onCreateTaskFr
     return () => { active = false }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [deepLinkFileId, projectId])
+
+  function changeViewMode(mode) {
+    setViewMode(mode)
+    saveViewMode(mode)
+  }
 
   const { queue, handleFiles, cancel } = useProjectFileUpload({
     projectId,
@@ -246,7 +254,24 @@ export default function ProjectFiles({ projectId, deepLinkFileId, onCreateTaskFr
     reload(folderId)
   }
 
+  // Los mismos handlers para las dos vistas (miniaturas y lista) y los dos
+  // modos (carpeta y búsqueda). Lo único que cambia entre modos es `onOpen`,
+  // que se pasa aparte.
+  const itemHandlers = {
+    onRename: it => setModal({ type: 'rename', item: it }),
+    onMove: it => setModal({ type: 'move', item: it }),
+    onDelete: it => setModal({ type: 'delete', item: it }),
+    onDownload: handleDownload,
+    onCopyLink: it => setModal({ type: 'copyLink', item: it }),
+    onShare: it => setModal({ type: 'share', item: it }),
+    onCreateTask: onCreateTaskFromFile ? it => onCreateTaskFromFile(it, fileDeepLink(projectId, it)) : null,
+    onLinkToContent: contenidoEnabled ? it => setModal({ type: 'linkContent', item: it }) : null,
+  }
+
   const selectedItems = [...folders, ...files].filter(it => selectedIds.has(it.id))
+
+  // Carpetas primero y después archivos, cada grupo con el orden elegido.
+  const visibleItems = [...sortItems(folders, sortBy), ...sortItems(files, sortBy)]
 
   // Sin reload(): saca solo lo que se movió, así la grilla no pasa por el spinner
   // en cada arrastre y lo que falló sigue a la vista.
@@ -293,7 +318,8 @@ export default function ProjectFiles({ projectId, deepLinkFileId, onCreateTaskFr
         onSearchChange={setSearchQuery}
         sortBy={sortBy}
         onSortChange={setSortBy}
-        showSort={searchResults === null}
+        viewMode={viewMode}
+        onViewModeChange={changeViewMode}
       />
 
       {selectedIds.size > 0 && (
@@ -320,24 +346,26 @@ export default function ProjectFiles({ projectId, deepLinkFileId, onCreateTaskFr
             <p className="mb-2"><Icon as={Search} size={28} className="inline-block text-gray-300 dark:text-gray-600" /></p>
             <p>Sin resultados para "{searchQuery}".</p>
           </div>
+        ) : viewMode === 'list' ? (
+          // Sin selección ni arrastre: los resultados mezclan carpetas, así que
+          // ni el lote ni el destino de un drop están definidos (mismo criterio
+          // que ya tenía la grilla).
+          <FilesList
+            items={sortItems(searchResults, sortBy)}
+            sortBy={sortBy} onSortChange={setSortBy}
+            projectId={projectId}
+            onOpen={openFoundItem}
+            {...itemHandlers}
+          />
         ) : (
           <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3">
-            {searchResults.map(item => (
+            {sortItems(searchResults, sortBy).map(item => (
               <ItemCard
                 key={`${item.type}-${item.id}`}
                 item={item}
                 projectId={projectId}
-                menuOpen={menuOpenId === item.id}
-                onOpenMenu={setMenuOpenId}
                 onOpen={openFoundItem}
-                onRename={it => setModal({ type: 'rename', item: it })}
-                onMove={it => setModal({ type: 'move', item: it })}
-                onDelete={it => setModal({ type: 'delete', item: it })}
-                onDownload={handleDownload}
-                onCopyLink={it => setModal({ type: 'copyLink', item: it })}
-                onShare={it => setModal({ type: 'share', item: it })}
-                onCreateTask={onCreateTaskFromFile ? it => onCreateTaskFromFile(it, fileDeepLink(projectId, it)) : null}
-                onLinkToContent={contenidoEnabled ? it => setModal({ type: 'linkContent', item: it }) : null}
+                {...itemHandlers}
                 caption={item.path.length ? `Raíz / ${item.path.map(p => p.name).join(' / ')}` : 'Raíz'}
               />
             ))}
@@ -351,24 +379,27 @@ export default function ProjectFiles({ projectId, deepLinkFileId, onCreateTaskFr
           <p>Todavía no hay nada acá.</p>
           <p className="text-xs mt-1">Arrastrá archivos a esta ventana o usá "Subir archivos".</p>
         </div>
+      ) : viewMode === 'list' ? (
+        <FilesList
+          items={visibleItems}
+          sortBy={sortBy} onSortChange={setSortBy}
+          highlightId={highlightId}
+          projectId={projectId}
+          onOpen={openItem}
+          selectedIds={selectedIds}
+          onToggleSelect={toggleSelect}
+          fileDrag={fileDrag}
+          {...itemHandlers}
+        />
       ) : (
         <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3">
-          {[...sortItems(folders, sortBy), ...sortItems(files, sortBy)].map(item => (
+          {visibleItems.map(item => (
             <div key={`${item.type}-${item.id}`} className={highlightId === item.id ? 'rounded-xl ring-2 ring-primary-400 animate-pulse' : ''}>
               <ItemCard
                 item={item}
                 projectId={projectId}
-                menuOpen={menuOpenId === item.id}
-                onOpenMenu={setMenuOpenId}
                 onOpen={openItem}
-                onRename={it => setModal({ type: 'rename', item: it })}
-                onMove={it => setModal({ type: 'move', item: it })}
-                onDelete={it => setModal({ type: 'delete', item: it })}
-                onDownload={handleDownload}
-                onCopyLink={it => setModal({ type: 'copyLink', item: it })}
-                onShare={it => setModal({ type: 'share', item: it })}
-                onCreateTask={onCreateTaskFromFile ? it => onCreateTaskFromFile(it, fileDeepLink(projectId, it)) : null}
-                onLinkToContent={contenidoEnabled ? it => setModal({ type: 'linkContent', item: it }) : null}
+                {...itemHandlers}
                 caption={item.uploadedBy ? `${item.uploadedBy.name} · ${fmtDate(item.createdAt)}` : fmtDate(item.createdAt)}
                 selected={selectedIds.has(item.id)}
                 onToggleSelect={toggleSelect}

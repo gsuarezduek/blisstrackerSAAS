@@ -560,9 +560,23 @@ describe('POST /files/:fileId/thumbnail', () => {
     expect(prisma.projectFile.update).not.toHaveBeenCalled()
   })
 
-  it('rechaza miniatura en un archivo que no es imagen ni video', async () => {
+  // El PDF empezó siendo un tipo "sin miniatura" y pasó a tenerla cuando el
+  // browser aprendió a rasterizar su primera página con pdf.js. Al endpoint el
+  // cambio le resultó invisible —sigue recibiendo un JPEG y validándolo por
+  // magic bytes—, lo único que se movió es `canHaveThumbnail`.
+  it('acepta miniatura de un PDF (su primera página, rasterizada en el browser)', async () => {
     mockBase()
-    prisma.projectFile.findFirst.mockResolvedValue(dbItem({ mimeType: 'application/pdf' }))
+    prisma.projectFile.findFirst.mockResolvedValue(dbItem({ mimeType: 'application/pdf', posterKey: null }))
+
+    const res = await postThumb()
+
+    expect(res.status).toBe(200)
+    expect(objectStorage.putObject).toHaveBeenCalledWith(expect.any(Buffer), 'image/jpeg', expect.any(Object))
+  })
+
+  it('rechaza miniatura en un tipo que el browser no puede rasterizar', async () => {
+    mockBase()
+    prisma.projectFile.findFirst.mockResolvedValue(dbItem({ mimeType: 'application/zip' }))
 
     const res = await postThumb()
 

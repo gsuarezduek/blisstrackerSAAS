@@ -41,6 +41,14 @@ const SIGNED_DOWNLOAD_EXPIRES_IN = 15 * 60 // 15 min
 // un archivo que el usuario elige, es uno que produce nuestro propio código.
 const MAX_THUMB_BYTES = 2 * 1024 * 1024
 const THUMB_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp']
+
+// Qué tipos de archivo llevan miniatura propia (`posterKey`): los que el
+// browser puede rasterizar sin ayuda del servidor. Espejo de `makeThumbnail`
+// en el frontend — si acá entra un tipo nuevo, allá hay que saber dibujarlo.
+function canHaveThumbnail(mimeType) {
+  if (!mimeType) return false
+  return mimeType.startsWith('image/') || mimeType.startsWith('video/') || mimeType === 'application/pdf'
+}
 const PENDING_MAX_AGE_MS = 60 * 60 * 1000
 const MAX_PENDING_PER_PROJECT = 5
 const MAX_ZIP_ENTRIES = 2000 // tope de archivos por ZIP — protege memoria/tiempo del proceso
@@ -670,9 +678,10 @@ async function revokePublicLink(req, res, next) {
 /**
  * POST /api/projects/:id/files/:fileId/thumbnail — multipart `thumbnail`
  * Guarda la miniatura que el browser generó para un archivo ya confirmado:
- * el primer frame de un video, o la versión reducida de una imagen (ver
- * `makeThumbnail` en projectFilesUpload.js). Persiste en `ProjectFile.posterKey`
- * y sale por `shapeItem` como `posterUrl`, que es lo que pinta la grilla.
+ * el primer frame de un video, la versión reducida de una imagen, o la primera
+ * página de un PDF (ver `makeThumbnail` en projectFilesUpload.js). Persiste en
+ * `ProjectFile.posterKey` y sale por `shapeItem` como `posterUrl`, que es lo
+ * que pinta la grilla.
  *
  * El objeto va a R2 SIN crear una fila `ProjectFile` propia — a propósito. La
  * primera versión de esto resolvía el poster con un `posterFileId` apuntando a
@@ -710,16 +719,18 @@ async function uploadThumbnail(req, res, next) {
     const check = validateImageUpload(req.file.buffer, THUMB_MIME_TYPES)
     if (!check.ok) return res.status(400).json({ error: check.error })
 
-    // Solo imagen y video tienen miniatura; para el resto la grilla usa el
-    // ícono por tipo y no hay nada que derivar.
+    // Imagen, video y PDF tienen miniatura; para el resto la grilla usa el
+    // ícono por tipo y no hay nada que derivar. El PDF entró después que los
+    // otros dos y no necesitó nada nuevo acá: lo único que cambia es quién
+    // genera los píxeles del otro lado (pdf.js en vez de <img>/<video>), y
+    // eso al endpoint le da igual — lo que recibe es un JPEG/PNG/WEBP que
+    // valida por magic bytes como cualquier otro.
     const file = await prisma.projectFile.findFirst({
       where: { id: Number(req.params.fileId), projectId, type: 'file', status: 'ready', deletedAt: null },
       select: { id: true, mimeType: true, posterKey: true },
     })
     if (!file) return res.status(404).json({ error: 'Archivo no encontrado' })
-    const isImage = file.mimeType?.startsWith('image/')
-    const isVideo = file.mimeType?.startsWith('video/')
-    if (!isImage && !isVideo) return res.status(400).json({ error: 'Este tipo de archivo no lleva miniatura.' })
+    if (!canHaveThumbnail(file.mimeType)) return res.status(400).json({ error: 'Este tipo de archivo no lleva miniatura.' })
 
     const { key } = await objectStorage.putObject(req.file.buffer, check.mimeType, { prefix: `files/${workspaceId}/thumbs` })
     const previousKey = file.posterKey
@@ -1159,6 +1170,7 @@ module.exports = {
   // exportados para tests
   MAX_FILE_BYTES,
   DENIED_MIME,
+  canHaveThumbnail,
   // exportados para el controller de solo lectura del portal de cliente
   shapeItem,
   buildPath,

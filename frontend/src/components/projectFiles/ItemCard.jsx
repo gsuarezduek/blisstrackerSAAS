@@ -1,26 +1,23 @@
 import { Link } from 'react-router-dom'
-import { fmtBytes, iconFor } from '../../lib/fileIcons'
-import { CalendarDays, Folder, Link2, Play } from 'lucide-react'
+import { fmtBytes } from '../../lib/fileIcons'
+import { CalendarDays, Link2 } from 'lucide-react'
 import { Icon } from '../ui/Icon'
+import { OverflowMenu } from '../ui/OverflowMenu'
+import ItemThumb from './ItemThumb'
+import { itemMenuActions } from './projectFilesHelpers'
 
 // ─── Tarjeta de ítem (carpeta o archivo) con menú contextual ──────────────────
+// La vista de miniaturas. Su hermana es <ItemRow>, la fila de la vista de
+// lista: misma data y las mismas acciones (<itemMenuActions>), presentadas para
+// reconocer un archivo de un vistazo en vez de para compararlos entre sí.
 
-export default function ItemCard({ item, projectId, menuOpen, onOpenMenu, onOpen, onRename, onMove, onDelete, onDownload, onCopyLink, onShare, onCreateTask, onLinkToContent, caption, selected, onToggleSelect, dragProps, dropProps, dragging, dropActive }) {
+export default function ItemCard({ item, projectId, onOpen, onRename, onMove, onDelete, onDownload, onCopyLink, onShare, onCreateTask, onLinkToContent, caption, selected, onToggleSelect, dragProps, dropProps, dragging, dropActive }) {
   const isFolder = item.type === 'folder'
-  const isImage = !isFolder && item.mimeType?.startsWith('image/')
-  const isVideo = !isFolder && item.mimeType?.startsWith('video/')
-  const isPreviewable = !isFolder && !isImage && item.previewable
-  // `posterUrl` es la miniatura liviana que generó el browser al subir (~40KB):
-  // se prefiere al original siempre que exista. Una imagen vieja, subida antes
-  // de que hubiera miniaturas, cae a `url` — el original completo, que es lo
-  // que hacía lenta la grilla. Un video sin miniatura no tiene a qué caer, así
-  // que se queda con el ícono por tipo.
-  const thumbUrl = isFolder ? null : (item.posterUrl || (isImage ? item.url : null))
   return (
     <div
       {...dragProps}
       {...dropProps}
-      draggable={!!dragProps && !menuOpen}
+      draggable={!!dragProps}
       className={`relative group rounded-xl ${selected || dropActive ? 'ring-2 ring-primary-500' : ''} ${dragging ? 'opacity-50' : ''}`}
     >
       <button
@@ -30,22 +27,8 @@ export default function ItemCard({ item, projectId, menuOpen, onOpenMenu, onOpen
           : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:border-primary-300 dark:hover:border-primary-600 hover:bg-gray-50 dark:hover:bg-gray-700/50'}`}
         title={item.name}
       >
-        <div className="w-14 h-14 flex items-center justify-center rounded-lg bg-gray-50 dark:bg-gray-900/40 overflow-hidden relative">
-          {thumbUrl ? (
-            <>
-              {/* draggable={false}: que se arrastre la tarjeta entera y no la imagen sola. */}
-              <img src={thumbUrl} alt="" loading="lazy" draggable={false} className="w-full h-full object-cover" />
-              {/* Un video y una imagen con miniatura se ven igual — el ▸ es lo
-                  que los distingue de un vistazo. */}
-              {isVideo && (
-                <span className="absolute inset-0 flex items-center justify-center bg-black/25">
-                  <Icon as={Play} size={18} className="text-white drop-shadow" />
-                </span>
-              )}
-            </>
-          ) : (
-            <Icon as={isFolder ? Folder : iconFor(item.mimeType)} size={30} className={isFolder ? 'text-amber-500' : 'text-gray-400'} />
-          )}
+        <div className="relative">
+          <ItemThumb item={item} size={56} />
           {item.isPublic && (
             <span
               className="absolute bottom-0.5 right-0.5 text-[9px] bg-primary-600 text-white rounded-full w-4 h-4 flex items-center justify-center leading-none"
@@ -87,44 +70,13 @@ export default function ItemCard({ item, projectId, menuOpen, onOpenMenu, onOpen
         </button>
       )}
 
-      <button
-        onClick={e => { e.stopPropagation(); onOpenMenu(menuOpen ? null : item.id) }}
-        className="absolute top-1 right-1 w-6 h-6 flex items-center justify-center rounded-md text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-white dark:hover:bg-gray-700 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity text-sm"
-        title="Más acciones"
-      >
-        ⋯
-      </button>
+      {/* El menú va en un portal con position:fixed (ver <OverflowMenu>) para
+          que no lo recorte ni un contenedor con overflow-hidden ni el borde de
+          la ventana en la última fila de la grilla. */}
+      <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+        <OverflowMenu items={itemMenuActions(item, { onOpen, onRename, onMove, onDelete, onDownload, onCopyLink, onShare, onCreateTask, onLinkToContent })} />
+      </div>
 
-      {menuOpen && (
-        <>
-          <div className="fixed inset-0 z-40" onClick={() => onOpenMenu(null)} />
-          <div className="absolute top-7 right-1 z-50 w-48 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg py-1 text-sm">
-            {isPreviewable && (
-              <button onClick={() => { onOpenMenu(null); onOpen(item) }} className="w-full text-left px-3 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200">Ver</button>
-            )}
-            <button onClick={() => { onOpenMenu(null); onRename(item) }} className="w-full text-left px-3 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200">Renombrar</button>
-            <button onClick={() => { onOpenMenu(null); onMove(item) }} className="w-full text-left px-3 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200">Mover</button>
-            {onShare && (
-              <button onClick={() => { onOpenMenu(null); onShare(item) }} className="w-full text-left px-3 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200">
-                {item.isPublic ? 'Compartido' : 'Compartir'}
-              </button>
-            )}
-            {!isFolder && (
-              <>
-                <button onClick={() => { onOpenMenu(null); onDownload(item) }} className="w-full text-left px-3 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200">⬇️ Descargar</button>
-                <button onClick={() => { onOpenMenu(null); onCopyLink(item) }} className="w-full text-left px-3 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200">Copiar enlace</button>
-                {onLinkToContent && (
-                  <button onClick={() => { onOpenMenu(null); onLinkToContent(item) }} className="w-full text-left px-3 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200">Contenido</button>
-                )}
-                {onCreateTask && (
-                  <button onClick={() => { onOpenMenu(null); onCreateTask(item) }} className="w-full text-left px-3 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200">Crear tarea</button>
-                )}
-              </>
-            )}
-            <button onClick={() => { onOpenMenu(null); onDelete(item) }} className="w-full text-left px-3 py-1.5 hover:bg-red-50 dark:hover:bg-red-900/20 text-red-600 dark:text-red-400">Eliminar</button>
-          </div>
-        </>
-      )}
     </div>
   )
 }
