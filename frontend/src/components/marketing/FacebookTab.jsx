@@ -99,6 +99,8 @@ export default function FacebookTab({ projectId, onSelectProject, projects = [] 
   const [disconnecting,       setDisconnecting]   = useState(false)
   const [refreshing,          setRefreshing]      = useState(false)
   const [deletingSnapshot,    setDeletingSnapshot] = useState(false)
+  const [recalcing,           setRecalcing]       = useState(false)
+  const [recalcInfo,          setRecalcInfo]      = useState(null)
   const [debugData,           setDebugData]       = useState(null)
   const [debugLoading,        setDebugLoading]    = useState(false)
   const [debugError,          setDebugError]      = useState(null)
@@ -155,6 +157,7 @@ export default function FacebookTab({ projectId, onSelectProject, projects = [] 
   }, [projectId])
 
   useEffect(() => { fetchData() }, [fetchData])
+  useEffect(() => { setRecalcInfo(null) }, [selectedMonth, projectId])
 
   async function handleDisconnect() {
     if (!window.confirm('¿Desconectar la página de Facebook de este proyecto?')) return
@@ -180,6 +183,22 @@ export default function FacebookTab({ projectId, onSelectProject, projects = [] 
     } catch (err) {
       setError(err.response?.data?.error || 'No se pudo actualizar.')
     } finally { setRefreshing(false) }
+  }
+
+  // Vuelve a traer los datos de un mes ya cerrado. El scrape no filtra por fecha: trae
+  // los últimos N posts (tope `apifyFacebookPostsLimit`) y el recorte por mes lo hace el
+  // backend, así que cuán atrás llega depende de ese tope — `monthCoverageComplete`
+  // avisa si pudo quedar corto. Los seguidores del mes NO se pisan con los de hoy
+  // (ver `pickHistoricalStock` en facebookSnapshot.service.js).
+  async function handleRecalcSnapshot() {
+    setRecalcing(true); setRecalcInfo(null); setError(null)
+    try {
+      const { data } = await api.post(`/marketing/projects/${projectId}/facebook/snapshots`, { month: selectedMonth })
+      setRecalcInfo(data)
+      await fetchData()
+    } catch (err) {
+      setError(err.response?.data?.error || 'No se pudo recalcular ese mes.')
+    } finally { setRecalcing(false) }
   }
 
   async function handleDeleteSnapshot() {
@@ -365,7 +384,23 @@ export default function FacebookTab({ projectId, onSelectProject, projects = [] 
 
       {availableMonths.length > 0 && (
         <MonthNav selectedMonth={selectedMonth} availableMonths={availableMonths} onChange={setSelectedMonth}
-          canDelete={canDeleteSnapshot} onDelete={handleDeleteSnapshot} deleting={deletingSnapshot} />
+          canDelete={canDeleteSnapshot} onDelete={handleDeleteSnapshot} deleting={deletingSnapshot}
+          canRecalc={!isCurrentMonth} onRecalc={handleRecalcSnapshot} recalculating={recalcing} />
+      )}
+
+      {recalcInfo && (
+        <div className={`border rounded-xl px-4 py-3 text-xs ${recalcInfo.monthCoverageComplete
+          ? 'bg-green-50 dark:bg-green-900/10 border-green-200 dark:border-green-800 text-green-800 dark:text-green-300'
+          : 'bg-amber-50 dark:bg-amber-900/10 border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300'}`}>
+          <strong>{monthLabel(recalcInfo.month)} recalculado:</strong>{' '}
+          {recalcInfo.postsThisMonth} {recalcInfo.postsThisMonth === 1 ? 'post' : 'posts'} de ese mes
+          {recalcInfo.engagementRate != null && ` · engagement ${recalcInfo.engagementRate}%`}.
+          {recalcInfo.postsThisMonth === 0 && ' El scrape no llegó hasta ese mes (trae los posts más recientes) o la página no posteó.'}
+          {!recalcInfo.monthCoverageComplete && ' Puede haber quedado corto: subí el tope de posts en SuperAdmin → Configuración y volvé a recalcular.'}
+          {recalcInfo.followersSource === 'snapshot' && ' Los seguidores se conservaron del snapshot original.'}
+          {recalcInfo.followersSource === 'log' && ' Los seguidores se tomaron del último registro diario de ese mes.'}
+          {recalcInfo.followersSource === 'scrape' && ' ⚠️ No había seguidores guardados de ese mes, así que quedaron los de hoy.'}
+        </div>
       )}
 
       {displayData && (

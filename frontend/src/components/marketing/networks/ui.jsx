@@ -1,6 +1,6 @@
 import SocialIcon from '../SocialIcon'
 import { fmtK, fmtNum, monthLabel } from './format'
-import { Trash2 } from 'lucide-react'
+import { Trash2, RefreshCw } from 'lucide-react'
 import { Icon } from '../../ui/Icon'
 
 // Primitivas visuales compartidas por las pestañas de redes y anuncios.
@@ -63,7 +63,13 @@ export function LineChart({ data, valueAccessor, labelAccessor, label, color = '
   return <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-5">{chart}</div>
 }
 
-export function MonthNav({ selectedMonth, availableMonths, onChange, canDelete, onDelete, deleting }) {
+/**
+ * Navegación por mes de las pestañas de redes. `canRecalc`/`onRecalc`/`recalculating`
+ * son opcionales (hoy solo los pasa Facebook): habilitan volver a traer los datos de un
+ * mes ya cerrado, que de otra forma solo se pueden mirar como snapshot — el botón
+ * "Actualizar" de cada tab siempre pide el mes en curso.
+ */
+export function MonthNav({ selectedMonth, availableMonths, onChange, canDelete, onDelete, deleting, canRecalc, onRecalc, recalculating }) {
   const idx = availableMonths.indexOf(selectedMonth)
   const canPrev = idx < availableMonths.length - 1
   const canNext = idx > 0
@@ -77,6 +83,12 @@ export function MonthNav({ selectedMonth, availableMonths, onChange, canDelete, 
         {isCurrentMonth
           ? <span className="text-[10px] bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400 px-2 py-0.5 rounded-full font-medium">En vivo</span>
           : <span className="text-[10px] bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 px-2 py-0.5 rounded-full font-medium">Snapshot</span>}
+        {canRecalc && (
+          <button onClick={onRecalc} disabled={recalculating} title="Volver a traer los datos de este mes"
+            className="text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 disabled:opacity-40 transition-colors text-sm leading-none">
+            {recalculating ? '…' : <Icon as={RefreshCw} size={14} />}
+          </button>
+        )}
         {canDelete && (
           <button onClick={onDelete} disabled={deleting} title="Borrar el snapshot de este mes"
             className="text-gray-400 hover:text-red-500 dark:hover:text-red-400 disabled:opacity-40 transition-colors text-sm leading-none">

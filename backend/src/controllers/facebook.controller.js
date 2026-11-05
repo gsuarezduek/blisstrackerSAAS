@@ -219,6 +219,13 @@ async function getSnapshots(req, res, next) {
 /**
  * POST /api/marketing/projects/:id/facebook/snapshots
  * Body: { month?: "YYYY-MM" }
+ * Recalcula (o crea) el snapshot de un mes. Es el único camino para traer los datos
+ * de un mes ya cerrado: el botón "Actualizar" de la tab siempre pide el mes en curso.
+ * Con un mes pasado se preservan los seguidores / "me gusta" históricos (son stock, no
+ * están fechados — ver `pickHistoricalStock`); lo que se recalcula son los posts y el
+ * engagement, que sí van fechados. Cuánto llega hacia atrás depende del tope de posts
+ * del scrape (`apifyFacebookPostsLimit`): `monthCoverageComplete:false` avisa que pudo
+ * quedar corto.
  */
 async function saveSnapshot(req, res, next) {
   try {
@@ -226,13 +233,26 @@ async function saveSnapshot(req, res, next) {
     const workspaceId = req.workspace.id
     const month       = req.body.month || currentMonthStr()
 
+    if (!/^\d{4}-\d{2}$/.test(month)) return res.status(400).json({ error: 'Mes inválido (YYYY-MM)' })
+    if (month > currentMonthStr())     return res.status(400).json({ error: 'No se puede pedir un mes futuro.' })
+
     const project = await prisma.project.findFirst({
       where: { id: projectId, workspaceId }, select: { id: true },
     })
     if (!project) return res.status(404).json({ error: 'Proyecto no encontrado' })
 
-    await saveFacebookSnapshot(projectId, workspaceId, month)
-    res.json({ ok: true, month })
+    const isPast = month !== currentMonthStr()
+    const { metrics, followersSource } = await saveFacebookSnapshot(projectId, workspaceId, month, null, { preserveStock: isPast })
+
+    res.json({
+      ok:    true,
+      month,
+      followersSource,                                      // snapshot | log | scrape | live
+      followersCount:        metrics.followersCount ?? null, // el que trajo la fuente en vivo (informativo)
+      postsThisMonth:        metrics.postsThisMonth ?? 0,
+      engagementRate:        metrics.engagementRate ?? null,
+      monthCoverageComplete: metrics.monthCoverageComplete !== false,
+    })
   } catch (err) { next(err) }
 }
 

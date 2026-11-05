@@ -34,10 +34,33 @@ function snapshotData(metrics) {
 }
 
 /**
+ * Resuelve los valores de **stock** (seguidores y "me gusta" de la página) de un mes
+ * ya cerrado. Son los únicos datos del snapshot que NO están fechados: un scrape de
+ * hoy devuelve los seguidores de hoy, así que recalcular octubre en noviembre dejaría
+ * el snapshot de octubre con el número de noviembre y el crecimiento mensual mentiría.
+ * Los posts/engagement sí van fechados (se filtran por mes) y se recalculan sin riesgo.
+ * Orden de preferencia: lo que ya tenía el snapshot → el último registro diario de
+ * seguidores de ese mes → lo que trajo el scrape (único dato disponible).
+ * Función pura: las dos primeras fuentes las consulta el caller.
+ */
+function pickHistoricalStock({ existing, lastLog, metrics }) {
+  if (existing?.followersCount != null) {
+    return { followersCount: existing.followersCount, fanCount: existing.fanCount ?? metrics.fanCount ?? null, followersSource: 'snapshot' }
+  }
+  if (lastLog?.followersCount != null) {
+    return { followersCount: lastLog.followersCount, fanCount: existing?.fanCount ?? metrics.fanCount ?? null, followersSource: 'log' }
+  }
+  return { followersCount: metrics.followersCount ?? 0, fanCount: metrics.fanCount ?? null, followersSource: 'scrape' }
+}
+
+/**
  * Guarda un snapshot de Facebook para un proyecto y mes.
  * Si se pasan métricas pre-fetcheadas, no consulta la API/scraping.
+ * `opts.preserveStock` (recálculo de un mes ya cerrado): conserva los seguidores /
+ * "me gusta" históricos en vez de pisarlos con los de hoy — ver `pickHistoricalStock`.
+ * @returns {{ metrics, followersSource: 'snapshot'|'log'|'scrape'|'live' }}
  */
-async function saveFacebookSnapshot(projectId, workspaceId, month, preloaded = null) {
+async function saveFacebookSnapshot(projectId, workspaceId, month, preloaded = null, opts = {}) {
   let metrics = preloaded
   if (!metrics) {
     const integration = await prisma.projectIntegration.findUnique({
@@ -61,13 +84,33 @@ async function saveFacebookSnapshot(projectId, workspaceId, month, preloaded = n
   const topPostsCached = await cacheImagesInArray(metrics.topPosts ?? [], 'imgSrc', workspaceId)
   const data = snapshotData({ ...metrics, topPosts: topPostsCached })
 
+  let followersSource = 'live'
+  if (opts.preserveStock) {
+    const [existing, lastLog] = await Promise.all([
+      prisma.facebookSnapshot.findUnique({
+        where:  { projectId_month: { projectId, month } },
+        select: { followersCount: true, fanCount: true },
+      }),
+      prisma.facebookFollowerLog.findFirst({
+        where:   { projectId, date: { startsWith: month } },
+        orderBy: { date: 'desc' },
+        select:  { followersCount: true },
+      }),
+    ])
+    const stock = pickHistoricalStock({ existing, lastLog, metrics })
+    data.followersCount = stock.followersCount
+    data.fanCount       = stock.fanCount
+    followersSource     = stock.followersSource
+  }
+
   await prisma.facebookSnapshot.upsert({
     where:  { projectId_month: { projectId, month } },
     update: data,
     create: { projectId, workspaceId, month, ...data },
   })
 
-  console.log(`[FacebookSnapshot] Guardado para proyecto ${projectId}, mes ${month}: ${metrics.followersCount} seguidores`)
+  console.log(`[FacebookSnapshot] Guardado para proyecto ${projectId}, mes ${month}: ${data.followersCount} seguidores (origen: ${followersSource}), ${data.postsThisMonth ?? 0} posts`)
+  return { metrics, followersSource }
 }
 
 /**
@@ -94,4 +137,4 @@ async function saveAllMonthlyFacebookSnapshots() {
   }
 }
 
-module.exports = { saveFacebookSnapshot, saveAllMonthlyFacebookSnapshots }
+module.exports = { saveFacebookSnapshot, saveAllMonthlyFacebookSnapshots, pickHistoricalStock }
