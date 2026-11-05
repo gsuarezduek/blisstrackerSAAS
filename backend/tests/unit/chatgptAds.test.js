@@ -205,6 +205,32 @@ describe('fetchChatGptAdsData', () => {
     expect(axios.get).not.toHaveBeenCalled()
   })
 
+  // Esta es la regresión de un bug real que llegó a producción: los tests miraban el
+  // OBJETO `params` (donde la clave 'fields[]' está bien escrita) y no la URL que
+  // axios termina armando. Con `paramsSerializer: { indexes: null }`, axios le saca
+  // los corchetes a las claves de valor array y manda `fields=a&fields=b`, que la API
+  // rechaza con "Duplicate parameter: 'fields'". Se verifica con el axios REAL.
+  test('los arrays viajan como fields[]=…, no como fields=… repetido', async () => {
+    mockAds({ totals: [{ impressions: 1, clicks: 0, spend: 0, ctr: 0 }] })
+    await fetchChatGptAdsData(integration, 'this_month')
+
+    const realAxios = jest.requireActual('axios')
+    const insightsCalls = axios.get.mock.calls.filter(([u]) => u.endsWith('/ad_account/insights'))
+    expect(insightsCalls.length).toBeGreaterThan(0)
+
+    for (const [, opts] of insightsCalls) {
+      const url = decodeURIComponent(realAxios.getUri({
+        url: '/insights', params: opts.params, paramsSerializer: opts.paramsSerializer,
+      }))
+      expect(url).toContain('fields[]=impressions')
+      expect(url).toContain('fields[]=clicks')
+      // Sin corchetes la API responde "Duplicate parameter".
+      expect(url).not.toMatch(/[?&]fields=/)
+      // Los objetos JSON van en una sola clave con corchetes.
+      expect(url).toMatch(/time_ranges\[\]=\{"type":"date_range"/)
+    }
+  })
+
   test('un rango explícito gana sobre el preset (lo usan el snapshot y el informe)', async () => {
     mockAds({ totals: [{ impressions: 1, clicks: 0, spend: 0, ctr: 0 }] })
     await fetchChatGptAdsData(integration, 'this_month', { startDate: '2026-09-01', endDate: '2026-09-30' })

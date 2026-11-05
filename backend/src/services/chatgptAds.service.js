@@ -131,7 +131,13 @@ async function adsGet(apiKey, path, params, context) {
       params,
       // Arrays como `fields[]=a&fields[]=b` y objetos JSON ya serializados como
       // string — exactamente el formato de los ejemplos de la doc.
-      paramsSerializer: { indexes: null },
+      //
+      // `indexes: false` y NO `null`: con `null`, axios le SACA los `[]` a una clave
+      // cuyo valor es un array (manda `fields=a&fields=b`) y la API lo rechaza con
+      // "Duplicate parameter: 'fields'". Con `false` quedan los corchetes, que es lo
+      // que pide. Las claves de valor string (`time_ranges[]`, `sort[]`) no pasan por
+      // ese camino y conservan los corchetes igual. Ver el test de serialización.
+      paramsSerializer: { indexes: false },
       timeout: 30_000,
     })
     return data
