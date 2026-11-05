@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
+import { matchesSearch } from '../../utils/textSearch'
 
 const norm = s => (s || '').toLowerCase()
 const byName = (a, b) => norm(a.name).localeCompare(norm(b.name), 'es', { sensitivity: 'base' })
@@ -42,7 +43,7 @@ export default function ProjectSearchSelect({
   const selected = projects.find(p => String(p.id) === value)
 
   const filtered = search.trim()
-    ? projects.filter(p => p.name.toLowerCase().includes(search.toLowerCase()))
+    ? projects.filter(p => matchesSearch(p.name, search))
     : projects
 
   const groups = useMemo(() => {

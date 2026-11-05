@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { avatarUrl } from '../../utils/avatarUrl'
 import { Handshake } from 'lucide-react'
 import { Icon } from '../ui/Icon'
+import { matchesSearch } from '../../utils/textSearch'
 
 // Mismo patrón visual/interacción que PersonSearchSelect.jsx (Calendario):
 // botón con avatar + nombre que despliega buscador + lista — a diferencia de
@@ -27,7 +28,7 @@ export default function ContentOwnerSelect({ members = [], clientContacts = [], 
 
   const groups = useMemo(() => {
     const q = query.trim().toLowerCase()
-    const matchesQuery = name => !q || name.toLowerCase().includes(q)
+    const matchesQuery = name => !q || matchesSearch(name, q)
     return {
       contacts: clientContacts.filter(c => matchesQuery(c.name)),
       team:     active.filter(m => m.inTeam && matchesQuery(m.name)),

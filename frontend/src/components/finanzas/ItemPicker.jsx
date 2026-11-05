@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { Plus } from 'lucide-react'
 import { Icon } from '../ui/Icon'
 import api from '../../api/client'
+import { matchesSearch } from '../../utils/textSearch'
 
 const input = 'w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500'
 
@@ -32,7 +33,7 @@ export default function ItemPicker({ type, items, categories, value, onChange })
   const matches = items.filter(i =>
     i.active !== false
     && (i.category?.type === type || i.id === value)
-    && i.name.toLowerCase().includes(query.toLowerCase()))
+    && matchesSearch(i.name, query))
 
   function pick(item) {
     onChange(item)

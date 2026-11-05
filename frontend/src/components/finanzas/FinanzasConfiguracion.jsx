@@ -11,6 +11,7 @@ import TaxModal from './TaxModal'
 import IssuerModal from './IssuerModal'
 import ItemModal from './ItemModal'
 import FinanceAuditLogPanel from './FinanceAuditLogPanel'
+import { matchesSearch } from '../../utils/textSearch'
 
 const input = 'border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500'
 
@@ -240,7 +241,7 @@ function ItemsPanel({ items, categories, onChanged }) {
   const [toDelete, setToDelete] = useState(null)
   const [deleting, setDeleting] = useState(false)
 
-  const filtered = items.filter(i => i.name.toLowerCase().includes(search.toLowerCase()))
+  const filtered = items.filter(i => matchesSearch(i.name, search))
 
   async function handleDelete() {
     setDeleting(true)

@@ -5,6 +5,7 @@ import { avatarUrl } from '../utils/avatarUrl'
 import { useAuth } from '../context/AuthContext'
 import { Lock, LockOpen, Handshake, AtSign, MessageSquare, Eye, Bell, Check, TriangleAlert, Trash2, Plus, Briefcase, CalendarDays, Smartphone, Hand, Palmtree, Trophy, Pencil, UserRound, Bot, Play } from 'lucide-react'
 import { Icon } from './ui/Icon'
+import { matchesSearch } from '../utils/textSearch'
 
 // Cada filtro define un predicado `match`. Un filtro `muted` no destaca: no suma al
 // badge de la campana ni muestra badge en su icono (son informativos / de fondo).
@@ -58,7 +59,7 @@ export default function NotificationBell() {
     let list = notifications.filter(n => activeFilterObj.match(n))
     if (activeFilterObj.key === 'COMPLETED' && projectQuery.trim()) {
       const q = projectQuery.trim().toLowerCase()
-      list = list.filter(n => n.project?.name?.toLowerCase().includes(q))
+      list = list.filter(n => matchesSearch(n.project?.name, q))
     }
     return list
   }, [notifications, activeFilterObj, projectQuery])

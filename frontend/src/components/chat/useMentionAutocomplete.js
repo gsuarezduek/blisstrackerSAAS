@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react'
+import { matchesSearch } from '../../utils/textSearch'
 
 // Autocompletado de @menciones para el input del chat — mismo patrón que ya usa
 // TaskCommentsModal.jsx (sin librería externa), generalizado para recibir
@@ -9,7 +10,7 @@ export function useMentionAutocomplete({ text, setText, textareaRef, members }) 
   const [mentionIdx, setMentionIdx] = useState(0)
 
   const mentionMatches = mentionQuery !== null
-    ? members.filter(m => m.name.toLowerCase().includes(mentionQuery.toLowerCase())).slice(0, 8)
+    ? members.filter(m => matchesSearch(m.name, mentionQuery)).slice(0, 8)
     : []
 
   const selectMention = useCallback((member) => {

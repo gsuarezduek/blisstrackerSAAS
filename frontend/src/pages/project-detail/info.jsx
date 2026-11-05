@@ -4,6 +4,7 @@ import ProjectPrivacyToggle from '../../components/ProjectPrivacyToggle'
 import UserLink from '../../components/UserLink'
 import { avatarUrl } from '../../utils/avatarUrl'
 import RoleBadge from '../../components/RoleBadge'
+import { matchesSearch } from '../../utils/textSearch'
 
 // Pestaña "Ajustes" — configuración del proyecto: servicios, equipo, portal del
 // cliente y datos del proyecto (sitio web, redes). Links y accesos viven en su
@@ -179,7 +180,7 @@ export function TeamModal({
             {teamQuery && (() => {
               const currentIds = new Set(data.project.members.map(pm => pm.user.id))
               const suggestions = allUsers.filter(u =>
-                !currentIds.has(u.id) && u.name.toLowerCase().includes(teamQuery.toLowerCase())
+                !currentIds.has(u.id) && matchesSearch(u.name, teamQuery)
               )
               return (
                 <div className="absolute left-0 right-0 top-full mt-1 z-10 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-xl shadow-lg overflow-hidden max-h-52 overflow-y-auto">

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import useMembers from '../../hooks/useMembers'
 import { useAuth } from '../../context/AuthContext'
 import { avatarUrl } from '../../utils/avatarUrl'
+import { matchesSearch } from '../../utils/textSearch'
 
 /**
  * Buscador/selector de UNA persona — a diferencia de PeoplePicker (multi-select
@@ -29,7 +30,7 @@ export default function PersonSearchSelect({ value, onChange }) {
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
-    const base = q ? active.filter(m => m.name.toLowerCase().includes(q)) : active
+    const base = q ? active.filter(m => matchesSearch(m.name, q)) : active
     // "Mi calendario" siempre primero en la lista, sin importar la búsqueda
     const mine = base.filter(m => m.id === user.id)
     const rest = base.filter(m => m.id !== user.id)

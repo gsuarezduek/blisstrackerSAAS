@@ -8,6 +8,7 @@ const { computeObjectives } = require('../../services/marketingObjectives.servic
 const { todayString, DEFAULT_TZ } = require('../../utils/dates')
 const { tzOffsetStr } = require('../../lib/timeMetrics')
 const { monthBounds, monthLabel, prevMonthStr, rangeLabel, monthsInRange } = require('../../lib/monthUtils')
+const { buildTextSearchFilters } = require('../../lib/textSearch')
 
 // Rango de fechas real del período de datos del informe (espejo de monthlyReport.controller).
 function reportPeriodDates(report) {
@@ -70,7 +71,7 @@ async function getReportsSummary(req, res, next) {
     const baseWhere = { workspaceId, month, ...GENERATED_REPORT_WHERE, project: { active: true } }
     const where = {
       ...baseWhere,
-      ...(search        ? { project: { active: true, name: { contains: search, mode: 'insensitive' } } } : {}),
+      ...(search        ? { AND: buildTextSearchFilters(search, p => ({ project: { name: p } })) } : {}),
       ...(generatedById  ? { generatedById } : {}),
     }
 

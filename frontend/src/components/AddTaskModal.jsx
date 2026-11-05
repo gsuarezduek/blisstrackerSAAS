@@ -9,6 +9,7 @@ import { useTaskFileUpload, MAX_FILE_BYTES, fmtMb } from './taskFileUpload'
 import { fmtBytes, iconFor } from '../lib/fileIcons'
 import { TriangleAlert, Lightbulb, Paperclip, Repeat, CalendarDays } from 'lucide-react'
 import { Icon } from './ui/Icon'
+import { matchesSearch } from '../utils/textSearch'
 
 const MONTH_NAMES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
 
@@ -29,7 +30,7 @@ function ProjectCombobox({ projects, value, onChange, userId }) {
 
   const filtered = query.trim() === ''
     ? projects
-    : projects.filter(p => p.name.toLowerCase().includes(query.toLowerCase()))
+    : projects.filter(p => matchesSearch(p.name, query))
 
   // Agrupar en Favoritos → Mis proyectos (soy del equipo) → Otros, respetando el filtro.
   const groups = useMemo(() => {
@@ -162,7 +163,7 @@ export default function AddTaskModal({ onAdd, onClose, lockedProject, defaultPro
   const [mentionStart, setMentionStart] = useState(-1)
   const [mentionIdx, setMentionIdx] = useState(0)
   const mentionMatches = mentionQuery !== null
-    ? members.filter(m => m.name.toLowerCase().includes(mentionQuery.toLowerCase()))
+    ? members.filter(m => matchesSearch(m.name, mentionQuery))
     : []
 
   // Opciones de tarea recurrente / futura (mutuamente excluyentes con la tarea normal)

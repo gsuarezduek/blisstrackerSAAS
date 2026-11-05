@@ -11,6 +11,7 @@ const { isDangerousMime } = require('../../lib/dangerousMime')
 const { assertConversation } = require('./_shared')
 const { requestAgentId, requestAgentName, assertOwnAgent } = require('../tasks/_shared')
 const { formatAgentName } = require('../../lib/agentTasks')
+const { buildTextSearchFilters } = require('../../lib/textSearch')
 
 const MESSAGE_PAGE_SIZE = 50
 const SESSION_WINDOW_MS = 24 * 60 * 60 * 1000
@@ -93,13 +94,13 @@ async function listConversations(req, res, next) {
         isBlocked: showBlocked,
         ...agentFilter,
         ...(q ? {
-          OR: [
-            { contactName: { contains: q, mode: 'insensitive' } },
-            { phoneE164: { contains: q, mode: 'insensitive' } },
-            { contact: { name: { contains: q, mode: 'insensitive' } } },
-            { contact: { company: { name: { contains: q, mode: 'insensitive' } } } },
-            { messages: { some: { content: { contains: q, mode: 'insensitive' } } } },
-          ],
+          AND: buildTextSearchFilters(q, [
+            'contactName',
+            'phoneE164',
+            p => ({ contact: { name: p } }),
+            p => ({ contact: { company: { name: p } } }),
+            p => ({ messages: { some: { content: p } } }),
+          ]),
         } : {}),
       },
       orderBy: [{ pinnedAt: { sort: 'desc', nulls: 'last' } }, { lastMessageAt: 'desc' }],

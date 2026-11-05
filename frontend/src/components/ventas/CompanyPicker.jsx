@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
+import { matchesSearch } from '../../utils/textSearch'
 
 const inputClass = 'w-full px-3 py-2 text-sm rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-400'
 
@@ -26,7 +27,7 @@ export default function CompanyPicker({ companies, value, onChange, placeholder 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
     if (!q) return companies
-    return companies.filter(c => c.name.toLowerCase().includes(q))
+    return companies.filter(c => matchesSearch(c.name, q))
   }, [companies, query])
 
   useEffect(() => { setActiveIndex(0) }, [query, open])

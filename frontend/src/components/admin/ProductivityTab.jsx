@@ -12,6 +12,7 @@ import { Bot, Clock, Palmtree, Pencil, Search, X } from 'lucide-react'
 import { Icon } from '../ui/Icon'
 import { fmtHours } from '../../utils/format'
 import AgentsBlock from '../productivity/AgentsBlock'
+import { matchesSearch } from '../../utils/textSearch'
 
 // Arma los query params de período para cualquier request de Productividad, a partir del
 // modo elegido en PeriodSelector. `customRange` solo importa cuando mode === 'custom'.
@@ -784,7 +785,7 @@ function ByPersonView({ data, loading, setData, mode, customRange }) {
     const q = query.trim().toLowerCase()
     const filtered = data.members.filter(m =>
       (!filter || m.status === filter) &&
-      (!q || m.name.toLowerCase().includes(q))
+      (!q || matchesSearch(m.name, q))
     )
     return [...filtered].sort((a, b) => {
       const va = sortValue(a, sortBy), vb = sortValue(b, sortBy)

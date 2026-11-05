@@ -11,6 +11,7 @@ const objectStorage = require('../services/objectStorage.service')
 const { safeContentDisposition } = require('../lib/contentDisposition')
 const { isDangerousMime } = require('../lib/dangerousMime')
 const { shapeItem, buildPath, signedUrlForFile } = require('./projects/projectFiles.controller')
+const { buildTextSearchFilters } = require('../lib/textSearch')
 
 // Mismo refuerzo que aplican los dos `download` de acá: un link público no
 // tiene auth, así que nunca se firma `inline` para un tipo que el navegador
@@ -118,7 +119,7 @@ async function searchSharedFolder(req, res, next) {
     const candidates = await prisma.projectFile.findMany({
       where: {
         projectId: root.projectId, deletedAt: null,
-        name: { contains: q, mode: 'insensitive' },
+        AND: buildTextSearchFilters(q, 'name'),
         OR: [{ type: 'folder' }, { type: 'file', status: 'ready' }],
         id: { not: root.id },
       },

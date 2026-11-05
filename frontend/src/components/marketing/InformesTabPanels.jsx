@@ -9,6 +9,7 @@ import {
   StarBadge, SearchInput, StatCard, StarRow, objPctBand,
   monthLabel, prevMonthStr,
 } from './InformesTabParts'
+import { matchesSearch } from '../../utils/textSearch'
 
 function ReportsStatsCards({ stats }) {
   if (!stats) return null
@@ -201,7 +202,7 @@ export function LiveObjectivesPanel({ onSelectProject, projects = [] }) {
   const visibleProjects = useMemo(() => {
     const list = data?.projects ?? []
     const q = search.trim().toLowerCase()
-    const filtered = q ? list.filter(p => p.projectName.toLowerCase().includes(q)) : list
+    const filtered = q ? list.filter(p => matchesSearch(p.projectName, q)) : list
     const starred = filtered.filter(p => starredIds.has(p.projectId))
     const rest    = filtered.filter(p => !starredIds.has(p.projectId))
     return [...starred, ...rest]

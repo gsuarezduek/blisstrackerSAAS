@@ -11,6 +11,7 @@ const objectStorage = require('../services/objectStorage.service')
 const { validateImageUpload } = require('../lib/imageType')
 const { getEffectiveCategoryLimitMb } = require('../lib/storageBudget')
 const { isDangerousMime } = require('../lib/dangerousMime')
+const { buildTextSearchFilters } = require('../lib/textSearch')
 
 const MESSAGE_PAGE_SIZE = 50
 
@@ -317,7 +318,7 @@ async function searchMessages(req, res, next) {
     if (!await assertChannelAccess(req, res, channel)) return
 
     const messages = await prisma.chatMessage.findMany({
-      where: { channelId, content: { contains: q, mode: 'insensitive' } },
+      where: { channelId, AND: buildTextSearchFilters(q, 'content') },
       include: MESSAGE_INCLUDE,
       orderBy: { id: 'desc' },
       take: limit,

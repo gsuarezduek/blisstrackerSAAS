@@ -6,6 +6,7 @@ import { useFeatureFlag } from '../hooks/useFeatureFlag'
 import useNavDestinations from '../hooks/useNavDestinations'
 import { useChat } from '../context/ChatContext'
 import { useTheme } from '../context/ThemeContext'
+import { searchIndexOf, normalizeText } from '../utils/textSearch'
 
 // Buscador global (Cmd/Ctrl+K) — navegación estática (fuzzy-match client-side
 // contra useNavDestinations), proyectos y personas del equipo (fuzzy-match client-side:
@@ -24,8 +25,12 @@ import { useTheme } from '../context/ThemeContext'
 // de Contenido, reuniones de Calendario y archivos de proyecto — el backend ya filtra
 // por flag/acceso de módulo, así que acá solo se renderea lo que llega.
 // Overlay/backdrop calcado del modal de ayuda de GlobalShortcuts.jsx.
+// Punto único por donde pasa TODO el filtrado local de la palette (destinos de
+// navegación, proyectos, personas, servicios, roles, acciones y canales de chat).
+// `searchIndexOf` ignora mayúsculas Y tildes: buscar "perez" encuentra a "Pérez".
+// Devuelve la posición porque los grupos ordenan por qué tan al principio matcheó.
 function scoreMatch(label, q) {
-  const idx = label.toLowerCase().indexOf(q)
+  const idx = searchIndexOf(label, q)
   return idx === -1 ? null : idx
 }
 
@@ -107,7 +112,7 @@ export default function CommandPalette({ open, onClose }) {
   }, [open, isAdmin])
 
   const navMatches = useMemo(() => {
-    const q = query.trim().toLowerCase()
+    const q = normalizeText(query.trim())
     if (!q) return []
     return destinations
       .map(d => ({ ...d, type: 'nav', score: scoreMatch(d.label, q) }))
@@ -120,7 +125,7 @@ export default function CommandPalette({ open, onClose }) {
   // directo a Contenido/Marketing filtrado por ese proyecto (?projectId=) — evita
   // tener que entrar primero a la ficha del proyecto para llegar a esas secciones.
   const projectMatches = useMemo(() => {
-    const q = query.trim().toLowerCase()
+    const q = normalizeText(query.trim())
     if (!q) return []
     const top = projects
       .map(p => ({ ...p, score: scoreMatch(p.name, q) }))
@@ -143,7 +148,7 @@ export default function CommandPalette({ open, onClose }) {
   }, [projects, query, canJumpToMarketing, canJumpToContenido])
 
   const memberMatches = useMemo(() => {
-    const q = query.trim().toLowerCase()
+    const q = normalizeText(query.trim())
     if (!q) return []
     return members
       .map(m => ({ id: `member-${m.id}`, type: 'member', label: m.name, to: `/users/${m.id}`, score: scoreMatch(m.name, q) }))
@@ -153,7 +158,7 @@ export default function CommandPalette({ open, onClose }) {
   }, [members, query])
 
   const adminMatches = useMemo(() => {
-    const q = query.trim().toLowerCase()
+    const q = normalizeText(query.trim())
     if (!q) return []
     const svc = services.map(sv => ({ id: `service-${sv.id}`, type: 'service', label: sv.name, to: '/admin?tab=services', score: scoreMatch(sv.name || '', q) }))
     const rol = roles.map(r => ({ id: `role-${r.id}`, type: 'role', label: r.label || r.name, to: '/admin?tab=roles', score: scoreMatch(r.label || r.name || '', q) }))
@@ -174,7 +179,7 @@ export default function CommandPalette({ open, onClose }) {
   ].map(a => ({ ...a, type: 'action' })), [canScheduleMeeting, dark, toggleTheme])
 
   const actionMatches = useMemo(() => {
-    const q = query.trim().toLowerCase()
+    const q = normalizeText(query.trim())
     if (!q) return actions // sin query se listan todas como sugerencia
     return actions
       .map(a => ({ ...a, score: scoreMatch(`${a.label} ${a.keywords}`, q) }))
@@ -184,7 +189,7 @@ export default function CommandPalette({ open, onClose }) {
 
   // Canales: los que tienen menciones/no leídos suben ante empate de score.
   const channelMatches = useMemo(() => {
-    const q = query.trim().toLowerCase()
+    const q = normalizeText(query.trim())
     if (!q) return []
     return channels
       .map(c => ({

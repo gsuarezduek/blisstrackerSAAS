@@ -8,6 +8,7 @@ import { AvatarStack } from './project-detail/ui'
 import { FolderOpen, Plus, Lock } from 'lucide-react'
 import { Icon } from '../components/ui/Icon'
 import NewProjectModal from '../components/NewProjectModal'
+import { matchesSearch } from '../utils/textSearch'
 
 // ─── Iconos de integraciones ─────────────────────────────────────────────────
 
@@ -223,7 +224,7 @@ export default function MyProjects() {
 
   const filtered = sortProjects(
     projects.filter(p => {
-      if (!p.name.toLowerCase().includes(search.toLowerCase())) return false
+      if (!matchesSearch(p.name, search)) return false
       if (filterService && !(p.services ?? []).some(ps => String(ps.service.id) === filterService)) return false
       if (filterPerson  && !(p.members  ?? []).some(pm => String(pm.user.id)    === filterPerson))  return false
       return true

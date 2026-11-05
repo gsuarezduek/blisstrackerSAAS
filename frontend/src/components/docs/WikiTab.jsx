@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react'
 import { WIKI_CATEGORIES, ALL_ARTICLES, findArticle, WIKI_LAST_UPDATED } from '../../data/wikiContent'
 import { renderWikiMarkdown } from './wikiMarkdown'
+import { matchesAnyField } from '../../utils/textSearch'
 
 const MODULE_LABELS = {
   marketing: 'Módulo Marketing', eos: 'Módulo EOS', contenido: 'Módulo Contenido',
@@ -147,10 +148,7 @@ export default function WikiTab({ articleId, onSelect }) {
     const q = query.trim().toLowerCase()
     if (!q) return null
     return ALL_ARTICLES.filter(a =>
-      a.title.toLowerCase().includes(q) ||
-      a.summary.toLowerCase().includes(q) ||
-      a.body.toLowerCase().includes(q) ||
-      a.categoryLabel.toLowerCase().includes(q)
+      matchesAnyField([a.title, a.summary, a.body, a.categoryLabel], q)
     )
   }, [query])
 

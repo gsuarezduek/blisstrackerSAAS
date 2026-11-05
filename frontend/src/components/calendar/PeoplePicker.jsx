@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import useMembers from '../../hooks/useMembers'
 import { avatarUrl } from '../../utils/avatarUrl'
+import { matchesSearch } from '../../utils/textSearch'
 
 /**
  * Multi-select de miembros del workspace: input de búsqueda + lista de
@@ -26,7 +27,7 @@ export default function PeoplePicker({ value, onChange, excludeIds = [], placeho
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
     if (!q) return selectable
-    return selectable.filter(m => m.name.toLowerCase().includes(q))
+    return selectable.filter(m => matchesSearch(m.name, q))
   }, [selectable, query])
 
   const selectedMembers = useMemo(() => selectable.filter(m => selected.has(m.id)), [selectable, selected])

@@ -49,10 +49,24 @@ function accentVariants(word) {
   return [...out]
 }
 
+// Normaliza la forma de declarar los campos a buscar. Un campo puede ser:
+//   - el nombre de una columna: 'description'
+//   - una función que recibe el patrón y devuelve el fragmento de where, para los
+//     campos de una relación: p => ({ company: { name: p } })
+// Así un solo helper cubre tanto "buscá en el título" como "buscá en el título, en el
+// nombre de la empresa o en algún mensaje de la conversación".
+function toPlacers(fields) {
+  return (Array.isArray(fields) ? fields : [fields]).map(field =>
+    typeof field === 'function' ? field : (pattern => ({ [field]: pattern }))
+  )
+}
+
 /**
- * Filtro de Prisma para buscar `q` en un campo de texto: las palabras se combinan
- * con AND (pueden estar en cualquier orden y con cualquier cosa en el medio) y cada
- * palabra tolera tildes.
+ * Filtro de Prisma para buscar `q` en uno o varios campos de texto: las palabras se
+ * combinan con AND (pueden estar en cualquier orden y con cualquier cosa en el medio),
+ * cada palabra tolera tildes, y con varios campos cada palabra puede aparecer en
+ * cualquiera de ellos ("acme propuesta" encuentra un lead titulado "Propuesta" de la
+ * empresa "ACME").
  *
  * Devuelve un array de condiciones para poner en un `AND`, o null si no hay nada
  * que buscar. El caller decide dónde enchufarlo.
@@ -60,9 +74,14 @@ function accentVariants(word) {
  *   buildTextSearchFilters('aprobacion posteos', 'description')
  *   → [{ OR: [{ description: { contains: 'aprobacion', mode: 'insensitive' } }, …] },
  *      { OR: [{ description: { contains: 'posteos',    mode: 'insensitive' } }, …] }]
+ *
+ *   buildTextSearchFilters('acme', ['title', p => ({ company: { name: p } })])
+ *   → [{ OR: [{ title: {…} }, { company: { name: {…} } }, …] }]
  */
-function buildTextSearchFilters(q, field) {
+function buildTextSearchFilters(q, fields) {
   if (typeof q !== 'string' || !q.trim()) return null
+  const placers = toPlacers(fields)
+  const pattern = value => ({ contains: value, mode: 'insensitive' })
 
   const words = q.trim().split(/\s+/)
     .filter(w => w.length >= MIN_WORD && w.length <= MAX_WORD_LEN)
@@ -71,12 +90,23 @@ function buildTextSearchFilters(q, field) {
   // Sin palabras útiles (ej. "a 1") se busca la frase tal cual: mejor eso que
   // devolver todo porque el filtro se evaporó.
   if (words.length === 0) {
-    return [{ [field]: { contains: q.trim(), mode: 'insensitive' } }]
+    const literal = pattern(q.trim())
+    return [{ OR: placers.map(place => place(literal)) }]
   }
 
   return words.map(word => ({
-    OR: accentVariants(word).map(variant => ({ [field]: { contains: variant, mode: 'insensitive' } })),
+    OR: accentVariants(word).flatMap(variant => placers.map(place => place(pattern(variant)))),
   }))
 }
 
-module.exports = { stripAccents, accentVariants, buildTextSearchFilters, MAX_WORDS }
+/**
+ * Igual que buildTextSearchFilters pero devuelve un único objeto listo para mezclar
+ * en un `where` (`{ AND: […] }`), o `null`. Azucar para los controllers que ya tienen
+ * su where armado y solo quieren sumarle la búsqueda.
+ */
+function textSearchWhere(q, fields) {
+  const filters = buildTextSearchFilters(q, fields)
+  return filters ? { AND: filters } : null
+}
+
+module.exports = { stripAccents, accentVariants, buildTextSearchFilters, textSearchWhere, MAX_WORDS }

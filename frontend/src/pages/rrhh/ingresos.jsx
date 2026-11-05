@@ -8,6 +8,7 @@ import { useWorkspace } from '../../context/WorkspaceContext'
 import { TZ, todayBA, todayStr, fmtDate, fmtTime, minutesFromMidnight, minsToTime } from './shared'
 import { Monitor, Pencil, Search, Smartphone, Tablet, Trash2, X } from 'lucide-react'
 import { Icon } from '../../components/ui/Icon'
+import { matchesSearch } from '../../utils/textSearch'
 
 const DEVICE_ICON  = { mobile: Smartphone, tablet: Tablet, desktop: Monitor }
 const DEVICE_LABEL = { mobile: 'Celular', tablet: 'Tablet', desktop: 'Computadora' }
@@ -176,7 +177,7 @@ export function TabIngresos({ users }) {
   const visibleByUser = useMemo(() => {
     const q = personSearch.trim().toLowerCase()
     if (!q) return byUser
-    return byUser.filter(({ user }) => user.name.toLowerCase().includes(q))
+    return byUser.filter(({ user }) => matchesSearch(user.name, q))
   }, [byUser, personSearch])
 
   return (

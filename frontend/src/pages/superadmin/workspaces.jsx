@@ -1,12 +1,13 @@
 import { useState } from 'react'
 import LoadingSpinner from '../../components/LoadingSpinner'
 import { StatusBadge, fmtTokens, fmtBytes } from './shared'
+import { matchesSearch } from '../../utils/textSearch'
 
 export function SectionWorkspaces({ workspaces, loading, onSelectWorkspace }) {
   const [search, setSearch] = useState('')
   const filtered = workspaces.filter(w =>
-    w.name.toLowerCase().includes(search.toLowerCase()) ||
-    w.slug.toLowerCase().includes(search.toLowerCase())
+    matchesSearch(w.name, search) ||
+    matchesSearch(w.slug, search)
   )
 
   return (

@@ -7,6 +7,7 @@ import { EditModal } from './licencias'
 import { VacationEditModal, INTERVAL_LABELS } from './vacacionesBalance'
 import { AdjustModal } from './beneficios'
 import { TZ, todayStr, LEAVE_TYPE_LABELS, BENEFIT_BANKS, leaveDayCount, leaveRangeLabel } from './shared'
+import { matchesSearch } from '../../utils/textSearch'
 
 // ─── Sección "Ausencias" del panel RRHH ───────────────────────────────────────
 // Tres vistas: Calendario (quién falta cuándo, todo el equipo en un mes),
@@ -230,7 +231,7 @@ export function groupRequests({ leaves = [], benefits = [], filter = 'all', quer
       amount: `${fmtNum(r.amount)} ${r.amount === 1 ? (UNIT_SINGULAR[meta?.unit] ?? meta?.unit ?? '') : (meta?.unit ?? '')}`, start: d, end: d,
       note: r.reason, reviewNote: r.reviewNote, reviewedBy: r.reviewedBy?.name })
   }
-  const visible = q ? rows.filter(r => r.user?.name?.toLowerCase().includes(q)) : rows
+  const visible = q ? rows.filter(r => matchesSearch(r.user?.name, q)) : rows
   const upcoming = visible.filter(r => r.status === 'approved' && r.end >= today).sort((a, b) => a.start.localeCompare(b.start))
   const past = visible.filter(r => r.status === 'rejected' || (r.status === 'approved' && r.end < today)).sort((a, b) => b.start.localeCompare(a.start))
   return { pendingIds: new Set(visible.filter(r => r.status === 'pending').map(r => r.key)), upcoming, past }
@@ -395,7 +396,7 @@ export function TabSaldos({ users, onUsersChanged }) {
       hours: (a, b) => (b.freeHoursBalance ?? 0) - (a.freeHoursBalance ?? 0),
       home: (a, b) => (b.homeDaysBalance ?? 0) - (a.homeDaysBalance ?? 0),
     }[sort]
-    return users.filter(u => !q || u.name.toLowerCase().includes(q)).sort(cmp)
+    return users.filter(u => !q || matchesSearch(u.name, q)).sort(cmp)
   }, [users, query, sort])
 
   const totals = users.reduce((t, u) => ({

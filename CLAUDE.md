@@ -315,7 +315,7 @@ backend/
       mfa.test.js                         # verifyTotp (códigos con espacios, basura, secret inválido), hasMfa (enrolamiento sin confirmar ≠ activo), códigos de recuperación (alfabeto, normalización, un solo uso, carrera entre requests), verifySecondFactor
       agentOutboundChannels.test.js       # canales de salida hacia un agente: el aviso pegado a la respuesta de una tool (no marca visto, throttle), el webhook (firma HMAC, no filtra el trabajo, reintento, SSRF) y el despertador (identidad del agente, args inválidos, tope de pasos)
       cannibalResolution.test.js          # conflictos de canibalización resueltos: identidad (query+idioma), ventana posterior al arreglo, corte de volumen prorrateado y la regla de reapertura (impresiones residuales de un 301 ≠ "volvió")
-      textSearch.test.js                  # búsqueda tolerante a tildes: variantes de una palabra (lineales, por la regla de "una tilde por palabra" del español) y combinación de palabras con AND
+      textSearch.test.js                  # búsqueda tolerante a tildes (backend): variantes de una palabra (lineales, por la regla de "una tilde por palabra" del español) y combinación de palabras con AND
       connectionCatalog.test.js           # estado de las fuentes de datos de un proyecto (active/expired/missing), el link de reconexión apunta a la app y no a OAuth, y el espejo con ConnectionsPanel.jsx del frontend
       mcpComposedTools.test.js            # tools que encadenan endpoints: el orden de los pasos de `task_log_done` (duración antes que fecha), qué devuelve cuando falla a mitad de camino, y el recorte de `list_projects`
       tokenPurpose.test.js                # INVARIANTE: verifyToken acepta sólo tokens de sesión y rechaza mfaToken / state de OAuth / google-link / portal de cliente; oauthState ida y vuelta; tope de intentos del desafío de 2FA
@@ -340,6 +340,7 @@ frontend/
     setup.js
     utils/
       format.test.js
+      textSearch.test.js                  # búsqueda sin tildes del lado del browser (normalizeText/matchesSearch/matchesAnyField)
       linkify.test.jsx
       webTabDates.test.js                 # getDateParams, formatDateLabel, currentMonthStr, prevMonthStr
     hooks/

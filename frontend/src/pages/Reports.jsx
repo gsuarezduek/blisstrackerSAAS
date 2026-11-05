@@ -12,6 +12,7 @@ import { deriveBudget } from '../utils/budget'
 import WorkedTime from '../components/ui/WorkedTime'
 import { Bot, ChartColumn, Pencil, Search, X } from 'lucide-react'
 import { Icon } from '../components/ui/Icon'
+import { matchesSearch } from '../utils/textSearch'
 
 function fmtTaskDate(iso) {
   return new Date(iso).toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })
@@ -76,7 +77,7 @@ function ByProjectView({ data, sortBy, search, statusFilter, loading, onEditTask
   const searched = useMemo(() => {
     const q = search.trim().toLowerCase()
     if (!q) return data
-    return data.filter(d => d.project.name.toLowerCase().includes(q))
+    return data.filter(d => matchesSearch(d.project.name, q))
   }, [data, search])
 
   const filtered = useMemo(() => {

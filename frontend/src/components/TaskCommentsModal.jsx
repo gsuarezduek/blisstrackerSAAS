@@ -24,6 +24,7 @@ import { Eye, Paperclip, MessageSquare, SmilePlus, Bot, Play } from 'lucide-reac
 import { Icon } from './ui/Icon'
 import { agentName } from '../hooks/useMyAgents'
 import { STATUS_LABEL, STATUS_CLASS } from '../utils/taskStatus'
+import { matchesSearch } from '../utils/textSearch'
 
 function timeAgo(dateStr) {
   const diff = Math.floor((Date.now() - new Date(dateStr)) / 1000)
@@ -97,11 +98,11 @@ export default function TaskCommentsModal({ task, onClose, onCommentAdded, onTas
   }, [editing, projects.length])
 
   const editMentionMatches = editMentionQuery !== null
-    ? wsMembers.filter(m => m.name.toLowerCase().includes(editMentionQuery.toLowerCase()))
+    ? wsMembers.filter(m => matchesSearch(m.name, editMentionQuery))
     : []
 
   const mentionMatches = mentionQuery !== null
-    ? wsMembers.filter(m => m.name.toLowerCase().includes(mentionQuery.toLowerCase()))
+    ? wsMembers.filter(m => matchesSearch(m.name, mentionQuery))
     : []
 
   const selectEditMention = useCallback((member) => {

@@ -22,6 +22,7 @@ const { findOrCreateFolder } = require('../../lib/projectFileTree')
 const { resolveDirectUpload } = require('../../lib/directUpload')
 const { extractText } = require('../../lib/documentText')
 const { DANGEROUS_MIME_TYPES, isDangerousMime } = require('../../lib/dangerousMime')
+const { buildTextSearchFilters } = require('../../lib/textSearch')
 
 const MAX_FILE_BYTES = 500 * 1024 * 1024 // 500MB — un solo PUT sin reintento parcial; más grande necesitaría multiparte
 // Alias histórico: mantenido para los callers que ya lo importan (ver abajo).
@@ -207,7 +208,7 @@ async function searchFiles(req, res, next) {
     const items = await prisma.projectFile.findMany({
       where: {
         projectId, deletedAt: null,
-        name: { contains: q, mode: 'insensitive' },
+        AND: buildTextSearchFilters(q, 'name'),
         OR: [{ type: 'folder' }, { type: 'file', status: 'ready' }],
       },
       include: { uploadedBy: { select: { id: true, name: true } }, ...CONTENT_LINKS_INCLUDE },

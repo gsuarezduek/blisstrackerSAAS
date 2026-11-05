@@ -15,6 +15,7 @@ import { VacationEditModal } from './vacacionesBalance'
 import { AdjustModal } from './beneficios'
 import { REQUEST_STATUS } from './licencias'
 import { TZ, todayStr, fmtDate, LEAVE_TYPE_LABELS, BENEFIT_BANKS, leaveDayCount, leaveRangeLabel } from './shared'
+import { matchesAnyField } from '../../utils/textSearch'
 
 // ─── Sección "Personas" del panel RRHH ────────────────────────────────────────
 // Directorio con buscador/filtros → ficha unificada de una persona (resumen,
@@ -68,7 +69,7 @@ export const PEOPLE_SORTS = [
 export function filterPeople(users, { query = '', filter = 'all', sort = 'name' } = {}, ctx = {}) {
   const { legajoFields = [], legajoReady = false, awayIds = new Set(), lastLogins = {}, roleLabel = r => r } = ctx
   const q = query.trim().toLowerCase()
-  const match = u => !q || [u.name, u.email, roleLabel(u.role)].some(v => v && String(v).toLowerCase().includes(q))
+  const match = u => matchesAnyField([u.name, u.email, roleLabel(u.role)], q)
   const pass = u => {
     if (filter === 'incomplete') return legajoReady && !isLegajoComplete(u, legajoFields)
     if (filter === 'noSchedule') return !(u.workStartTime && u.workEndTime)

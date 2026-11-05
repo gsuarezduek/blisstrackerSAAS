@@ -7,6 +7,7 @@ import FunLoader from './networks/FunLoader'
 import { CANNIBALIZATION_LOADING_MESSAGES } from './networks/loadingMessages'
 import ProtectedUrlsModal from './ProtectedUrlsModal'
 import ResolveConflictModal, { ACTION_LABEL } from './ResolveConflictModal'
+import { matchesSearch } from '../../utils/textSearch'
 
 const LANGUAGE_LABELS = { default: 'Principal (sin prefijo)' }
 function languageLabel(lang) {
@@ -382,7 +383,7 @@ export default function CanibalizacionTab({ projectId }) {
   const filteredConflicts = conflicts
     .filter(c => filter === 'all' || c.severity === filter)
     .filter(c => langFilter === 'all' || c.language === langFilter)
-    .filter(c => !search || c.query.toLowerCase().includes(search.toLowerCase()))
+    .filter(c => !search || matchesSearch(c.query, search))
 
   // ─────────────────────────────────────────────────────────────────────────────
   //  RENDER

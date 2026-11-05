@@ -10,6 +10,7 @@ const prisma = require('../lib/prisma')
 const objectStorage = require('../services/objectStorage.service')
 const { safeContentDisposition } = require('../lib/contentDisposition')
 const { shapeItem, buildPath, signedUrlForFile } = require('./projects/projectFiles.controller')
+const { buildTextSearchFilters } = require('../lib/textSearch')
 
 /**
  * Dos guardas que ningún middleware da acá (las rutas públicas no pasan por
@@ -74,7 +75,7 @@ async function searchPortalFiles(req, res, next) {
     const items = await prisma.projectFile.findMany({
       where: {
         projectId: portal.projectId, deletedAt: null,
-        name: { contains: q, mode: 'insensitive' },
+        AND: buildTextSearchFilters(q, 'name'),
         OR: [{ type: 'folder' }, { type: 'file', status: 'ready' }],
       },
       include: { uploadedBy: { select: { id: true, name: true } } },

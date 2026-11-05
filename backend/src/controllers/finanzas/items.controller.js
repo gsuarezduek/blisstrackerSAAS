@@ -2,6 +2,7 @@ const prisma = require('../../lib/prisma')
 const { logFinanceAudit } = require('../../lib/financeAudit')
 const { isValidItemIvaCondition } = require('../../lib/financeCatalog')
 const { trimmedOrNull, normalizeCuit } = require('./_shared')
+const { buildTextSearchFilters } = require('../../lib/textSearch')
 
 const ITEM_FIELD_LABELS = {
   name:              { label: 'Nombre' },
@@ -62,7 +63,7 @@ async function listItems(req, res, next) {
     const workspaceId = req.workspace.id
     const { search, tracksAccount, active } = req.query
     const where = { workspaceId }
-    if (search && search.trim()) where.name = { contains: search.trim(), mode: 'insensitive' }
+    if (search && search.trim()) where.AND = buildTextSearchFilters(search, 'name')
     if (tracksAccount !== undefined) where.tracksAccount = tracksAccount === 'true'
     if (active !== undefined) where.active = active === 'true'
     const items = await prisma.financeItem.findMany({ where, orderBy: { name: 'asc' }, include: LIST_INCLUDE })

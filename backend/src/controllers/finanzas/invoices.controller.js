@@ -15,6 +15,7 @@ const { renderInvoicePdf } = require('./invoicePrint.controller')
 const { isValidArcaVatRate } = require('../../lib/financeCatalog')
 const { parseDate, computeInvoiceStatus, businessError } = require('./_shared')
 const { isDangerousMime } = require('../../lib/dangerousMime')
+const { buildTextSearchFilters } = require('../../lib/textSearch')
 
 const MAX_FILE_BYTES = 20 * 1024 * 1024 // 20MB — comprobantes/facturas, no media pesado
 const PRESIGN_EXPIRES_IN = 900
@@ -86,7 +87,7 @@ async function listInvoices(req, res, next) {
       where.issueDate = { gte: new Date(Date.UTC(Number(year), 0, 1)), lt: new Date(Date.UTC(Number(year) + 1, 0, 1)) }
     }
     if (search && search.trim()) {
-      where.OR = [{ number: { contains: search.trim(), mode: 'insensitive' } }, { concept: { contains: search.trim(), mode: 'insensitive' } }]
+      where.AND = buildTextSearchFilters(search, ['number', 'concept'])
     }
 
     // `id` como segundo criterio: todas las facturas emitidas hoy comparten

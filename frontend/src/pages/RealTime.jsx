@@ -13,6 +13,7 @@ import { useAuth } from '../context/AuthContext'
 import { Lock, Palmtree, Bot } from 'lucide-react'
 import { Icon } from '../components/ui/Icon'
 import WorkedTime from '../components/ui/WorkedTime'
+import { matchesSearch } from '../utils/textSearch'
 
 const REFRESH_INTERVAL = 30 // seconds
 
@@ -249,7 +250,7 @@ export default function RealTime() {
   }, [load])
 
   const q = search.trim().toLowerCase()
-  const matchUser = name => !q || name.toLowerCase().includes(q)
+  const matchUser = name => !q || matchesSearch(name, q)
 
   const active = entries.filter(e => !e.workDay.endedAt && matchUser(e.user.name))
   const finished = entries.filter(e => e.workDay.endedAt && matchUser(e.user.name))

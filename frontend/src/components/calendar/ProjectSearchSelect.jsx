@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Star } from 'lucide-react'
 import { Icon } from '../ui/Icon'
+import { matchesSearch } from '../../utils/textSearch'
 
 const byName = (a, b) => a.name.localeCompare(b.name, 'es', { sensitivity: 'base' })
 
@@ -34,7 +35,7 @@ export default function ProjectSearchSelect({ projects, value, onChange, placeho
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
     if (!q) return projects
-    return projects.filter(p => p.name.toLowerCase().includes(q))
+    return projects.filter(p => matchesSearch(p.name, q))
   }, [projects, query])
 
   const groups = useMemo(() => {

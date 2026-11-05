@@ -1,6 +1,7 @@
 const prisma = require('../../lib/prisma')
 const { emitTo } = require('../../lib/socket')
 const { isValidStatus } = require('../../lib/contentCatalog')
+const { buildTextSearchFilters } = require('../../lib/textSearch')
 const {
   DATE_RE,
   DEFAULT_PAGE_SIZE,
@@ -63,11 +64,7 @@ async function listPieces(req, res, next) {
     }
     if (q && String(q).trim()) {
       const term = String(q).trim()
-      where.OR = [
-        { title:         { contains: term, mode: 'insensitive' } },
-        { copy:          { contains: term, mode: 'insensitive' } },
-        { designDetails: { contains: term, mode: 'insensitive' } },
-      ]
+      where.AND = buildTextSearchFilters(term, ['title', 'copy', 'designDetails'])
     }
 
     const skip = Math.max(parseInt(req.query.skip, 10) || 0, 0)

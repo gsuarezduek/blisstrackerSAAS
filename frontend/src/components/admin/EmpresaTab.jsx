@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import api from '../../api/client'
+import { matchesSearch } from '../../utils/textSearch'
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
 
@@ -326,7 +327,7 @@ export default function EmpresaTab() {
     ? FONT_SUGGESTIONS
     : FONT_SUGGESTIONS.map(g => ({
         ...g,
-        fonts: g.fonts.filter(f => f.toLowerCase().includes(fontQuery)),
+        fonts: g.fonts.filter(f => matchesSearch(f, fontQuery)),
       })).filter(g => g.fonts.length > 0)
 
   // ── JSX ───────────────────────────────────────────────────────────────────

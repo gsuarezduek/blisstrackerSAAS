@@ -3,6 +3,7 @@ const { isFlagEnabledForWorkspace } = require('../lib/featureFlags')
 const { hasModuleAccess } = require('../lib/moduleAccess')
 const { isAdmin } = require('../lib/projectAccess')
 const { taskInclude } = require('./tasks/_shared')
+const { buildTextSearchFilters } = require('../lib/textSearch')
 
 const MIN_QUERY_LENGTH = 2
 const LIMIT = 6
@@ -48,7 +49,10 @@ async function globalSearch(req, res, next) {
     const workspaceId = req.workspace.id
     const q = typeof req.query.q === 'string' ? req.query.q.trim() : ''
     if (q.length < MIN_QUERY_LENGTH) return res.json({ tasks: [], pieces: [], events: [], files: [] })
-    const contains = { contains: q, mode: 'insensitive' }
+    // Las palabras se combinan con AND y toleran tildes (ver lib/textSearch.js):
+    // "perez" encuentra a "Pérez" y "posteos noviembre" encuentra "Posteos de
+    // noviembre". Un campo por entidad, el mismo criterio en los cuatro bloques.
+    const matching = field => ({ AND: buildTextSearchFilters(q, field) })
 
     const [contenidoOk, calendarioOk] = await Promise.all([
       moduleAvailable(req, 'contenido'),
@@ -57,14 +61,14 @@ async function globalSearch(req, res, next) {
 
     const [tasks, pieces, events, files] = await Promise.all([
       prisma.task.findMany({
-        where: { workDay: { workspaceId }, description: contains, ...projectVisibilityWhere(req) },
+        where: { workDay: { workspaceId }, ...matching('description'), ...projectVisibilityWhere(req) },
         include: { ...taskInclude, user: { select: { id: true, name: true, avatar: true } } },
         orderBy: { createdAt: 'desc' },
         take: LIMIT,
       }),
       contenidoOk
         ? prisma.contentPiece.findMany({
-            where: { workspaceId, deletedAt: null, title: contains, ...projectVisibilityWhere(req) },
+            where: { workspaceId, deletedAt: null, ...matching('title'), ...projectVisibilityWhere(req) },
             select: { id: true, title: true, status: true, projectId: true, project: { select: { name: true } } },
             orderBy: { updatedAt: 'desc' },
             take: LIMIT,
@@ -72,7 +76,7 @@ async function globalSearch(req, res, next) {
         : [],
       calendarioOk
         ? prisma.calendarEvent.findMany({
-            where: { workspaceId, title: contains, ...projectVisibilityWhere(req, { requireProject: false }) },
+            where: { workspaceId, ...matching('title'), ...projectVisibilityWhere(req, { requireProject: false }) },
             select: { id: true, title: true, date: true, startTime: true, project: { select: { name: true } } },
             orderBy: { date: 'desc' },
             take: LIMIT,
@@ -80,7 +84,7 @@ async function globalSearch(req, res, next) {
         : [],
       prisma.projectFile.findMany({
         where: {
-          workspaceId, deletedAt: null, name: contains,
+          workspaceId, deletedAt: null, ...matching('name'),
           project: { filesEnabled: true, ...projectVisibilityWhere(req).project },
           OR: [{ type: 'folder' }, { type: 'file', status: 'ready' }],
         },

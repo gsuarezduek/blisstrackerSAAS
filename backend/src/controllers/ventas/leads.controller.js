@@ -5,6 +5,7 @@ const { normalizePhone } = require('../../lib/phone')
 const { LEAD_LIST_INCLUDE, LEAD_DETAIL_INCLUDE, logLeadEvent, assertContactAvailable, attachWhatsappStatus, attachLastActivity } = require('./_shared')
 const { createProject } = require('../../services/projects.service')
 const { todayString } = require('../../utils/dates')
+const { buildTextSearchFilters } = require('../../lib/textSearch')
 
 // ── Helpers ──────────────────────────────────────────────────
 
@@ -65,10 +66,7 @@ async function listLeads(req, res, next) {
     }
     if (search && search.trim()) {
       const q = search.trim()
-      where.OR = [
-        { title:   { contains: q, mode: 'insensitive' } },
-        { company: { name: { contains: q, mode: 'insensitive' } } },
-      ]
+      where.AND = buildTextSearchFilters(q, ['title', p => ({ company: { name: p } })])
     }
 
     const leads = await prisma.lead.findMany({

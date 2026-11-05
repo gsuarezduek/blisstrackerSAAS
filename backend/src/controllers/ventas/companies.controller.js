@@ -1,4 +1,5 @@
 const prisma = require('../../lib/prisma')
+const { buildTextSearchFilters } = require('../../lib/textSearch')
 
 // GET /api/ventas/companies?search=
 async function listCompanies(req, res, next) {
@@ -6,7 +7,7 @@ async function listCompanies(req, res, next) {
     const workspaceId = req.workspace.id
     const { search } = req.query
     const where = { workspaceId }
-    if (search && search.trim()) where.name = { contains: search.trim(), mode: 'insensitive' }
+    if (search && search.trim()) where.AND = buildTextSearchFilters(search, 'name')
 
     const companies = await prisma.company.findMany({
       where,

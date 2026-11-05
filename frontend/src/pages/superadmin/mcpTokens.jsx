@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import api from '../../api/client'
 import LoadingSpinner from '../../components/LoadingSpinner'
 import { timeAgo } from './shared'
+import { matchesAnyField } from '../../utils/textSearch'
 
 // Visibilidad global (todos los workspaces) de los tokens de MCP/Agentes IA — solo
 // lectura. El alta/baja la gestiona cada usuario desde su propio perfil (Preferencias
@@ -68,9 +69,7 @@ export function SectionMcpTokens() {
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase()
     const matches = tokens.filter(t => (
-      !needle || [t.label, t.user?.name, t.user?.email, t.workspace?.name, t.workspace?.slug]
-        .filter(Boolean)
-        .some(v => v.toLowerCase().includes(needle))
+      matchesAnyField([t.label, t.user?.name, t.user?.email, t.workspace?.name, t.workspace?.slug], needle)
     ))
     return matches.sort((a, b) => {
       const va = sortValue(a, sortBy), vb = sortValue(b, sortBy)

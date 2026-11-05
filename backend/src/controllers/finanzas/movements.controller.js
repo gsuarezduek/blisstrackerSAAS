@@ -4,6 +4,7 @@ const { toDecimal } = require('../../lib/financeMoney')
 const { isValidMovementType, isValidPaymentMethod, isValidAccountApplication } = require('../../lib/financeCatalog')
 const { resolveAndApplyTaxes, businessError, parseDate } = require('./_shared')
 const { recomputeTeamPaid } = require('../../lib/financeExtras')
+const { buildTextSearchFilters } = require('../../lib/textSearch')
 
 const MOVEMENT_INCLUDE = {
   item:      { select: { id: true, name: true, tracksAccount: true } },
@@ -113,7 +114,7 @@ async function listMovements(req, res, next) {
       if (fromDate) where.date.gte = fromDate
       if (toDate) where.date.lte = toDate
     }
-    if (search && search.trim()) where.item = { name: { contains: search.trim(), mode: 'insensitive' } }
+    if (search && search.trim()) where.AND = buildTextSearchFilters(search, p => ({ item: { name: p } }))
 
     const movements = await prisma.financeMovement.findMany({ where, orderBy: { date: 'desc' }, include: MOVEMENT_INCLUDE })
     res.json(movements)

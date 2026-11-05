@@ -1,6 +1,7 @@
 const prisma = require('../../lib/prisma')
 const { toDecimal } = require('../../lib/financeMoney')
 const { parseDate, computeInvoiceStatus } = require('./_shared')
+const { buildTextSearchFilters } = require('../../lib/textSearch')
 
 const INVOICE_WITH_COLLECTIONS = {
   where: { deletedAt: null },
@@ -57,7 +58,7 @@ async function listCustomers(req, res, next) {
     const where = { workspaceId, tracksAccount: true, active: true }
     if (search && search.trim()) {
       const q = search.trim()
-      where.OR = [{ name: { contains: q, mode: 'insensitive' } }, { legalName: { contains: q, mode: 'insensitive' } }]
+      where.AND = buildTextSearchFilters(q, ['name', 'legalName'])
     }
 
     const items = await prisma.financeItem.findMany({

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import api from '../../api/client'
 import RoleBadge from '../RoleBadge'
+import { matchesSearch } from '../../utils/textSearch'
 
 // ── Team Modal ─────────────────────────────────────────────────────────────────
 
@@ -15,7 +16,7 @@ function TeamModal({ project, allUsers, onClose, onUpdate }) {
   const memberIds    = new Set(members.map(u => u.id))
   const suggestions  = allUsers.filter(u =>
     !memberIds.has(u.id) &&
-    u.name.toLowerCase().includes(query.toLowerCase())
+    matchesSearch(u.name, query)
   )
 
   async function syncMembers(nextMembers) {
@@ -536,8 +537,8 @@ export default function ProjectsTab() {
       {/* Active projects */}
       {(() => {
         const q = search.toLowerCase()
-        const active   = projects.filter(p => p.active  && p.name.toLowerCase().includes(q))
-        const archived = projects.filter(p => !p.active && p.name.toLowerCase().includes(q))
+        const active   = projects.filter(p => p.active  && matchesSearch(p.name, q))
+        const archived = projects.filter(p => !p.active && matchesSearch(p.name, q))
         const totalActive = projects.filter(p => p.active).length
         return (
           <>

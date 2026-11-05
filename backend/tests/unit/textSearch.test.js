@@ -85,7 +85,27 @@ describe('buildTextSearchFilters', () => {
   // Si todas las palabras son inútiles, mejor buscar la frase tal cual que
   // quedarse sin filtro y devolver todo.
   it('sin ninguna palabra útil cae a la frase literal', () => {
-    expect(filters('a 1')).toEqual([{ description: { contains: 'a 1', mode: 'insensitive' } }])
+    expect(filters('a 1')).toEqual([{ OR: [{ description: { contains: 'a 1', mode: 'insensitive' } }] }])
+  })
+
+  // Varios campos: cada palabra puede aparecer en cualquiera de ellos, así
+  // "acme propuesta" encuentra un lead titulado "Propuesta" de la empresa "ACME".
+  it('busca en varios campos, incluidas relaciones', () => {
+    const out = buildTextSearchFilters('acme', ['title', p => ({ company: { name: p } })])
+    expect(out).toHaveLength(1)
+    expect(out[0].OR).toContainEqual({ title: { contains: 'acme', mode: 'insensitive' } })
+    expect(out[0].OR).toContainEqual({ company: { name: { contains: 'acme', mode: 'insensitive' } } })
+    // y las variantes con tilde se generan para cada campo
+    expect(out[0].OR).toContainEqual({ company: { name: { contains: 'ácme', mode: 'insensitive' } } })
+  })
+
+  it('con varias palabras y varios campos, AND de palabras y OR de campos', () => {
+    const out = buildTextSearchFilters('acme propuesta', ['title', 'notes'])
+    expect(out).toHaveLength(2)
+    for (const word of out) {
+      expect(word.OR.some(c => 'title' in c)).toBe(true)
+      expect(word.OR.some(c => 'notes' in c)).toBe(true)
+    }
   })
 
   it('topea la cantidad de palabras', () => {
