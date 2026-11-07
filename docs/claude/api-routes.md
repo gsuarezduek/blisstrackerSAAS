@@ -364,6 +364,7 @@ PATCH  /api/calendar/external-calendars/:id         # { name?, color?, active?, 
 DELETE /api/calendar/external-calendars/:id         # quita la suscripción (el de Google no desconecta la cuenta)
 POST   /api/calendar/external-calendars/:id/sync    # fuerza el refresco de ese calendario
 GET    /api/calendar/external-events                # ?from=&to=[&userIds=] — eventos ya traídos (cache); el título ajeno sale "Ocupado" salvo showDetails
+GET    /api/calendar/external-events/:id            # detalle de uno (lo que abre el bloque de la grilla); la descripción y el link de entrar solo para su dueño
 
 GET    /api/insights
 POST   /api/insights/refresh

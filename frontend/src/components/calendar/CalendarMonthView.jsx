@@ -15,11 +15,11 @@ const MAX_CHIPS_PER_DAY = 4
  * `tasks`: mis tareas futuras sin hora (Task.scheduledFor) — van primero en el día,
  * como los eventos "todo el día" de Google Calendar; click abre su detalle.
  * `externalEvents`: lo traído de mis calendarios de afuera (ver ExternalCalendar) —
- * `{ id, title, date, endDate, startTime, allDay, color, calendarName }`. No se
- * abren: no existen como reunión acá, se mira que el día está ocupado. Uno de
- * varios días se repite en cada día que abarca.
+ * `{ id, title, date, endDate, startTime, allDay, color, calendarName }`. Uno de
+ * varios días se repite en cada día que abarca. `onOpenExternal(e)` abre su
+ * detalle, que es de solo lectura (el evento se edita donde vive).
  */
-export default function CalendarMonthView({ events, tasks = [], externalEvents = [], month, onMonthChange, onOpenEvent, onOpenTask, onOpenDay }) {
+export default function CalendarMonthView({ events, tasks = [], externalEvents = [], month, onMonthChange, onOpenEvent, onOpenTask, onOpenExternal, onOpenDay }) {
   const byDay = useMemo(() => {
     const map = {}
     for (const e of events) (map[e.date] ??= []).push({ kind: 'event', item: e })
@@ -68,8 +68,10 @@ export default function CalendarMonthView({ events, tasks = [], externalEvents =
                   {items.slice(0, MAX_CHIPS_PER_DAY).map(({ kind, item: e, day }) => kind === 'external' ? (
                     <div
                       key={`ext-${e.id}-${day}`}
+                      onClick={ev => { ev.stopPropagation(); onOpenExternal?.(e) }}
                       title={e.calendarName ? `${e.title} · ${e.calendarName}` : e.title}
-                      className={`flex items-center gap-1 px-1.5 py-0.5 rounded bg-violet-50 dark:bg-violet-900/20 ${past ? 'opacity-60 grayscale' : ''}`}
+                      className={`flex items-center gap-1 px-1.5 py-0.5 rounded bg-violet-50 dark:bg-violet-900/20 transition-colors ${
+                        onOpenExternal ? 'cursor-pointer hover:bg-violet-100 dark:hover:bg-violet-900/40' : ''} ${past ? 'opacity-60 grayscale' : ''}`}
                       style={e.color ? { borderLeft: `3px solid ${e.color}` } : undefined}
                     >
                       <span className="text-[11px] text-gray-700 dark:text-gray-300 truncate">

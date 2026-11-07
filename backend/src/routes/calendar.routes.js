@@ -51,5 +51,6 @@ router.post  ('/external-calendars/:id/sync',  externalCalendars.sync)
 // Ruta propia y no sumado a GET /events para no cambiarle el shape a lo que ya
 // consumen el Calendario, la ficha del proyecto y el Dashboard.
 router.get   ('/external-events',              externalCalendars.listEvents)
+router.get   ('/external-events/:id',          externalCalendars.getEvent)
 
 module.exports = router

@@ -10,6 +10,9 @@ const { addDaysYMD } = require('../services/recurrence.service')
 // strings contra strings, sin aritmética de zona horaria en cada request.
 
 const MAX_TITLE = 300
+// Una invitación de Zoom/Teams trae páginas de texto legal y de instrucciones de
+// marcado telefónico: lo útil está siempre arriba.
+const MAX_DESCRIPTION = 2000
 const DEFAULT_DURATION_MINS = 60
 // Un evento más largo que esto casi siempre es un "fuera de la oficina" de varios
 // días mal declarado con hora; se recorta para que no tape la grilla entera.
@@ -63,6 +66,21 @@ function cleanTitle(raw, fallback = 'Ocupado') {
   return t ? t.slice(0, MAX_TITLE) : fallback
 }
 
+// A diferencia del título, acá los saltos de línea se conservan (son el formato del
+// texto) y solo se normalizan los finales de línea de Windows que mandan Outlook y
+// compañía. El HTML que a veces mete Google se queda como texto: el frontend lo
+// pinta plano, nunca con dangerouslySetInnerHTML.
+function cleanDescription(raw) {
+  const t = String(raw ?? '').replace(/\r\n/g, '\n').trim()
+  if (!t) return null
+  return t.length > MAX_DESCRIPTION ? `${t.slice(0, MAX_DESCRIPTION)}…` : t
+}
+
+function cleanShort(raw, max = 500) {
+  const t = String(raw ?? '').replace(/\s+/g, ' ').trim()
+  return t ? t.slice(0, max) : null
+}
+
 // ─── Google Calendar (API) ────────────────────────────────────────────────────
 
 // eventType de Google que NO son citas: "workingLocation" es el cartelito de
@@ -112,9 +130,20 @@ function mapGoogleEvent(ev, tz) {
     // Un día completo no ocupa una franja (un cumpleaños o un viaje no son "estoy
     // en reunión de 9 a 10"), y "Mostrar como libre" es exactamente eso.
     busy: !allDay && ev.transparency !== 'transparent',
-    location: ev.location ? String(ev.location).slice(0, 500) : null,
+    location: cleanShort(ev.location),
     url: ev.htmlLink || null,
+    description: cleanDescription(ev.description),
+    // `hangoutLink` es el Meet que Google crea con el evento; si la reunión es de
+    // Zoom/Teams, el link vive en conferenceData o directamente en la ubicación.
+    meetLink: ev.hangoutLink || conferenceUri(ev) || null,
+    organizer: cleanShort(ev.organizer?.displayName || ev.organizer?.email, 200),
   }
+}
+
+// Primer link "de entrar" que declare el bloque de conferencia del evento.
+function conferenceUri(ev) {
+  const entry = (ev.conferenceData?.entryPoints || []).find(e => e.entryPointType === 'video' && e.uri)
+  return entry?.uri || null
 }
 
 // ─── ICS (una URL iCal pegada a mano) ─────────────────────────────────────────
@@ -167,8 +196,19 @@ function mapIcsEvent(ev, { tz, from, to }) {
   const allDay = ev.start.dateOnly === true
   const transparent = String(ev.transparency || '').toUpperCase() === 'TRANSPARENT'
   const title = cleanTitle(ev.summary)
-  const location = ev.location ? String(ev.location).slice(0, 500) : null
+  const location = cleanShort(ev.location)
   const url = typeof ev.url === 'string' && ev.url ? ev.url : null
+  const description = cleanDescription(ev.description)
+  // Un ICS no tiene campo para la videollamada: el link viaja en la ubicación o
+  // suelto en la descripción, que es de donde lo saca cualquier cliente de calendario.
+  const meetLink = firstMeetingUrl(location) || firstMeetingUrl(description)
+  // `organizer` de node-ical puede ser un string ("mailto:x@y") o un objeto con params.
+  const organizer = cleanShort(
+    typeof ev.organizer === 'string'
+      ? ev.organizer.replace(/^mailto:/i, '')
+      : (ev.organizer?.params?.CN || String(ev.organizer?.val || '').replace(/^mailto:/i, '')),
+    200,
+  )
 
   // Forma del primer evento: la que heredan todas las ocurrencias.
   const base = allDay
@@ -187,7 +227,7 @@ function mapIcsEvent(ev, { tz, from, to }) {
     title, date: day, endDate: addDaysYMD(day, base.spanDays),
     startTime: base.startTime, durationMins: base.durationMins, allDay,
     busy: !allDay && !transparent,
-    location, url,
+    location, url, description, meetLink, organizer,
   })
 
   if (!ev.rrule) {
@@ -243,8 +283,20 @@ function dedupeExternalRows(rows) {
   return out
 }
 
+// Primer link de videollamada que aparezca en un texto. Los dominios son los que
+// sabemos que son "entrar a la reunión": cualquier http suelto de una descripción
+// suele ser la agenda, el documento o el aviso legal del pie.
+const MEETING_URL_RE = /https?:\/\/(?:[\w-]+\.)*(?:meet\.google\.com|zoom\.us|teams\.microsoft\.com|teams\.live\.com|whereby\.com|meet\.jit\.si)\/[^\s<>"')]+/i
+
+function firstMeetingUrl(text) {
+  if (!text) return null
+  const m = String(text).match(MEETING_URL_RE)
+  return m ? m[0].replace(/[.,;)]+$/, '') : null
+}
+
 module.exports = {
-  MAX_TITLE, DEFAULT_DURATION_MINS, MAX_DURATION_MINS,
+  MAX_TITLE, MAX_DESCRIPTION, DEFAULT_DURATION_MINS, MAX_DURATION_MINS,
+  cleanDescription, cleanShort, firstMeetingUrl,
   timeInTz, wallInTz, ymdLocal, diffMinutes, diffDaysYMD, clampDuration, cleanTitle,
   mapGoogleEvent, normalizeIcsUrl, mapIcsEvent, exdateDays, dedupeExternalRows,
 }

@@ -15,6 +15,7 @@ import { todayYMD, shiftDay, weekDates, weekdayLabel, weekRangeLabel } from '../
 import { useCalendarSocket } from '../components/calendar/useCalendarSocket'
 import { useFeatureFlag } from '../hooks/useFeatureFlag'
 import ExternalCalendarsModal from '../components/calendar/ExternalCalendarsModal'
+import ExternalEventModal from '../components/calendar/ExternalEventModal'
 import { Lock, CalendarPlus } from 'lucide-react'
 import { Icon } from '../components/ui/Icon'
 
@@ -78,6 +79,8 @@ export default function Calendario() {
   const [scheduleModal, setScheduleModal] = useState(null) // null | { date?, startTime?, participantIds? }
   const [detailEvent, setDetailEvent] = useState(null)
   const [calendarsModal, setCalendarsModal] = useState(false)
+  // Evento de un calendario de afuera abierto: desde la grilla llega solo su id.
+  const [externalEvent, setExternalEvent] = useState(null)
 
   const range = useMemo(() => {
     if (view === 'mes') return monthBounds(monthOf(date))
@@ -174,8 +177,13 @@ export default function Calendario() {
         tentative: b.tentative,
         tone: b.kind === 'task' ? 'task' : b.kind === 'external' ? 'external' : 'event',
         color: b.color || undefined,
-        // Un evento externo no tiene detalle en BlissTracker: se mira, no se abre.
-        onClick: b.kind === 'calendar_event' && b.refId ? () => openEventById(b.refId) : undefined,
+        // En la grilla el título va truncado, así que el bloque tiene que poder
+        // abrirse para leer qué es — también el de afuera, aunque sea de solo lectura.
+        onClick: b.refId
+          ? (b.kind === 'calendar_event' ? () => openEventById(b.refId)
+            : b.kind === 'external' ? () => setExternalEvent({ id: b.refId })
+            : undefined)
+          : undefined,
       }))
   }
 
@@ -188,11 +196,11 @@ export default function Calendario() {
     const timed = (state.blocks || [])
       .filter(b => b.kind === 'external')
       .map(b => ({
-        id: `b-${b.refId}`, title: b.title, date: b.date, endDate: b.date,
+        id: b.refId, title: b.title, date: b.date, endDate: b.date,
         startTime: b.start, allDay: false, color: b.color, calendarName: b.calendarName,
       }))
     const allDay = (state.allDayExternal || []).map(e => ({
-      id: `a-${e.id}`, title: e.title, date: e.date, endDate: e.endDate,
+      id: e.id, title: e.title, date: e.date, endDate: e.endDate,
       startTime: null, allDay: true, color: e.color, calendarName: e.calendarName,
     }))
     return [...timed, ...allDay]
@@ -212,7 +220,10 @@ export default function Calendario() {
     // días aparece en cada día que abarca.
     const external = (availability[key]?.allDayExternal || [])
       .filter(e => e.date <= onlyDate && e.endDate >= onlyDate)
-      .map(e => ({ id: `ext-${e.id}-${onlyDate}`, title: e.title, subtitle: e.calendarName, color: e.color || undefined }))
+      .map(e => ({
+        id: `ext-${e.id}-${onlyDate}`, title: e.title, subtitle: e.calendarName,
+        color: e.color || undefined, onClick: () => setExternalEvent(e),
+      }))
     return [...tasks, ...external]
   }
 
@@ -369,6 +380,7 @@ export default function Calendario() {
             events={events}
             tasks={availability[user.id]?.allDayTasks || []}
             externalEvents={externalForMonth}
+            onOpenExternal={e => setExternalEvent({ id: e.id })}
             onOpenTask={openTask}
             month={monthOf(date)}
             onMonthChange={m => updateParams({ date: `${m}-01` })}
@@ -427,6 +439,15 @@ export default function Calendario() {
         onClose={() => setScheduleModal(null)}
         onCreated={() => load()}
       />
+      {externalEvent && (
+        <ExternalEventModal
+          // Desde el Mes y la grilla llega solo el id (el bloque no trae la
+          // descripción); desde el riel "Sin hora", el evento ya completo.
+          eventId={externalEvent.id}
+          event={externalEvent.title ? externalEvent : null}
+          onClose={() => setExternalEvent(null)}
+        />
+      )}
       {calendarsModal && (
         <ExternalCalendarsModal
           onClose={() => setCalendarsModal(false)}

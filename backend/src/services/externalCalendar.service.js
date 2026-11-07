@@ -318,10 +318,48 @@ async function syncAllDue({ limit = 200 } = {}) {
 // ─── Lectura ──────────────────────────────────────────────────────────────────
 
 /**
+ * Cuánto se cuenta de un evento según quién pregunta. Tres niveles, no dos:
+ *  · es mío                      → todo, incluida la descripción y el link de entrar;
+ *  · ajeno con `showDetails`     → de qué se trata (título, ubicación, organizador);
+ *  · ajeno sin `showDetails`     → "Ocupado" y nada más.
+ * La descripción y el link se quedan SIEMPRE con su dueño aunque haya abierto el
+ * calendario: "el equipo ve de qué se trata" no es "el equipo ve todo el contenido",
+ * y el cuerpo de una invitación es justo donde viven los links de acceso, los
+ * teléfonos de marcado y las notas personales.
+ */
+function shapeExternalEvent(r, requesterId) {
+  const own = r.userId === requesterId
+  const reveal = own || r.calendar.showDetails
+  return {
+    id: r.id,
+    kind: 'external',
+    userId: r.userId,
+    calendarId: r.calendarId,
+    calendarName: reveal ? r.calendar.name : null,
+    calendarSource: r.calendar.source,
+    color: r.calendar.color,
+    title: reveal ? r.title : 'Ocupado',
+    date: r.date,
+    endDate: r.endDate,
+    startTime: r.startTime,
+    durationMins: r.durationMins,
+    allDay: r.allDay,
+    busy: r.busy,
+    location: reveal ? r.location : null,
+    organizer: reveal ? r.organizer : null,
+    description: own ? r.description : null,
+    meetLink: own ? r.meetLink : null,
+    url: own ? r.url : null,
+    canSeeDetail: reveal,
+  }
+}
+
+const EVENT_WITH_CALENDAR = {
+  calendar: { select: { id: true, name: true, color: true, source: true, showDetails: true } },
+}
+
+/**
  * Eventos externos cacheados que solapan [from, to], por persona.
- * `requesterId` decide cuánto se cuenta de cada uno: el título de la agenda de otra
- * persona solo se muestra si ese calendario está marcado `showDetails` — un evento
- * traído de una agenda personal ("Médico 15h") no es una reunión de trabajo.
  */
 async function listForRange({ workspaceId, userIds, from, to, requesterId }) {
   if (!userIds?.length) return []
@@ -331,35 +369,27 @@ async function listForRange({ workspaceId, userIds, from, to, requesterId }) {
       date: { lte: to }, endDate: { gte: from },
       calendar: { active: true },
     },
-    include: { calendar: { select: { id: true, name: true, color: true, source: true, showDetails: true } } },
+    include: EVENT_WITH_CALENDAR,
     orderBy: [{ date: 'asc' }, { startTime: 'asc' }],
   })
-  return dedupeExternalRows(rows).map(r => {
-    const own = r.userId === requesterId
-    const reveal = own || r.calendar.showDetails
-    return {
-      id: r.id,
-      kind: 'external',
-      userId: r.userId,
-      calendarId: r.calendarId,
-      calendarName: r.calendar.name,
-      calendarSource: r.calendar.source,
-      color: r.calendar.color,
-      title: reveal ? r.title : 'Ocupado',
-      date: r.date,
-      endDate: r.endDate,
-      startTime: r.startTime,
-      durationMins: r.durationMins,
-      allDay: r.allDay,
-      busy: r.busy,
-      location: reveal ? r.location : null,
-      url: own ? r.url : null,
-    }
+  return dedupeExternalRows(rows).map(r => shapeExternalEvent(r, requesterId))
+}
+
+/**
+ * Un evento suelto, para abrirlo desde la grilla (donde el bloque solo lleva su id).
+ * Mismo recorte que la lista. Scopeado al workspace: el calendario puede ser de otra
+ * persona (la vista Equipo), y por eso lo que se devuelve pasa por `shapeExternalEvent`.
+ */
+async function getOne({ workspaceId, id, requesterId }) {
+  const row = await prisma.externalCalendarEvent.findFirst({
+    where: { id, workspaceId, calendar: { active: true } },
+    include: EVENT_WITH_CALENDAR,
   })
+  return row ? shapeExternalEvent(row, requesterId) : null
 }
 
 module.exports = {
   SYNC_PAST_DAYS, SYNC_AHEAD_DAYS, STALE_MINS, MAX_EVENTS_PER_CALENDAR, INTERACTIVE_DEADLINE_MS,
   syncWindow, isStale, syncCalendar, syncIfStale, syncAllDue,
-  ensureGoogleCalendar, listForRange, probeIcsUrl, fetchIcsText,
+  ensureGoogleCalendar, listForRange, getOne, probeIcsUrl, fetchIcsText, shapeExternalEvent,
 }

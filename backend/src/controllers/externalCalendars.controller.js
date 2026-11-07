@@ -193,4 +193,18 @@ async function listEvents(req, res, next) {
   } catch (err) { next(err) }
 }
 
-module.exports = { list, create, update, remove, sync, listEvents }
+// ─── GET /api/calendar/external-events/:id ───────────────────────────────────
+// El detalle de un evento traído de afuera: lo que abre el bloque de la grilla,
+// donde el título va truncado y no entra nada más. Es de solo lectura — se edita
+// donde vive, y para eso está el link a su calendario de origen.
+async function getEvent(req, res, next) {
+  try {
+    const id = Number(req.params.id)
+    if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: 'id inválido' })
+    const event = await externalCalendar.getOne({ workspaceId: req.workspace.id, id, requesterId: req.user.userId })
+    if (!event) return res.status(404).json({ error: 'Evento no encontrado' })
+    res.json(event)
+  } catch (err) { next(err) }
+}
+
+module.exports = { list, create, update, remove, sync, listEvents, getEvent }

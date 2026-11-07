@@ -15,7 +15,7 @@ jest.mock('../../src/lib/prisma', () => ({
     findMany: jest.fn(), findFirst: jest.fn(), findUnique: jest.fn(),
     create: jest.fn(), update: jest.fn(), delete: jest.fn(), count: jest.fn(),
   },
-  externalCalendarEvent: { findMany: jest.fn(), deleteMany: jest.fn(), createMany: jest.fn() },
+  externalCalendarEvent: { findMany: jest.fn(), findFirst: jest.fn(), deleteMany: jest.fn(), createMany: jest.fn() },
   googleCalendarConnection: { findUnique: jest.fn() },
   calendarEvent: { findMany: jest.fn() },
   $transaction: jest.fn(ops => Promise.all(ops)),
@@ -228,9 +228,67 @@ describe('GET /api/calendar/external-events', () => {
     expect(res.body[0].title).toBe('Clase de inglés')
   })
 
+  it('lo propio trae los detalles para poder leer de qué era', async () => {
+    prisma.externalCalendarEvent.findMany.mockResolvedValue([cachedRow({
+      description: 'Repasamos los números', meetLink: 'https://meet.google.com/x', organizer: 'Jefa',
+    })])
+    const res = await req('get', '/external-events?from=2026-11-01&to=2026-11-30')
+    expect(res.body[0]).toMatchObject({
+      description: 'Repasamos los números', meetLink: 'https://meet.google.com/x',
+      organizer: 'Jefa', canSeeDetail: true,
+    })
+  })
+
+  it('de la agenda ajena NUNCA sale el cuerpo de la invitación, ni con showDetails', async () => {
+    // "El equipo ve de qué se trata" no es "el equipo ve todo el contenido": la
+    // descripción es justo donde viven los links de acceso y las notas personales.
+    prisma.externalCalendarEvent.findMany.mockResolvedValue([cachedRow({
+      userId: OTHER, description: 'Link de acceso: https://meet.google.com/privado', meetLink: 'https://meet.google.com/privado',
+      organizer: 'Jefa',
+      calendar: { id: 50, name: 'Google', color: null, source: 'google', showDetails: true },
+    })])
+    const res = await req('get', `/external-events?from=2026-11-01&to=2026-11-30&userIds=${OTHER}`)
+    expect(res.body[0].title).toBe('Clase de inglés')   // de qué se trata, sí
+    expect(res.body[0].organizer).toBe('Jefa')
+    expect(res.body[0].description).toBeNull()          // el contenido, no
+    expect(res.body[0].meetLink).toBeNull()
+    expect(JSON.stringify(res.body)).not.toContain('privado')
+  })
+
   it('exige un rango de fechas válido', async () => {
     const res = await req('get', '/external-events?from=noviembre&to=2026-11-30')
     expect(res.status).toBe(400)
+  })
+})
+
+describe('GET /api/calendar/external-events/:id — abrir un evento de la grilla', () => {
+  function cachedRow(over = {}) {
+    return {
+      id: 1, userId: ME, calendarId: 50, title: 'Clase de inglés',
+      date: '2026-11-10', endDate: '2026-11-10', startTime: '09:00', durationMins: 60,
+      allDay: false, busy: true, location: 'Zoom', url: 'https://x',
+      description: 'Traer el material', meetLink: null, organizer: null,
+      calendar: { id: 50, name: 'Agenda del estudio', color: null, source: 'ics', showDetails: false },
+      ...over,
+    }
+  }
+
+  it('devuelve el detalle del evento propio', async () => {
+    prisma.externalCalendarEvent.findFirst.mockResolvedValue(cachedRow())
+    const res = await req('get', '/external-events/1')
+    expect(res.status).toBe(200)
+    expect(res.body).toMatchObject({ title: 'Clase de inglés', description: 'Traer el material', canSeeDetail: true })
+  })
+
+  it('el de otra persona sin showDetails es solo "Ocupado"', async () => {
+    prisma.externalCalendarEvent.findFirst.mockResolvedValue(cachedRow({ userId: OTHER }))
+    const res = await req('get', '/external-events/1')
+    expect(res.body).toMatchObject({ title: 'Ocupado', description: null, location: null, canSeeDetail: false })
+  })
+
+  it('404 si no existe en este workspace', async () => {
+    prisma.externalCalendarEvent.findFirst.mockResolvedValue(null)
+    expect((await req('get', '/external-events/999')).status).toBe(404)
   })
 })
 

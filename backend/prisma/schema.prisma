@@ -3176,6 +3176,14 @@ model ExternalCalendarEvent {
   busy         Boolean @default(true)
   location     String?
   url          String?
+  // Lo que hace falta para contestar "¿de qué era esta reunión?" sin tener que
+  // abrir Google. La descripción viene recortada (una invitación de Zoom trae
+  // páginas de texto legal) y solo se le muestra a su dueño — ver showDetails en
+  // ExternalCalendar: que el equipo vea DE QUÉ se trata no es que vea todo el
+  // contenido, que es justo donde viven los links de acceso y las notas personales.
+  description  String?
+  meetLink     String?
+  organizer    String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

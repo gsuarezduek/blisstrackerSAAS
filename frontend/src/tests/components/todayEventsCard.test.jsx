@@ -5,7 +5,7 @@
  * EN el minuto en que termina.
  */
 import { describe, test, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import TodayEventsCard, { toMins, phaseOf } from '../../components/dashboard/TodayEventsCard'
 
@@ -134,13 +134,16 @@ describe('TodayEventsCard', () => {
     expect(screen.getByText(/Hoy en tu calendario · 2/)).toBeInTheDocument()
   })
 
-  test('un evento de afuera dice de qué calendario viene y no se puede abrir', async () => {
-    mockApi({ external: [externalEvent()] })
+  test('un evento de afuera dice de qué calendario viene y abre su ficha', async () => {
+    mockApi({ external: [externalEvent({ description: 'Repasamos los números del mes' })] })
     renderCard()
     expect(await screen.findByText(/Mi Google/)).toBeInTheDocument()
-    // Solo las reuniones de BlissTracker llevan a su detalle; un evento de Google
-    // no existe como reunión acá.
-    expect(screen.queryByRole('button')).toBeNull()
+
+    // En la fila el título va truncado: hay que poder abrirlo para leerlo entero.
+    // El detalle es de solo lectura — el evento se edita donde vive.
+    fireEvent.click(screen.getByText('Clase de inglés'))
+    expect(await screen.findByText('Repasamos los números del mes')).toBeInTheDocument()
+    expect(screen.getByText(/Se edita en su calendario de origen/)).toBeInTheDocument()
   })
 
   test('los de día completo no entran en la agenda por horario', async () => {

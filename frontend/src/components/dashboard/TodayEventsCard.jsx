@@ -6,6 +6,7 @@ import api from '../../api/client'
 import { useAuth } from '../../context/AuthContext'
 import { useFeatureFlag } from '../../hooks/useFeatureFlag'
 import { useCalendarSocket } from '../calendar/useCalendarSocket'
+import ExternalEventModal from '../calendar/ExternalEventModal'
 import { todayYMD } from '../calendar/dateHelpers'
 import { fmtMins } from '../../utils/format'
 
@@ -39,11 +40,10 @@ export function phaseOf(ev, now) {
   return 'later'
 }
 
-// La fila es un botón solo cuando hay algo que abrir: una reunión de BlissTracker
-// lleva a su detalle en el Calendario, un evento traído de afuera no existe como
-// reunión acá (se edita en Google, o donde viva ese calendario).
-function Row({ isExternal, onOpen, children }) {
-  if (isExternal) return <div className="flex items-center gap-3 flex-1 min-w-0">{children}</div>
+// Las dos filas se abren, cada una a lo suyo: una reunión de BlissTracker lleva a
+// su detalle en el Calendario; un evento traído de afuera abre su ficha de solo
+// lectura acá mismo (se edita donde vive, pero al menos se puede leer entero).
+function Row({ onOpen, children }) {
   return (
     <button type="button" onClick={onOpen} className="flex items-center gap-3 flex-1 min-w-0 text-left">
       {children}
@@ -57,6 +57,7 @@ export default function TodayEventsCard() {
   const allowed = enabled && !!user?.moduleAccess?.calendario
   const navigate = useNavigate()
   const [events, setEvents] = useState([])
+  const [openExternal, setOpenExternal] = useState(null)
   const [, tick] = useState(0)
 
   const load = useCallback(() => {
@@ -119,7 +120,7 @@ export default function TodayEventsCard() {
           return (
             <li key={`${ev.isExternal ? 'x' : 'm'}-${ev.id}`} className={phase === 'past' ? 'opacity-50' : ''}>
               <div className="flex items-center gap-3 px-4 py-2">
-                <Row isExternal={ev.isExternal} onOpen={() => navigate(`/calendario?event=${ev.id}`)}>
+                <Row onOpen={() => (ev.isExternal ? setOpenExternal(ev) : navigate(`/calendario?event=${ev.id}`))}>
                   <span className={`text-sm font-semibold tabular-nums flex-shrink-0 ${phase === 'now' ? 'text-primary-600 dark:text-primary-400' : 'text-gray-700 dark:text-gray-200'}`}>
                     {ev.startTime}
                   </span>
@@ -173,6 +174,7 @@ export default function TodayEventsCard() {
           )
         })}
       </ul>
+      {openExternal && <ExternalEventModal event={openExternal} onClose={() => setOpenExternal(null)} />}
     </section>
   )
 }
