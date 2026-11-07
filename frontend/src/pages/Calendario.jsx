@@ -14,8 +14,8 @@ import EventDetailModal from '../components/calendar/EventDetailModal'
 import { todayYMD, shiftDay, weekDates, weekdayLabel, weekRangeLabel } from '../components/calendar/dateHelpers'
 import { useCalendarSocket } from '../components/calendar/useCalendarSocket'
 import { useFeatureFlag } from '../hooks/useFeatureFlag'
-import GoogleCalendarConnectButton from '../components/calendar/GoogleCalendarConnectButton'
-import { Lock } from 'lucide-react'
+import ExternalCalendarsModal from '../components/calendar/ExternalCalendarsModal'
+import { Lock, CalendarPlus } from 'lucide-react'
 import { Icon } from '../components/ui/Icon'
 
 const VIEWS = [
@@ -77,6 +77,7 @@ export default function Calendario() {
   const [loadError, setLoadError] = useState('')
   const [scheduleModal, setScheduleModal] = useState(null) // null | { date?, startTime?, participantIds? }
   const [detailEvent, setDetailEvent] = useState(null)
+  const [calendarsModal, setCalendarsModal] = useState(false)
 
   const range = useMemo(() => {
     if (view === 'mes') return monthBounds(monthOf(date))
@@ -166,12 +167,36 @@ export default function Calendario() {
         start: b.start,
         end: b.end,
         title: b.title || (b.kind === 'task' ? 'Tarea' : 'Ocupado'),
+        // De qué calendario de afuera viene: es lo que explica un bloque que no se
+        // puede abrir ni editar desde acá.
+        subtitle: b.calendarName || undefined,
         recurring: !!b.recurrenceId,
         tentative: b.tentative,
-        tone: b.kind === 'task' ? 'task' : 'event',
+        tone: b.kind === 'task' ? 'task' : b.kind === 'external' ? 'external' : 'event',
+        color: b.color || undefined,
+        // Un evento externo no tiene detalle en BlissTracker: se mira, no se abre.
         onClick: b.kind === 'calendar_event' && b.refId ? () => openEventById(b.refId) : undefined,
       }))
   }
+
+  // Vista Mes: los eventos de mis calendarios de afuera salen de lo que `availability`
+  // ya trajo para el rango visible (los con hora vienen como blocks `kind:'external'`,
+  // los de día completo en `allDayExternal`) — no hace falta otra llamada.
+  const externalForMonth = useMemo(() => {
+    const state = availability[user.id]
+    if (!state) return []
+    const timed = (state.blocks || [])
+      .filter(b => b.kind === 'external')
+      .map(b => ({
+        id: `b-${b.refId}`, title: b.title, date: b.date, endDate: b.date,
+        startTime: b.start, allDay: false, color: b.color, calendarName: b.calendarName,
+      }))
+    const allDay = (state.allDayExternal || []).map(e => ({
+      id: `a-${e.id}`, title: e.title, date: e.date, endDate: e.endDate,
+      startTime: null, allDay: true, color: e.color, calendarName: e.calendarName,
+    }))
+    return [...timed, ...allDay]
+  }, [availability, user.id])
 
   // Tareas futuras sin hora (allDayTasks, solo vienen en mi propia columna) — se
   // abren con el mismo modal de detalle global que usa el buscador (GlobalShortcuts).
@@ -179,9 +204,16 @@ export default function Calendario() {
     window.dispatchEvent(new CustomEvent('bliss:open-task', { detail: task }))
   }
   function allDayItemsFor(key, onlyDate) {
-    return (availability[key]?.allDayTasks || [])
+    const tasks = (availability[key]?.allDayTasks || [])
       .filter(t => t.scheduledFor === onlyDate)
       .map(t => ({ id: `task-${t.id}`, title: t.description, recurring: !!t.recurrenceId, onClick: () => openTask(t) }))
+    // Los de día completo de un calendario de afuera ("Viaje", un feriado): no
+    // ocupan franja, van en el mismo riel que las tareas sin hora. Uno de varios
+    // días aparece en cada día que abarca.
+    const external = (availability[key]?.allDayExternal || [])
+      .filter(e => e.date <= onlyDate && e.endDate >= onlyDate)
+      .map(e => ({ id: `ext-${e.id}-${onlyDate}`, title: e.title, subtitle: e.calendarName, color: e.color || undefined }))
+    return [...tasks, ...external]
   }
 
   // Editar/borrar/traer a hoy desde el modal global avisa con este evento.
@@ -241,7 +273,13 @@ export default function Calendario() {
           <h1 className="text-xl font-bold text-gray-900 dark:text-white">Calendario</h1>
           {moduleAllowed && (
             <div className="flex items-center gap-2">
-              <GoogleCalendarConnectButton />
+              <button
+                onClick={() => setCalendarsModal(true)}
+                title="Traer a BlissTracker tu Google Calendar u otro calendario por URL"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+              >
+                <Icon as={CalendarPlus} size={14} /> Mis calendarios
+              </button>
               <button
                 onClick={() => setScheduleModal(viewingOther ? { participantIds: [targetUserId] } : {})}
                 className="bg-primary-600 hover:bg-primary-700 text-white rounded-xl px-4 py-2 text-sm font-medium transition-colors"
@@ -330,6 +368,7 @@ export default function Calendario() {
           <CalendarMonthView
             events={events}
             tasks={availability[user.id]?.allDayTasks || []}
+            externalEvents={externalForMonth}
             onOpenTask={openTask}
             month={monthOf(date)}
             onMonthChange={m => updateParams({ date: `${m}-01` })}
@@ -388,6 +427,14 @@ export default function Calendario() {
         onClose={() => setScheduleModal(null)}
         onCreated={() => load()}
       />
+      {calendarsModal && (
+        <ExternalCalendarsModal
+          onClose={() => setCalendarsModal(false)}
+          // Agregar, apagar o cambiar un calendario cambia lo que se pinta en la
+          // grilla: se recarga lo mismo que recarga el socket.
+          onChanged={load}
+        />
+      )}
       <EventDetailModal
         event={detailEvent}
         onClose={() => setDetailEvent(null)}

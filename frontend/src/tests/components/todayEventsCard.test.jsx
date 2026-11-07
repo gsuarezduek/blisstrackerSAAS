@@ -73,12 +73,28 @@ function renderCard() {
   return render(<MemoryRouter><TodayEventsCard /></MemoryRouter>)
 }
 
+// La tarjeta junta dos fuentes: las reuniones de BlissTracker y lo traído de los
+// calendarios de afuera (ver ExternalCalendar).
+function mockApi({ meetings = [], external = [] } = {}) {
+  api.get.mockImplementation(url => Promise.resolve({
+    data: url === '/calendar/external-events' ? external : meetings,
+  }))
+}
+
+function externalEvent(over = {}) {
+  return {
+    id: 99, kind: 'external', title: 'Clase de inglés', calendarName: 'Mi Google',
+    date: '2026-11-05', endDate: '2026-11-05', startTime: '08:00', durationMins: 60,
+    allDay: false, busy: true, color: '#4285F4', ...over,
+  }
+}
+
 describe('TodayEventsCard', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     state.user = { id: ME, moduleAccess: { calendario: true } }
     state.flag = true
-    api.get.mockResolvedValue({ data: [] })
+    mockApi()
   })
 
   test('sin reuniones hoy no ocupa lugar en el Dashboard', async () => {
@@ -88,23 +104,67 @@ describe('TodayEventsCard', () => {
   })
 
   test('lista lo agendado con hora, duración y proyecto, y lleva al Calendario', async () => {
-    api.get.mockResolvedValue({ data: [event()] })
+    mockApi({ meetings: [event()] })
     renderCard()
     expect(await screen.findByText('Kickoff con el cliente')).toBeInTheDocument()
     expect(screen.getByText('10:00')).toBeInTheDocument()
     expect(screen.getByText(/1h 0m · Pastiza/)).toBeInTheDocument()
     expect(screen.getByText('Ver calendario →')).toHaveAttribute('href', '/calendario')
-    expect(api.get).toHaveBeenCalledWith('/calendar/events', { params: expect.objectContaining({ from: expect.any(String) }) })
-    // El rango pedido es un solo día: hoy.
-    const { from, to } = api.get.mock.calls[0][1].params
-    expect(from).toBe(to)
+    // El rango pedido es un solo día: hoy, a las dos fuentes.
+    for (const path of ['/calendar/events', '/calendar/external-events']) {
+      const call = api.get.mock.calls.find(c => c[0] === path)
+      expect(call).toBeTruthy()
+      expect(call[1].params.from).toBe(call[1].params.to)
+    }
   })
 
   test('marca la invitación que todavía no respondí', async () => {
-    api.get.mockResolvedValue({ data: [event({ participants: [{ userId: ME, status: 'pending' }] })] })
+    mockApi({ meetings: [event({ participants: [{ userId: ME, status: 'pending' }] })] })
     renderCard()
     expect(await screen.findByText('Sin confirmar')).toBeInTheDocument()
     expect(screen.getByText(/1 sin confirmar/)).toBeInTheDocument()
+  })
+
+  test('mezcla las reuniones propias con lo traído de afuera, ordenado por hora', async () => {
+    mockApi({ meetings: [event()], external: [externalEvent()] })
+    renderCard()
+    expect(await screen.findByText('Clase de inglés')).toBeInTheDocument()
+    const horas = screen.getAllByText(/^\d{2}:\d{2}$/).map(el => el.textContent)
+    expect(horas).toEqual(['08:00', '10:00'])
+    expect(screen.getByText(/Hoy en tu calendario · 2/)).toBeInTheDocument()
+  })
+
+  test('un evento de afuera dice de qué calendario viene y no se puede abrir', async () => {
+    mockApi({ external: [externalEvent()] })
+    renderCard()
+    expect(await screen.findByText(/Mi Google/)).toBeInTheDocument()
+    // Solo las reuniones de BlissTracker llevan a su detalle; un evento de Google
+    // no existe como reunión acá.
+    expect(screen.queryByRole('button')).toBeNull()
+  })
+
+  test('los de día completo no entran en la agenda por horario', async () => {
+    mockApi({ external: [externalEvent({ title: 'Viaje', allDay: true, startTime: null, durationMins: null })] })
+    const { container } = renderCard()
+    await waitFor(() => expect(api.get).toHaveBeenCalledTimes(2))
+    expect(container).toBeEmptyDOMElement()
+  })
+
+  test('si una fuente falla, la otra se muestra igual', async () => {
+    api.get.mockImplementation(url => (
+      url === '/calendar/external-events'
+        ? Promise.reject(new Error('503'))
+        : Promise.resolve({ data: [event()] })
+    ))
+    renderCard()
+    expect(await screen.findByText('Kickoff con el cliente')).toBeInTheDocument()
+  })
+
+  test('una invitación sin responder no se cuenta sobre lo traído de afuera', async () => {
+    mockApi({ external: [externalEvent()] })
+    renderCard()
+    await screen.findByText('Clase de inglés')
+    expect(screen.queryByText('Sin confirmar')).toBeNull()
   })
 
   test('sin acceso al módulo no se pide nada al backend', async () => {

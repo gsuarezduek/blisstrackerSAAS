@@ -245,6 +245,8 @@ model Workspace {
   calendarEventParticipants  CalendarEventParticipant[]
   calendarEventRecurrences   CalendarEventRecurrence[]
   googleCalendarConnections  GoogleCalendarConnection[]
+  externalCalendars          ExternalCalendar[]
+  externalCalendarEvents     ExternalCalendarEvent[]
   financeAccounts            FinanceAccount[]
   financeIssuers             FinanceIssuer[]
   financeTaxes               FinanceTax[]
@@ -504,6 +506,8 @@ model User {
   calendarEventParticipations       CalendarEventParticipant[]  @relation("CalendarEventParticipant")
   calendarEventRecurrencesOrganized CalendarEventRecurrence[]   @relation("CalendarEventRecurrenceOrganizer")
   googleCalendarConnections         GoogleCalendarConnection[]
+  externalCalendars                 ExternalCalendar[]
+  externalCalendarEvents            ExternalCalendarEvent[]
   invitationCodesCreated            InvitationCode[]
   financeAccountsCreated            FinanceAccount[]            @relation("FinanceAccountCreatedBy")
   financeIssuersCreated             FinanceIssuer[]             @relation("FinanceIssuerCreatedBy")
@@ -654,31 +658,31 @@ model UserRole {
 }
 
 model Project {
-  id                  Int       @id @default(autoincrement())
-  workspaceId         Int
-  workspace           Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  name                String
-  active              Boolean   @default(true)
-  lostAt              DateTime? // se setea al pasar a inactivo (true→false), se limpia al reactivar; alimenta "Proyectos perdidos" del Scorecard EOS
-  timezone            String    @default("America/Argentina/Buenos_Aires")
-  linksEnabled        Boolean   @default(true)
-  situationEnabled    Boolean   @default(true)
-  hoursEnabled        Boolean   @default(false)
-  briefsEnabled       Boolean   @default(true)
-  filesEnabled        Boolean   @default(true)
-  isPrivate           Boolean   @default(false) // ver concepto "Proyectos privados": solo ProjectMember + admin/owner ven la ficha completa
-  monthlyHours        Int?
-  emailFrom           String?
-  aiWeeklyTokenLimit  Int       @default(500000)
-  websiteUrl          String?
-  connections         String    @default("{}") // JSON: { instagram, facebook, ... }
-  integrationDefaults String    @default("{}") // JSON: IDs recordados por tipo para reconexión, ej { google_ads: { customerId, propertyId, country }, google_analytics: { propertyId } }
-  cannibalProtectedUrls String  @default("[]") // JSON: array de URLs que el análisis de canibalización nunca recomienda redirigir (301) ni noindexar
-  domainRating        Float? // Ahrefs Domain Rating (0-100), valor actual cacheado
-  domainRatingAt      DateTime? // última actualización del Domain Rating
-  reportSections      String? // JSON: array de claves de sección habilitadas para el informe de este proyecto (ej: ["analytics","instagram"]). null = sin restricción (todas las disponibles, comportamiento legacy)
-  createdAt           DateTime  @default(now())
-  updatedAt           DateTime  @updatedAt
+  id                    Int       @id @default(autoincrement())
+  workspaceId           Int
+  workspace             Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  name                  String
+  active                Boolean   @default(true)
+  lostAt                DateTime? // se setea al pasar a inactivo (true→false), se limpia al reactivar; alimenta "Proyectos perdidos" del Scorecard EOS
+  timezone              String    @default("America/Argentina/Buenos_Aires")
+  linksEnabled          Boolean   @default(true)
+  situationEnabled      Boolean   @default(true)
+  hoursEnabled          Boolean   @default(false)
+  briefsEnabled         Boolean   @default(true)
+  filesEnabled          Boolean   @default(true)
+  isPrivate             Boolean   @default(false) // ver concepto "Proyectos privados": solo ProjectMember + admin/owner ven la ficha completa
+  monthlyHours          Int?
+  emailFrom             String?
+  aiWeeklyTokenLimit    Int       @default(500000)
+  websiteUrl            String?
+  connections           String    @default("{}") // JSON: { instagram, facebook, ... }
+  integrationDefaults   String    @default("{}") // JSON: IDs recordados por tipo para reconexión, ej { google_ads: { customerId, propertyId, country }, google_analytics: { propertyId } }
+  cannibalProtectedUrls String    @default("[]") // JSON: array de URLs que el análisis de canibalización nunca recomienda redirigir (301) ni noindexar
+  domainRating          Float? // Ahrefs Domain Rating (0-100), valor actual cacheado
+  domainRatingAt        DateTime? // última actualización del Domain Rating
+  reportSections        String? // JSON: array de claves de sección habilitadas para el informe de este proyecto (ej: ["analytics","instagram"]). null = sin restricción (todas las disponibles, comportamiento legacy)
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
 
   tasks                    Task[]
   taskRecurrences          TaskRecurrence[]
@@ -3095,6 +3099,96 @@ model GoogleCalendarConnection {
   @@index([workspaceId])
 }
 
+// Calendario de AFUERA que se trae a BlissTracker para ver (y que tape huecos)
+// — el camino inverso al push de GoogleCalendarConnection. Es POR PERSONA, igual
+// que esa conexión: nadie suscribe el calendario de otro.
+//
+// Dos fuentes con el mismo modelo porque lo único que cambia es de dónde salen
+// los bytes; todo lo de después (cache, pintado, disponibilidad) es idéntico:
+//   - "google": los eventos del calendario de Google que YA está conectado. No
+//     guarda credenciales propias — lee de GoogleCalendarConnection, cuyo scope
+//     `calendar.events` ya es de lectura y escritura.
+//   - "ics":    una URL iCal pegada a mano (Google, Outlook, Apple, la que sea).
+//     `icsUrl` va CIFRADA: una "dirección secreta en formato iCal" es una llave
+//     de facto — con ese link cualquiera lee la agenda entera.
+model ExternalCalendar {
+  id               Int     @id @default(autoincrement())
+  workspaceId      Int
+  userId           Int
+  source           String // "google" | "ics"
+  name             String
+  icsUrl           String? // cifrado (AES-256-GCM) — solo source="ics"
+  // Host de esa URL, en claro: es lo único que sirve para reconocer de qué
+  // calendario se trata ("calendar.google.com"), y así la lista no necesita
+  // descifrar el secreto para pintarse.
+  icsHost          String?
+  // Calendario dentro de la cuenta de Google. Hoy siempre "primary": listar los
+  // demás calendarios pide `calendar.readonly`, un scope sensible aparte que
+  // dispararía otra verificación de Google (ver googleCalendarAuth.controller.js).
+  googleCalendarId String?
+  color            String? // hex "#RRGGBB" para pintarlo distinto de las reuniones propias
+  // ¿El resto del equipo ve el título, o solo "Ocupado"? Default cerrado: un
+  // evento traído de una agenda personal no es una reunión de trabajo.
+  showDetails      Boolean @default(false)
+  active           Boolean @default(true)
+
+  lastSyncAt    DateTime?
+  lastSyncError String?
+  lastSyncCount Int?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  workspace Workspace               @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  events    ExternalCalendarEvent[]
+
+  // Un solo calendario de Google por persona y workspace (hoy, el "primary").
+  @@unique([userId, workspaceId, source, googleCalendarId])
+  @@index([workspaceId, userId])
+  @@index([active, lastSyncAt])
+}
+
+// Cache de lo que trajimos de afuera. No se pide a Google/al ICS en cada request:
+// la vista Equipo con 6 personas serían 6 llamadas de red por render, y
+// getBusyBlocks necesita los eventos de TODOS para buscar huecos comunes.
+//
+// Las fechas se guardan como strings de pared en la timezone del workspace (mismo
+// criterio que WorkDay.date y CalendarEvent): la conversión del instante UTC que
+// devuelve Google se hace una sola vez, al sincronizar.
+model ExternalCalendarEvent {
+  id           Int     @id @default(autoincrement())
+  calendarId   Int
+  workspaceId  Int
+  userId       Int // denormalizado: la disponibilidad se consulta por persona
+  // Id del lado de la fuente. Para una ocurrencia de una serie ya trae su fecha
+  // (Google con singleEvents=true), y en ICS se la agregamos (`uid#fecha`) — así
+  // cada ocurrencia es una fila propia y el upsert es idempotente.
+  externalId   String
+  title        String
+  date         String // "YYYY-MM-DD" — primer día
+  endDate      String // "YYYY-MM-DD" — último día inclusive (= date si dura uno)
+  startTime    String? // "HH:MM" — null si es de día completo
+  durationMins Int?
+  allDay       Boolean @default(false)
+  // ¿Ocupa el tiempo de la persona? false para los que en Google figuran como
+  // "Mostrar como libre" (transparency) y para los que esa persona rechazó.
+  busy         Boolean @default(true)
+  location     String?
+  url          String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  calendar  ExternalCalendar @relation(fields: [calendarId], references: [id], onDelete: Cascade)
+  workspace Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([calendarId, externalId])
+  @@index([workspaceId, userId, date])
+  @@index([calendarId, date])
+}
+
 // ─── SEO SNAPSHOTS ────────────────────────────────────────────────────────────
 
 model SearchConsoleSnapshot {
@@ -3197,7 +3291,7 @@ model CannibalReport {
 // anterior (resolvedAt + action + reopenCount) — que es justo lo que delata un 301
 // que no quedó aplicado o un CMS que regeneró la página.
 model CannibalResolution {
-  id          Int    @id @default(autoincrement())
+  id          Int @id @default(autoincrement())
   projectId   Int
   workspaceId Int
 
@@ -4818,18 +4912,18 @@ model DeviceToken {
 // no requiere cambiar el modelo, solo generar tokens con ese workspaceId.
 // Altas/bajas vía script de uso único (backend/scripts/), no hay UI todavía.
 model McpToken {
-  id          Int       @id @default(autoincrement())
-  workspaceId Int
-  userId      Int
-  tokenHash   String    @unique
-  label       String? // nombre legible, ej. "Grok - Gaston"
-  createdAt   DateTime  @default(now())
-  lastUsedAt  DateTime?
-  revokedAt   DateTime? // soft-revoke: no se borra la fila, se conserva el historial
+  id                Int       @id @default(autoincrement())
+  workspaceId       Int
+  userId            Int
+  tokenHash         String    @unique
+  label             String? // nombre legible, ej. "Grok - Gaston"
+  createdAt         DateTime  @default(now())
+  lastUsedAt        DateTime?
+  revokedAt         DateTime? // soft-revoke: no se borra la fila, se conserva el historial
   // Cada cuántos minutos, como mucho, se le recuerda al agente (en la respuesta de
   // una tool) que registre en qué está trabajando si no tiene ninguna tarea en
   // curso — ver mcp/workReminder.js. 0 = nunca.
-  workReminderMins Int @default(30)
+  workReminderMins  Int       @default(30)
   // ── Canales de salida hacia el agente ──────────────────────────────────────
   // MCP es unidireccional (el agente nos llama, nunca al revés), así que estos dos
   // campos son la única forma de que algo le llegue sin que él pregunte. Ver

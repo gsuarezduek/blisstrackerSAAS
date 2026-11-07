@@ -358,6 +358,12 @@ GET    /api/calendar/google/auth-url                # inicia la conexión OAuth 
 GET    /api/calendar/google/callback                # callback OAuth (sin auth)
 GET    /api/calendar/google/status                  # { connected, accountEmail }
 DELETE /api/calendar/google                         # desconecta Google Calendar
+GET    /api/calendar/external-calendars             # mis calendarios traídos de afuera (la URL iCal nunca vuelve, solo su host)
+POST   /api/calendar/external-calendars             # { url, name?, color?, showDetails? } — suscribe una URL iCal (se prueba antes de guardar)
+PATCH  /api/calendar/external-calendars/:id         # { name?, color?, active?, showDetails? }
+DELETE /api/calendar/external-calendars/:id         # quita la suscripción (el de Google no desconecta la cuenta)
+POST   /api/calendar/external-calendars/:id/sync    # fuerza el refresco de ese calendario
+GET    /api/calendar/external-events                # ?from=&to=[&userIds=] — eventos ya traídos (cache); el título ajeno sale "Ocupado" salvo showDetails
 
 GET    /api/insights
 POST   /api/insights/refresh

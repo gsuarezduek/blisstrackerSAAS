@@ -329,6 +329,22 @@ cron.schedule('5 8 * * *', () => runCron('whatsappAutomation', 30 * 60 * 1000, a
   catch (err) { console.error('[WhatsappAutomation] Error en cron diario:', err.message) }
 }), { timezone: DEFAULT_TZ })
 
+// Cron: refresco de los calendarios traídos de afuera (Google ya conectado + URLs
+// iCal) — cada 15 min. Es lo que mantiene fresco el cache que la vista Equipo y el
+// buscador de huecos leen de OTRAS personas: al abrir el Calendario solo se
+// refrescan los calendarios propios (ver externalCalendar.service#syncIfStale), que
+// si no serían tantos fetchs de red como columnas tenga la vista. Cada calendario
+// trae su propia ventana de frescura (10 min el de Google, 60 el de un ICS, que del
+// lado de Google se regenera con horas de atraso), así que esto no le pega a nada
+// que ya esté al día.
+cron.schedule('*/15 * * * *', () => runCron('externalCalendarSync', 10 * 60 * 1000, async () => {
+  const { syncAllDue } = require('./services/externalCalendar.service')
+  try {
+    const { checked, synced } = await syncAllDue()
+    if (synced > 0) console.log(`[ExternalCalendar] ${synced}/${checked} calendarios refrescados.`)
+  } catch (err) { console.error('[ExternalCalendar] Error en cron de refresco:', err.message) }
+}), { timezone: DEFAULT_TZ })
+
 // Cron: respuestas del bot de WhatsApp en espera (prioridad a los agentes de IA,
 // WhatsappBotConfig.agentWaitMins) — cada minuto. Sin nada pendiente es un solo
 // query indexado (botReplyDueAt).

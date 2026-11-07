@@ -32,15 +32,24 @@ function emptyUserState() {
 //   del código: null = sin restricción).
 // - fullDayOff: fechas con licencia aprobada (VacationRequest) — el día entero no
 //   tiene huecos libres.
-// - blocks: [{ date, start, end, kind: 'task'|'calendar_event', tentative, refId, title, projectId }]
+// - blocks: [{ date, start, end, kind: 'task'|'calendar_event'|'external', tentative, refId, title, projectId }]
 //   `tentative: true` = invitación de CalendarEvent todavía no respondida (se pinta
 //   en el calendario pero NO cuenta como ocupado para findCommonFreeSlots).
-async function getBusyBlocks({ workspaceId, userIds, fromDate, toDate }) {
+//   `kind: 'external'` = evento traído de un calendario de afuera (Google, una URL
+//   iCal — ver ExternalCalendar). Entra por acá, y no como una lista aparte, para
+//   que un compromiso que la persona tiene en su Google tape el hueco que el
+//   buscador de reuniones le iba a ofrecer; y de paso la grilla lo pinta sin tocar
+//   el frontend, que ya dibuja todo lo que viene en `blocks`.
+//
+// `requesterId` (opcional) es quién está preguntando: el título de un evento
+// externo de OTRA persona solo se revela si ese calendario está marcado
+// `showDetails` — "Médico 15h" de una agenda personal no es una reunión de trabajo.
+async function getBusyBlocks({ workspaceId, userIds, fromDate, toDate, requesterId = null }) {
   const byUser = {}
   for (const id of userIds) byUser[id] = emptyUserState()
   if (!userIds.length) return byUser
 
-  const [members, vacations, tasks, participations] = await Promise.all([
+  const [members, vacations, tasks, participations, externals] = await Promise.all([
     prisma.workspaceMember.findMany({
       where:  { workspaceId, userId: { in: userIds } },
       select: { userId: true, workStartTime: true, workEndTime: true },
@@ -82,6 +91,22 @@ async function getBusyBlocks({ workspaceId, userIds, fromDate, toDate }) {
       select: {
         userId: true, status: true, taskId: true,
         event: { select: { id: true, date: true, startTime: true, durationMins: true, title: true, projectId: true, recurrenceId: true } },
+      },
+    }),
+    // Lo que ya está en los calendarios de afuera de esta gente (cache de
+    // ExternalCalendarEvent — nunca se le pega a Google desde acá). Solo los que
+    // ocupan franja: un día completo ("Viaje", un cumpleaños) o un evento marcado
+    // "Mostrar como libre" no son "estoy en reunión de 9 a 10".
+    prisma.externalCalendarEvent.findMany({
+      where: {
+        workspaceId, userId: { in: userIds },
+        date: { gte: fromDate, lte: toDate },
+        busy: true, allDay: false, startTime: { not: null },
+        calendar: { active: true },
+      },
+      select: {
+        id: true, userId: true, title: true, date: true, startTime: true, durationMins: true,
+        calendar: { select: { id: true, name: true, color: true, showDetails: true } },
       },
     }),
   ])
@@ -134,6 +159,22 @@ async function getBusyBlocks({ workspaceId, userIds, fromDate, toDate }) {
       end: minsToTime(timeToMins(ev.startTime) + ev.durationMins),
       kind: 'calendar_event', tentative: p.status === 'pending',
       refId: ev.id, title: ev.title, projectId: ev.projectId, recurrenceId: ev.recurrenceId,
+    })
+  }
+
+  for (const x of externals) {
+    const u = byUser[x.userId]
+    if (!u) continue
+    const reveal = x.userId === requesterId || x.calendar.showDetails
+    u.blocks.push({
+      date: x.date, start: x.startTime,
+      end: minsToTime(timeToMins(x.startTime) + (x.durationMins || DEFAULT_TASK_BLOCK_MINS)),
+      kind: 'external', tentative: false,
+      refId: x.id, title: reveal ? x.title : 'Ocupado', projectId: null,
+      // El nombre del calendario también se calla cuando el título se calla: "Agenda
+      // personal" ya dice de más. El color no identifica nada y ayuda a ver de un
+      // vistazo que el bloque viene de afuera.
+      calendarName: reveal ? x.calendar.name : null, color: x.calendar.color,
     })
   }
 

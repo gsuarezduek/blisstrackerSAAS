@@ -18,13 +18,17 @@ const ALL_DAY_ITEM_PX = 24
  * varias personas en un mismo día) — el caller decide vía `columns`.
  *
  * `columns`: [{ key, label, subLabel? }]
- * `getBlocks(key)`: → [{ id, start:"HH:MM", end:"HH:MM", title, recurring?, tentative?, tone?, onClick? }]
+ * `getBlocks(key)`: → [{ id, start:"HH:MM", end:"HH:MM", title, recurring?, tentative?, tone?, color?, onClick? }]
+ *   `tone`: 'event' (default) | 'task' | 'external' (traído de un calendario de
+ *   afuera — ver ExternalCalendar; se pinta distinto porque no se gestiona desde
+ *   acá). `color` pinta el borde izquierdo con el color de ESE calendario, que es
+ *   lo único que distingue dos calendarios externos entre sí.
  * `getWorkWindow(key)`: → { start, end } | null (null = todo el día disponible, sin sombreado)
  * `isFullDayOff(key)`: → boolean (licencia aprobada — sombrea toda la columna)
  * `isPast(key)`: → boolean (día ya transcurrido — la columna se pinta en gris suave,
  *   como Google Calendar, y sus bloques se atenúan; sigue siendo clickeable)
  * `onSlotClick(key, "HH:MM")`: click en un hueco vacío (para agendar ahí, redondeado a 15min)
- * `getAllDayItems(key)`: → [{ id, title, recurring?, onClick? }] (opcional) — ítems sin
+ * `getAllDayItems(key)`: → [{ id, title, subtitle?, color?, recurring?, onClick? }] (opcional) — ítems sin
  *   hora (ej. tareas futuras sin Task.scheduledTime), en una franja "todo el día" bajo
  *   el encabezado. La franja solo aparece si alguna columna tiene ítems, y tiene la
  *   misma altura en todas para no desalinear la grilla.
@@ -115,9 +119,10 @@ export default function WeekTimeGrid({
                       <div
                         key={item.id}
                         onClick={() => item.onClick?.()}
-                        title={item.title}
+                        title={item.subtitle ? `${item.title} · ${item.subtitle}` : item.title}
                         className={`rounded-md px-1.5 py-0.5 border border-gray-300 bg-gray-100 dark:bg-gray-700/60 dark:border-gray-600 ${
                           item.onClick ? 'cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-700' : ''} ${past ? 'opacity-60 grayscale' : ''}`}
+                        style={item.color ? { borderLeftWidth: 3, borderLeftColor: item.color } : undefined}
                       >
                         <span className="text-[10px] font-medium text-gray-700 dark:text-gray-200 truncate block">{item.recurring && <Icon as={Repeat} size={10} className="inline-block mr-0.5 align-[-1px]" />}{item.title}</span>
                       </div>
@@ -171,16 +176,23 @@ export default function WeekTimeGrid({
                     <div
                       key={b.id}
                       onClick={e => { e.stopPropagation(); b.onClick?.() }}
-                      title={b.title}
+                      title={b.subtitle ? `${b.title} · ${b.subtitle}` : b.title}
                       className={`absolute left-1 right-1 rounded-md px-1.5 py-0.5 overflow-hidden cursor-pointer border ${
                         past ? 'opacity-60 grayscale' : ''} ${
                         b.tentative
                           ? 'border-dashed border-amber-400 bg-amber-50/80 dark:bg-amber-900/20 dark:border-amber-600'
                           : b.tone === 'task'
                             ? 'border-gray-300 bg-gray-100 dark:bg-gray-700/60 dark:border-gray-600'
-                            : 'border-primary-300 bg-primary-50 dark:bg-primary-900/30 dark:border-primary-700'
+                            : b.tone === 'external'
+                              ? 'border-violet-300 bg-violet-50 dark:bg-violet-900/20 dark:border-violet-700'
+                              : 'border-primary-300 bg-primary-50 dark:bg-primary-900/30 dark:border-primary-700'
                       }`}
-                      style={{ top: `${topPct(b.start)}%`, height: `${Math.max(heightPct(b.start, b.end), 3)}%` }}
+                      style={{
+                        top: `${topPct(b.start)}%`, height: `${Math.max(heightPct(b.start, b.end), 3)}%`,
+                        // Inline y no una clase de Tailwind: el color lo elige la
+                        // persona por calendario, no sale de la paleta.
+                        ...(b.color ? { borderLeftWidth: 3, borderLeftColor: b.color } : {}),
+                      }}
                     >
                       <span className="text-[10px] font-medium text-gray-700 dark:text-gray-200 truncate block">{b.recurring && <Icon as={Repeat} size={10} className="inline-block mr-0.5 align-[-1px]" />}{b.title}</span>
                     </div>

@@ -38,4 +38,18 @@ router.get   ('/google/auth-url',              googleAuth.getAuthUrl)
 router.get   ('/google/status',                googleAuth.getStatus)
 router.delete('/google',                       googleAuth.disconnect)
 
+// Calendarios de AFUERA traídos acá (el camino inverso al push de arriba): el
+// Google ya conectado y las URLs iCal pegadas a mano. Todo por persona — ver
+// externalCalendars.controller.js / externalCalendar.service.js.
+const externalCalendars = require('../controllers/externalCalendars.controller')
+
+router.get   ('/external-calendars',           externalCalendars.list)
+router.post  ('/external-calendars',           externalCalendars.create)
+router.patch ('/external-calendars/:id',       externalCalendars.update)
+router.delete('/external-calendars/:id',       externalCalendars.remove)
+router.post  ('/external-calendars/:id/sync',  externalCalendars.sync)
+// Ruta propia y no sumado a GET /events para no cambiarle el shape a lo que ya
+// consumen el Calendario, la ficha del proyecto y el Dashboard.
+router.get   ('/external-events',              externalCalendars.listEvents)
+
 module.exports = router

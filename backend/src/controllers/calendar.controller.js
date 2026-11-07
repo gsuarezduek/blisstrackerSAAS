@@ -7,6 +7,7 @@ const { startMeetingParticipants } = require('../lib/projectMeetingLifecycle')
 const { taskInclude } = require('./tasks/_shared')
 const { createTaskForParticipant, syncTaskFields, removeTaskIfPending } = require('../lib/calendarEventTasks')
 const googleCalendarSync = require('../services/googleCalendarSync.service')
+const externalCalendarService = require('../services/externalCalendar.service')
 const {
   DATE_RE, TIME_RE, MIN_DURATION_MINS, MAX_DURATION_MINS, TITLE_MAX, MEET_LINK_MAX,
   parseUserIds, formatEvent, formatRecurrence, EVENT_INCLUDE, loadEvent,
@@ -112,9 +113,17 @@ async function getAvailability(req, res, next) {
     // no afectan el buscador de huecos comunes. Solo las del propio requester (una
     // tarea es personal, ver arriba: en la columna de otra persona no aportaría
     // nada sin título ni hora, y llenaría la vista Equipo).
+    // Refresca los calendarios de afuera de QUIEN PREGUNTA antes de leer el cache
+    // (best-effort, nunca rompe la respuesta): así abrir el Calendario alcanza para
+    // ver lo que haya en su Google, sin esperar al cron. Los de las otras personas
+    // de la vista Equipo se leen del cache — 6 columnas no pueden ser 6 fetchs.
+    if (userIds.includes(requesterId)) {
+      await externalCalendarService.syncIfStale({ workspaceId, userId: requesterId, tz: req.workspace.timezone })
+    }
+
     const includeOwnTasks = userIds.includes(requesterId)
-    const [busy, untimedTasks] = await Promise.all([
-      getBusyBlocks({ workspaceId, userIds, fromDate: from, toDate: to }),
+    const [busy, untimedTasks, externalAllDay] = await Promise.all([
+      getBusyBlocks({ workspaceId, userIds, fromDate: from, toDate: to, requesterId }),
       includeOwnTasks
         ? prisma.task.findMany({
             where: {
@@ -130,6 +139,15 @@ async function getAvailability(req, res, next) {
             include: { ...taskInclude, user: { select: { id: true, name: true, avatar: true } } },
             orderBy: { createdAt: 'asc' },
           })
+        : [],
+      // Los de día completo no ocupan franja (no entran en getBusyBlocks): van al
+      // riel "Sin hora", al lado de las tareas futuras sin horario. Solo los
+      // propios, mismo criterio que esas tareas: en la columna de otra persona
+      // llenarían la vista sin aportar nada a "¿cuándo nos juntamos?".
+      includeOwnTasks
+        ? externalCalendarService.listForRange({ workspaceId, userIds: [requesterId], from, to, requesterId })
+            .then(rows => rows.filter(r => r.allDay))
+            .catch(() => [])
         : [],
     ])
 
@@ -162,10 +180,13 @@ async function getAvailability(req, res, next) {
         workEnd:    state.workEnd,
         fullDayOff: [...state.fullDayOff],
         blocks: state.blocks.map((b) => {
-          const revealed = isSelf || (b.kind === 'calendar_event' && hasAccessToProject(b.projectId))
+          // Un bloque 'external' ya sale sanitizado de getBusyBlocks (ahí se aplica
+          // el showDetails de su calendario), así que pasa tal cual.
+          const revealed = isSelf || b.kind === 'external' || (b.kind === 'calendar_event' && hasAccessToProject(b.projectId))
           return revealed ? b : { date: b.date, start: b.start, end: b.end, kind: b.kind, tentative: b.tentative }
         }),
         allDayTasks: isSelf ? untimedTasks : [],
+        allDayExternal: isSelf ? externalAllDay : [],
       }
     }
     res.json(sanitized)
@@ -184,6 +205,11 @@ async function commonFreeSlots(req, res, next) {
       ? Number(req.body.durationMins)
       : DEFAULT_TASK_BLOCK_MINS
 
+    // Mismo refresco que en getAvailability: buscar un hueco sin mirar lo que la
+    // persona ya tiene en su Google sería ofrecer un horario que no tiene libre.
+    if (userIds.includes(req.user.userId)) {
+      await externalCalendarService.syncIfStale({ workspaceId, userId: req.user.userId, tz: req.workspace.timezone })
+    }
     const slots = await findCommonFreeSlots({ workspaceId, userIds, date, durationMins })
     res.json({ slots })
   } catch (err) { next(err) }

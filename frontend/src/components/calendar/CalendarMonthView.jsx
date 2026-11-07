@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import MonthGrid from './MonthGrid'
-import { monthLabel, todayYMD } from './dateHelpers'
+import { monthLabel, todayYMD, shiftDay } from './dateHelpers'
 import { CircleDashed, Repeat } from 'lucide-react'
 import { Icon } from '../ui/Icon'
 
@@ -14,15 +14,28 @@ const MAX_CHIPS_PER_DAY = 4
  * detalle; click en un día vacío navega a la vista semanal centrada ahí.
  * `tasks`: mis tareas futuras sin hora (Task.scheduledFor) — van primero en el día,
  * como los eventos "todo el día" de Google Calendar; click abre su detalle.
+ * `externalEvents`: lo traído de mis calendarios de afuera (ver ExternalCalendar) —
+ * `{ id, title, date, endDate, startTime, allDay, color, calendarName }`. No se
+ * abren: no existen como reunión acá, se mira que el día está ocupado. Uno de
+ * varios días se repite en cada día que abarca.
  */
-export default function CalendarMonthView({ events, tasks = [], month, onMonthChange, onOpenEvent, onOpenTask, onOpenDay }) {
+export default function CalendarMonthView({ events, tasks = [], externalEvents = [], month, onMonthChange, onOpenEvent, onOpenTask, onOpenDay }) {
   const byDay = useMemo(() => {
     const map = {}
     for (const e of events) (map[e.date] ??= []).push({ kind: 'event', item: e })
     for (const key of Object.keys(map)) map[key].sort((a, b) => a.item.startTime.localeCompare(b.item.startTime))
+    for (const x of externalEvents) {
+      let day = x.date
+      const last = x.endDate || x.date
+      // Tope de seguridad: un evento mal declarado podría abarcar un rango absurdo.
+      for (let i = 0; i < 62 && day <= last; i++) {
+        (map[day] ??= []).push({ kind: 'external', item: x, day })
+        day = shiftDay(day, 1)
+      }
+    }
     for (const t of tasks) (map[t.scheduledFor] ??= []).unshift({ kind: 'task', item: t })
     return map
-  }, [events, tasks])
+  }, [events, tasks, externalEvents])
 
   const today = todayYMD()
 
@@ -52,7 +65,18 @@ export default function CalendarMonthView({ events, tasks = [], month, onMonthCh
                   {dayNum}
                 </div>
                 <div className="space-y-1">
-                  {items.slice(0, MAX_CHIPS_PER_DAY).map(({ kind, item: e }) => kind === 'task' ? (
+                  {items.slice(0, MAX_CHIPS_PER_DAY).map(({ kind, item: e, day }) => kind === 'external' ? (
+                    <div
+                      key={`ext-${e.id}-${day}`}
+                      title={e.calendarName ? `${e.title} · ${e.calendarName}` : e.title}
+                      className={`flex items-center gap-1 px-1.5 py-0.5 rounded bg-violet-50 dark:bg-violet-900/20 ${past ? 'opacity-60 grayscale' : ''}`}
+                      style={e.color ? { borderLeft: `3px solid ${e.color}` } : undefined}
+                    >
+                      <span className="text-[11px] text-gray-700 dark:text-gray-300 truncate">
+                        {e.startTime ? `${e.startTime} ` : ''}{e.title}
+                      </span>
+                    </div>
+                  ) : kind === 'task' ? (
                     <div
                       key={`task-${e.id}`}
                       onClick={ev => { ev.stopPropagation(); onOpenTask?.(e) }}

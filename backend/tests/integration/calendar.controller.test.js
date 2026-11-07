@@ -15,6 +15,9 @@ jest.mock('../../src/lib/prisma', () => {
     taskSession:               { create: jest.fn() },
     projectMeeting:            { create: jest.fn(), findUnique: jest.fn(), update: jest.fn() },
     projectMeetingParticipant: { createMany: jest.fn(), findMany: jest.fn(), update: jest.fn() },
+    externalCalendar:          { findMany: jest.fn(), findFirst: jest.fn(), create: jest.fn(), update: jest.fn() },
+    externalCalendarEvent:     { findMany: jest.fn(), deleteMany: jest.fn(), createMany: jest.fn() },
+    googleCalendarConnection:  { findUnique: jest.fn() },
   }
   prisma.$transaction = jest.fn((arg) => (
     typeof arg === 'function' ? arg(prisma) : Promise.all(arg)
@@ -50,6 +53,10 @@ function mockWorkspace(role = 'member') {
 beforeEach(() => {
   jest.clearAllMocks()
   mockWorkspace('member')
+  // Calendarios traídos de afuera: sin nada suscrito (los lee getBusyBlocks).
+  prisma.externalCalendarEvent.findMany.mockResolvedValue([])
+  prisma.externalCalendar.findMany.mockResolvedValue([])
+  prisma.googleCalendarConnection.findUnique.mockResolvedValue(null)
   // Sin series recurrentes por default — los tests que las necesitan lo pisan.
   prisma.calendarEventRecurrence.findMany.mockResolvedValue([])
 })

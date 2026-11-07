@@ -3,6 +3,7 @@ jest.mock('../../src/lib/prisma', () => ({
   vacationRequest:          { findMany: jest.fn() },
   task:                     { findMany: jest.fn() },
   calendarEventParticipant: { findMany: jest.fn() },
+  externalCalendarEvent:    { findMany: jest.fn() },
 }))
 
 const prisma = require('../../src/lib/prisma')
@@ -14,6 +15,7 @@ function resetAll() {
   prisma.vacationRequest.findMany.mockResolvedValue([])
   prisma.task.findMany.mockResolvedValue([])
   prisma.calendarEventParticipant.findMany.mockResolvedValue([])
+  prisma.externalCalendarEvent.findMany.mockResolvedValue([])
 }
 
 beforeEach(resetAll)
