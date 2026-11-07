@@ -20,6 +20,11 @@ function event(over = {}) {
     allDay: false, busy: true, color: '#4285F4',
     location: 'Oficina', organizer: 'Jefa', description: 'Repasamos los números',
     meetLink: 'https://meet.google.com/abc-defg-hij', url: 'https://calendar.google.com/event?eid=x',
+    attendees: [
+      { name: 'Ana Pérez', email: 'ana@x.com', status: 'accepted' },
+      { email: 'beto@x.com', status: 'pending' },
+    ],
+    attendeeCount: 2,
     canSeeDetail: true, ...over,
   }
 }
@@ -36,6 +41,28 @@ describe('ExternalEventModal', () => {
     expect(screen.getByText('Repasamos los números')).toBeInTheDocument()
   })
 
+  it('lista los invitados con su estado y cuántos confirmaron', () => {
+    render(<ExternalEventModal event={event()} onClose={() => {}} />)
+    expect(screen.getByText(/2 invitados/)).toBeInTheDocument()
+    expect(screen.getByText(/1 confirmó/)).toBeInTheDocument()
+    expect(screen.getByText('Ana Pérez')).toBeInTheDocument()
+    expect(screen.getByText('Confirmó')).toBeInTheDocument()
+    // Sin nombre se muestra el mail, que es lo único que hay.
+    expect(screen.getByText('beto@x.com')).toBeInTheDocument()
+    expect(screen.getByText('Sin responder')).toBeInTheDocument()
+  })
+
+  it('en una reunión multitudinaria dice cuántos quedaron sin listar', () => {
+    render(<ExternalEventModal event={event({ attendeeCount: 120 })} onClose={() => {}} />)
+    expect(screen.getByText(/120 invitados/)).toBeInTheDocument()
+    expect(screen.getByText('y 118 más')).toBeInTheDocument()
+  })
+
+  it('sin invitados no muestra la sección', () => {
+    render(<ExternalEventModal event={event({ attendees: null, attendeeCount: null })} onClose={() => {}} />)
+    expect(screen.queryByText(/invitado/)).toBeNull()
+  })
+
   it('ofrece entrar a la videollamada y abrir el evento donde vive', () => {
     render(<ExternalEventModal event={event()} onClose={() => {}} />)
     expect(screen.getByRole('link', { name: /Entrar a la reunión/ })).toHaveAttribute('href', 'https://meet.google.com/abc-defg-hij')
@@ -50,10 +77,11 @@ describe('ExternalEventModal', () => {
 
   it('el de otra persona que no comparte detalles dice por qué no hay nada', () => {
     render(<ExternalEventModal
-      event={event({ title: 'Ocupado', canSeeDetail: false, calendarName: null, organizer: null, location: null, description: null, meetLink: null, url: null })}
+      event={event({ title: 'Ocupado', canSeeDetail: false, calendarName: null, organizer: null, location: null, description: null, meetLink: null, url: null, attendees: null, attendeeCount: null })}
       onClose={() => {}} />)
     expect(screen.getByText(/no comparte de qué se trata/)).toBeInTheDocument()
     expect(screen.queryByRole('link')).toBeNull()
+    expect(screen.queryByText(/invitado/)).toBeNull()
   })
 
   it('con solo el id, lo pide al backend', async () => {

@@ -3157,33 +3157,41 @@ model ExternalCalendar {
 // criterio que WorkDay.date y CalendarEvent): la conversión del instante UTC que
 // devuelve Google se hace una sola vez, al sincronizar.
 model ExternalCalendarEvent {
-  id           Int     @id @default(autoincrement())
-  calendarId   Int
-  workspaceId  Int
-  userId       Int // denormalizado: la disponibilidad se consulta por persona
+  id            Int     @id @default(autoincrement())
+  calendarId    Int
+  workspaceId   Int
+  userId        Int // denormalizado: la disponibilidad se consulta por persona
   // Id del lado de la fuente. Para una ocurrencia de una serie ya trae su fecha
   // (Google con singleEvents=true), y en ICS se la agregamos (`uid#fecha`) — así
   // cada ocurrencia es una fila propia y el upsert es idempotente.
-  externalId   String
-  title        String
-  date         String // "YYYY-MM-DD" — primer día
-  endDate      String // "YYYY-MM-DD" — último día inclusive (= date si dura uno)
-  startTime    String? // "HH:MM" — null si es de día completo
-  durationMins Int?
-  allDay       Boolean @default(false)
+  externalId    String
+  title         String
+  date          String // "YYYY-MM-DD" — primer día
+  endDate       String // "YYYY-MM-DD" — último día inclusive (= date si dura uno)
+  startTime     String? // "HH:MM" — null si es de día completo
+  durationMins  Int?
+  allDay        Boolean @default(false)
   // ¿Ocupa el tiempo de la persona? false para los que en Google figuran como
   // "Mostrar como libre" (transparency) y para los que esa persona rechazó.
-  busy         Boolean @default(true)
-  location     String?
-  url          String?
+  busy          Boolean @default(true)
+  location      String?
+  url           String?
   // Lo que hace falta para contestar "¿de qué era esta reunión?" sin tener que
   // abrir Google. La descripción viene recortada (una invitación de Zoom trae
   // páginas de texto legal) y solo se le muestra a su dueño — ver showDetails en
   // ExternalCalendar: que el equipo vea DE QUÉ se trata no es que vea todo el
   // contenido, que es justo donde viven los links de acceso y las notas personales.
-  description  String?
-  meetLink     String?
-  organizer    String?
+  description   String?
+  meetLink      String?
+  organizer     String?
+  // Invitados: `[{ name?, email, status }]`, con status normalizado a
+  // accepted|declined|tentative|pending (Google y los ICS usan vocabularios
+  // distintos). Se guardan hasta ATTENDEE_LIMIT y `attendeeCount` lleva cuántos
+  // eran en total, para no mentir con el número en una reunión multitudinaria.
+  // Son datos personales de terceros: igual que la descripción, solo se le
+  // muestran a su dueño — ver shapeExternalEvent.
+  attendees     Json?
+  attendeeCount Int?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { X, Clock, MapPin, User, Video, ExternalLink, CalendarDays } from 'lucide-react'
+import { X, Clock, MapPin, User, Video, ExternalLink, CalendarDays, Check, Minus } from 'lucide-react'
 import { Icon } from '../ui/Icon'
 import api from '../../api/client'
 import { fmtMins } from '../../utils/format'
@@ -23,6 +23,43 @@ function endTime(startTime, durationMins) {
   const [h, m] = startTime.split(':').map(Number)
   const total = h * 60 + m + (durationMins || 0)
   return `${String(Math.floor(total / 60) % 24).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`
+}
+
+// Mismo vocabulario que el resto del módulo para el estado de una invitación.
+const ATTENDEE_STATUS = {
+  accepted:  { label: 'Confirmó',      className: 'text-green-600 dark:text-green-400' },
+  declined:  { label: 'Rechazó',       className: 'text-red-600 dark:text-red-400' },
+  tentative: { label: 'Quizá',         className: 'text-amber-600 dark:text-amber-400' },
+  pending:   { label: 'Sin responder', className: 'text-gray-400 dark:text-gray-500' },
+}
+
+function AttendeeList({ attendees, total }) {
+  const confirmed = attendees.filter(a => a.status === 'accepted').length
+  const hidden = Math.max(0, (total ?? attendees.length) - attendees.length)
+
+  return (
+    <div>
+      <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-1.5">
+        {total ?? attendees.length} invitado{(total ?? attendees.length) === 1 ? '' : 's'}
+        {confirmed > 0 && <span className="normal-case tracking-normal font-medium text-gray-400"> · {confirmed} confirmó{confirmed === 1 ? '' : 'n'}</span>}
+      </p>
+      <ul className="space-y-1">
+        {attendees.map((a, i) => {
+          const status = ATTENDEE_STATUS[a.status] || ATTENDEE_STATUS.pending
+          return (
+            <li key={a.email || `${a.name}-${i}`} className="flex items-center gap-2 text-sm min-w-0">
+              <Icon as={a.status === 'accepted' ? Check : Minus} size={13} className={status.className} />
+              <span className="text-gray-700 dark:text-gray-300 truncate" title={a.email || a.name}>{a.name || a.email}</span>
+              <span className={`text-xs flex-shrink-0 ml-auto ${status.className}`}>{status.label}</span>
+            </li>
+          )
+        })}
+      </ul>
+      {hidden > 0 && (
+        <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">y {hidden} más</p>
+      )}
+    </div>
+  )
 }
 
 function Line({ icon, children }) {
@@ -90,6 +127,10 @@ export default function ExternalEventModal({ event: initial, eventId, onClose })
                   className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold bg-primary-600 hover:bg-primary-700 text-white">
                   <Icon as={Video} size={15} /> Entrar a la reunión
                 </a>
+              )}
+
+              {event.attendees?.length > 0 && (
+                <AttendeeList attendees={event.attendees} total={event.attendeeCount} />
               )}
 
               {event.description && (

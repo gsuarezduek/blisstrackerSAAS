@@ -13,6 +13,9 @@ const MAX_TITLE = 300
 // Una invitación de Zoom/Teams trae páginas de texto legal y de instrucciones de
 // marcado telefónico: lo útil está siempre arriba.
 const MAX_DESCRIPTION = 2000
+// Cuántos invitados se guardan. Más que esto no se lee en una lista: para una
+// charla de toda la empresa lo que importa es el número, que va aparte.
+const ATTENDEE_LIMIT = 50
 const DEFAULT_DURATION_MINS = 60
 // Un evento más largo que esto casi siempre es un "fuera de la oficina" de varios
 // días mal declarado con hora; se recorta para que no tape la grilla entera.
@@ -81,6 +84,46 @@ function cleanShort(raw, max = 500) {
   return t ? t.slice(0, max) : null
 }
 
+// ─── Invitados ────────────────────────────────────────────────────────────────
+
+// Google y los ICS dicen lo mismo con palabras distintas; acá queda uno solo.
+const ATTENDEE_STATUS = {
+  accepted: 'accepted', declined: 'declined', tentative: 'tentative',
+  needsaction: 'pending', 'needs-action': 'pending',
+}
+
+function attendeeStatus(raw) {
+  return ATTENDEE_STATUS[String(raw ?? '').toLowerCase()] || 'pending'
+}
+
+function emailOf(raw) {
+  return cleanShort(String(raw ?? '').replace(/^mailto:/i, ''), 200)
+}
+
+/**
+ * Normaliza la lista de invitados a `[{ name?, email, status }]` + cuántos eran en
+ * total. Devuelve `{ attendees, attendeeCount }` con `null`/`undefined` cuando no
+ * hay nadie, para no guardar un array vacío que después hay que distinguir de
+ * "esta fuente no informa invitados".
+ *
+ * Las **salas y los recursos quedan afuera**: en Google y en un ICS un proyector o
+ * la "Sala 2" son un invitado más, pero en una lista de personas son ruido (y la
+ * sala ya se ve en la ubicación).
+ */
+function normalizeAttendees(list) {
+  const people = []
+  for (const a of list) {
+    if (!a || a.resource) continue
+    if (String(a.cutype ?? '').toUpperCase() === 'ROOM' || String(a.cutype ?? '').toUpperCase() === 'RESOURCE') continue
+    const email = emailOf(a.email)
+    const name = cleanShort(a.name, 200)
+    if (!email && !name) continue
+    people.push({ ...(name && name !== email ? { name } : {}), email: email || null, status: attendeeStatus(a.status) })
+  }
+  if (!people.length) return { attendees: null, attendeeCount: null }
+  return { attendees: people.slice(0, ATTENDEE_LIMIT), attendeeCount: people.length }
+}
+
 // ─── Google Calendar (API) ────────────────────────────────────────────────────
 
 // eventType de Google que NO son citas: "workingLocation" es el cartelito de
@@ -137,6 +180,9 @@ function mapGoogleEvent(ev, tz) {
     // Zoom/Teams, el link vive en conferenceData o directamente en la ubicación.
     meetLink: ev.hangoutLink || conferenceUri(ev) || null,
     organizer: cleanShort(ev.organizer?.displayName || ev.organizer?.email, 200),
+    ...normalizeAttendees((ev.attendees || []).map(a => ({
+      email: a.email, name: a.displayName, status: a.responseStatus, resource: a.resource,
+    }))),
   }
 }
 
@@ -209,6 +255,13 @@ function mapIcsEvent(ev, { tz, from, to }) {
       : (ev.organizer?.params?.CN || String(ev.organizer?.val || '').replace(/^mailto:/i, '')),
     200,
   )
+  // Con un solo invitado node-ical devuelve el objeto suelto en vez de un array.
+  const rawAttendees = ev.attendee == null ? [] : (Array.isArray(ev.attendee) ? ev.attendee : [ev.attendee])
+  const { attendees, attendeeCount } = normalizeAttendees(rawAttendees.map(a => (
+    typeof a === 'string'
+      ? { email: a }
+      : { email: a?.val, name: a?.params?.CN, status: a?.params?.PARTSTAT, cutype: a?.params?.CUTYPE }
+  )))
 
   // Forma del primer evento: la que heredan todas las ocurrencias.
   const base = allDay
@@ -227,7 +280,7 @@ function mapIcsEvent(ev, { tz, from, to }) {
     title, date: day, endDate: addDaysYMD(day, base.spanDays),
     startTime: base.startTime, durationMins: base.durationMins, allDay,
     busy: !allDay && !transparent,
-    location, url, description, meetLink, organizer,
+    location, url, description, meetLink, organizer, attendees, attendeeCount,
   })
 
   if (!ev.rrule) {
@@ -295,8 +348,8 @@ function firstMeetingUrl(text) {
 }
 
 module.exports = {
-  MAX_TITLE, MAX_DESCRIPTION, DEFAULT_DURATION_MINS, MAX_DURATION_MINS,
-  cleanDescription, cleanShort, firstMeetingUrl,
+  MAX_TITLE, MAX_DESCRIPTION, ATTENDEE_LIMIT, DEFAULT_DURATION_MINS, MAX_DURATION_MINS,
+  cleanDescription, cleanShort, firstMeetingUrl, normalizeAttendees, attendeeStatus,
   timeInTz, wallInTz, ymdLocal, diffMinutes, diffDaysYMD, clampDuration, cleanTitle,
   mapGoogleEvent, normalizeIcsUrl, mapIcsEvent, exdateDays, dedupeExternalRows,
 }

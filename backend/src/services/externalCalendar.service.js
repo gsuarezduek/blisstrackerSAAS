@@ -350,6 +350,10 @@ function shapeExternalEvent(r, requesterId) {
     description: own ? r.description : null,
     meetLink: own ? r.meetLink : null,
     url: own ? r.url : null,
+    // Los invitados son datos personales de terceros (hay mails de gente que puede
+    // ni estar en el workspace), así que van con la descripción: solo su dueño.
+    attendees: own ? (r.attendees || null) : null,
+    attendeeCount: own ? (r.attendeeCount ?? null) : null,
     canSeeDetail: reveal,
   }
 }

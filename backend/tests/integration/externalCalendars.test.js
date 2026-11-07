@@ -231,11 +231,13 @@ describe('GET /api/calendar/external-events', () => {
   it('lo propio trae los detalles para poder leer de qué era', async () => {
     prisma.externalCalendarEvent.findMany.mockResolvedValue([cachedRow({
       description: 'Repasamos los números', meetLink: 'https://meet.google.com/x', organizer: 'Jefa',
+      attendees: [{ name: 'Ana', email: 'ana@x.com', status: 'accepted' }], attendeeCount: 1,
     })])
     const res = await req('get', '/external-events?from=2026-11-01&to=2026-11-30')
     expect(res.body[0]).toMatchObject({
       description: 'Repasamos los números', meetLink: 'https://meet.google.com/x',
       organizer: 'Jefa', canSeeDetail: true,
+      attendees: [{ name: 'Ana', email: 'ana@x.com', status: 'accepted' }], attendeeCount: 1,
     })
   })
 
@@ -244,7 +246,7 @@ describe('GET /api/calendar/external-events', () => {
     // descripción es justo donde viven los links de acceso y las notas personales.
     prisma.externalCalendarEvent.findMany.mockResolvedValue([cachedRow({
       userId: OTHER, description: 'Link de acceso: https://meet.google.com/privado', meetLink: 'https://meet.google.com/privado',
-      organizer: 'Jefa',
+      organizer: 'Jefa', attendees: [{ email: 'privado@x.com', status: 'accepted' }], attendeeCount: 1,
       calendar: { id: 50, name: 'Google', color: null, source: 'google', showDetails: true },
     })])
     const res = await req('get', `/external-events?from=2026-11-01&to=2026-11-30&userIds=${OTHER}`)
@@ -252,6 +254,7 @@ describe('GET /api/calendar/external-events', () => {
     expect(res.body[0].organizer).toBe('Jefa')
     expect(res.body[0].description).toBeNull()          // el contenido, no
     expect(res.body[0].meetLink).toBeNull()
+    expect(res.body[0].attendees).toBeNull()            // ni quiénes van
     expect(JSON.stringify(res.body)).not.toContain('privado')
   })
 

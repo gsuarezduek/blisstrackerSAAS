@@ -141,6 +141,16 @@ describe('mapIcsEvent', () => {
     'DTSTART;TZID=America/Argentina/Buenos_Aires:20261106T220000',
     'DTEND;TZID=America/Argentina/Buenos_Aires:20261107T000000',
     'UID:nocturno@x', 'SUMMARY:Cierre nocturno',
+    'ORGANIZER;CN=Jefa:mailto:jefa@x.com',
+    'ATTENDEE;CN=Ana Perez;PARTSTAT=ACCEPTED;CUTYPE=INDIVIDUAL:mailto:ana@x.com',
+    'ATTENDEE;PARTSTAT=NEEDS-ACTION:mailto:beto@x.com',
+    'ATTENDEE;CN=Sala 2;CUTYPE=ROOM;PARTSTAT=ACCEPTED:mailto:sala2@r.com',
+    'END:VEVENT',
+    'BEGIN:VEVENT',
+    'DTSTART;TZID=America/Argentina/Buenos_Aires:20261113T090000',
+    'DTEND;TZID=America/Argentina/Buenos_Aires:20261113T100000',
+    'UID:uninvitado@x', 'SUMMARY:Con un solo invitado',
+    'ATTENDEE;CN=Solo Uno;PARTSTAT=TENTATIVE:mailto:uno@x.com',
     'END:VEVENT',
     'BEGIN:VEVENT',
     'DTSTART;VALUE=DATE:20261112', 'DTEND;VALUE=DATE:20261115',
@@ -186,6 +196,21 @@ describe('mapIcsEvent', () => {
     expect(run().find(r => r.externalId === 'viaje@x')).toMatchObject({
       date: '2026-11-12', endDate: '2026-11-14', allDay: true, startTime: null, busy: false,
     })
+  })
+
+  it('trae los invitados con su estado, y el organizador', () => {
+    const ev = run().find(r => r.externalId === 'nocturno@x')
+    expect(ev.organizer).toBe('Jefa')
+    expect(ev.attendees).toEqual([
+      { name: 'Ana Perez', email: 'ana@x.com', status: 'accepted' },
+      { email: 'beto@x.com', status: 'pending' },
+    ])
+    expect(ev.attendeeCount).toBe(2)
+  })
+
+  it('con UN solo invitado node-ical no devuelve un array, y igual se lee', () => {
+    const ev = run().find(r => r.externalId === 'uninvitado@x')
+    expect(ev.attendees).toEqual([{ name: 'Solo Uno', email: 'uno@x.com', status: 'tentative' }])
   })
 
   it('descarta los cancelados y lo que cae fuera del rango', () => {
@@ -247,5 +272,54 @@ describe('dedupeExternalRows — el mismo evento por dos calendarios', () => {
     const viaje = { id: 1, userId: 7, title: 'Viaje', date: '2026-11-12', endDate: '2026-11-14', startTime: null }
     expect(dedupeExternalRows([viaje, { ...viaje, id: 2 }])).toHaveLength(1)
     expect(dedupeExternalRows([viaje, { ...viaje, id: 2, endDate: '2026-11-15' }])).toHaveLength(2)
+  })
+})
+
+describe('normalizeAttendees — los invitados de la reunión', () => {
+  const { normalizeAttendees, ATTENDEE_LIMIT } = require('../../src/lib/externalCalendar')
+
+  it('traduce a un solo vocabulario los estados de Google y de un ICS', () => {
+    const { attendees } = normalizeAttendees([
+      { email: 'a@x.com', status: 'accepted' },
+      { email: 'b@x.com', status: 'NEEDS-ACTION' },
+      { email: 'c@x.com', status: 'needsAction' },
+      { email: 'd@x.com', status: 'DECLINED' },
+      { email: 'e@x.com', status: 'TENTATIVE' },
+      { email: 'f@x.com' },
+    ])
+    expect(attendees.map(a => a.status)).toEqual(['accepted', 'pending', 'pending', 'declined', 'tentative', 'pending'])
+  })
+
+  it('deja afuera las salas y los recursos, que no son personas', () => {
+    const { attendees, attendeeCount } = normalizeAttendees([
+      { email: 'ana@x.com', name: 'Ana' },
+      { email: 'sala2@r.com', name: 'Sala 2', cutype: 'ROOM' },
+      { email: 'proyector@r.com', resource: true },
+    ])
+    expect(attendees).toEqual([{ name: 'Ana', email: 'ana@x.com', status: 'pending' }])
+    expect(attendeeCount).toBe(1)
+  })
+
+  it('saca el mailto: y no repite el mail como nombre', () => {
+    const { attendees } = normalizeAttendees([
+      { email: 'mailto:ana@x.com', name: 'Ana Pérez' },
+      { email: 'mailto:beto@x.com', name: 'beto@x.com' },
+    ])
+    expect(attendees[0]).toEqual({ name: 'Ana Pérez', email: 'ana@x.com', status: 'pending' })
+    expect(attendees[1]).toEqual({ email: 'beto@x.com', status: 'pending' })
+  })
+
+  it('recorta la lista pero el total sigue diciendo la verdad', () => {
+    const many = Array.from({ length: 200 }, (_, i) => ({ email: `p${i}@x.com` }))
+    const { attendees, attendeeCount } = normalizeAttendees(many)
+    expect(attendees).toHaveLength(ATTENDEE_LIMIT)
+    expect(attendeeCount).toBe(200)
+  })
+
+  it('sin invitados devuelve null, no una lista vacía', () => {
+    // null = "esta reunión no tiene invitados o la fuente no los informa"; un array
+    // vacío obligaría a distinguir dos cosas que se ven igual.
+    expect(normalizeAttendees([])).toEqual({ attendees: null, attendeeCount: null })
+    expect(normalizeAttendees([{ }, null])).toEqual({ attendees: null, attendeeCount: null })
   })
 })
