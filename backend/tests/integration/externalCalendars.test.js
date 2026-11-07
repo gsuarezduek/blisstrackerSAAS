@@ -264,6 +264,36 @@ describe('Refresco del Google ya conectado', () => {
     expect(rows.map(r => r.externalId)).toEqual(['solo-en-google'])
   })
 
+  it('tampoco vuelven las reuniones que organizó OTRA persona y a mí me invitaron', async () => {
+    // Al empujar, los participantes viajan como attendees: Google pone el evento
+    // también en MI calendario, con el mismo id. Si el filtro mirara solo lo que yo
+    // organicé, los invitados —la mayoría de los participantes— verían todo doble.
+    prisma.googleCalendarConnection.findUnique.mockResolvedValue({
+      id: 1, userId: ME, workspaceId: WS, accountEmail: 'yo@x.com',
+      accessToken: null, refreshToken: null, expiresAt: new Date(Date.now() + 3600_000),
+    })
+    prisma.externalCalendar.findFirst.mockResolvedValue(calendar({ id: 60, source: 'google', lastSyncAt: null }))
+    prisma.externalCalendar.findMany.mockResolvedValue([calendar({ id: 60, source: 'google', lastSyncAt: null })])
+    prisma.calendarEvent.findMany.mockResolvedValue([{ googleEventId: 'reunion-de-otro' }])
+    axios.get.mockResolvedValue({
+      data: {
+        items: [{
+          id: 'reunion-de-otro', summary: 'Reunión cierre semanal',
+          start: { dateTime: '2026-11-10T15:00:00-03:00' }, end: { dateTime: '2026-11-10T16:00:00-03:00' },
+          attendees: [{ self: true, responseStatus: 'accepted' }, { email: 'jefe@x.com', organizer: true }],
+        }],
+      },
+    })
+
+    await req('get', '/external-events?from=2026-11-01&to=2026-11-30')
+
+    expect(prisma.externalCalendarEvent.createMany.mock.calls[0][0].data).toEqual([])
+    // Y la búsqueda no se acota al organizador.
+    expect(prisma.calendarEvent.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.not.objectContaining({ organizerId: expect.anything() }),
+    }))
+  })
+
   it('da de alta sola la fila del Google que ya estaba conectado', async () => {
     prisma.googleCalendarConnection.findUnique.mockResolvedValue({
       id: 1, userId: ME, workspaceId: WS, accountEmail: 'yo@x.com', accessToken: null, refreshToken: null, expiresAt: null,
@@ -292,6 +322,21 @@ describe('Refresco del Google ya conectado', () => {
     expect(prisma.externalCalendar.update).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({ lastSyncError: 'Insufficient permission' }),
     }))
+  })
+})
+
+describe('El cache es exactamente la ventana', () => {
+  it('cada refresco reemplaza TODAS las filas del calendario, no solo el rango traído', async () => {
+    // Si solo se borrara el rango que se vuelve a pedir, una fila vieja de afuera de
+    // la ventana no la tocaría nunca nadie: ni se refresca, ni se borra, ni se
+    // arregla si quedó duplicada.
+    axios.get.mockResolvedValue({ data: ICS_BODY, headers: {} })
+    prisma.externalCalendar.create.mockResolvedValue(calendar({ icsUrl: require('../../src/lib/encryption').encrypt(ICS_URL) }))
+    prisma.externalCalendar.findUnique.mockResolvedValue(calendar())
+
+    await req('post', '/external-calendars').send({ url: ICS_URL })
+
+    expect(prisma.externalCalendarEvent.deleteMany).toHaveBeenCalledWith({ where: { calendarId: 50 } })
   })
 })
 

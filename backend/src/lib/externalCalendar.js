@@ -218,8 +218,33 @@ function mapIcsEvent(ev, { tz, from, to }) {
   return rows
 }
 
+/**
+ * Colapsa el MISMO compromiso traído por dos calendarios distintos de la misma
+ * persona. Pasa apenas alguien conecta su Google por OAuth y además pega la URL
+ * iCal de ese mismo calendario — dos suscripciones legítimas, el mismo evento dos
+ * veces —, y no se puede resolver por `externalId` porque cada fuente le pone el
+ * suyo (la API usa el id del evento; el ICS, su UID).
+ *
+ * La identidad es "la misma persona ocupada a la misma hora con el mismo nombre".
+ * El costo de equivocarse es bajo y asimétrico: dos eventos realmente distintos con
+ * idéntico título y horario son, para quien mira su día, el mismo compromiso; ver
+ * el bloque duplicado, en cambio, es el bug que esto arregla. Gana el primero, que
+ * viene ordenado por fecha y hora.
+ */
+function dedupeExternalRows(rows) {
+  const seen = new Set()
+  const out = []
+  for (const r of rows) {
+    const key = [r.userId, r.date, r.endDate, r.startTime || 'allday', (r.title || '').trim().toLowerCase()].join('|')
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push(r)
+  }
+  return out
+}
+
 module.exports = {
   MAX_TITLE, DEFAULT_DURATION_MINS, MAX_DURATION_MINS,
   timeInTz, wallInTz, ymdLocal, diffMinutes, diffDaysYMD, clampDuration, cleanTitle,
-  mapGoogleEvent, normalizeIcsUrl, mapIcsEvent, exdateDays,
+  mapGoogleEvent, normalizeIcsUrl, mapIcsEvent, exdateDays, dedupeExternalRows,
 }

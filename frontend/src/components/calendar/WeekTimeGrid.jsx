@@ -11,6 +11,46 @@ const HOUR_HEIGHT_PX = 48
 const ALL_DAY_ITEM_PX = 24
 
 /**
+ * Reparte en columnas los bloques que se pisan en el tiempo, como cualquier
+ * calendario. Sin esto, dos bloques a la misma hora se dibujan uno ENCIMA del otro
+ * (los dos son `absolute` a lo ancho de la columna) y lo que se ve es el texto
+ * superpuesto de ambos, ilegible y sin pista de que son dos cosas.
+ *
+ * Devuelve cada bloque con `col` (en cuál de las columnas va) y `cols` (en cuántas
+ * se partió su grupo). Los grupos se arman por cadena de solapamiento: A pisa a B y
+ * B pisa a C los pone a los tres en el mismo grupo aunque A y C no se toquen, que
+ * es lo que mantiene el ancho parejo y las columnas alineadas.
+ */
+export function layoutBlocks(blocks) {
+  const sorted = [...blocks].sort((a, b) => toMins(a.start) - toMins(b.start) || toMins(b.end) - toMins(a.end))
+  const out = []
+  let group = []
+  let groupEnd = -1
+
+  function flush() {
+    const colEnds = [] // minuto en que se libera cada columna
+    const placed = group.map(b => {
+      const start = toMins(b.start)
+      let col = colEnds.findIndex(end => end <= start)
+      if (col === -1) { colEnds.push(toMins(b.end)); col = colEnds.length - 1 }
+      else colEnds[col] = toMins(b.end)
+      return { b, col }
+    })
+    for (const { b, col } of placed) out.push({ ...b, col, cols: colEnds.length })
+    group = []
+    groupEnd = -1
+  }
+
+  for (const b of sorted) {
+    if (group.length && toMins(b.start) >= groupEnd) flush()
+    group.push(b)
+    groupEnd = Math.max(groupEnd, toMins(b.end))
+  }
+  if (group.length) flush()
+  return out
+}
+
+/**
  * Grilla horaria genérica (columna de horas × N columnas) — no existe nada
  * reusable en el repo para esto (a diferencia de la grilla mensual, ver
  * MonthGrid.jsx). CSS puro, sin librería externa. Cada columna puede ser un
@@ -172,12 +212,12 @@ export default function WeekTimeGrid({
                     </>
                   )}
 
-                  {!dayOff && blocks.map(b => (
+                  {!dayOff && layoutBlocks(blocks).map(b => (
                     <div
                       key={b.id}
                       onClick={e => { e.stopPropagation(); b.onClick?.() }}
                       title={b.subtitle ? `${b.title} · ${b.subtitle}` : b.title}
-                      className={`absolute left-1 right-1 rounded-md px-1.5 py-0.5 overflow-hidden cursor-pointer border ${
+                      className={`absolute rounded-md px-1.5 py-0.5 overflow-hidden cursor-pointer border ${
                         past ? 'opacity-60 grayscale' : ''} ${
                         b.tentative
                           ? 'border-dashed border-amber-400 bg-amber-50/80 dark:bg-amber-900/20 dark:border-amber-600'
@@ -189,6 +229,10 @@ export default function WeekTimeGrid({
                       }`}
                       style={{
                         top: `${topPct(b.start)}%`, height: `${Math.max(heightPct(b.start, b.end), 3)}%`,
+                        // Posición horizontal según el reparto de layoutBlocks (con
+                        // una sola columna queda igual que el left-1/right-1 de antes).
+                        left: `calc(${(b.col / b.cols) * 100}% + 2px)`,
+                        width: `calc(${100 / b.cols}% - 4px)`,
                         // Inline y no una clase de Tailwind: el color lo elige la
                         // persona por calendario, no sale de la paleta.
                         ...(b.color ? { borderLeftWidth: 3, borderLeftColor: b.color } : {}),

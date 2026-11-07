@@ -1,5 +1,6 @@
 const prisma = require('../lib/prisma')
 const { addDaysYMD } = require('./recurrence.service')
+const { dedupeExternalRows } = require('../lib/externalCalendar')
 
 // Minutos que ocupa en el calendario una Task con scheduledTime pero sin
 // scheduledDurationMins explícito (ver Task.scheduledDurationMins en schema.prisma).
@@ -105,7 +106,7 @@ async function getBusyBlocks({ workspaceId, userIds, fromDate, toDate, requester
         calendar: { active: true },
       },
       select: {
-        id: true, userId: true, title: true, date: true, startTime: true, durationMins: true,
+        id: true, userId: true, title: true, date: true, endDate: true, startTime: true, durationMins: true,
         calendar: { select: { id: true, name: true, color: true, showDetails: true } },
       },
     }),
@@ -162,7 +163,9 @@ async function getBusyBlocks({ workspaceId, userIds, fromDate, toDate, requester
     })
   }
 
-  for (const x of externals) {
+  // El mismo compromiso puede venir por dos calendarios de la misma persona (su
+  // Google conectado + la URL iCal de ese mismo Google, por ejemplo).
+  for (const x of dedupeExternalRows(externals)) {
     const u = byUser[x.userId]
     if (!u) continue
     const reveal = x.userId === requesterId || x.calendar.showDetails

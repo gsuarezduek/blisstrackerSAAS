@@ -6,7 +6,7 @@ const { assertPublicUrl } = require('../lib/safeUrl')
 const { getValidAccessToken } = require('./googleCalendarToken.service')
 const { addDaysYMD } = require('./recurrence.service')
 const { todayString, DEFAULT_TZ } = require('../utils/dates')
-const { mapGoogleEvent, mapIcsEvent } = require('../lib/externalCalendar')
+const { mapGoogleEvent, mapIcsEvent, dedupeExternalRows } = require('../lib/externalCalendar')
 
 // Trae a BlissTracker los calendarios de afuera (ver modelo ExternalCalendar) y
 // mantiene el cache de ExternalCalendarEvent. El camino inverso al push de
@@ -20,7 +20,7 @@ const CAL_BASE = 'https://www.googleapis.com/calendar/v3'
 // usuario: el cache tiene que servirle igual a la vista Semana, a la Mes y a la
 // tarjeta de hoy del Dashboard, y a getBusyBlocks pidiendo el de otra persona.
 // Más allá de esto no se trae nada (las vistas reales no van tan lejos).
-const SYNC_PAST_DAYS = 7
+const SYNC_PAST_DAYS = 30
 const SYNC_AHEAD_DAYS = 90
 
 // Cada cuánto vale volver a preguntar. El ICS de Google se regenera con horas de
@@ -149,22 +149,35 @@ async function probeIcsUrl(url, { tz = DEFAULT_TZ } = {}) {
  * Los eventos que NOSOTROS empujamos a Google vuelven en su respuesta — sin este
  * filtro cada reunión agendada acá se vería dos veces: la propia y su espejo
  * "externo". `CalendarEvent.googleEventId` es el id que Google devolvió al crearla.
+ *
+ * Mira TODO el workspace y no solo lo que organizó el dueño del calendario: cuando
+ * una reunión se empuja, los demás participantes viajan como `attendees`, así que
+ * Google la pone también en el calendario de cada invitado — y con el MISMO id, que
+ * es lo que hace que comparar por id alcance. Filtrar por organizador dejaba ver
+ * doble exactamente a los invitados, que son la mayoría de los participantes de
+ * cualquier reunión. Acotado al rango que se está sincronizando, que es lo único
+ * que puede aparecer en la respuesta.
  */
-async function ownPushedGoogleIds(workspaceId, organizerId) {
+async function ownPushedGoogleIds(workspaceId, { from, to }) {
   const rows = await prisma.calendarEvent.findMany({
-    where: { workspaceId, organizerId, googleEventId: { not: null } },
+    where: { workspaceId, googleEventId: { not: null }, date: { gte: from, lte: to } },
     select: { googleEventId: true },
   })
   return new Set(rows.map(r => r.googleEventId))
 }
 
 /**
- * Trae el calendario y reemplaza el cache de la ventana. El reemplazo es por rango
- * SOLAPADO (`date <= to AND endDate >= from`, la misma condición con la que se lee)
- * y no por `date` dentro del rango: un evento que arranca antes del `from` y sigue
- * adentro vuelve en la respuesta, y si no se borró primero choca con el @@unique.
- * Borrar y recrear, en vez de diffear por externalId, resuelve de una los eventos
- * que se cancelaron o se movieron del lado de la fuente.
+ * Trae el calendario y **reemplaza entero** su cache: borra todas sus filas y
+ * escribe la ventana recién traída.
+ *
+ * Borrar todo en vez de diffear por `externalId` resuelve de una los eventos
+ * cancelados o movidos del lado de la fuente. Y borrar TODO en vez de solo el rango
+ * que se vuelve a traer evita dos problemas que no se arreglan solos: un evento que
+ * arranca antes del `from` y sigue adentro volvería en la respuesta y chocaría con
+ * el `@@unique`, y —peor— cualquier fila vieja que quedara fuera de la ventana no la
+ * tocaría nunca nadie: ni se refresca ni se borra. Así el cache de un calendario es
+ * siempre, exactamente, su ventana actual. Mirar más atrás que eso muestra las
+ * reuniones de BlissTracker (que sí son historial) y no los eventos de afuera.
  */
 async function syncCalendar(cal, { tz }) {
   const { from, to } = syncWindow(tz)
@@ -175,16 +188,14 @@ async function syncCalendar(cal, { tz }) {
 
     let keep = rows
     if (cal.source === 'google') {
-      const mine = await ownPushedGoogleIds(cal.workspaceId, cal.userId)
+      const mine = await ownPushedGoogleIds(cal.workspaceId, { from, to })
       keep = rows.filter(r => !mine.has(r.externalId))
     }
     const truncated = keep.length > MAX_EVENTS_PER_CALENDAR
     if (truncated) keep = keep.slice(0, MAX_EVENTS_PER_CALENDAR)
 
     await prisma.$transaction([
-      prisma.externalCalendarEvent.deleteMany({
-        where: { calendarId: cal.id, date: { lte: to }, endDate: { gte: from } },
-      }),
+      prisma.externalCalendarEvent.deleteMany({ where: { calendarId: cal.id } }),
       prisma.externalCalendarEvent.createMany({
         data: keep.map(r => ({
           ...r,
@@ -323,7 +334,7 @@ async function listForRange({ workspaceId, userIds, from, to, requesterId }) {
     include: { calendar: { select: { id: true, name: true, color: true, source: true, showDetails: true } } },
     orderBy: [{ date: 'asc' }, { startTime: 'asc' }],
   })
-  return rows.map(r => {
+  return dedupeExternalRows(rows).map(r => {
     const own = r.userId === requesterId
     const reveal = own || r.calendar.showDetails
     return {

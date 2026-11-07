@@ -213,3 +213,39 @@ describe('clampDuration / cleanTitle', () => {
     expect(cleanTitle('x'.repeat(500)).length).toBe(300)
   })
 })
+
+describe('dedupeExternalRows — el mismo evento por dos calendarios', () => {
+  const { dedupeExternalRows } = require('../../src/lib/externalCalendar')
+
+  const row = (over = {}) => ({
+    id: 1, userId: 7, title: 'Reunión cierre semanal',
+    date: '2026-11-10', endDate: '2026-11-10', startTime: '15:00', ...over,
+  })
+
+  it('colapsa el mismo compromiso traído por dos suscripciones distintas', () => {
+    // Pasa apenas alguien conecta su Google y además pega la URL iCal de ese mismo
+    // calendario: cada fuente le pone su propio externalId.
+    const out = dedupeExternalRows([row({ id: 1 }), row({ id: 2 })])
+    expect(out).toHaveLength(1)
+    expect(out[0].id).toBe(1)
+  })
+
+  it('no colapsa dos eventos distintos de la misma persona a la misma hora', () => {
+    expect(dedupeExternalRows([row(), row({ id: 2, title: 'Otra cosa' })])).toHaveLength(2)
+  })
+
+  it('no colapsa el mismo título a horas distintas, ni entre personas distintas', () => {
+    expect(dedupeExternalRows([row(), row({ id: 2, startTime: '16:00' })])).toHaveLength(2)
+    expect(dedupeExternalRows([row(), row({ id: 2, userId: 8 })])).toHaveLength(2)
+  })
+
+  it('ignora mayúsculas y espacios de más en el título', () => {
+    expect(dedupeExternalRows([row(), row({ id: 2, title: '  reunión cierre semanal ' })])).toHaveLength(1)
+  })
+
+  it('los de día completo se comparan por su rango, no por hora', () => {
+    const viaje = { id: 1, userId: 7, title: 'Viaje', date: '2026-11-12', endDate: '2026-11-14', startTime: null }
+    expect(dedupeExternalRows([viaje, { ...viaje, id: 2 }])).toHaveLength(1)
+    expect(dedupeExternalRows([viaje, { ...viaje, id: 2, endDate: '2026-11-15' }])).toHaveLength(2)
+  })
+})
