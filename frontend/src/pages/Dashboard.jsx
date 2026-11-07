@@ -16,6 +16,7 @@ import NowCard from '../components/dashboard/NowCard'
 import LaterTabs from '../components/dashboard/LaterTabs'
 import AgentTasksPanel from '../components/dashboard/AgentTasksPanel'
 import AgentsWorkingStrip from '../components/dashboard/AgentsWorkingStrip'
+import TodayEventsCard from '../components/dashboard/TodayEventsCard'
 import useMyAgents from '../hooks/useMyAgents'
 import { useAuth } from '../context/AuthContext'
 import { completedMinutes, fmtMins } from '../utils/format'
@@ -764,6 +765,11 @@ export default function Dashboard() {
             onFeedback={handleInsightFeedback}
           />
         )}
+
+        {/* Lo que tengo agendado hoy: se auto-gatea (módulo Calendario + acceso + algo
+            para hoy). Va acá, sobre "Ahora", porque una reunión con hora fija condiciona
+            con qué tarea arranco. */}
+        <TodayEventsCard />
 
         <div className="space-y-6">
           {/* 1. Ahora */}
