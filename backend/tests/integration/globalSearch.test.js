@@ -2,7 +2,7 @@ jest.mock('../../src/lib/prisma', () => ({
   workspace:       { findUnique: jest.fn() },
   workspaceMember: { findUnique: jest.fn() },
   featureFlag:     { findUnique: jest.fn() },
-  task:            { findMany: jest.fn() },
+  task:            { findMany: jest.fn(), findFirst: jest.fn() },
   contentPiece:    { findMany: jest.fn() },
   calendarEvent:   { findMany: jest.fn() },
   projectFile:     { findMany: jest.fn() },
@@ -39,6 +39,7 @@ function get(q, role) {
 beforeEach(() => {
   jest.clearAllMocks()
   prisma.task.findMany.mockResolvedValue([{ id: 5, description: 'Diseñar logo' }])
+  prisma.task.findFirst.mockResolvedValue(null)
   prisma.contentPiece.findMany.mockResolvedValue([{ id: 7, title: 'Post logo' }])
   prisma.calendarEvent.findMany.mockResolvedValue([{ id: 9, title: 'Reunión logo' }])
   prisma.projectFile.findMany.mockResolvedValue([{ id: 3, name: 'logo.png' }])
@@ -111,6 +112,61 @@ describe('GET /api/search', () => {
       { projectId: null },
       { project: privacyOr },
     ])
+  })
+
+  // Buscar una tarea por su número: es la referencia que usan los agentes ("mirá la
+  // tarea 29943") y la que muestra el detalle de la tarea.
+  describe('por número de tarea', () => {
+    it('resuelve un número como id exacto y lo pone primero', async () => {
+      mockWorkspace()
+      prisma.featureFlag.findUnique.mockResolvedValue(null)
+      prisma.task.findFirst.mockResolvedValue({ id: 29943, description: 'La que se pidió' })
+      prisma.task.findMany.mockResolvedValue([{ id: 5, description: 'Comprar 29943 licencias' }])
+      const res = await get('29943')
+      expect(prisma.task.findFirst.mock.calls[0][0].where.id).toBe(29943)
+      expect(res.body.tasks.map(t => t.id)).toEqual([29943, 5])
+    })
+
+    it('acepta el # y la palabra adelante', async () => {
+      mockWorkspace()
+      prisma.featureFlag.findUnique.mockResolvedValue(null)
+      prisma.task.findFirst.mockResolvedValue({ id: 29943, description: 'La que se pidió' })
+      for (const q of ['#29943', 'tarea 29943', 'Tarea #29943']) {
+        prisma.task.findFirst.mockClear()
+        await get(q)
+        expect(prisma.task.findFirst.mock.calls[0][0].where.id).toBe(29943)
+      }
+    })
+
+    it('no duplica la tarea si la búsqueda por texto también la trae', async () => {
+      mockWorkspace()
+      prisma.featureFlag.findUnique.mockResolvedValue(null)
+      prisma.task.findFirst.mockResolvedValue({ id: 29943, description: 'Revisar 29943' })
+      prisma.task.findMany.mockResolvedValue([{ id: 29943, description: 'Revisar 29943' }])
+      const res = await get('29943')
+      expect(res.body.tasks.map(t => t.id)).toEqual([29943])
+    })
+
+    // Un id de un solo dígito esquiva el mínimo de caracteres, pero buscar "7" por
+    // texto devolvería cualquier tarea con un 7 en la descripción: sólo el id.
+    it('un número más corto que el mínimo busca sólo por id', async () => {
+      mockWorkspace()
+      prisma.task.findFirst.mockResolvedValue({ id: 7, description: 'La tarea 7' })
+      const res = await get('7')
+      expect(res.body.tasks.map(t => t.id)).toEqual([7])
+      expect(prisma.task.findMany).not.toHaveBeenCalled()
+      expect(prisma.projectFile.findMany).not.toHaveBeenCalled()
+    })
+
+    it('un número que no existe no rompe ni ensucia los otros bloques', async () => {
+      mockWorkspace()
+      prisma.featureFlag.findUnique.mockResolvedValue(null)
+      prisma.task.findFirst.mockResolvedValue(null)
+      const res = await get('999999999999')  // fuera del rango de un Int: ni se consulta
+      expect(res.status).toBe(200)
+      expect(prisma.task.findFirst).not.toHaveBeenCalled()
+      expect(res.body.tasks.map(t => t.id)).toEqual([5])
+    })
   })
 
   it('admin/owner no lleva filtro de privacidad', async () => {

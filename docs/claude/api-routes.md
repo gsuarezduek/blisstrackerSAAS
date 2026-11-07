@@ -153,7 +153,7 @@ DELETE /api/projects/:id/files/:itemId/purge            # admin/owner: borra def
 PATCH  /api/projects/:id/files/:itemId                  # renombra y/o mueve { name?, parentId? }
 DELETE /api/projects/:id/files/:itemId                  # papelera (soft-delete, cascada al subárbol)
 GET    /api/realtime
-GET    /api/search                       # ?q= (mín. 2 caracteres) — buscador global: { tasks, pieces, events, files }, cada bloque filtrado por flag/acceso de su módulo
+GET    /api/search                       # ?q= (mín. 2 caracteres) — buscador global: { tasks, pieces, events, files }, cada bloque filtrado por flag/acceso de su módulo. Un q que es sólo un número ("29943", "#29943", "tarea 29943") se resuelve como el id de la tarea y va primero (ahí no aplica el mínimo)
 GET    /api/reports/by-project              # admin: proyecto→persona→tarea + horas registradas vs 100% horas contratadas
 GET    /api/reports/by-user                 # admin: tareas planas por usuario (?userId=) — no usado por el front actual
 GET    /api/reports/mine                    # registro propio: proyecto→tarea (rango libre)

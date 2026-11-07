@@ -23,7 +23,8 @@ import { searchIndexOf, normalizeText } from '../utils/textSearch'
 // servicios y roles del workspace (solo admin, fuzzy-match client-side sobre una lista
 // que se trae una vez) y un bloque server-side (`GET /api/search?q=`) con tareas, piezas
 // de Contenido, reuniones de Calendario y archivos de proyecto — el backend ya filtra
-// por flag/acceso de módulo, así que acá solo se renderea lo que llega.
+// por flag/acceso de módulo, así que acá solo se renderea lo que llega. Una query
+// que es sólo un número se resuelve ahí como el id de la tarea (ver `isTaskRef`).
 // Overlay/backdrop calcado del modal de ayuda de GlobalShortcuts.jsx.
 // Punto único por donde pasa TODO el filtrado local de la palette (destinos de
 // navegación, proyectos, personas, servicios, roles, acciones y canales de chat).
@@ -33,6 +34,15 @@ function scoreMatch(label, q) {
   const idx = searchIndexOf(label, q)
   return idx === -1 ? null : idx
 }
+
+const MIN_SERVER_QUERY = 2
+
+// ¿La query es una referencia a una tarea por su número? El id que muestra el
+// detalle de la tarea (#29943) es la referencia que circula cuando un agente dice
+// "mirá la tarea 29943". Se acepta con #, sin # o con la palabra adelante, y se
+// busca aunque sea más corta que el mínimo de caracteres: el backend la resuelve
+// como id exacto (ver search.controller.js) en lugar de buscarla como texto.
+const isTaskRef = q => /^(?:tareas?\s*)?#?\d+$/i.test(q)
 
 const truncate = (str, n = 70) => {
   const line = (str || '').split('\n')[0].trim()
@@ -212,7 +222,9 @@ export default function CommandPalette({ open, onClose }) {
   useEffect(() => {
     if (!open) return
     const q = query.trim()
-    if (q.length < 2) { setGlobalResults(null); setCompanyResults([]); setServerLoading(false); return }
+    if (q.length < MIN_SERVER_QUERY && !isTaskRef(q)) {
+      setGlobalResults(null); setCompanyResults([]); setServerLoading(false); return
+    }
     let active = true
     setServerLoading(true)
     const t = setTimeout(() => {
@@ -220,7 +232,7 @@ export default function CommandPalette({ open, onClose }) {
         .then(({ data }) => { if (active) setGlobalResults(data) })
         .catch(() => { if (active) setGlobalResults(null) })
         .finally(() => { if (active) setServerLoading(false) })
-      if (canSeeLeads) {
+      if (canSeeLeads && q.length >= MIN_SERVER_QUERY) {
         api.get(`/ventas/companies?search=${encodeURIComponent(q)}`)
           .then(({ data }) => { if (active) setCompanyResults((data || []).slice(0, 4)) })
           .catch(() => { if (active) setCompanyResults([]) })
@@ -322,7 +334,7 @@ export default function CommandPalette({ open, onClose }) {
             value={query}
             onChange={e => { setQuery(e.target.value); setSelected(0) }}
             onKeyDown={onKeyDown}
-            placeholder={`Ir a… o buscar tareas, proyectos, personas, canales…`}
+            placeholder={`Ir a… o buscar tareas (por texto o #número), proyectos, personas…`}
             className="flex-1 bg-transparent outline-none text-sm text-gray-900 dark:text-white placeholder-gray-400"
           />
           {(searching || serverLoading) && <span className="text-xs text-gray-400">Buscando…</span>}
@@ -350,7 +362,7 @@ export default function CommandPalette({ open, onClose }) {
                   {item.type === 'member' && <span className="text-gray-400 mr-1.5">Persona ·</span>}
                   {item.type === 'channel' && <span className="text-gray-400 mr-1.5">Chat ·</span>}
                   {item.type === 'action' && <span className="text-gray-400 mr-1.5">Acción ·</span>}
-                  {item.type === 'task' && <span className="text-gray-400 mr-1.5">Tarea ·</span>}
+                  {item.type === 'task' && <span className="text-gray-400 mr-1.5">Tarea #{item.task.id} ·</span>}
                   {item.type === 'piece' && <span className="text-gray-400 mr-1.5">Contenido ·</span>}
                   {item.type === 'event' && <span className="text-gray-400 mr-1.5">Reunión ·</span>}
                   {item.type === 'file' && <span className="text-gray-400 mr-1.5">{item.isFolder ? 'Carpeta' : 'Archivo'} ·</span>}

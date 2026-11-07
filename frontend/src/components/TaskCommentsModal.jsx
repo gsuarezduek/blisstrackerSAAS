@@ -53,6 +53,19 @@ export default function TaskCommentsModal({ task, onClose, onCommentAdded, onTas
   const bottomRef                 = useRef(null)
   const textareaRef               = useRef(null)
   const [reactingId, setReactingId] = useState(null)
+  const [copiedId, setCopiedId]     = useState(false)
+
+  // El número de tarea (`Task.id`) es la referencia con la que circula una tarea
+  // fuera de la app: es lo que pide un agente cuando dice "mirá la tarea 29943" y
+  // lo que encuentra el buscador global (Cmd/Ctrl+K) si se lo escribe. Por eso se
+  // muestra en el detalle y se copia con un click.
+  async function copyTaskId() {
+    try {
+      await navigator.clipboard.writeText(String(task.id))
+      setCopiedId(true)
+      setTimeout(() => setCopiedId(false), 1500)
+    } catch { /* clipboard no disponible */ }
+  }
 
   // @mention autocomplete — contra los miembros del workspace (cualquiera puede ser
   // mencionado en un comentario, sea o no del equipo del proyecto, mismo criterio que la
@@ -423,7 +436,17 @@ export default function TaskCommentsModal({ task, onClose, onCommentAdded, onTas
         {/* Header */}
         <div className="px-5 pt-5 pb-4 border-b border-gray-100 dark:border-gray-700 flex-shrink-0">
           <div className="flex items-start justify-between gap-3 mb-3">
-            <p className="text-xs text-gray-400 dark:text-gray-500">{currentProject}</p>
+            <div className="flex items-center gap-2 min-w-0">
+              <p className="text-xs text-gray-400 dark:text-gray-500 truncate">{currentProject}</p>
+              <button
+                type="button"
+                onClick={copyTaskId}
+                title="Copiar el número de la tarea"
+                className="flex-shrink-0 text-xs font-mono px-1.5 py-0.5 rounded-md bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
+              >
+                {copiedId ? '¡Copiado!' : `#${task.id}`}
+              </button>
+            </div>
             <div className="flex items-center gap-2 flex-shrink-0 -mt-1">
               {/* Seguir tarea: notifica al seguidor cuando se completa o se comenta */}
               <button
