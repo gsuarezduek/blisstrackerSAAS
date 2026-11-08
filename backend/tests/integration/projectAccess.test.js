@@ -43,6 +43,8 @@ function storedAccess(over = {}) {
     account: 'Instagram', username: 'cliente', extra: null,
     password: encrypt('vieja123'), twofa: encrypt('ABCD-2FA'),
     createdAt: new Date('2026-01-01'), updatedAt: new Date('2026-01-01'),
+    createdById: 3, createdBy: { id: 3, name: 'Ana', avatar: '2bee.png' },
+    updatedById: null, updatedBy: null,
     ...over,
   }
 }
@@ -70,8 +72,11 @@ describe('PATCH /api/projects/:id/accesos/:accessId', () => {
     expect(res.body.password).toBeUndefined()
 
     const { data } = prisma.projectAccess.update.mock.calls[0][0]
-    expect(Object.keys(data)).toEqual(['password'])
+    // El único campo tocado es la contraseña; updatedById va aparte, es el sello
+    // de quién editó.
+    expect(Object.keys(data).sort()).toEqual(['password', 'updatedById'])
     expect(decrypt(data.password)).toBe('nueva456')
+    expect(data.updatedById).toBe(7)
 
     expect(prisma.projectAccessLog.create).toHaveBeenCalledWith({
       data: expect.objectContaining({ action: 'update', fields: ['password'], userId: 7, label: 'Instagram' }),
@@ -90,7 +95,7 @@ describe('PATCH /api/projects/:id/accesos/:accessId', () => {
 
     expect(res.status).toBe(200)
     const { data } = prisma.projectAccess.update.mock.calls[0][0]
-    expect(data).toEqual({ username: 'cliente-nuevo' })
+    expect(data).toEqual({ username: 'cliente-nuevo', updatedById: 7 })
     expect(data).not.toHaveProperty('password')
     expect(data).not.toHaveProperty('twofa')
   })
@@ -101,13 +106,15 @@ describe('PATCH /api/projects/:id/accesos/:accessId', () => {
     const res = await req('patch', '/api/projects/1/accesos/5').send({ twofa: '' })
 
     expect(res.status).toBe(200)
-    expect(prisma.projectAccess.update.mock.calls[0][0].data).toEqual({ twofa: null })
+    expect(prisma.projectAccess.update.mock.calls[0][0].data).toEqual({ twofa: null, updatedById: 7 })
     expect(prisma.projectAccessLog.create).toHaveBeenCalledWith({
       data: expect.objectContaining({ action: 'update', fields: ['twofa'] }),
     })
   })
 
-  it('reescribir el mismo valor no escribe nada ni inventa una entrada del historial', async () => {
+  // Sin el early return, reescribir lo mismo sellaría updatedById y le robaría la
+  // última edición a quien la hizo de verdad.
+  it('reescribir el mismo valor no escribe nada, ni el historial ni el autor', async () => {
     prisma.projectAccess.findFirst.mockResolvedValue(storedAccess())
 
     const res = await req('patch', '/api/projects/1/accesos/5')
@@ -136,6 +143,42 @@ describe('PATCH /api/projects/:id/accesos/:accessId', () => {
     const res = await req('patch', '/api/projects/1/accesos/99').send({ password: 'x' })
 
     expect(res.status).toBe(404)
+  })
+})
+
+describe('quién cargó y quién editó', () => {
+  it('el alta guarda al autor y la lista lo devuelve', async () => {
+    prisma.projectAccess.create.mockResolvedValue(storedAccess({
+      createdById: 7, createdBy: { id: 7, name: 'Gastón', avatar: '2bee.png' },
+    }))
+
+    const res = await req('post', '/api/projects/1/accesos').send({ account: 'Instagram' })
+
+    expect(res.status).toBe(201)
+    expect(prisma.projectAccess.create.mock.calls[0][0].data.createdById).toBe(7)
+    expect(res.body.createdBy).toEqual({ id: 7, name: 'Gastón', avatar: '2bee.png' })
+    expect(res.body.updatedBy).toBeNull()
+  })
+
+  it('un acceso viejo sin autor devuelve null y no se lo adivina', async () => {
+    prisma.projectAccess.findMany.mockResolvedValue([
+      storedAccess({ createdById: null, createdBy: null }),
+    ])
+
+    const res = await req('get', '/api/projects/1/accesos')
+
+    expect(res.status).toBe(200)
+    expect(res.body[0].createdBy).toBeNull()
+    expect(res.body[0].updatedBy).toBeNull()
+  })
+
+  it('la autoría no filtra el secreto', async () => {
+    prisma.projectAccess.findMany.mockResolvedValue([storedAccess()])
+
+    const res = await req('get', '/api/projects/1/accesos')
+
+    expect(res.body[0]).toMatchObject({ hasPassword: true, hasTwofa: true })
+    expect(JSON.stringify(res.body)).not.toContain('vieja123')
   })
 })
 

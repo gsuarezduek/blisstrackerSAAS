@@ -466,6 +466,8 @@ model User {
   reportGenerationLogs              ReportGenerationLog[]
   platformSettingChanges            PlatformSettingLog[]        @relation("SettingChangedBy")
   accessRevealLogs                  ProjectAccessLog[]
+  accessesCreated                   ProjectAccess[]             @relation("ProjectAccessCreatedBy")
+  accessesUpdated                   ProjectAccess[]             @relation("ProjectAccessUpdatedBy")
   ownedLeads                        Lead[]                      @relation("LeadOwner")
   createdLeads                      Lead[]                      @relation("LeadCreatedBy")
   leadActivities                    LeadActivity[]              @relation("LeadActivityUser")
@@ -932,9 +934,17 @@ model ProjectAccess {
   extra       String? // Notas / dato extra
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+  // Quién cargó la credencial y quién la tocó última. Están en la fila (y no se
+  // derivan del log) porque se muestran en la lista de accesos, que no puede
+  // depender de agregar el historial de cada fila. SetNull: si la persona se va
+  // del sistema la credencial no se borra ni queda apuntando a nadie.
+  createdById Int?
+  updatedById Int?
 
   project    Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
   workspace  Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdBy  User?              @relation("ProjectAccessCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy  User?              @relation("ProjectAccessUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
   revealLogs ProjectAccessLog[]
 
   @@index([projectId])

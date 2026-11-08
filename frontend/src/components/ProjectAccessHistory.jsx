@@ -131,10 +131,12 @@ export default function ProjectAccessHistory({ projectId, reloadKey = 0 }) {
               {logs.map(l => (
                 <li key={l.id} className="flex items-start gap-2 text-sm">
                   <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 mt-1.5 ${DOT[l.action] || DOT.reveal}`} />
+                  {/* object-cover: sin él un avatar que no es cuadrado se deforma */}
                   <img
                     src={avatarUrl(l.user?.avatar)}
                     alt=""
-                    className="w-5 h-5 rounded-full flex-shrink-0 mt-px"
+                    onError={e => { e.currentTarget.style.visibility = 'hidden' }}
+                    className="w-5 h-5 rounded-full object-cover flex-shrink-0 mt-px bg-gray-100 dark:bg-gray-700"
                   />
                   <span className="text-gray-600 dark:text-gray-300 min-w-0">
                     <span className="font-medium text-gray-800 dark:text-gray-100">{l.user?.name || 'Alguien'}</span>

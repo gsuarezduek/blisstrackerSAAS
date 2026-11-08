@@ -434,6 +434,10 @@ Los ve y los gestiona **cualquier persona del workspace**, no solo el equipo del
 
 Tocá el **lápiz** del acceso y escribí la nueva. Lo importante: **los campos de contraseña y 2FA arrancan vacíos y vacío significa "dejala como está"**. Así podés corregir el usuario o el nombre de la cuenta sin tener que revelar antes la contraseña. Si lo que querés es borrar una contraseña guardada, usá **quitar**.
 
+## Quién cargó qué
+
+Cada acceso muestra abajo **quién lo cargó** y **quién lo editó último**, con la fecha. Los accesos cargados antes de que esto existiera no tienen autor y no lo muestran: no se adivina.
+
 ## Historial
 
 Al pie de la tarjeta, **Historial de cambios** muestra qué pasó con cada acceso: quién lo cargó, quién cambió qué campo y cuándo, y quién lo eliminó. La pestaña **Quién vio qué** lista los pedidos de ver una contraseña o un 2FA.
@@ -444,7 +448,7 @@ El historial registra **qué campo cambió, nunca el valor**: no hay forma de re
 
 Se agregan con nombre y URL, y se editan con el lápiz del chip. Los links los edita el **equipo del proyecto o un admin**.`,
         tips: [
-          'Si una credencial dejó de funcionar, mirá el historial antes de preguntar: suele estar ahí quién la cambió.',
+          'Si una credencial dejó de funcionar, mirá quién la editó último: está en la propia fila, y el detalle en el historial.',
           'Al editar, dejá vacía la contraseña si no la querés cambiar — no hace falta revelarla para tocar los otros campos.',
         ],
         related: ['ficha-proyecto-resumen', 'proyectos-privados'],

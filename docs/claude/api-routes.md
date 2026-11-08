@@ -107,7 +107,7 @@ GET    /api/projects/:id/members
 GET    /api/projects/:id/tasks
 GET    /api/projects/:id/completed       # ?skip=N
 PUT    /api/projects/:id/links                            # reemplaza la lista completa (alta, edición y baja de un link pasan por acá) — admin/owner o miembro del proyecto
-GET    /api/projects/:id/accesos                          # credenciales del proyecto, sin password/2FA (hasPassword/hasTwofa) — cualquier miembro del workspace
+GET    /api/projects/:id/accesos                          # credenciales del proyecto, sin password/2FA (hasPassword/hasTwofa) + createdBy/updatedBy — cualquier miembro del workspace
 POST   /api/projects/:id/accesos                          # alta { account?, username?, password?, twofa?, extra? } (al menos uno); password/2FA se guardan cifrados
 PATCH  /api/projects/:id/accesos/:accessId                # edita: clave ausente = sin cambios, '' = borra el campo, valor = lo reemplaza
 DELETE /api/projects/:id/accesos/:accessId

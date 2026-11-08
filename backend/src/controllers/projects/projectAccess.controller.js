@@ -26,6 +26,13 @@ async function resolveAccessGuard(req) {
   return { projectId }
 }
 
+// Quién cargó el acceso y quién lo tocó último: viaja con cada fila de la lista,
+// así la pregunta "¿de quién es este dato?" se contesta sin abrir el historial.
+const ACCESS_INCLUDE = {
+  createdBy: { select: { id: true, name: true, avatar: true } },
+  updatedBy: { select: { id: true, name: true, avatar: true } },
+}
+
 // Forma pública de un acceso: nunca expone la contraseña ni el 2FA, solo si los tiene.
 const publicAccess = (a) => ({
   id: a.id,
@@ -36,6 +43,10 @@ const publicAccess = (a) => ({
   hasTwofa: !!a.twofa,
   createdAt: a.createdAt,
   updatedAt: a.updatedAt,
+  // null en los accesos cargados antes de que esto existiera: el historial solo
+  // guardaba reveals, así que no hay a quién atribuirles el dato.
+  createdBy: a.createdBy ?? null,
+  updatedBy: a.updatedBy ?? null,
 })
 
 // Registra un evento en el historial del acceso. `label` congela el nombre de la
@@ -79,6 +90,7 @@ async function listAccesses(req, res, next) {
     const accesses = await prisma.projectAccess.findMany({
       where: { projectId: guard.projectId },
       orderBy: { createdAt: 'asc' },
+      include: ACCESS_INCLUDE,
     })
     res.json(accesses.map(publicAccess))
   } catch (err) { next(err) }
@@ -105,7 +117,9 @@ async function addAccess(req, res, next) {
         password: values.password ? encrypt(values.password) : null,
         twofa:    values.twofa    ? encrypt(values.twofa)    : null,
         extra:    values.extra    ?? null,
+        createdById: req.user.userId,
       },
+      include: ACCESS_INCLUDE,
     })
     await logEvent({ req, projectId: guard.projectId, access: created, action: 'create', fields: filled })
     res.status(201).json(publicAccess(created))
@@ -121,6 +135,7 @@ async function updateAccess(req, res, next) {
 
     const access = await prisma.projectAccess.findFirst({
       where: { id: Number(req.params.accessId), projectId: guard.projectId },
+      include: ACCESS_INCLUDE,
     })
     if (!access) return res.status(404).json({ error: 'Acceso no encontrado' })
 
@@ -146,7 +161,14 @@ async function updateAccess(req, res, next) {
     }
     if (changed.length === 0) return res.json(publicAccess(access))
 
-    const updated = await prisma.projectAccess.update({ where: { id: access.id }, data })
+    // updatedById se sella sólo cuando hubo un cambio real (el early return de
+    // arriba ya cortó el caso "reescribió lo mismo"): si no, mirar y guardar sin
+    // tocar nada reescribiría al autor de la última edición de verdad.
+    const updated = await prisma.projectAccess.update({
+      where: { id: access.id },
+      data: { ...data, updatedById: req.user.userId },
+      include: ACCESS_INCLUDE,
+    })
     await logEvent({ req, projectId: guard.projectId, access: updated, action: 'update', fields: changed })
     res.json(publicAccess(updated))
   } catch (err) { next(err) }

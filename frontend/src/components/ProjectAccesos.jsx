@@ -18,6 +18,35 @@ const EMPTY_FORM = {
 const wasEdited = (a) =>
   a.updatedAt && a.createdAt && new Date(a.updatedAt) - new Date(a.createdAt) > 1000
 
+// "Cargado por Ana · editado por Juan hoy" — de quién es el dato y quién lo tocó
+// último, la pregunta que se hace cuando una credencial dejó de funcionar. Los
+// accesos cargados antes de que esto existiera no tienen autor: ahí se muestra
+// sólo la parte que se sabe, nunca se adivina.
+function attribution(a) {
+  const parts = []
+  if (a.createdBy) parts.push(`cargado por ${a.createdBy.name}`)
+  if (wasEdited(a)) {
+    const when = fmtCreatedAt(a.updatedAt)
+    parts.push(a.updatedBy ? `editado por ${a.updatedBy.name} ${when}` : `editado ${when}`)
+  }
+  if (parts.length === 0) return null
+  const line = parts.join(' · ')
+  return line.charAt(0).toUpperCase() + line.slice(1)
+}
+
+const ART = 'America/Argentina/Buenos_Aires'
+const longDate = (iso) =>
+  new Date(iso).toLocaleString('es-AR', {
+    day: 'numeric', month: 'long', year: 'numeric',
+    hour: '2-digit', minute: '2-digit', timeZone: ART,
+  })
+
+function attributionTitle(a) {
+  const parts = [`Cargado el ${longDate(a.createdAt)}`]
+  if (wasEdited(a)) parts.push(`editado el ${longDate(a.updatedAt)}`)
+  return parts.join(' · ')
+}
+
 export default function ProjectAccesos({ projectId }) {
   const [accesses, setAccesses] = useState([])
   const [loading, setLoading]   = useState(true)
@@ -214,17 +243,8 @@ export default function ProjectAccesos({ projectId }) {
                 className="group flex items-start gap-3 rounded-xl border border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/40 px-3 py-2.5"
               >
                 <div className="flex-1 min-w-0 space-y-1">
-                  {(a.account || wasEdited(a)) && (
-                    <div className="flex items-baseline gap-2 flex-wrap">
-                      {a.account && (
-                        <p className="text-sm font-semibold text-gray-800 dark:text-gray-100 break-words">{a.account}</p>
-                      )}
-                      {wasEdited(a) && (
-                        <span className="text-[11px] text-gray-400 dark:text-gray-500">
-                          editado {fmtCreatedAt(a.updatedAt)}
-                        </span>
-                      )}
-                    </div>
+                  {a.account && (
+                    <p className="text-sm font-semibold text-gray-800 dark:text-gray-100 break-words">{a.account}</p>
                   )}
 
                   {a.username && (
@@ -256,6 +276,12 @@ export default function ProjectAccesos({ projectId }) {
                       <span className="text-gray-400 dark:text-gray-500 text-xs w-16 flex-shrink-0">Extra</span>
                       <span className="text-gray-600 dark:text-gray-300 break-words whitespace-pre-wrap">{a.extra}</span>
                     </div>
+                  )}
+
+                  {attribution(a) && (
+                    <p className="text-[11px] text-gray-400 dark:text-gray-500 pt-0.5" title={attributionTitle(a)}>
+                      {attribution(a)}
+                    </p>
                   )}
                 </div>
 
