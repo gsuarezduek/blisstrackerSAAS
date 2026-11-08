@@ -164,6 +164,7 @@ export default function Finanzas() {
               <CustomersTab accounts={accounts} categories={categories} items={items} taxes={taxes} issuers={issuers} financeIvaMode={financeIvaMode} refreshKey={refreshKey} onDataChange={loadShared} />
             ) : (
               <PendingTab items={items} accounts={accounts} categories={categories} taxes={taxes} issuers={issuers}
+                focusTaskId={searchParams.get('task') ? Number(searchParams.get('task')) : null}
                 onNavigate={handleTaskNavigate} onDataChange={loadShared} />
             )}
           </>

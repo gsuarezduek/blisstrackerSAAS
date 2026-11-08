@@ -284,10 +284,10 @@ Cada tarjeta de tarea muestra la cantidad de comentarios. Hacé click para abrir
 
 - **N** — nueva tarea.
 - **Shift + D** — Dashboard
-- **Shift + Y** — Mis Proyectos
+- **Shift + Y** — Proyectos
 - **Shift + A** — Actividad (tiempo real)
 - **Shift + M** — Marketing
-- **Shift + R** — Reportes (o Mis reportes si no sos admin)
+- **Shift + R** — Reportes
 - **?** — ayuda con todos los atajos
 - **Esc** — cierra la ventana abierta
 
@@ -337,11 +337,11 @@ Lo que sí es solo para miembros del proyecto (o admins) es **editar la ficha**:
       },
       {
         id: 'mis-proyectos',
-        title: 'Mis Proyectos',
+        title: 'Proyectos',
         audience: 'todos',
         module: null,
         summary: 'Tu vista personal de proyectos, en 3 grupos: destacados, los tuyos y el resto del workspace.',
-        body: `La página **Mis Proyectos** organiza todo en tres secciones, en orden:
+        body: `La página **Proyectos** organiza todo en tres secciones, en orden:
 
 1. **Proyectos destacados** — los que marcaste con la estrella (preferencia personal).
 2. **Mis proyectos** — donde sos parte del equipo.
@@ -555,13 +555,13 @@ Ignorarlo es perder valor del sistema. Si no lo querés, podés apagar todo el s
       },
       {
         id: 'mis-reportes',
-        title: 'Mis reportes',
+        title: 'Reportes',
         audience: 'todos',
         module: null,
         summary: 'Tu actividad y productividad personal. Los admins además tienen los reportes del equipo.',
-        body: `**Mis reportes** muestra tu actividad: tareas completadas, tiempo trabajado y evolución.
+        body: `**Reportes** muestra tu actividad: tareas completadas, tiempo trabajado y evolución.
 
-Si sos admin, además tenés acceso a **Reportes** del equipo completo (por proyecto y por persona) y a la vista de **Actividad** en tiempo real de quién está trabajando en qué.`,
+Si sos admin, el ítem Reportes de Administración es el del equipo completo (por proyecto y por persona). Este es el personal, el que ven quienes no son admin. La vista de Actividad en tiempo real sigue siendo aparte.
         related: ['insight-ia-reporte-semanal'],
       },
     ],

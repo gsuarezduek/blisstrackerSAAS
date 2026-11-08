@@ -359,7 +359,10 @@ PATCH  /api/calendar/events/:id                     # solo organizador; si cambi
 DELETE /api/calendar/events/:id                     # solo organizador, solo si realMeetingId es null. `?scope=series` cancela esta ocurrencia + las siguientes ya materializadas y termina la serie ahí; sin scope solo esta ocurrencia (deja una CalendarEventException para que la serie no la regenere)
 POST   /api/calendar/events/:id/respond             # { status: 'accepted'|'declined' } — el participante. Aceptar una ocurrencia de una serie recurrente acepta automáticamente toda la serie (sin scope). Rechazar acepta `?scope=series` (esta y las siguientes) igual que editar/borrar
 POST   /api/calendar/events/:id/start-meeting       # crea/arranca la ProjectMeeting real con los invitados que aceptaron
-GET    /api/calendar/availability                   # ?userIds=&from=&to= — bloques ocupados/tentativos por persona
+GET    /api/calendar/availability                   # ?userIds=&from=&to= — bloques ocupados/tentativos por persona. En la columna propia suma `salesActions`, `financeTasks` y `contentPieces` (día completo)
+GET    /api/calendar/sales-actions                  # ?from=&to= — las mismas acciones, para la agenda de hoy del Dashboard
+GET    /api/calendar/finance-tasks                  # ?from=&to= — tareas de Pendientes de Finanzas del usuario (abiertas por `date`, pospuestas por `postponedUntil`)
+GET    /api/calendar/content-pieces                 # ?from=&to= — piezas de Contenido del usuario (scheduledDate, responsable interno, no publicadas ni archivadas; si hay tarea abierta en el dashboard, no se repiten)
 POST   /api/calendar/availability/common-free-slots # { userIds, date, durationMins } — huecos libres en común
 GET    /api/calendar/google/auth-url                # inicia la conexión OAuth personal con Google Calendar
 GET    /api/calendar/google/callback                # callback OAuth (sin auth)

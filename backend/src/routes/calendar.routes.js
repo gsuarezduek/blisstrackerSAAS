@@ -30,6 +30,9 @@ router.post  ('/events/:id/respond',           calendar.respondEvent)
 router.post  ('/events/:id/start-meeting',     calendar.startMeetingFromEvent)
 
 router.get   ('/availability',                 calendar.getAvailability)
+router.get   ('/sales-actions',                calendar.listSalesActions)
+router.get   ('/finance-tasks',               calendar.listFinanceTasks)
+router.get   ('/content-pieces',              calendar.listContentPieces)
 router.post  ('/availability/common-free-slots', calendar.commonFreeSlots)
 
 // Conexión personal con Google Calendar (push de eventos agendados) — ver

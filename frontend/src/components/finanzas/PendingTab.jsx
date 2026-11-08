@@ -10,7 +10,7 @@ import ExtrasList from './ExtrasList'
 // Finanzas.jsx para saltar a la pestaña relacionada con el origen de la tarea.
 // Las tareas de un extra ("Cobrar 1° pago…", "Pagar al equipo…") abren el
 // cobro / pago al equipo directo en ExtrasList (`extraRequest`).
-export default function PendingTab({ items, accounts, categories, taxes, issuers, onNavigate, onDataChange }) {
+export default function PendingTab({ items, accounts, categories, taxes, issuers, onNavigate, onDataChange, focusTaskId }) {
   const [tasks, setTasks] = useState(null)
   const [extraRequest, setExtraRequest] = useState(null)
   // Responsables asignables: no "todo el workspace" (useMembers()) sino solo
@@ -20,9 +20,9 @@ export default function PendingTab({ items, accounts, categories, taxes, issuers
   const [members, setMembers] = useState([])
 
   const loadTasks = useCallback(async () => {
-    const res = await api.get('/finanzas/tasks')
+    const res = await api.get('/finanzas/tasks', { params: focusTaskId ? { focus: focusTaskId } : undefined })
     setTasks(res.data)
-  }, [])
+  }, [focusTaskId])
 
   useEffect(() => { loadTasks() }, [loadTasks])
   useEffect(() => { api.get('/finanzas/team').then(res => setMembers(res.data)) }, [])
@@ -38,6 +38,7 @@ export default function PendingTab({ items, accounts, categories, taxes, issuers
         <p className="text-sm text-gray-400 text-center py-6">Cargando…</p>
       ) : (
         <TasksList tasks={tasks} members={members} items={items} onChanged={loadTasks} onNavigate={onNavigate}
+          focusTaskId={focusTaskId}
           onOpenExtra={(task) => setExtraRequest({ extraId: task.originId, nonce: Date.now() })} />
       )}
 

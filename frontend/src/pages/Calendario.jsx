@@ -211,7 +211,40 @@ export default function Calendario() {
   function openTask(task) {
     window.dispatchEvent(new CustomEvent('bliss:open-task', { detail: task }))
   }
+  function openLead(leadId) {
+    navigate(`${user?.isAdmin ? '/admin/ventas' : '/ventas'}?lead=${leadId}`)
+  }
+  function openFinanceTask(taskId) {
+    navigate(`/finanzas?tab=pendientes&task=${taskId}`)
+  }
+  function openContentPiece(piece) {
+    navigate(`/contenido?projectId=${piece.projectId}&piece=${piece.id}`)
+  }
   function allDayItemsFor(key, onlyDate) {
+    const content = (availability[key]?.contentPieces || [])
+      .filter(p => p.date === onlyDate)
+      .map(p => ({
+        id: `content-${p.id}`,
+        title: p.projectName ? `Contenido · ${p.projectName}: ${p.title}` : `Contenido · ${p.title}`,
+        subtitle: 'Contenido',
+        onClick: () => openContentPiece(p),
+      }))
+    const finance = (availability[key]?.financeTasks || [])
+      .filter(t => t.date === onlyDate)
+      .map(t => ({
+        id: `finance-${t.id}`,
+        title: t.itemName ? `Finanzas · ${t.itemName}: ${t.title}` : `Finanzas · ${t.title}`,
+        subtitle: 'Finanzas',
+        onClick: () => openFinanceTask(t.id),
+      }))
+    const sales = (availability[key]?.salesActions || [])
+      .filter(a => a.date === onlyDate)
+      .map(a => ({
+        id: `sales-${a.id}`,
+        title: a.companyName ? `Ventas · ${a.companyName}: ${a.title}` : `Ventas · ${a.title}`,
+        subtitle: 'Ventas',
+        onClick: () => openLead(a.leadId),
+      }))
     const tasks = (availability[key]?.allDayTasks || [])
       .filter(t => t.scheduledFor === onlyDate)
       .map(t => ({ id: `task-${t.id}`, title: t.description, recurring: !!t.recurrenceId, onClick: () => openTask(t) }))
@@ -224,7 +257,7 @@ export default function Calendario() {
         id: `ext-${e.id}-${onlyDate}`, title: e.title, subtitle: e.calendarName,
         color: e.color || undefined, onClick: () => setExternalEvent(e),
       }))
-    return [...tasks, ...external]
+    return [...content, ...finance, ...sales, ...tasks, ...external]
   }
 
   // Editar/borrar/traer a hoy desde el modal global avisa con este evento.
@@ -379,9 +412,15 @@ export default function Calendario() {
           <CalendarMonthView
             events={events}
             tasks={availability[user.id]?.allDayTasks || []}
+            salesActions={availability[user.id]?.salesActions || []}
+            financeTasks={availability[user.id]?.financeTasks || []}
+            contentPieces={availability[user.id]?.contentPieces || []}
             externalEvents={externalForMonth}
             onOpenExternal={e => setExternalEvent({ id: e.id })}
             onOpenTask={openTask}
+            onOpenSales={a => openLead(a.leadId)}
+            onOpenFinance={t => openFinanceTask(t.id)}
+            onOpenContent={p => openContentPiece(p)}
             month={monthOf(date)}
             onMonthChange={m => updateParams({ date: `${m}-01` })}
             onOpenEvent={setDetailEvent}

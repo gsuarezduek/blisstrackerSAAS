@@ -327,7 +327,7 @@ export default function WebAnalyticsTab({ projectId, onSelectProject }) {
             Google Analytics no está conectado para este proyecto
           </p>
           <p className="text-xs text-amber-600 dark:text-amber-400 mb-4">
-            Conectalo ahora o ingresá a <strong>Mis Proyectos → Info</strong> para configurar el Property ID.
+            Conectalo ahora o ingresá a <strong>Proyectos → Info</strong> para configurar el Property ID.
           </p>
           <button
             onClick={handleReconnectGoogle}
@@ -347,7 +347,7 @@ export default function WebAnalyticsTab({ projectId, onSelectProject }) {
             Falta el GA4 Property ID
           </p>
           <p className="text-xs text-amber-600 dark:text-amber-400">
-            Ingresalo en <strong>Mis Proyectos → [Proyecto] → Info → Integraciones Google</strong>
+            Ingresalo en <strong>Proyectos → [Proyecto] → Info → Integraciones Google</strong>
           </p>
         </div>
       )}
@@ -359,7 +359,7 @@ export default function WebAnalyticsTab({ projectId, onSelectProject }) {
           </p>
           <p className="text-xs text-amber-600 dark:text-amber-400">
             La cuenta de Google conectada no tiene permiso sobre esa propiedad. Revisá el Property ID en{' '}
-            <strong>Mis Proyectos → [Proyecto] → Info → Integraciones Google</strong>, o pedí acceso de lectura a esa propiedad en Google Analytics.
+            <strong>Proyectos → [Proyecto] → Info → Integraciones Google</strong>, o pedí acceso de lectura a esa propiedad en Google Analytics.
           </p>
         </div>
       )}

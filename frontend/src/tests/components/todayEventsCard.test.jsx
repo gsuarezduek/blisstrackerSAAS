@@ -6,7 +6,7 @@
  */
 import { describe, test, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor, fireEvent } from '@testing-library/react'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, useLocation } from 'react-router-dom'
 import TodayEventsCard, { toMins, phaseOf } from '../../components/dashboard/TodayEventsCard'
 
 vi.mock('../../api/client', () => ({ default: { get: vi.fn() } }))
@@ -69,15 +69,24 @@ function event(over = {}) {
   }
 }
 
-function renderCard() {
-  return render(<MemoryRouter><TodayEventsCard /></MemoryRouter>)
+function Where() {
+  const loc = useLocation()
+  return <span data-testid="where">{loc.pathname}{loc.search}</span>
+}
+
+function renderCard({ where = false } = {}) {
+  return render(<MemoryRouter><TodayEventsCard />{where && <Where />}</MemoryRouter>)
 }
 
 // La tarjeta junta dos fuentes: las reuniones de BlissTracker y lo traído de los
 // calendarios de afuera (ver ExternalCalendar).
-function mockApi({ meetings = [], external = [] } = {}) {
+function mockApi({ meetings = [], external = [], sales = [], finance = [], content = [] } = {}) {
   api.get.mockImplementation(url => Promise.resolve({
-    data: url === '/calendar/external-events' ? external : meetings,
+    data: url === '/calendar/external-events' ? external
+      : url === '/calendar/sales-actions' ? sales
+      : url === '/calendar/finance-tasks' ? finance
+      : url === '/calendar/content-pieces' ? content
+      : meetings,
   }))
 }
 
@@ -111,7 +120,7 @@ describe('TodayEventsCard', () => {
     expect(screen.getByText(/1h 0m · Pastiza/)).toBeInTheDocument()
     expect(screen.getByText('Ver calendario →')).toHaveAttribute('href', '/calendario')
     // El rango pedido es un solo día: hoy, a las dos fuentes.
-    for (const path of ['/calendar/events', '/calendar/external-events']) {
+    for (const path of ['/calendar/events', '/calendar/external-events', '/calendar/sales-actions', '/calendar/finance-tasks', '/calendar/content-pieces']) {
       const call = api.get.mock.calls.find(c => c[0] === path)
       expect(call).toBeTruthy()
       expect(call[1].params.from).toBe(call[1].params.to)
@@ -146,19 +155,47 @@ describe('TodayEventsCard', () => {
     expect(screen.getByText(/Se edita en su calendario de origen/)).toBeInTheDocument()
   })
 
-  test('los de día completo no entran en la agenda por horario', async () => {
+  test('un evento de día completo entra en la agenda, sin hora', async () => {
     mockApi({ external: [externalEvent({ title: 'Viaje', allDay: true, startTime: null, durationMins: null })] })
-    const { container } = renderCard()
-    await waitFor(() => expect(api.get).toHaveBeenCalledTimes(2))
-    expect(container).toBeEmptyDOMElement()
+    renderCard()
+    expect(await screen.findByText('Viaje')).toBeInTheDocument()
+    expect(screen.getByText('Día')).toBeInTheDocument()
+    expect(screen.queryByText(/en \d+ min/)).toBeNull()
+  })
+
+  test('una próxima acción de Ventas abre el lead', async () => {
+    mockApi({ sales: [{ id: 5, title: 'Llamar', date: '2026-11-05', leadId: 3, companyName: 'Acme' }] })
+    renderCard({ where: true })
+    expect(await screen.findByText('Acme: Llamar')).toBeInTheDocument()
+    expect(screen.getByText('Ventas')).toBeInTheDocument()
+    fireEvent.click(screen.getByText('Acme: Llamar'))
+    expect(await screen.findByTestId('where')).toHaveTextContent('/ventas?lead=3')
+  })
+
+  test('una tarea de Finanzas abre Pendientes en esa tarea', async () => {
+    mockApi({ finance: [{ id: 8, title: 'Cobrar factura', date: '2026-11-05', itemName: 'Acme' }] })
+    renderCard({ where: true })
+    expect(await screen.findByText('Acme: Cobrar factura')).toBeInTheDocument()
+    expect(screen.getByText('Finanzas')).toBeInTheDocument()
+    fireEvent.click(screen.getByText('Acme: Cobrar factura'))
+    expect(await screen.findByTestId('where')).toHaveTextContent('/finanzas?tab=pendientes&task=8')
+  })
+
+  test('una pieza de Contenido abre esa pieza', async () => {
+    mockApi({ content: [{ id: 4, title: 'Reel del jueves', date: '2026-11-05', projectId: 9, projectName: 'Acme' }] })
+    renderCard({ where: true })
+    expect(await screen.findByText('Acme: Reel del jueves')).toBeInTheDocument()
+    expect(screen.getByText('Contenido')).toBeInTheDocument()
+    fireEvent.click(screen.getByText('Acme: Reel del jueves'))
+    expect(await screen.findByTestId('where')).toHaveTextContent('/contenido?projectId=9&piece=4')
   })
 
   test('si una fuente falla, la otra se muestra igual', async () => {
-    api.get.mockImplementation(url => (
-      url === '/calendar/external-events'
-        ? Promise.reject(new Error('503'))
-        : Promise.resolve({ data: [event()] })
-    ))
+    api.get.mockImplementation(url => {
+      if (url === '/calendar/external-events') return Promise.reject(new Error('503'))
+      if (url === '/calendar/sales-actions' || url === '/calendar/finance-tasks' || url === '/calendar/content-pieces') return Promise.resolve({ data: [] })
+      return Promise.resolve({ data: [event()] })
+    })
     renderCard()
     expect(await screen.findByText('Kickoff con el cliente')).toBeInTheDocument()
   })

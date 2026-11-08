@@ -374,7 +374,7 @@ export default function LeadDetail({ leadId, team, companies, onBack, onChanged 
                 </select>
               </div>
               {na.dueAt && (
-                <p className="text-[11px] text-gray-400">Además se crea una tarea futura para el responsable, con fecha {fmtDate(na.dueAt)}.</p>
+                <p className="text-[11px] text-gray-400">Aparece en el calendario y en la agenda del responsable el {fmtDate(na.dueAt)}. Desde ahí se abre este lead.</p>
               )}
               <button onClick={addAction} disabled={!na.title.trim() || savingAction} className="w-full bg-primary-600 hover:bg-primary-700 disabled:opacity-50 text-white rounded-lg py-2 text-sm font-semibold">
                 {savingAction ? 'Agregando...' : 'Agregar acción'}

@@ -8,6 +8,9 @@ const { taskInclude } = require('./tasks/_shared')
 const { createTaskForParticipant, syncTaskFields, removeTaskIfPending } = require('../lib/calendarEventTasks')
 const googleCalendarSync = require('../services/googleCalendarSync.service')
 const externalCalendarService = require('../services/externalCalendar.service')
+const { listOwnSalesActions } = require('../lib/salesAgenda')
+const { listOwnFinanceTasks } = require('../lib/financeAgenda')
+const { contentAgendaEnabled, listOwnContentPieces } = require('../lib/contentAgenda')
 const {
   DATE_RE, TIME_RE, MIN_DURATION_MINS, MAX_DURATION_MINS, TITLE_MAX, MEET_LINK_MAX,
   parseUserIds, formatEvent, formatRecurrence, EVENT_INCLUDE, loadEvent,
@@ -122,7 +125,7 @@ async function getAvailability(req, res, next) {
     }
 
     const includeOwnTasks = userIds.includes(requesterId)
-    const [busy, untimedTasks, externalAllDay] = await Promise.all([
+    const [busy, untimedTasks, externalAllDay, salesRows, financeRows, contentRows] = await Promise.all([
       getBusyBlocks({ workspaceId, userIds, fromDate: from, toDate: to, requesterId }),
       includeOwnTasks
         ? prisma.task.findMany({
@@ -149,7 +152,35 @@ async function getAvailability(req, res, next) {
             .then(rows => rows.filter(r => r.allDay))
             .catch(() => [])
         : [],
+      // Próximas acciones de Ventas del propio requester. Mismo riel "Sin hora":
+      // tienen fecha y no hora. No ocupan franja. Si además existe la Task
+      // vinculada, esa no se repite abajo en allDayTasks.
+      includeOwnTasks
+        ? listOwnSalesActions({ workspaceId, userId: requesterId, from, to, tz: req.workspace.timezone })
+        : [],
+      // Tareas de Finanzas del propio requester. Mismo riel, misma regla: si ya
+      // tienen Task vinculada, no se pintan dos veces.
+      includeOwnTasks
+        ? listOwnFinanceTasks({ workspaceId, userId: requesterId, from, to, tz: req.workspace.timezone })
+        : [],
+      // Piezas de Contenido del propio requester, el día de publicación. Sin
+      // hora: el calendario de Contenido también las agrupa por día. Si ya hay
+      // una tarea abierta para esa pieza, listOwnContentPieces no la trae.
+      includeOwnTasks
+        ? listOwnContentPieces({
+            workspaceId, userId: requesterId, from, to,
+            enabled: await contentAgendaEnabled(req),
+          })
+        : [],
     ])
+
+    const linkedTaskIds = new Set([
+      ...salesRows.map(a => a.taskId),
+      ...financeRows.map(a => a.taskId),
+    ].filter(Boolean))
+    const visibleUntimed = untimedTasks.filter(t => !linkedTaskIds.has(t.id))
+    const salesActions = salesRows.map(({ taskId, ...action }) => action)
+    const financeTasks = financeRows.map(({ taskId, ...task }) => task)
 
     // Proyecto privado (ver concepto "Proyectos privados"): un calendar_event de
     // un proyecto privado ajeno se enmascara como si fuera una tarea — se ve el
@@ -185,11 +216,69 @@ async function getAvailability(req, res, next) {
           const revealed = isSelf || b.kind === 'external' || (b.kind === 'calendar_event' && hasAccessToProject(b.projectId))
           return revealed ? b : { date: b.date, start: b.start, end: b.end, kind: b.kind, tentative: b.tentative }
         }),
-        allDayTasks: isSelf ? untimedTasks : [],
+        allDayTasks: isSelf ? visibleUntimed : [],
         allDayExternal: isSelf ? externalAllDay : [],
+        salesActions: isSelf ? salesActions : [],
+        financeTasks: isSelf ? financeTasks : [],
+        contentPieces: isSelf ? contentRows : [],
       }
     }
     res.json(sanitized)
+  } catch (err) { next(err) }
+}
+
+// ─── GET /api/calendar/sales-actions?from=&to= ─────────────────────────────
+// Las próximas acciones de Ventas del usuario actual, para la agenda del
+// Dashboard (el Calendario las recibe dentro de /availability). Mismo rango
+// YYYY-MM-DD que el resto del módulo.
+async function listSalesActions(req, res, next) {
+  try {
+    const { from, to } = req.query
+    if (!DATE_RE.test(from || '') || !DATE_RE.test(to || '')) return res.status(400).json({ error: 'from/to inválidos (YYYY-MM-DD)' })
+    if (rangeTooWide(from, to)) return res.status(400).json({ error: 'Rango de fechas demasiado amplio' })
+    const rows = await listOwnSalesActions({
+      workspaceId: req.workspace.id,
+      userId: req.user.userId,
+      from, to,
+      tz: req.workspace.timezone,
+    })
+    res.json(rows.map(({ taskId, ...action }) => action))
+  } catch (err) { next(err) }
+}
+
+// ─── GET /api/calendar/finance-tasks?from=&to= ─────────────────────────────
+// Tareas de Pendientes de Finanzas del usuario actual, para la agenda del
+// Dashboard. El Calendario las recibe dentro de /availability.
+async function listFinanceTasks(req, res, next) {
+  try {
+    const { from, to } = req.query
+    if (!DATE_RE.test(from || '') || !DATE_RE.test(to || '')) return res.status(400).json({ error: 'from/to inválidos (YYYY-MM-DD)' })
+    if (rangeTooWide(from, to)) return res.status(400).json({ error: 'Rango de fechas demasiado amplio' })
+    const rows = await listOwnFinanceTasks({
+      workspaceId: req.workspace.id,
+      userId: req.user.userId,
+      from, to,
+      tz: req.workspace.timezone,
+    })
+    res.json(rows.map(({ taskId, ...task }) => task))
+  } catch (err) { next(err) }
+}
+
+// ─── GET /api/calendar/content-pieces?from=&to= ────────────────────────────
+// Piezas de Contenido del usuario actual, para la agenda del Dashboard. El
+// Calendario las recibe dentro de /availability.
+async function listContentPieces(req, res, next) {
+  try {
+    const { from, to } = req.query
+    if (!DATE_RE.test(from || '') || !DATE_RE.test(to || '')) return res.status(400).json({ error: 'from/to inválidos (YYYY-MM-DD)' })
+    if (rangeTooWide(from, to)) return res.status(400).json({ error: 'Rango de fechas demasiado amplio' })
+    const rows = await listOwnContentPieces({
+      workspaceId: req.workspace.id,
+      userId: req.user.userId,
+      from, to,
+      enabled: await contentAgendaEnabled(req),
+    })
+    res.json(rows)
   } catch (err) { next(err) }
 }
 
@@ -923,7 +1012,7 @@ async function startMeetingFromEvent(req, res, next) {
 }
 
 module.exports = {
-  listEvents, getAvailability, commonFreeSlots,
+  listEvents, getAvailability, listSalesActions, listFinanceTasks, listContentPieces, commonFreeSlots,
   createEvent, getEvent, updateEvent, deleteEvent,
   respondEvent, startMeetingFromEvent, startMeetingCore,
 }

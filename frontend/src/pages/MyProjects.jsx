@@ -364,7 +364,7 @@ export default function MyProjects() {
       <main className="max-w-6xl mx-auto px-4 py-8">
         <div className="mb-6 flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Mis Proyectos</h1>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Proyectos</h1>
             <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">
               {projects.length} proyecto{projects.length !== 1 ? 's' : ''} en el workspace
             </p>

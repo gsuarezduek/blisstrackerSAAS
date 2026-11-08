@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import MonthGrid from './MonthGrid'
 import { monthLabel, todayYMD, shiftDay } from './dateHelpers'
-import { CircleDashed, Repeat } from 'lucide-react'
+import { Briefcase, CircleDashed, Clapperboard, Repeat, Wallet } from 'lucide-react'
 import { Icon } from '../ui/Icon'
 
 const STATUS_DOT = { confirmed: 'bg-green-500', pending: 'bg-amber-400', partial: 'bg-red-400' }
@@ -19,7 +19,7 @@ const MAX_CHIPS_PER_DAY = 4
  * varios días se repite en cada día que abarca. `onOpenExternal(e)` abre su
  * detalle, que es de solo lectura (el evento se edita donde vive).
  */
-export default function CalendarMonthView({ events, tasks = [], externalEvents = [], month, onMonthChange, onOpenEvent, onOpenTask, onOpenExternal, onOpenDay }) {
+export default function CalendarMonthView({ events, tasks = [], salesActions = [], financeTasks = [], contentPieces = [], externalEvents = [], month, onMonthChange, onOpenEvent, onOpenTask, onOpenSales, onOpenFinance, onOpenContent, onOpenExternal, onOpenDay }) {
   const byDay = useMemo(() => {
     const map = {}
     for (const e of events) (map[e.date] ??= []).push({ kind: 'event', item: e })
@@ -34,8 +34,11 @@ export default function CalendarMonthView({ events, tasks = [], externalEvents =
       }
     }
     for (const t of tasks) (map[t.scheduledFor] ??= []).unshift({ kind: 'task', item: t })
+    for (const a of salesActions) (map[a.date] ??= []).unshift({ kind: 'sales', item: a })
+    for (const t of financeTasks) (map[t.date] ??= []).unshift({ kind: 'finance', item: t })
+    for (const p of contentPieces) (map[p.date] ??= []).unshift({ kind: 'content', item: p })
     return map
-  }, [events, tasks, externalEvents])
+  }, [events, tasks, salesActions, financeTasks, contentPieces, externalEvents])
 
   const today = todayYMD()
 
@@ -65,7 +68,46 @@ export default function CalendarMonthView({ events, tasks = [], externalEvents =
                   {dayNum}
                 </div>
                 <div className="space-y-1">
-                  {items.slice(0, MAX_CHIPS_PER_DAY).map(({ kind, item: e, day }) => kind === 'external' ? (
+                  {items.slice(0, MAX_CHIPS_PER_DAY).map(({ kind, item: e, day }) => kind === 'content' ? (
+                    <div
+                      key={`content-${e.id}`}
+                      onClick={ev => { ev.stopPropagation(); onOpenContent?.(e) }}
+                      title={`Contenido · ${e.projectName ? `${e.projectName}: ` : ''}${e.title}`}
+                      className={`flex items-center gap-1 px-1.5 py-0.5 rounded border border-rose-200 dark:border-rose-800 bg-rose-50 dark:bg-rose-900/20 hover:bg-rose-100 dark:hover:bg-rose-900/40 cursor-pointer transition-colors ${
+                        past ? 'opacity-60 grayscale' : ''}`}
+                    >
+                      <Icon as={Clapperboard} size={11} className="shrink-0 text-rose-600 dark:text-rose-400" />
+                      <span className="text-[11px] text-gray-700 dark:text-gray-300 truncate">
+                        {e.projectName ? `${e.projectName}: ` : ''}{e.title}
+                      </span>
+                    </div>
+                  ) : kind === 'finance' ? (
+                    <div
+                      key={`finance-${e.id}`}
+                      onClick={ev => { ev.stopPropagation(); onOpenFinance?.(e) }}
+                      title={`Finanzas · ${e.itemName ? `${e.itemName}: ` : ''}${e.title}`}
+                      className={`flex items-center gap-1 px-1.5 py-0.5 rounded border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-900/20 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 cursor-pointer transition-colors ${
+                        past ? 'opacity-60 grayscale' : ''}`}
+                    >
+                      <Icon as={Wallet} size={11} className="shrink-0 text-emerald-600 dark:text-emerald-400" />
+                      <span className="text-[11px] text-gray-700 dark:text-gray-300 truncate">
+                        {e.itemName ? `${e.itemName}: ` : ''}{e.title}
+                      </span>
+                    </div>
+                  ) : kind === 'sales' ? (
+                    <div
+                      key={`sales-${e.id}`}
+                      onClick={ev => { ev.stopPropagation(); onOpenSales?.(e) }}
+                      title={`Ventas · ${e.companyName ? `${e.companyName}: ` : ''}${e.title}`}
+                      className={`flex items-center gap-1 px-1.5 py-0.5 rounded border border-primary-200 dark:border-primary-800 bg-primary-50 dark:bg-primary-900/20 hover:bg-primary-100 dark:hover:bg-primary-900/40 cursor-pointer transition-colors ${
+                        past ? 'opacity-60 grayscale' : ''}`}
+                    >
+                      <Icon as={Briefcase} size={11} className="shrink-0 text-primary-600 dark:text-primary-400" />
+                      <span className="text-[11px] text-gray-700 dark:text-gray-300 truncate">
+                        {e.companyName ? `${e.companyName}: ` : ''}{e.title}
+                      </span>
+                    </div>
+                  ) : kind === 'external' ? (
                     <div
                       key={`ext-${e.id}-${day}`}
                       onClick={ev => { ev.stopPropagation(); onOpenExternal?.(e) }}

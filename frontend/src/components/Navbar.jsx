@@ -158,11 +158,11 @@ export default function Navbar() {
   // FUENTE ÚNICA: cualquier cambio aquí aplica en desktop Y mobile automáticamente.
   const links = [
     { to: '/', label: 'Dashboard' },
-    { to: '/my-projects', label: 'Mis Proyectos' },
+    { to: '/my-projects', label: 'Proyectos' },
     { to: '/realtime', label: 'Actividad', dot: true },
-    // "Mis Reportes" va al final del menú para usuarios no-admin (los admins usan
-    // "Reportes" dentro de Administración → Productividad, ver adminSublinks).
-    ...(!isAdmin ? [{ to: '/my-reports', label: 'Mis Reportes' }] : []),
+    // "Reportes" va al final del menú para usuarios no-admin (los admins usan
+    // otro "Reportes", el del equipo, dentro de Administración).
+    ...(!isAdmin ? [{ to: '/my-reports', label: 'Reportes' }] : []),
   ]
 
   // ── Sublinks de Módulos ───────────────────────────────────────────────────

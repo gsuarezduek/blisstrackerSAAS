@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Plus } from 'lucide-react'
 import { Icon } from '../ui/Icon'
 import api from '../../api/client'
+import { useAuth } from '../../context/AuthContext'
 import { fmtMoney } from '../../utils/format'
 import { taskOriginLabel } from './financeCatalog'
 
@@ -15,11 +16,13 @@ function fmtDate(iso) {
 // Modal simple "+ Agregar tarea" (manual): título, detalle, fecha, y
 // opcionalmente un cliente — si se elige uno, la tarea también aparece
 // fusionada en "Próximas acciones" de su ficha (ver NextActionsList.jsx).
-function NewTaskModal({ customers, onClose, onSaved }) {
+function NewTaskModal({ customers, members, onClose, onSaved }) {
+  const { user } = useAuth()
   const [title, setTitle] = useState('')
   const [detail, setDetail] = useState('')
   const [date, setDate] = useState('')
   const [itemId, setItemId] = useState('')
+  const [responsibleId, setResponsibleId] = useState(user?.id ? String(user.id) : '')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
@@ -30,6 +33,7 @@ function NewTaskModal({ customers, onClose, onSaved }) {
       await api.post('/finanzas/tasks', {
         title: title.trim(), detail: detail.trim() || undefined, date: date || undefined,
         itemId: itemId ? Number(itemId) : undefined,
+        responsibleId: responsibleId ? Number(responsibleId) : null,
       })
       onSaved()
     } catch (err) {
@@ -46,6 +50,12 @@ function NewTaskModal({ customers, onClose, onSaved }) {
           <input autoFocus className={input} placeholder="Título" value={title} onChange={e => setTitle(e.target.value)} />
           <input className={input} placeholder="Detalle (opcional)" value={detail} onChange={e => setDetail(e.target.value)} />
           <input type="date" className={input} value={date} onChange={e => setDate(e.target.value)} />
+          <select className={input} value={responsibleId} onChange={e => setResponsibleId(e.target.value)}>
+            <option value="">Sin responsable</option>
+            {(members || []).map(m => (
+              <option key={m.id} value={m.id}>{m.name}{String(m.id) === String(user?.id) ? ' (vos)' : ''}</option>
+            ))}
+          </select>
           {customers?.length > 0 && (
             <select className={input} value={itemId} onChange={e => setItemId(e.target.value)}>
               <option value="">Sin cliente vinculado</option>
@@ -79,11 +89,16 @@ function PostponeInline({ onConfirm, onCancel }) {
 // esa persona — mismo mecanismo que el to-do de Reuniones), acción
 // ("Hecho"/"Acreditado"...), Posponer, Ver›. `members` = workspace members
 // (useMembers()), para el selector de responsable.
-export default function TasksList({ tasks, members, items, onChanged, onNavigate, onOpenExtra }) {
+export default function TasksList({ tasks, members, items, onChanged, onNavigate, onOpenExtra, focusTaskId }) {
   const [showNew, setShowNew] = useState(false)
   const [postponing, setPostponing] = useState(null)
   const [assignError, setAssignError] = useState(null) // { taskId, message }
   const customers = items?.filter(i => i.tracksAccount) || []
+
+  useEffect(() => {
+    if (!focusTaskId) return
+    document.getElementById(`finance-task-${focusTaskId}`)?.scrollIntoView({ block: 'center' })
+  }, [focusTaskId, tasks])
 
   async function markDone(task) {
     await api.patch(`/finanzas/tasks/${task.id}`, { status: 'done' })
@@ -118,7 +133,13 @@ export default function TasksList({ tasks, members, items, onChanged, onNavigate
       <div className="space-y-1.5">
         {tasks.length === 0 && <p className="text-sm text-gray-400 text-center py-4">Sin pendientes — todo al día.</p>}
         {tasks.map(t => (
-          <div key={t.id} className="border border-gray-100 dark:border-gray-700 rounded-xl px-3 py-2">
+          <div
+            key={t.id}
+            id={`finance-task-${t.id}`}
+            className={`border rounded-xl px-3 py-2 ${Number(focusTaskId) === t.id
+              ? 'border-primary-400 dark:border-primary-500 bg-primary-50/60 dark:bg-primary-900/20'
+              : 'border-gray-100 dark:border-gray-700'}`}
+          >
             <div className="flex items-center gap-3">
               {t.origin && <span className="text-[11px] bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300 rounded-full px-2 py-0.5 shrink-0">{taskOriginLabel(t.origin)}</span>}
               <div className="flex-1 min-w-0">
@@ -160,7 +181,7 @@ export default function TasksList({ tasks, members, items, onChanged, onNavigate
         ))}
       </div>
 
-      {showNew && <NewTaskModal customers={customers} onClose={() => setShowNew(false)} onSaved={() => { setShowNew(false); onChanged() }} />}
+      {showNew && <NewTaskModal customers={customers} members={members} onClose={() => setShowNew(false)} onSaved={() => { setShowNew(false); onChanged() }} />}
     </div>
   )
 }

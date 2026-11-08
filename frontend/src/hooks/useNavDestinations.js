@@ -46,9 +46,9 @@ export default function useNavDestinations() {
 
   const destinations = [
     { to: '/', label: 'Dashboard' },
-    { to: '/my-projects', label: 'Mis Proyectos' },
+    { to: '/my-projects', label: 'Proyectos' },
     { to: '/realtime', label: 'Actividad' },
-    ...(!isAdmin ? [{ to: '/my-reports', label: 'Mis Reportes' }] : []),
+    ...(!isAdmin ? [{ to: '/my-reports', label: 'Reportes' }] : []),
 
     ...(ventasAllowed ? [{ to: ventasBase, label: 'Ventas' }] : []),
     ...(marketingAllowed ? [{ to: '/marketing', label: 'Marketing' }] : []),

@@ -180,13 +180,24 @@ async function listTasks(req, res, next) {
       return res.json(tasks)
     }
     const tasks = await getOpenTasks(req.workspace.id)
+    const focus = req.query.focus ? Number(req.query.focus) : null
+    if (focus && !tasks.some(t => t.id === focus)) {
+      const extra = await prisma.financeTask.findFirst({
+        where: { id: focus, workspaceId: req.workspace.id, deletedAt: null, status: { in: ['open', 'postponed'] } },
+        include: { doneBy: { select: { id: true, name: true } }, responsible: { select: { id: true, name: true } }, item: { select: { id: true, name: true } } },
+      })
+      if (extra) tasks.unshift(extra)
+    }
     res.json(tasks)
   } catch (err) { next(err) }
 }
 
-// POST /api/finanzas/tasks — manual: { title, detail?, date?, amount?, itemId? }
+// POST /api/finanzas/tasks — manual: { title, detail?, date?, amount?, itemId?, responsibleId? }
 // `itemId` es opcional: vincula la tarea a un cliente para que aparezca
 // también en su ficha (fusionada con "Próximas acciones").
+// Sin `responsibleId` queda a cargo de quien la crea. El proyecto de tareas de
+// Finanzas no es requisito para guardar el responsable: solo decide si además
+// se crea la Task del dashboard.
 async function createTask(req, res, next) {
   try {
     const workspaceId = req.workspace.id
@@ -203,12 +214,26 @@ async function createTask(req, res, next) {
       resolvedItemId = item.id
     }
 
-    const task = await prisma.financeTask.create({
+    const responsibleId = req.body.responsibleId === undefined ? req.user.userId : req.body.responsibleId
+    if (responsibleId != null) {
+      if (!Number.isInteger(responsibleId)) return res.status(400).json({ error: 'Responsable inválido' })
+      const member = await prisma.workspaceMember.findFirst({ where: { workspaceId, userId: responsibleId, active: true } })
+      if (!member) return res.status(400).json({ error: 'Responsable no encontrado' })
+    }
+
+    let task = await prisma.financeTask.create({
       data: {
         workspaceId, kind: 'manual', title: title.trim(), detail: detail?.trim() || null, itemId: resolvedItemId,
-        date: parsedDate, amount: amount != null ? toDecimal(amount).toString() : null, createdById: req.user.userId,
+        date: parsedDate, amount: amount != null ? toDecimal(amount).toString() : null,
+        createdById: req.user.userId, responsibleId: responsibleId ?? null,
       },
     })
+    if (task.responsibleId && req.workspace.financeTaskProjectId) {
+      await syncDashboardOnResponsibleChange(task, {
+        projectId: req.workspace.financeTaskProjectId, workspaceId, tz: req.workspace.timezone, requesterId: req.user.userId,
+      })
+      task = await prisma.financeTask.findUnique({ where: { id: task.id } })
+    }
     await logFinanceAudit({ workspaceId, entityType: 'task', entityId: task.id, action: 'create', userId: req.user.userId, entityLabel: `tarea "${task.title}"` })
     res.status(201).json(task)
   } catch (err) { next(err) }
@@ -245,10 +270,6 @@ async function updateTask(req, res, next) {
         const member = await prisma.workspaceMember.findFirst({ where: { workspaceId, userId: responsibleId, active: true } })
         if (!member) return res.status(400).json({ error: 'Responsable no encontrado' })
       }
-      const needsProject = !existing.taskId && responsibleId
-      if (needsProject && !req.workspace.financeTaskProjectId) {
-        return res.status(400).json({ error: 'Configurá primero el proyecto para tareas de Finanzas en Configuración.' })
-      }
       data.responsibleId = responsibleId
     }
 
@@ -266,7 +287,7 @@ async function updateTask(req, res, next) {
       }
     })
 
-    if (responsibleId !== undefined) {
+    if (responsibleId !== undefined && req.workspace.financeTaskProjectId) {
       await syncDashboardOnResponsibleChange(task, {
         projectId: req.workspace.financeTaskProjectId, workspaceId, tz: req.workspace.timezone, requesterId: req.user.userId,
       })

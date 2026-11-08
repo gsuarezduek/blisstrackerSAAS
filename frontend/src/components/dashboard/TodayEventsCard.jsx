@@ -11,9 +11,8 @@ import { todayYMD } from '../calendar/dateHelpers'
 import { fmtMins } from '../../utils/format'
 
 // "Hoy en tu calendario": las reuniones de HOY donde participo, debajo del insight
-// diario. Responde "¿tengo algo con hora fija antes de ponerme con una tarea?", que
-// el Dashboard no contestaba — las reuniones solo se veían en /calendario (y, al
-// aceptarlas, como una tarea más entre las demás).
+// diario, más lo que no tiene hora (un evento de día completo, una próxima acción
+// de Ventas). Responde "¿tengo algo antes de ponerme con una tarea?".
 //
 // Se monta siempre y se auto-gatea (mismo patrón que SetupChecklist): sin el módulo
 // Calendario, sin acceso, o sin nada agendado para hoy, no renderiza nada. El flag
@@ -43,6 +42,22 @@ export function phaseOf(ev, now) {
 // Las dos filas se abren, cada una a lo suyo: una reunión de BlissTracker lleva a
 // su detalle en el Calendario; un evento traído de afuera abre su ficha de solo
 // lectura acá mismo (se edita donde vive, pero al menos se puede leer entero).
+function isUntimed(ev) {
+  return ev.allDay || ev.isSales || ev.isFinance || ev.isContent || !ev.startTime
+}
+
+function leadPath(user, leadId) {
+  return `${user?.isAdmin ? '/admin/ventas' : '/ventas'}?lead=${leadId}`
+}
+
+function financePath(taskId) {
+  return `/finanzas?tab=pendientes&task=${taskId}`
+}
+
+function contentPath(piece) {
+  return `/contenido?projectId=${piece.projectId}&piece=${piece.id}`
+}
+
 function Row({ onOpen, children }) {
   return (
     <button type="button" onClick={onOpen} className="flex items-center gap-3 flex-1 min-w-0 text-left">
@@ -69,14 +84,40 @@ export default function TodayEventsCard() {
     Promise.all([
       api.get('/calendar/events', { params: { from: today, to: today } }).then(r => r.data || []).catch(() => []),
       api.get('/calendar/external-events', { params: { from: today, to: today } }).then(r => r.data || []).catch(() => []),
-    ]).then(([meetings, external]) => {
+      api.get('/calendar/sales-actions', { params: { from: today, to: today } }).then(r => r.data || []).catch(() => []),
+      api.get('/calendar/finance-tasks', { params: { from: today, to: today } }).then(r => r.data || []).catch(() => []),
+      api.get('/calendar/content-pieces', { params: { from: today, to: today } }).then(r => r.data || []).catch(() => []),
+    ]).then(([meetings, external, sales, finance, content]) => {
       const rows = [
         ...meetings.map(e => ({ ...e, isExternal: false })),
-        // Los de día completo no tienen hora a la que ir: no entran en una agenda
-        // ordenada por horario (se ven en el Calendario, en la franja "Sin hora").
-        ...external.filter(e => !e.allDay && e.startTime).map(e => ({ ...e, isExternal: true })),
+        ...external.map(e => ({ ...e, isExternal: true })),
+        ...sales.map(a => ({
+          ...a,
+          isSales: true,
+          allDay: true,
+          title: a.companyName ? `${a.companyName}: ${a.title}` : a.title,
+        })),
+        ...finance.map(t => ({
+          ...t,
+          isFinance: true,
+          allDay: true,
+          title: t.itemName ? `${t.itemName}: ${t.title}` : t.title,
+        })),
+        ...content.map(p => ({
+          ...p,
+          isContent: true,
+          allDay: true,
+          title: p.projectName ? `${p.projectName}: ${p.title}` : p.title,
+        })),
       ]
-      rows.sort((a, b) => (a.startTime || '').localeCompare(b.startTime || ''))
+      // Lo que no tiene hora va primero: no compite con el reloj de las reuniones.
+      rows.sort((a, b) => {
+        const au = isUntimed(a) ? 0 : 1
+        const bu = isUntimed(b) ? 0 : 1
+        if (au !== bu) return au - bu
+        return (a.startTime || '').localeCompare(b.startTime || '')
+          || (a.title || '').localeCompare(b.title || '')
+      })
       setEvents(rows)
     })
   }, [allowed])
@@ -114,15 +155,24 @@ export default function TodayEventsCard() {
       </div>
       <ul className="divide-y divide-gray-100 dark:divide-gray-700/70">
         {events.map(ev => {
-          const phase = phaseOf(ev, now)
+          const untimed = isUntimed(ev)
+          const phase = untimed ? 'later' : phaseOf(ev, now)
           const myStatus = (ev.participants || []).find(p => p.userId === user?.id)?.status
-          const mins = toMins(ev.startTime) - now
+          const mins = untimed ? null : toMins(ev.startTime) - now
+          const open = () => {
+            if (ev.isSales) navigate(leadPath(user, ev.leadId))
+            else if (ev.isFinance) navigate(financePath(ev.id))
+            else if (ev.isContent) navigate(contentPath(ev))
+            else if (ev.isExternal) setOpenExternal(ev)
+            else navigate(`/calendario?event=${ev.id}`)
+          }
+          const rowKey = ev.isSales ? 's' : ev.isFinance ? 'f' : ev.isContent ? 'c' : ev.isExternal ? 'x' : 'm'
           return (
-            <li key={`${ev.isExternal ? 'x' : 'm'}-${ev.id}`} className={phase === 'past' ? 'opacity-50' : ''}>
+            <li key={`${rowKey}-${ev.id}`} className={phase === 'past' ? 'opacity-50' : ''}>
               <div className="flex items-center gap-3 px-4 py-2">
-                <Row onOpen={() => (ev.isExternal ? setOpenExternal(ev) : navigate(`/calendario?event=${ev.id}`))}>
+                <Row onOpen={open}>
                   <span className={`text-sm font-semibold tabular-nums flex-shrink-0 ${phase === 'now' ? 'text-primary-600 dark:text-primary-400' : 'text-gray-700 dark:text-gray-200'}`}>
-                    {ev.startTime}
+                    {untimed ? 'Día' : ev.startTime}
                   </span>
                   <span className="flex-1 min-w-0">
                     <span className="block text-sm text-gray-800 dark:text-gray-100 truncate" title={ev.title}>
@@ -137,9 +187,11 @@ export default function TodayEventsCard() {
                       {ev.title}
                     </span>
                     <span className="block text-xs text-gray-500 dark:text-gray-400 truncate">
-                      {fmtMins(ev.durationMins)}
-                      {ev.project && ` · ${ev.project.name}`}
-                      {ev.isExternal && ev.calendarName && ` · ${ev.calendarName}`}
+                      {ev.isSales ? 'Ventas' : ev.isFinance ? 'Finanzas' : ev.isContent ? 'Contenido' : [
+                            untimed ? null : fmtMins(ev.durationMins),
+                            ev.project?.name,
+                            ev.isExternal ? ev.calendarName : null,
+                          ].filter(Boolean).join(' · ')}
                     </span>
                   </span>
                 </Row>
