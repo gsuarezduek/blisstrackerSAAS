@@ -1,4 +1,5 @@
 const prisma = require('../lib/prisma')
+const { MARKETING_PROJECT_WHERE } = require('../lib/projectModules')
 const {
   scrapeInstagramProfile,
   scrapeLinkedinCompany,
@@ -47,7 +48,7 @@ async function saveAllMonthlyCompetitorSnapshots() {
 
   // Procesamos todas las plataformas soportadas (Instagram + LinkedIn)
   const competitors = enabled.size === 0 ? [] : await prisma.competitorAccount.findMany({
-    where:  { platform: { in: Object.keys(PLATFORM_SCRAPERS) }, workspaceId: { in: [...enabled] } },
+    where:  { platform: { in: Object.keys(PLATFORM_SCRAPERS) }, workspaceId: { in: [...enabled] }, project: MARKETING_PROJECT_WHERE },
     select: { id: true, username: true, workspaceId: true, projectId: true, platform: true },
   })
 

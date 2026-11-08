@@ -1,5 +1,6 @@
 const cheerio   = require('cheerio')
 const prisma    = require('../lib/prisma')
+const { MARKETING_PROJECT_WHERE } = require('../lib/projectModules')
 const { logTokens } = require('../lib/logTokens')
 const { assertPublicUrl, fetchPublicUrl } = require('../lib/safeUrl')
 const { normalizeInternal, crawlSite } = require('../lib/siteCrawler')
@@ -791,7 +792,7 @@ async function runAllMonthlyGeoAudits() {
   const { enabledWorkspaceIds } = require('../lib/featureFlags')
   const enabled = await enabledWorkspaceIds('marketing')
   const projects = enabled.size === 0 ? [] : await prisma.project.findMany({
-    where:  { websiteUrl: { not: null }, workspaceId: { in: [...enabled] } },
+    where:  { websiteUrl: { not: null }, workspaceId: { in: [...enabled] }, ...MARKETING_PROJECT_WHERE },
     select: { id: true, workspaceId: true, websiteUrl: true },
   })
 

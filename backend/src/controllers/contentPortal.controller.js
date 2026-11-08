@@ -1,6 +1,7 @@
 const prisma = require('../lib/prisma')
 const { emitTo } = require('../lib/socket')
 const { isFlagEnabledForWorkspace } = require('../lib/featureFlags')
+const { isProjectModuleEnabled } = require('../lib/projectModules')
 const { getProjectNotifyRecipients } = require('../lib/projectRecipients')
 const {
   PORTAL_VISIBLE_STATUSES,
@@ -88,22 +89,28 @@ function formatCommentPublic(c) {
 }
 
 /**
- * Tres guardas que ningún middleware da acá (las rutas públicas no pasan por
+ * Guardas que ningún middleware da acá (las rutas públicas no pasan por
  * resolveWorkspace, así que requireFeatureFlag no aplica): el flag `contenido`
- * a mano (grant de SuperAdmin + opt-out del workspace) y `portal.contentEnabled`.
+ * a mano (grant de SuperAdmin + opt-out del workspace), `Project.contenidoEnabled`
+ * (el módulo prendido para ESTE proyecto, ver concepto "Marketing y Contenido por
+ * proyecto") y `portal.contentEnabled`.
  * Devuelve { status, error } si hay que cortar, o null si puede seguir.
  */
 async function assertContentAccess(portal) {
   if (!portal.contentEnabled) {
     return { status: 404, error: 'El módulo de Contenido no está habilitado para este proyecto' }
   }
-  const [flag, workspace] = await Promise.all([
+  const [flag, workspace, project] = await Promise.all([
     prisma.featureFlag.findUnique({ where: { key: 'contenido' } }),
     prisma.workspace.findUnique({ where: { id: portal.workspaceId }, select: { disabledFeatureKeys: true } }),
+    prisma.project.findUnique({ where: { id: portal.projectId }, select: { contenidoEnabled: true } }),
   ])
   const disabledKeys = JSON.parse(workspace?.disabledFeatureKeys || '[]')
   if (!isFlagEnabledForWorkspace(flag, portal.workspaceId, disabledKeys)) {
     return { status: 404, error: 'Este módulo no está habilitado' }
+  }
+  if (!isProjectModuleEnabled(project, 'contenido')) {
+    return { status: 404, error: 'El módulo de Contenido no está habilitado para este proyecto' }
   }
   return null
 }

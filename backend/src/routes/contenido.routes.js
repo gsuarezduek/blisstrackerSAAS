@@ -4,7 +4,7 @@ const { auth } = require('../middleware/auth')
 const { resolveWorkspace } = require('../middleware/workspace')
 const { requireFeatureFlag } = require('../lib/featureFlags')
 const { moduleAccessGuard } = require('../lib/moduleAccess')
-const { requireProjectAccess } = require('../middleware/projectPrivacy')
+const { requireProjectModuleParam } = require('../middleware/projectPrivacy')
 
 // Fallback multipart (solo imagen, sin R2 configurado) — memoryStorage, nunca
 // disco, mismo patrón que avatares/logo/banner. El límite de tamaño real de
@@ -26,11 +26,15 @@ const uploadFallback = multer({ storage: multer.memoryStorage(), limits: { fileS
 // Excepción — proyecto privado (ver concepto "Proyectos privados"): ahí SÍ es
 // una barrera, también para lectura. Mismo gate que projects.routes.js, reusado
 // vía router.param('id') porque acá también ':id' es siempre el projectId.
+//
+// Ese mismo middleware resuelve el gate de módulo por proyecto: un proyecto con
+// Contenido apagado no existe para esta sección (404) — ver concepto "Marketing y
+// Contenido por proyecto" en CLAUDE.md.
 router.use(auth)
 router.use(resolveWorkspace)
 router.use(requireFeatureFlag('contenido'))
 router.use(moduleAccessGuard('contenido'))
-router.param('id', requireProjectAccess)
+router.param('id', requireProjectModuleParam('contenido'))
 
 // Content.controller.js se dividió en sub-controllers por responsabilidad
 // (mismo patrón que controllers/tasks/ y controllers/ventas/): content/_shared.js

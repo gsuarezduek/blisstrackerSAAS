@@ -27,13 +27,30 @@ const LIVE_SECTIONS = [
   { key: 'tasks',       label: 'Trabajo realizado'},
 ]
 
+// Espejo de NON_MARKETING_SECTION_KEYS en backend/src/controllers/monthlyReport/_shared.js:
+// la única sección de arriba que no es de Marketing. Con Marketing apagado para esta
+// cuenta (ver concepto "Secciones por proyecto (Marketing, Contenido, Briefs)") es la única que se puede
+// ofrecer — y el backend filtra igual lo que el cliente ve, por si quedó algo guardado.
+const NON_MARKETING_SECTION_KEYS = ['tasks']
+
 // Configuración del portal de cliente (Info → antes de Equipo). Acceso externo,
 // por proyecto, a Informes + Briefs (abierto), Datos Actuales (con código OTP) y,
 // si el módulo Contenido está habilitado, el calendario de piezas (aprobación).
 // Los contactos autorizados (multi-contacto) se administran en ClientPortalContacts,
 // con sus propios endpoints — no dependen de este "Guardar".
-export default function ClientPortalConfig({ projectId, canEdit, filesEnabled }) {
-  const { enabled: contenidoEnabled } = useFeatureFlag('contenido')
+export default function ClientPortalConfig({
+  projectId, canEdit, filesEnabled,
+  contenidoEnabled: projectContenido = true,
+  marketingEnabled: projectMarketing = true,
+}) {
+  const { enabled: contenidoFlag } = useFeatureFlag('contenido')
+  // Dos capas: el flag dice si el workspace tiene el módulo, el toggle del proyecto
+  // si esta cuenta lo usa (ver concepto "Secciones por proyecto (Marketing, Contenido, Briefs)").
+  const contenidoEnabled = contenidoFlag && projectContenido
+  const liveSectionOptions = projectMarketing
+    ? LIVE_SECTIONS
+    : LIVE_SECTIONS.filter(s => NON_MARKETING_SECTION_KEYS.includes(s.key))
+  const liveSectionKeys = liveSectionOptions.map(s => s.key)
   const [portal,  setPortal]  = useState(null)
   const [loading, setLoading] = useState(true)
   const [editing, setEditing] = useState(false)
@@ -177,7 +194,12 @@ export default function ClientPortalConfig({ projectId, canEdit, filesEnabled })
               </button>
             </div>
             <p className="text-xs text-gray-400 dark:text-gray-500">
-              Datos Actuales: {portal.liveSections.length > 0 ? `${portal.liveSections.length} secciones habilitadas` : 'ninguna sección habilitada'}
+              Datos Actuales: {(() => {
+                // Cuenta solo lo que el cliente puede llegar a ver: con Marketing
+                // apagado, el backend filtra sus secciones aunque sigan guardadas.
+                const n = portal.liveSections.filter(k => liveSectionKeys.includes(k)).length
+                return n > 0 ? `${n} secciones habilitadas` : 'ninguna sección habilitada'
+              })()}
               {contenidoEnabled && (portal.contentEnabled ? ' · Contenido visible' : ' · Contenido oculto')}
               {portal.showMeetings && ' · Próxima reunión visible'}
               {portal.showTeam && ' · Equipo visible'}
@@ -308,7 +330,7 @@ export default function ClientPortalConfig({ projectId, canEdit, filesEnabled })
           <div>
             <p className="text-xs text-gray-500 dark:text-gray-400 mb-1.5">Secciones habilitadas para "Datos Actuales"</p>
             <div className="flex flex-wrap gap-1.5">
-              {LIVE_SECTIONS.map(s => (
+              {liveSectionOptions.map(s => (
                 <label
                   key={s.key}
                   className={`flex items-center gap-1 text-xs px-2 py-1 rounded-full border cursor-pointer select-none ${

@@ -1,4 +1,5 @@
 const prisma = require('../lib/prisma')
+const { MARKETING_PROJECT_WHERE } = require('../lib/projectModules')
 const { getValidTikTokToken }  = require('./tiktokTokenRefresh.service')
 const { fetchTikTokMetrics }   = require('./tiktok.service')
 const { cacheImagesInArray }   = require('./socialImageCache.service')
@@ -83,7 +84,7 @@ async function saveAllMonthlyTikTokSnapshots() {
   const month = prevMonthStr(currentMonthStr())
 
   const integrations = await prisma.projectIntegration.findMany({
-    where:  { type: 'tiktok', status: 'active', project: { active: true } },
+    where:  { type: 'tiktok', status: 'active', project: { active: true, ...MARKETING_PROJECT_WHERE } },
     select: { projectId: true, project: { select: { workspaceId: true } } },
   })
 

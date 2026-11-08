@@ -6,6 +6,7 @@
 const prisma = require('../../lib/prisma')
 const { computeObjectives } = require('../../services/marketingObjectives.service')
 const { todayString, DEFAULT_TZ } = require('../../utils/dates')
+const { MARKETING_PROJECT_WHERE } = require('../../lib/projectModules')
 const { tzOffsetStr } = require('../../lib/timeMetrics')
 const { monthBounds, monthLabel, prevMonthStr, rangeLabel, monthsInRange } = require('../../lib/monthUtils')
 const { buildTextSearchFilters } = require('../../lib/textSearch')
@@ -243,7 +244,7 @@ async function getLiveObjectivesSummary(req, res, next) {
 
     // Solo proyectos activos con al menos un objetivo configurado.
     const projects = await prisma.project.findMany({
-      where:   { workspaceId, active: true, marketingObjectives: { some: {} } },
+      where:   { workspaceId, active: true, marketingObjectives: { some: {} }, ...MARKETING_PROJECT_WHERE },
       select:  { id: true, name: true },
       orderBy: { name: 'asc' },
     })

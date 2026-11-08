@@ -1,6 +1,7 @@
 import ProjectInfoTab from '../../components/ProjectInfoTab'
 import ClientPortalConfig from '../../components/ClientPortalConfig'
 import ProjectPrivacyToggle from '../../components/ProjectPrivacyToggle'
+import ProjectModulesToggle from '../../components/ProjectModulesToggle'
 import UserLink from '../../components/UserLink'
 import { avatarUrl } from '../../utils/avatarUrl'
 import RoleBadge from '../../components/RoleBadge'
@@ -21,6 +22,15 @@ export default function InfoTab({
 
       {/* Privacidad — ver concepto "Proyectos privados" */}
       <ProjectPrivacyToggle
+        project={data.project}
+        canEdit={canEditProject}
+        onUpdated={updated => setData(prev => ({ ...prev, project: { ...prev.project, ...updated } }))}
+      />
+
+      {/* Marketing/Contenido prendidos o apagados para esta cuenta — va arriba
+          porque decide qué más se ve en esta misma pestaña (sitio web,
+          integraciones, el contenido del portal del cliente). */}
+      <ProjectModulesToggle
         project={data.project}
         canEdit={canEditProject}
         onUpdated={updated => setData(prev => ({ ...prev, project: { ...prev.project, ...updated } }))}
@@ -96,6 +106,8 @@ export default function InfoTab({
         projectId={data.project.id}
         canEdit={authUser?.isAdmin || (data.project.members ?? []).some(pm => pm.user.id === authUser?.id)}
         filesEnabled={data.project.filesEnabled !== false}
+        contenidoEnabled={data.project.contenidoEnabled !== false}
+        marketingEnabled={data.project.marketingEnabled !== false}
       />
 
       {/* Equipo */}

@@ -35,6 +35,12 @@ const SECTION_KEYS = [
   'instagram', 'tiktok', 'youtube', 'linkedin', 'facebook', 'metaAds', 'googleAds', 'chatgptAds', 'competitors', 'tasks',
 ]
 
+// La única sección de arriba que NO es de Marketing: "Trabajo realizado" sale de
+// las tareas del proyecto. Importa para un proyecto con Marketing apagado (ver
+// concepto "Secciones por proyecto (Marketing, Contenido, Briefs)"): su portal puede seguir
+// mostrando el trabajo hecho, pero no analítica, redes ni anuncios.
+const NON_MARKETING_SECTION_KEYS = ['tasks']
+
 // Normaliza un array de claves de sección recibido del cliente (filtra inválidas)
 function sanitizeSections(arr) {
   if (!Array.isArray(arr)) return null
@@ -111,6 +117,7 @@ async function loadSignature(generatedById, workspaceId) {
 module.exports = {
   GENERATED_WHERE,
   SECTION_KEYS,
+  NON_MARKETING_SECTION_KEYS,
   reportPeriod,
   reportLabel,
   sanitizeSections,

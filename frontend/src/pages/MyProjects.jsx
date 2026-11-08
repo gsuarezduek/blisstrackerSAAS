@@ -268,7 +268,10 @@ export default function MyProjects() {
     const counts      = p.taskCounts ?? {}
     const activePills = COUNT_CONFIG.filter(c => counts[c.key] > 0)
     const isBlocked   = (counts.BLOCKED ?? 0) > 0
-    const integTypes  = (p.integrations ?? []).map(i => i.type)
+    // Las integraciones son de Marketing: en una cuenta con el módulo apagado (ver
+    // concepto "Secciones por proyecto (Marketing, Contenido, Briefs)") no se muestran, aunque hayan
+    // quedado conectadas de antes.
+    const integTypes  = p.marketingEnabled === false ? [] : (p.integrations ?? []).map(i => i.type)
     const members     = (p.members ?? []).map(pm => pm.user)
     const services    = (p.services ?? []).map(ps => ps.service.name)
 

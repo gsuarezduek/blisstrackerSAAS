@@ -1,4 +1,5 @@
 const prisma    = require('../lib/prisma')
+const { MARKETING_PROJECT_WHERE } = require('../lib/projectModules')
 const { parseAIJson }         = require('../utils/parseAIJson')
 const { logTokens }           = require('../lib/logTokens')
 const { normalizeSiteUrl }    = require('../utils/seo')
@@ -223,7 +224,7 @@ async function saveCurrentMonthKeywordRankings() {
   const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
 
   const projects = await prisma.trackedKeyword.findMany({
-    where:    {},
+    where:    { project: MARKETING_PROJECT_WHERE },
     select:   { projectId: true, workspaceId: true },
     distinct: ['projectId'],
   })
@@ -258,7 +259,7 @@ async function saveAllKeywordRankings() {
   const { enabledWorkspaceIds } = require('../lib/featureFlags')
   const enabled = await enabledWorkspaceIds('marketing')
   const projects = enabled.size === 0 ? [] : await prisma.trackedKeyword.findMany({
-    where:   { workspaceId: { in: [...enabled] } },
+    where:   { workspaceId: { in: [...enabled] }, project: MARKETING_PROJECT_WHERE },
     select:  { projectId: true, workspaceId: true },
     distinct: ['projectId'],
   })

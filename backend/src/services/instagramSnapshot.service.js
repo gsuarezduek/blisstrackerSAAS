@@ -1,4 +1,5 @@
 const prisma = require('../lib/prisma')
+const { MARKETING_PROJECT_WHERE } = require('../lib/projectModules')
 const { getValidMetaToken }       = require('./metaTokenRefresh.service')
 const { fetchInstagramMetrics }   = require('./instagram.service')
 const { scrapeInstagramProfile }  = require('./socialScrape.service')
@@ -106,7 +107,7 @@ async function saveAllMonthlyInstagramSnapshots() {
   const { enabledWorkspaceIds } = require('../lib/featureFlags')
   const enabled = await enabledWorkspaceIds('marketing')
   const integrations = enabled.size === 0 ? [] : await prisma.projectIntegration.findMany({
-    where:  { type: 'instagram', status: 'active', workspaceId: { in: [...enabled] }, project: { active: true } },
+    where:  { type: 'instagram', status: 'active', workspaceId: { in: [...enabled] }, project: { active: true, ...MARKETING_PROJECT_WHERE } },
     select: { projectId: true, project: { select: { workspaceId: true } } },
   })
 

@@ -1,4 +1,5 @@
 const prisma = require('../lib/prisma')
+const { MARKETING_PROJECT_WHERE } = require('../lib/projectModules')
 const { getValidLinkedinToken } = require('./linkedinTokenRefresh.service')
 const { fetchLinkedinMetrics }  = require('./linkedin.service')
 const { scrapeLinkedinCompany } = require('./socialScrape.service')
@@ -81,7 +82,7 @@ async function saveAllMonthlyLinkedinSnapshots() {
   const month = prevMonthStr(currentMonthStr())
 
   const integrations = await prisma.projectIntegration.findMany({
-    where:  { type: 'linkedin', status: 'active', propertyId: { not: null }, project: { active: true } },
+    where:  { type: 'linkedin', status: 'active', propertyId: { not: null }, project: { active: true, ...MARKETING_PROJECT_WHERE } },
     select: { projectId: true, project: { select: { workspaceId: true } } },
   })
 

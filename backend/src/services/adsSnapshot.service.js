@@ -1,4 +1,5 @@
 const prisma                         = require('../lib/prisma')
+const { MARKETING_PROJECT_WHERE } = require('../lib/projectModules')
 const { getValidFbToken, fetchMetaAdsData }  = require('./metaAds.service')
 const { fetchGoogleAdsData }         = require('./googleAds.service')
 const { fetchChatGptAdsData }        = require('./chatgptAds.service')
@@ -274,7 +275,7 @@ async function saveAllAdsSnapshots() {
     const integrations = enabled.size === 0 ? [] : await prisma.projectIntegration.findMany({
       where: {
         type: platform.type, status: 'active', ...platform.extraWhere,
-        workspaceId: { in: [...enabled] }, project: { active: true },
+        workspaceId: { in: [...enabled] }, project: { active: true, ...MARKETING_PROJECT_WHERE },
       },
       include: { project: { select: { id: true, workspaceId: true, name: true } } },
     })

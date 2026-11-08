@@ -6,6 +6,7 @@ const { encrypt, decrypt } = require('../lib/encryption')
 const { saveCurrentMonthSnapshotSafe } = require('../services/analyticsSnapshot.service')
 const { clearCache: clearGscCache } = require('../services/googleSearchConsole.service')
 const { SOURCES, resolveConnections } = require('../lib/connectionCatalog')
+const { MARKETING_PROJECT_WHERE, isProjectModuleEnabled } = require('../lib/projectModules')
 const { isAdmin } = require('../lib/projectAccess')
 
 // GA4 y Search Console comparten el mismo scope set — una sola auth sirve para ambos
@@ -413,15 +414,21 @@ async function connectionsStatus(req, res, next) {
     const keepStates = STATES[stateKey]
 
     const projects = await prisma.project.findMany({
-      where: single ? { id: one, workspaceId } : { workspaceId, active: true },
+      where: single ? { id: one, workspaceId } : { workspaceId, active: true, ...MARKETING_PROJECT_WHERE },
       select: {
-        id: true, name: true, websiteUrl: true, isPrivate: true, active: true,
+        id: true, name: true, websiteUrl: true, isPrivate: true, active: true, marketingEnabled: true,
         integrations: { select: { type: true, status: true, propertyId: true, customerId: true, accountEmail: true, scopes: true, expiresAt: true } },
         ...(viewerIsAdmin ? {} : { members: { where: { userId: req.user.userId }, select: { userId: true } } }),
       },
       orderBy: { name: 'asc' },
     })
     if (single && projects.length === 0) return res.status(404).json({ error: 'Proyecto no encontrado' })
+    // Gate de módulo por proyecto: cross-proyecto ya lo resuelve el `where`, pero
+    // con `?projectId=` esta ruta no cuelga de '/projects/:id' y no hereda el
+    // middleware. Ver concepto "Secciones por proyecto (Marketing, Contenido, Briefs)".
+    if (single && !isProjectModuleEnabled(projects[0], 'marketing')) {
+      return res.status(404).json({ error: 'Este proyecto no tiene Marketing habilitado', code: 'PROJECT_MODULE_DISABLED' })
+    }
 
     // Proyectos privados: el contenido es sólo del equipo + admins (el nombre no es
     // secreto, pero sus integraciones sí). Mismo criterio que requireProjectAccess,

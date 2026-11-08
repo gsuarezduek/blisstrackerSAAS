@@ -219,6 +219,15 @@ export default function ModulesTab({ loaded }) {
                 />
               )}
 
+              {/* Marketing/Contenido se apagan además POR PROYECTO (ver concepto
+                  "Secciones por proyecto (Marketing, Contenido, Briefs)"): el toggle de acá es del
+                  workspace entero, así que se avisa dónde está el otro. */}
+              {!feat.disabled && (feat.key === 'marketing' || feat.key === 'contenido') && (
+                <p className="mt-2 ml-12 text-[11px] text-gray-500 dark:text-gray-400 leading-snug">
+                  No todas las cuentas usan {feat.name}: también se prende o apaga por proyecto, desde su ficha → Ajustes.
+                </p>
+              )}
+
               {/* EOS habilitado → proyecto asociado a tareas y reuniones */}
               {feat.key === 'eos' && !feat.disabled && (
                 <div className="mt-3 ml-12 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/30 p-3">

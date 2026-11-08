@@ -1,6 +1,7 @@
 const prisma     = require('../lib/prisma')
 const { runGeoAnalysis } = require('../services/geoAudit.service')
 const { taskInclude } = require('./tasks/_shared')
+const { MARKETING_PROJECT_WHERE } = require('../lib/projectModules')
 
 const { anthropic, assertTokenBudget } = require('../lib/claude')
 const { logTokens } = require('../lib/logTokens')
@@ -61,8 +62,9 @@ async function listAudits(req, res, next) {
 
     if (!projectId && summary) {
       // Benchmark: último audit completado de cada proyecto ACTIVO del workspace
+      // con Marketing prendido (un proyecto apagado no está en esta sección).
       const projects = await prisma.project.findMany({
-        where: { workspaceId, active: true },
+        where: { workspaceId, active: true, ...MARKETING_PROJECT_WHERE },
         select: { id: true, name: true },
       })
       const results = await Promise.all(

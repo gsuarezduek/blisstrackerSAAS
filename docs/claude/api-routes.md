@@ -106,6 +106,7 @@ PATCH  /api/projects/:id/star            # toggle destacado del proyecto para el
 GET    /api/projects/:id/members
 GET    /api/projects/:id/tasks
 GET    /api/projects/:id/completed       # ?skip=N
+PATCH  /api/projects/:id/modules                          # prende/apaga Marketing, Contenido y Briefs PARA ESTE PROYECTO { marketingEnabled?, contenidoEnabled?, briefsEnabled? } — clave ausente = sin cambios, devuelve las tres; admin/owner o miembro del proyecto
 PUT    /api/projects/:id/links                            # reemplaza la lista completa (alta, edición y baja de un link pasan por acá) — admin/owner o miembro del proyecto
 GET    /api/projects/:id/accesos                          # credenciales del proyecto, sin password/2FA (hasPassword/hasTwofa) + createdBy/updatedBy — cualquier miembro del workspace
 POST   /api/projects/:id/accesos                          # alta { account?, username?, password?, twofa?, extra? } (al menos uno); password/2FA se guardan cifrados

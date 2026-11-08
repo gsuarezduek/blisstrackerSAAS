@@ -1,6 +1,7 @@
 const prisma = require('../lib/prisma')
 const { isValidBriefType, briefLabel, isBriefComplete } = require('../lib/briefCatalog')
 const { isAdmin, canWrite } = require('../lib/projectAccess')
+const { isProjectModuleEnabled } = require('../lib/projectModules')
 const { SYSTEM_TYPES, postProjectSystemMessage } = require('../lib/chatSystemMessage')
 
 // Resuelve :id (numérico o name) a un projectId del workspace actual.
@@ -14,9 +15,12 @@ async function resolveProjectId(param, workspaceId) {
   return p?.id ?? null
 }
 
+// Briefs se prende/apaga POR PROYECTO (ver concepto "Secciones por proyecto
+// (Marketing, Contenido, Briefs)"): un proyecto nuevo lo estrena apagado, y la
+// pestaña solo aparece donde alguien lo prendió.
 async function assertBriefsEnabled(projectId) {
   const project = await prisma.project.findUnique({ where: { id: projectId }, select: { briefsEnabled: true } })
-  return project?.briefsEnabled !== false
+  return isProjectModuleEnabled(project, 'briefs')
 }
 
 function shape(b) {
@@ -37,7 +41,7 @@ async function listBriefs(req, res, next) {
     const projectId = await resolveProjectId(req.params.id, workspaceId)
     if (!projectId) return res.status(404).json({ error: 'Proyecto no encontrado' })
     if (!(await assertBriefsEnabled(projectId))) {
-      return res.status(403).json({ error: 'La sección de Briefs está deshabilitada para este workspace' })
+      return res.status(403).json({ error: 'La sección de Briefs está apagada para este proyecto' })
     }
 
     const briefs = await prisma.projectBrief.findMany({
@@ -59,7 +63,7 @@ async function saveBrief(req, res, next) {
     const projectId = await resolveProjectId(req.params.id, workspaceId)
     if (!projectId) return res.status(404).json({ error: 'Proyecto no encontrado' })
     if (!(await assertBriefsEnabled(projectId))) {
-      return res.status(403).json({ error: 'La sección de Briefs está deshabilitada para este workspace' })
+      return res.status(403).json({ error: 'La sección de Briefs está apagada para este proyecto' })
     }
 
     const { type } = req.params
@@ -117,7 +121,7 @@ async function deleteBrief(req, res, next) {
     const projectId = await resolveProjectId(req.params.id, workspaceId)
     if (!projectId) return res.status(404).json({ error: 'Proyecto no encontrado' })
     if (!(await assertBriefsEnabled(projectId))) {
-      return res.status(403).json({ error: 'La sección de Briefs está deshabilitada para este workspace' })
+      return res.status(403).json({ error: 'La sección de Briefs está apagada para este proyecto' })
     }
 
     const { type } = req.params

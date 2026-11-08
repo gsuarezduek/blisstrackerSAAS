@@ -2,25 +2,52 @@ import { useEffect, useState } from 'react'
 import { X } from 'lucide-react'
 import api from '../api/client'
 import useMembers from '../hooks/useMembers'
+import { useFeatureFlag } from '../hooks/useFeatureFlag'
 import { avatarUrl } from '../utils/avatarUrl'
 import { Icon } from './ui/Icon'
+import { PROJECT_SECTIONS } from './ProjectModulesToggle'
+import { Toggle } from '../pages/preferences/shared'
 
-// Alta rápida de proyecto desde Mis Proyectos (mismo POST /projects que Admin →
-// Proyectos, admin/owner). Quien lo crea queda en el equipo automáticamente; acá
-// se pueden sumar servicios y más personas. El resto de la ficha (sitio web,
-// redes, portal, horas) se completa después en Ajustes del proyecto.
+// Alta de proyecto desde Mis Proyectos (mismo POST /projects que Admin → Proyectos,
+// admin/owner). Quien lo crea queda en el equipo automáticamente.
+//
+// Acá se personaliza la cuenta de entrada, no después: qué **secciones** usa (ver
+// concepto "Secciones por proyecto (Marketing, Contenido, Briefs)"), si tiene
+// **abono de horas**, si nace **privada** y su **sitio web**. Son justo las cuatro
+// cosas que, completadas más tarde en Ajustes, en la práctica no se completan: sin
+// horas contratadas Reportes no mide consumo, sin sitio web no corren GEO/SEO ni el
+// Health Score, y la privacidad es la más difícil de cambiar después (lo que se
+// cargó mientras tanto ya lo vio el resto del workspace). Todo tiene default
+// razonable: se puede crear tocando solo el nombre.
 export default function NewProjectModal({ open, onClose, onCreated, currentUserId }) {
   const { members } = useMembers()
+  const { enabled: marketingFlag } = useFeatureFlag('marketing')
+  const { enabled: contenidoFlag } = useFeatureFlag('contenido')
+  const flags = { marketing: marketingFlag, contenido: contenidoFlag }
   const [services, setServices] = useState([])
   const [name, setName] = useState('')
   const [serviceIds, setServiceIds] = useState([])
   const [memberIds, setMemberIds] = useState([])
+  const [sections, setSections] = useState({})   // { marketingEnabled: bool, ... }
+  const [isPrivate, setIsPrivate] = useState(false)
+  const [hoursEnabled, setHoursEnabled] = useState(false)
+  const [monthlyHours, setMonthlyHours] = useState('')
+  const [websiteUrl, setWebsiteUrl] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+
+  // Secciones que el workspace tiene habilitadas; Briefs no tiene flag y siempre está.
+  const availableSections = PROJECT_SECTIONS.filter(sec => !sec.flag || flags[sec.flag])
+  // El default de cada sección sale del mismo catálogo (`onCreate`), así que el
+  // popup y el alta del backend arrancan de acuerdo: Briefs apagado, el resto no.
+  const sectionDefaults = Object.fromEntries(PROJECT_SECTIONS.map(sec => [sec.field, sec.onCreate]))
+  const sectionOn = field => sections[field] ?? sectionDefaults[field]
+  const marketingOn = sectionOn('marketingEnabled') && marketingFlag
 
   useEffect(() => {
     if (!open) return
     setName(''); setServiceIds([]); setMemberIds([]); setError('')
+    setSections({}); setIsPrivate(false); setHoursEnabled(false); setMonthlyHours(''); setWebsiteUrl('')
     api.get('/services').then(r => setServices(r.data)).catch(() => setServices([]))
   }, [open])
 
@@ -43,7 +70,16 @@ export default function NewProjectModal({ open, onClose, onCreated, currentUserI
     if (!name.trim() || saving) return
     setSaving(true); setError('')
     try {
-      const { data } = await api.post('/projects', { name: name.trim(), serviceIds, memberIds })
+      const { data } = await api.post('/projects', {
+        name: name.trim(), serviceIds, memberIds,
+        // Las secciones van explícitas (no solo lo tocado) para que lo que se vio en
+        // el popup sea lo que queda, sin depender de los defaults del backend.
+        ...Object.fromEntries(availableSections.map(sec => [sec.field, sectionOn(sec.field)])),
+        isPrivate,
+        hoursEnabled,
+        monthlyHours: hoursEnabled && monthlyHours !== '' ? Number(monthlyHours) : null,
+        ...(marketingOn && websiteUrl.trim() ? { websiteUrl: websiteUrl.trim() } : {}),
+      })
       onCreated(data)
     } catch (err) {
       setError(err.response?.data?.error || 'No se pudo crear el proyecto')
@@ -102,6 +138,79 @@ export default function NewProjectModal({ open, onClose, onCreated, currentUserI
                 ))}
               </div>
             )}
+          </div>
+
+          {/* Secciones de la cuenta — el mismo catálogo (y las mismas descripciones)
+              que la tarjeta de Ajustes, para que lo que se elige acá se reconozca
+              después donde se cambia. */}
+          {availableSections.length > 0 && (
+            <div>
+              <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Secciones</p>
+              <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">Qué va a usar esta cuenta. Se puede cambiar después en Ajustes del proyecto.</p>
+              <div className="mt-2 space-y-2.5">
+                {availableSections.map(sec => (
+                  <div key={sec.field} className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-sm text-gray-800 dark:text-gray-200">{sec.label}</p>
+                      <p className="text-xs text-gray-400 dark:text-gray-500 leading-snug">{sec.what}</p>
+                    </div>
+                    <Toggle
+                      on={sectionOn(sec.field)}
+                      onToggle={() => setSections(prev => ({ ...prev, [sec.field]: !sectionOn(sec.field) }))}
+                      disabled={saving}
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Sitio web — solo si la cuenta va a usar Marketing: es lo único que
+              habilita GEO, SEO y el Health Score, y es el paso que todos saltean. */}
+          {marketingOn && (
+            <label className="block">
+              <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Sitio web</span>
+              <span className="block text-xs text-gray-400 dark:text-gray-500 mt-0.5">Sin esto no corren los análisis de GEO, SEO ni el Health Score.</span>
+              <input value={websiteUrl} onChange={e => setWebsiteUrl(e.target.value)} maxLength={300}
+                placeholder="https://ejemplo.com"
+                className="mt-1.5 w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+            </label>
+          )}
+
+          {/* Abono de horas — define si Reportes y el Resumen miden consumo contra
+              presupuesto. El número se pide solo si la cuenta lo tiene. */}
+          <div>
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Abono de horas al mes</p>
+                <p className="text-xs text-gray-400 dark:text-gray-500 leading-snug">Compara las horas trabajadas contra las contratadas, en Reportes y en el Resumen de la cuenta.</p>
+              </div>
+              <Toggle on={hoursEnabled} onToggle={() => setHoursEnabled(v => !v)} disabled={saving} />
+            </div>
+            {hoursEnabled && (
+              <label className="mt-2 flex items-center gap-2">
+                <input type="number" min="0" step="1" value={monthlyHours} onChange={e => setMonthlyHours(e.target.value)}
+                  placeholder="Ej. 40"
+                  className="w-28 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+                <span className="text-xs text-gray-500 dark:text-gray-400">horas por mes (se puede cargar después)</span>
+              </label>
+            )}
+          </div>
+
+          {/* Privacidad — la decisión más difícil de revertir: lo que se cargue
+              mientras el proyecto es abierto ya lo vio el resto del workspace, y
+              marcarlo privado más tarde se bloquea si alguien de afuera tiene
+              tareas abiertas (ver concepto "Proyectos privados"). */}
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Proyecto privado</p>
+              <p className="text-xs text-gray-400 dark:text-gray-500 leading-snug">
+                {isPrivate
+                  ? 'Solo su equipo y los admins ven el contenido. El resto del workspace ve que existe, nada más.'
+                  : 'Cualquier integrante del workspace puede verlo y trabajar acá.'}
+              </p>
+            </div>
+            <Toggle on={isPrivate} onToggle={() => setIsPrivate(v => !v)} disabled={saving} />
           </div>
 
           {error && <p role="alert" className="text-sm text-red-600 dark:text-red-400">{error}</p>}

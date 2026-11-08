@@ -105,7 +105,12 @@ describe('GET /api/search', () => {
     await get('logo')
     const privacyOr = { OR: [{ isPrivate: false }, { isPrivate: true, members: { some: { userId: 1 } } }] }
     expect(prisma.task.findMany.mock.calls[0][0].where.project).toEqual(privacyOr)
-    expect(prisma.contentPiece.findMany.mock.calls[0][0].where.project).toEqual(privacyOr)
+    // Las piezas suman el módulo por proyecto, igual que los archivos suman
+    // `filesEnabled` (ver concepto "Marketing y Contenido por proyecto").
+    expect(prisma.contentPiece.findMany.mock.calls[0][0].where.project).toEqual({
+      contenidoEnabled: true,
+      ...privacyOr,
+    })
     // CalendarEvent.projectId es nullable: además de la condición de arriba, deja
     // pasar los eventos legacy sin proyecto asociado.
     expect(prisma.calendarEvent.findMany.mock.calls[0][0].where.OR).toEqual([

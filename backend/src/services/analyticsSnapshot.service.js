@@ -1,4 +1,5 @@
 const prisma    = require('../lib/prisma')
+const { MARKETING_PROJECT_WHERE } = require('../lib/projectModules')
 const { fetchGA4Report, fetchAiTrafficData, isGA4PermissionDenied } = require('./googleAnalytics.service')
 const { parseAIJson }    = require('../utils/parseAIJson')
 const { logTokens }      = require('../lib/logTokens')
@@ -225,7 +226,7 @@ async function saveAllPreviousMonthSnapshots() {
   )
 
   const integrations = await prisma.projectIntegration.findMany({
-    where:  { type: 'google_analytics', status: 'active', propertyId: { not: null }, project: { active: true } },
+    where:  { type: 'google_analytics', status: 'active', propertyId: { not: null }, project: { active: true, ...MARKETING_PROJECT_WHERE } },
     select: { projectId: true, workspaceId: true },
   })
 
@@ -251,7 +252,7 @@ async function saveAllPreviousMonthSnapshots() {
  */
 async function refreshAllCurrentMonthSnapshots() {
   const integrations = await prisma.projectIntegration.findMany({
-    where:  { type: 'google_analytics', status: 'active', propertyId: { not: null }, project: { active: true } },
+    where:  { type: 'google_analytics', status: 'active', propertyId: { not: null }, project: { active: true, ...MARKETING_PROJECT_WHERE } },
     select: { projectId: true, workspaceId: true, workspace: { select: { timezone: true } } },
   })
 

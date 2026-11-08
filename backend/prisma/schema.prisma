@@ -672,6 +672,12 @@ model Project {
   hoursEnabled          Boolean   @default(false)
   briefsEnabled         Boolean   @default(true)
   filesEnabled          Boolean   @default(true)
+  // Módulos por proyecto (ver concepto "Marketing y Contenido por proyecto"): no
+  // todas las cuentas llevan marketing ni calendario de contenido. Apagado saca al
+  // proyecto de la sección entera (selector, agregados cross-proyecto, buscador,
+  // snapshots mensuales) y esconde su configuración en la ficha.
+  marketingEnabled      Boolean   @default(true)
+  contenidoEnabled      Boolean   @default(true)
   isPrivate             Boolean   @default(false) // ver concepto "Proyectos privados": solo ProjectMember + admin/owner ven la ficha completa
   monthlyHours          Int?
   emailFrom             String?

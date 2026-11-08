@@ -117,7 +117,10 @@ function IntegrationChip({ integ, state, loading, expanded, onClick }) {
 }
 
 export default function ProjectInfoTab({ project, onSave }) {
-  const { enabled: marketingEnabled } = useFeatureFlag('marketing')
+  const { enabled: marketingFlag } = useFeatureFlag('marketing')
+  // El flag dice si el workspace tiene Marketing; `project.marketingEnabled`, si
+  // esta cuenta lo usa (ver concepto "Secciones por proyecto (Marketing, Contenido, Briefs)").
+  const marketingEnabled = marketingFlag && project.marketingEnabled !== false
 
   const [websiteUrl, setWebsiteUrl] = useState(project.websiteUrl ?? '')
   const [saving, setSaving]         = useState(false)
@@ -514,7 +517,8 @@ export default function ProjectInfoTab({ project, onSave }) {
   }
 
   // Todo lo que gestiona este componente (sitio web para GEO + integraciones) es
-  // parte de Marketing — sin el flag no hay nada útil que mostrar acá.
+  // parte de Marketing — sin el módulo (del workspace o de esta cuenta) no hay
+  // nada útil que mostrar acá.
   if (!marketingEnabled) return null
 
   return (

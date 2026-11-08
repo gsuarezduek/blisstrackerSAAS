@@ -1,25 +1,60 @@
 // ─── Sugerencias IA (modo live) ────────────────────────────────────────────────
+import { useState } from 'react'
+import { ChevronDown, ChevronRight } from 'lucide-react'
+import { Icon } from '../../ui/Icon'
 import { fmtCreatedAt, createdAtTitle } from '../../../utils/format'
 
 const IMPACT_COLOR = { alto: 'text-red-500', medio: 'text-orange-500', bajo: 'text-blue-500' }
 
+// Resumen de una línea para cuando la sección está cerrada: cuántas sugerencias
+// hay esperando, sin obligar a abrirla para saberlo.
+function collapsedSummary(aiData) {
+  if (!aiData) return 'Sin generar'
+  const n = [
+    aiData.oportunidades?.length ? `${aiData.oportunidades.length} oportunidades` : null,
+    aiData.quickWins?.length     ? `${aiData.quickWins.length} quick wins`       : null,
+  ].filter(Boolean)
+  return n.length ? n.join(' · ') : 'Sin sugerencias'
+}
+
 export default function AiInsightsPanel({ aiData, aiLoading, aiError, aiCooldown, aiGeneratedAt, onGenerate, onCreateTask }) {
+  // Arranca cerrada: es el bloque más alto de la pantalla y no es lo primero que
+  // se viene a mirar. No se recuerda la elección a propósito — cada visita a SEO
+  // vuelve a empezar por los datos, y abrirla es un click.
+  const [open, setOpen] = useState(false)
+
+  // Generar desde la sección cerrada la abre: si no, el resultado llega y no se ve.
+  function handleGenerate() {
+    setOpen(true)
+    onGenerate()
+  }
+
   return (
     <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-5">
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
+      <div className={`flex items-center justify-between gap-3 ${open ? 'mb-3' : ''}`}>
+        <button
+          onClick={() => setOpen(o => !o)}
+          aria-expanded={open}
+          className="flex items-center gap-2 min-w-0 text-left group"
+        >
+          <Icon as={open ? ChevronDown : ChevronRight} size={16}
+            className="text-gray-400 group-hover:text-gray-600 dark:group-hover:text-gray-300 flex-shrink-0" />
           <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Sugerencias IA</h3>
           {aiData && aiGeneratedAt && (
-            <span className="text-xs text-gray-400" title={createdAtTitle(aiGeneratedAt)}>
+            <span className="text-xs text-gray-400 truncate" title={createdAtTitle(aiGeneratedAt)}>
               · generado {fmtCreatedAt(aiGeneratedAt)}
             </span>
           )}
-        </div>
-        <button onClick={onGenerate} disabled={aiLoading || aiCooldown > 0}
-          className="text-xs text-primary-600 dark:text-primary-400 hover:underline disabled:opacity-50 disabled:no-underline disabled:cursor-not-allowed">
+          {!open && (
+            <span className="text-xs text-gray-400 truncate">· {collapsedSummary(aiData)}</span>
+          )}
+        </button>
+        <button onClick={handleGenerate} disabled={aiLoading || aiCooldown > 0}
+          className="flex-shrink-0 text-xs text-primary-600 dark:text-primary-400 hover:underline disabled:opacity-50 disabled:no-underline disabled:cursor-not-allowed">
           {aiLoading ? 'Generando…' : aiCooldown > 0 ? `Disponible en ${aiCooldown} min` : aiData ? 'Regenerar' : 'Generar análisis IA'}
         </button>
       </div>
+      {!open ? null : <>
       {aiError && <p className="text-xs text-orange-500 mb-3">{aiError}</p>}
       {!aiData && !aiLoading && (
         <p className="text-sm text-gray-400 dark:text-gray-500">
@@ -82,6 +117,7 @@ export default function AiInsightsPanel({ aiData, aiLoading, aiError, aiCooldown
           )}
         </div>
       )}
+      </>}
     </div>
   )
 }

@@ -1,4 +1,5 @@
 const prisma = require('../../lib/prisma')
+const { MARKETING_PROJECT_WHERE } = require('../../lib/projectModules')
 const { validateImageUpload } = require('../../lib/imageType')
 const { isFlagEnabledForWorkspace } = require('../../lib/featureFlags')
 const { getTokenBudget } = require('../../lib/tokenBudget')
@@ -217,7 +218,9 @@ async function getOnboardingChecklist(req, res, next) {
     const [flags, memberCount, integrationCount, eosData, leadCount] = await Promise.all([
       prisma.featureFlag.findMany({ where: { key: { in: ['marketing', 'eos', 'ventas'] } } }),
       prisma.workspaceMember.count({ where: { workspaceId, active: true } }),
-      prisma.projectIntegration.count({ where: { workspaceId } }),
+      // Solo las de cuentas que usan Marketing: una integración vieja de un
+      // proyecto con el módulo apagado no cuenta como "ya lo conectaste".
+      prisma.projectIntegration.count({ where: { workspaceId, project: MARKETING_PROJECT_WHERE } }),
       prisma.eOSData.findUnique({ where: { workspaceId }, select: { purpose: true, niche: true } }),
       prisma.lead.count({ where: { workspaceId } }),
     ])

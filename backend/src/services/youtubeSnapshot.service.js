@@ -1,4 +1,5 @@
 const prisma = require('../lib/prisma')
+const { MARKETING_PROJECT_WHERE } = require('../lib/projectModules')
 const { getValidAccessToken } = require('./tokenRefresh.service')
 const { fetchYouTubeMetrics }  = require('./youtube.service')
 const { cacheImagesInArray }   = require('./socialImageCache.service')
@@ -73,7 +74,7 @@ async function saveAllMonthlyYouTubeSnapshots() {
   const month = prevMonthStr(currentMonthStr())
 
   const integrations = await prisma.projectIntegration.findMany({
-    where:  { type: 'google_youtube', status: 'active', project: { active: true } },
+    where:  { type: 'google_youtube', status: 'active', project: { active: true, ...MARKETING_PROJECT_WHERE } },
     select: { projectId: true, project: { select: { workspaceId: true } } },
   })
 

@@ -1,4 +1,5 @@
 const prisma = require('../lib/prisma')
+const { MARKETING_PROJECT_WHERE } = require('../lib/projectModules')
 const { todayString, DEFAULT_TZ } = require('../utils/dates')
 const { createTtlCache } = require('../lib/ttlCache')
 const { computeSeoActionItems, PRIORITY_WEIGHT } = require('./seoActionPlan.service')
@@ -254,7 +255,7 @@ const pendingCache = createTtlCache({ ttlMs: 5 * 60 * 1000, max: 200 })
 async function computeWorkspacePendingSummary({ workspaceId, tz = DEFAULT_TZ }) {
   return pendingCache.through(`pending:${workspaceId}`, async () => {
     const projects = await prisma.project.findMany({
-      where:  { workspaceId, active: true },
+      where:  { workspaceId, active: true, ...MARKETING_PROJECT_WHERE },
       select: { id: true, name: true },
     })
     const results = await Promise.all(projects.map(async p => {

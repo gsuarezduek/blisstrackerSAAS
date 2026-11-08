@@ -1,5 +1,6 @@
 const axios = require('axios')
 const prisma = require('../lib/prisma')
+const { MARKETING_PROJECT_WHERE } = require('../lib/projectModules')
 const { getValidMetaToken }  = require('./metaTokenRefresh.service')
 const { cacheSocialImage }   = require('./socialImageCache.service')
 const { DEFAULT_TZ } = require('../utils/dates')
@@ -125,7 +126,7 @@ async function captureStoriesForProject(projectId, workspaceId, integration) {
  */
 async function captureAllStories() {
   const integrations = await prisma.projectIntegration.findMany({
-    where: { type: 'instagram', status: 'active', NOT: { scopes: 'scrape' }, project: { active: true } },
+    where: { type: 'instagram', status: 'active', NOT: { scopes: 'scrape' }, project: { active: true, ...MARKETING_PROJECT_WHERE } },
     include: { project: { select: { workspaceId: true, name: true } } },
   })
 

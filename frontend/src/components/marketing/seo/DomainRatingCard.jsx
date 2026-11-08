@@ -15,9 +15,13 @@ export default function DomainRatingCard({ projectId }) {
     if (!projectId) return
     const ctrl = new AbortController()
     setLoading(true)
+    setError(null)
     api.get(`/marketing/projects/${projectId}/domain-rating`, { signal: ctrl.signal })
       .then(r => setData(r.data))
-      .catch(err => { if (err.name === 'CanceledError' || err.code === 'ERR_CANCELED') return })
+      .catch(err => {
+        if (err.name === 'CanceledError' || err.code === 'ERR_CANCELED') return
+        setError(err.response?.data?.error ?? 'No se pudo leer el Domain Rating.')
+      })
       .finally(() => setLoading(false))
     return () => ctrl.abort()
   }, [projectId])
@@ -27,7 +31,7 @@ export default function DomainRatingCard({ projectId }) {
     setError(null)
     try {
       const { data: r } = await api.post(`/marketing/projects/${projectId}/domain-rating/refresh`)
-      setData(d => ({ ...d, ...r }))
+      setData(d => ({ ...d, domainRating: r.domainRating, domainRatingAt: r.domainRatingAt }))
     } catch (err) {
       setError(err.response?.data?.error ?? 'No se pudo actualizar el Domain Rating.')
     } finally { setRefreshing(false) }
@@ -48,6 +52,9 @@ export default function DomainRatingCard({ projectId }) {
 
   const dr   = data?.domainRating
   const band = drBand(dr)
+  // `configured: false` = el servidor no tiene AHREFS_API_KEY. El dato cacheado
+  // (si hay) se sigue mostrando, pero actualizarlo es imposible.
+  const notConfigured = data?.configured === false
 
   return (
     <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4">
@@ -70,8 +77,9 @@ export default function DomainRatingCard({ projectId }) {
         <div className="flex flex-col items-end gap-1">
           <button
             onClick={refresh}
-            disabled={refreshing || !data?.hasUrl}
-            title={!data?.hasUrl ? 'El proyecto no tiene URL configurada' : ''}
+            disabled={refreshing || !data?.hasUrl || notConfigured}
+            title={!data?.hasUrl ? 'El proyecto no tiene URL configurada'
+              : notConfigured ? 'Falta configurar la API key de Ahrefs en el servidor' : ''}
             className="px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             {refreshing ? 'Actualizando…' : 'Actualizar DR'}
@@ -81,6 +89,11 @@ export default function DomainRatingCard({ projectId }) {
           )}
         </div>
       </div>
+      {notConfigured && !error && (
+        <p className="text-xs text-gray-400 mt-2">
+          Sin actualización automática: falta la API key de Ahrefs en el servidor.
+        </p>
+      )}
       {error && <p className="text-xs text-red-500 mt-2">{error}</p>}
     </div>
   )

@@ -474,13 +474,9 @@ export default function GlobalTab({ loaded }) {
               <Toggle on={globalSettings.situationEnabled !== false} onToggle={() => handleGlobalSetting({ situationEnabled: !globalSettings.situationEnabled })} disabled={!loaded} />
             </div>
 
-            <div className="flex items-start justify-between gap-4 py-4 border-b dark:border-gray-700">
-              <div className="flex-1">
-                <p className="text-sm font-medium text-gray-800 dark:text-gray-200">Briefs</p>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Muestra la sección de briefs (cuestionarios de relevamiento) en la vista de todos los proyectos.</p>
-              </div>
-              <Toggle on={globalSettings.briefsEnabled !== false} onToggle={() => handleGlobalSetting({ briefsEnabled: !globalSettings.briefsEnabled })} disabled={!loaded} />
-            </div>
+            {/* Briefs ya no está acá: se elige por proyecto (ficha → Ajustes, y al crearlo).
+                Este bloque escribe con un updateMany sobre TODOS los proyectos, así que
+                dejarlo habría borrado de un saque lo elegido cuenta por cuenta. */}
 
             <div className="flex items-start justify-between gap-4 py-4 border-b dark:border-gray-700">
               <div className="flex-1">

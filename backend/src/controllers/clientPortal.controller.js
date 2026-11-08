@@ -8,10 +8,12 @@ const {
   sanitizeSections,
   currentMonthStr,
   GENERATED_WHERE,
+  NON_MARKETING_SECTION_KEYS,
 } = require('./monthlyReport/_shared')
 const { buildPublicReportPayload } = require('./monthlyReport/reportPublic.controller')
 const { canWrite } = require('../lib/projectAccess')
 const { isFlagEnabledForWorkspace } = require('../lib/featureFlags')
+const { isProjectModuleEnabled } = require('../lib/projectModules')
 const { emitTo } = require('../lib/socket')
 const { formatAsset } = require('./content/_shared')
 const { getProjectNotifyRecipients } = require('../lib/projectRecipients')
@@ -367,6 +369,17 @@ async function deleteContact(req, res, next) {
   } catch (err) { next(err) }
 }
 
+// Qué secciones de "Datos en vivo" puede ver el cliente. Con Marketing apagado
+// para este proyecto (ver concepto "Secciones por proyecto (Marketing, Contenido, Briefs)") sobrevive
+// solo "Trabajo realizado": lo que queda — analítica, redes, anuncios, keywords —
+// es justamente la vitrina de Marketing, y apagar el módulo sin esto la dejaba
+// publicada al cliente aunque el equipo ya no la viera.
+function visibleLiveSections(portal, project) {
+  const sections = safeParseArr(portal.liveSections) ?? []
+  if (isProjectModuleEnabled(project, 'marketing')) return sections
+  return sections.filter(k => NON_MARKETING_SECTION_KEYS.includes(k))
+}
+
 // ─── Público: pantalla de marca previa al login (sin auth) ────────────────────
 
 /**
@@ -416,7 +429,7 @@ async function getPortalData(req, res, next) {
     const portal = req.clientPortal
 
     const [project, workspace, reportRows, latestReport, briefRows, contentFlag, nextMeeting, allMeetings] = await Promise.all([
-      prisma.project.findUnique({ where: { id: portal.projectId }, select: { id: true, name: true, filesEnabled: true } }),
+      prisma.project.findUnique({ where: { id: portal.projectId }, select: { id: true, name: true, filesEnabled: true, marketingEnabled: true, contenidoEnabled: true } }),
       prisma.workspace.findUnique({
         where:  { id: portal.workspaceId },
         select: { slug: true, name: true, companyName: true, companyDescription: true, industry: true, companyWebsite: true, logoData: true, brandColors: true, brandFonts: true, disabledFeatureKeys: true },
@@ -483,7 +496,7 @@ async function getPortalData(req, res, next) {
     let hasContent = false
     let pendingApprovalCount = 0
     let pendingPreview = []
-    if (portal.contentEnabled && workspace) {
+    if (portal.contentEnabled && workspace && isProjectModuleEnabled(project, 'contenido')) {
       const disabledKeys = JSON.parse(workspace.disabledFeatureKeys || '[]')
       if (isFlagEnabledForWorkspace(contentFlag, portal.workspaceId, disabledKeys)) {
         const [visibleCount, pendingCount] = await Promise.all([
@@ -581,7 +594,7 @@ async function getPortalData(req, res, next) {
       } : null,
       reports: reportRows.map(r => ({ token: r.token, month: r.month })),
       briefs:  briefRows.map(b => ({ type: b.type, answers: b.answers && typeof b.answers === 'object' ? b.answers : {}, updatedAt: b.updatedAt })),
-      hasLiveSections: safeParseArr(portal.liveSections).length > 0,
+      hasLiveSections: visibleLiveSections(portal, project).length > 0,
       hasContent,
       pendingApprovalCount,
       pendingPreview,
@@ -820,7 +833,11 @@ async function computeLiveData(portal) {
   const today = todayString()
   const periodStart = new Date(`${month}-01T00:00:00.000Z`)
   const periodEnd   = new Date(`${today}T00:00:00.000Z`)
-  const liveSections = safeParseArr(portal.liveSections)
+  const project = await prisma.project.findUnique({
+    where:  { id: portal.projectId },
+    select: { marketingEnabled: true },
+  })
+  const liveSections = visibleLiveSections(portal, project)
 
   // cachedAnalysis con `resumen` truthy: aggregateReportData salta la llamada a Claude
   // (ver monthlyReport.service.js — validCachedAnalysis = cachedAnalysis?.resumen ? ... : null)

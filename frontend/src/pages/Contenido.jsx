@@ -56,9 +56,20 @@ export default function Contenido() {
 
   useEffect(() => {
     // Proyectos privados ajenos (locked) afuera del selector: el backend igual
-    // bloquearía todo lo demás, pero así no aparece como una opción muerta.
-    api.get('/projects').then(r => setProjects(r.data.filter(p => !p.locked))).catch(() => {})
+    // bloquearía todo lo demás, pero así no aparece como una opción muerta. Mismo
+    // criterio para las cuentas que no usan Contenido (ver concepto "Marketing y
+    // Contenido por proyecto"): no están en esta sección.
+    api.get('/projects')
+      .then(r => setProjects(r.data.filter(p => !p.locked && p.contenidoEnabled !== false)))
+      .catch(() => {})
   }, [])
+
+  // Un link viejo (o alguien que acaba de apagar el módulo) no deja la vista pidiendo
+  // piezas de una cuenta que ya no está acá.
+  useEffect(() => {
+    if (!projectId || projects.length === 0) return
+    if (!projects.some(p => String(p.id) === String(projectId))) handleProjectChange('')
+  }, [projectId, projects]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const rawView = searchParams.get('view')
   const view = VALID_VIEWS.has(rawView) ? rawView : 'tabla'

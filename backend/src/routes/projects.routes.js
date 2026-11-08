@@ -86,6 +86,11 @@ router.post('/:id/situation',              projectSituation.createEntry)
 router.patch('/:id/situation/:entryId',    projectSituation.updateEntry)
 router.delete('/:id/situation/:entryId',   projectSituation.deleteEntry)
 router.patch('/:id/info',                  projectSettings.saveInfo)
+// Marketing/Contenido prendidos o apagados para ESTE proyecto (ver concepto
+// "Secciones por proyecto (Marketing, Contenido, Briefs)"). Va acá y no en los routers de cada
+// módulo: con el módulo apagado, sus rutas ya devuelven 404 para este proyecto,
+// así que no habría por dónde volver a prenderlo.
+router.patch('/:id/modules',               projectSettings.saveModules)
 router.get('/:id/briefs',                  briefs.listBriefs)
 router.put('/:id/briefs/:type',            briefs.saveBrief)
 router.delete('/:id/briefs/:type',         briefs.deleteBrief)

@@ -81,7 +81,13 @@ async function list(req, res, next) {
       const isMember = p.members.some(m => m.userId === userId)
       const hasAccess = viewerIsAdmin || isMember || !p.isPrivate
       if (!hasAccess) {
-        return { id: p.id, name: p.name, active: p.active, isPrivate: true, locked: true, starred: false, taskCounts: null }
+        // Los toggles de módulo viajan igual que en la ficha completa: no son
+        // contenido del proyecto, y sin ellos su nombre seguía apareciendo en el
+        // selector de Marketing/Contenido aunque el módulo esté apagado.
+        return {
+          id: p.id, name: p.name, active: p.active, isPrivate: true, locked: true, starred: false, taskCounts: null,
+          marketingEnabled: p.marketingEnabled, contenidoEnabled: p.contenidoEnabled,
+        }
       }
       return {
         ...p,
@@ -152,8 +158,17 @@ async function listAll(req, res, next) {
 
 async function create(req, res, next) {
   try {
-    const { name, serviceIds = [], memberIds = [] } = req.body
+    const { name, serviceIds = [], memberIds = [], websiteUrl } = req.body
     if (!name) return res.status(400).json({ error: 'Nombre requerido' })
+
+    // Lo que se personaliza en el popup de alta: qué secciones usa la cuenta, si
+    // nace privada y si tiene abono de horas. Todo opcional — sin nada, el proyecto
+    // sale con los defaults de `createProject`.
+    const { marketingEnabled, contenidoEnabled, briefsEnabled, isPrivate, hoursEnabled, monthlyHours } = req.body
+    if (monthlyHours !== undefined && monthlyHours !== null && monthlyHours !== '') {
+      const h = Number(monthlyHours)
+      if (!Number.isInteger(h) || h < 0) return res.status(400).json({ error: 'monthlyHours debe ser un entero positivo' })
+    }
 
     const project = await createProject({
       workspaceId: req.workspace.id,
@@ -161,6 +176,8 @@ async function create(req, res, next) {
       creatorId: req.user.userId, // el creador siempre queda como miembro
       serviceIds,
       memberIds,
+      websiteUrl: typeof websiteUrl === 'string' && websiteUrl.trim() ? websiteUrl.trim() : undefined,
+      settings: { marketingEnabled, contenidoEnabled, briefsEnabled, isPrivate, hoursEnabled, monthlyHours },
       include: includeDetails,
     })
     res.status(201).json(project)

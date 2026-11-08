@@ -361,9 +361,18 @@ La estrella es por usuario: marcar un proyecto como destacado solo afecta tu vis
         summary: 'Toda la documentación del proyecto: datos, enlaces, contexto y los cuestionarios de relevamiento.',
         body: `Dentro de cada proyecto hay varias pestañas de documentación.
 
+## Ajustes → Módulos de la cuenta
+
+No todas las cuentas llevan marketing ni calendario de contenido. En **Ajustes** prendés o apagás **Marketing** y **Contenido** para ese proyecto:
+
+- **Marketing apagado** — el proyecto no aparece en la sección Marketing (ni en su selector, ni en su buscador, ni en los informes) y la ficha deja de pedir sitio web e integraciones de Google y redes.
+- **Contenido apagado** — el proyecto no aparece en el calendario de contenido ni sus piezas en el buscador.
+
+Apagar **no borra nada**: lo que ya estaba cargado vuelve a aparecer si lo prendés. Lo puede cambiar un admin o cualquiera del equipo del proyecto.
+
 ## Info
 
-Datos del proyecto: el **sitio web** (se usa para los análisis de marketing) y las **conexiones** de redes sociales (Instagram, Facebook, LinkedIn, Twitter, TikTok, YouTube).
+Datos del proyecto: el **sitio web** (se usa para los análisis de marketing) y las **conexiones** de redes sociales (Instagram, Facebook, LinkedIn, Twitter, TikTok, YouTube). Solo se muestra si la cuenta tiene **Marketing** prendido.
 
 ## Links
 
@@ -384,6 +393,7 @@ Cada brief muestra su progreso (X/Y campos) y un estado: Sin empezar / En progre
         tips: [
           'Cargá el sitio web en Info: sin él no funcionan GEO, SEO ni el Health Score.',
           'Arrancá siempre por el brief de Marca: el resto asume que ya está completo.',
+          'Si una cuenta no lleva marketing ni contenido, apagá esos módulos en Ajustes: deja de pedirte datos que no vas a usar.',
         ],
         related: ['marketing-intro', 'contenido-intro', 'preferencias'],
       },
@@ -666,6 +676,7 @@ Los no-admins ven solo la vista personal.`,
         params: [
           { name: 'attendanceTrackingEnabled', desc: 'Toggle global del bloque de asistencia/puntualidad.' },
           { name: 'briefsEnabled / linksEnabled / situationEnabled / hoursEnabled', desc: 'Toggles globales de secciones de proyecto.' },
+          { name: 'marketingEnabled / contenidoEnabled', desc: 'Marketing y Contenido prendidos o apagados por proyecto (se tocan en la ficha → Ajustes, no acá).' },
         ],
         related: ['pizarra-notas', 'puntualidad-horarios', 'eos-intro', 'marketing-intro'],
       },

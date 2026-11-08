@@ -476,8 +476,21 @@ async function getSerpSnapshot(req, res, next) {
       })
     }
 
-    const snapshot = await captureAndSaveSerpSnapshot(kwId, projectId, workspaceId)
-    res.json({ snapshot: formatSnapshot(snapshot), fresh: true })
+    try {
+      const snapshot = await captureAndSaveSerpSnapshot(kwId, projectId, workspaceId)
+      return res.json({ snapshot: formatSnapshot(snapshot), fresh: true })
+    } catch (err) {
+      // Sin cuota de SerpAPI no se puede capturar, pero el último snapshot
+      // guardado sigue siendo mejor que una pantalla de error: se devuelve
+      // rotulado (`stale`) y con su fecha de captura, que el panel ya muestra.
+      if (err.code !== 'SERP_QUOTA_EXCEEDED' && err.code !== 'SERP_UNAUTHORIZED') throw err
+      const stale = await prisma.serpSnapshot.findFirst({
+        where:   { trackedKeywordId: kwId },
+        orderBy: { capturedAt: 'desc' },
+      })
+      if (!stale) throw err
+      return res.json({ snapshot: formatSnapshot(stale), fresh: false, stale: true, warning: err.message })
+    }
   } catch (err) { next(err) }
 }
 

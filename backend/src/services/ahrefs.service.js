@@ -1,62 +1,98 @@
 const axios = require('axios')
 const prisma = require('../lib/prisma')
+const { MARKETING_PROJECT_WHERE } = require('../lib/projectModules')
 const { extractDomain } = require('./serpApi.service')
 
-// Endpoint público y gratuito de Ahrefs — NO requiere API key.
+// Endpoint "free" de Ahrefs: las consultas no se cobran, pero **sí exigen una API
+// key de APIv3** (`Authorization: Bearer`). Una cuenta gratuita de Ahrefs alcanza
+// para generarla (Account settings → API keys). Sin el header, Ahrefs responde
+// 403 `["Error","Forbidden"]` — era el motivo por el que "Actualizar DR" no hacía
+// nada: el fallo se tragaba en silencio si el proyecto ya tenía un DR cacheado.
 // https://docs.ahrefs.com/en/api/reference/public/get-domain-rating-free
 const AHREFS_DR_FREE = 'https://api.ahrefs.com/v3/public/domain-rating-free'
 
+/** ¿Hay API key de Ahrefs en este servidor? Mismo criterio que SERP_API_KEY. */
+function isAhrefsConfigured() {
+  return !!process.env.AHREFS_API_KEY
+}
+
 /**
- * Consulta el Domain Rating (0-100) de un dominio en el endpoint free de Ahrefs.
- * Devuelve un Number, o null si no se pudo obtener (URL inválida, error de red,
- * respuesta inesperada). Nunca lanza — pensado para usarse también en crons.
+ * Consulta el Domain Rating (0-100) de un dominio y devuelve
+ * `{ domainRating, error }` — `error` es un código propio (`NOT_CONFIGURED`,
+ * `INVALID_URL`, `UNAUTHORIZED`, `RATE_LIMITED`, `UPSTREAM`) para que quien llama
+ * pueda decir QUÉ falló. Nunca lanza — pensado para usarse también en crons.
  */
-async function fetchDomainRating(websiteUrl) {
+async function fetchDomainRatingResult(websiteUrl) {
   const domain = extractDomain(websiteUrl)
-  if (!domain) return null
+  if (!domain) return { domainRating: null, error: 'INVALID_URL' }
+
+  const apiKey = process.env.AHREFS_API_KEY
+  if (!apiKey) return { domainRating: null, error: 'NOT_CONFIGURED', domain }
 
   try {
     const { data } = await axios.get(AHREFS_DR_FREE, {
       params:  { target: domain, output: 'json' },
+      headers: { Authorization: `Bearer ${apiKey}`, Accept: 'application/json' },
       timeout: 15000,
     })
     const dr = data?.domain_rating?.domain_rating
-    return typeof dr === 'number' ? dr : null
+    if (typeof dr !== 'number') return { domainRating: null, error: 'UPSTREAM', domain }
+    return { domainRating: dr, error: null, domain }
   } catch (err) {
-    const reason = err.response?.status
-      ? `HTTP ${err.response.status}`
-      : err.message
-    console.error(`[ahrefs] fetchDomainRating(${domain}) falló: ${reason}`)
-    return null
+    const status = err.response?.status
+    const error  = status === 401 || status === 403 ? 'UNAUTHORIZED'
+      : status === 429 ? 'RATE_LIMITED'
+      : 'UPSTREAM'
+    console.error(`[ahrefs] fetchDomainRating(${domain}) falló: ${status ? `HTTP ${status}` : err.message} (${error})`)
+    return { domainRating: null, error, domain }
   }
 }
 
 /**
+ * Azúcar para quien sólo necesita el número (GEO audit, gamification):
+ * devuelve un Number o null.
+ */
+async function fetchDomainRating(websiteUrl) {
+  const { domainRating } = await fetchDomainRatingResult(websiteUrl)
+  return domainRating
+}
+
+/**
  * Refresca el Domain Rating cacheado de un proyecto (Project.domainRating +
- * domainRatingAt). Devuelve { domainRating, domainRatingAt }. Si el fetch falla
- * devuelve el valor previo sin tocar la fecha.
+ * domainRatingAt). Devuelve `{ domainRating, domainRatingAt, error }`. Si el
+ * fetch falla devuelve el valor previo sin tocar la fecha **y el motivo** — el
+ * valor cacheado no puede hacer pasar un fallo por éxito.
  */
 async function refreshProjectDomainRating(project) {
-  const dr = await fetchDomainRating(project.websiteUrl)
+  const { domainRating: dr, error } = await fetchDomainRatingResult(project.websiteUrl)
   if (dr == null) {
-    return { domainRating: project.domainRating ?? null, domainRatingAt: project.domainRatingAt ?? null }
+    return {
+      domainRating:   project.domainRating ?? null,
+      domainRatingAt: project.domainRatingAt ?? null,
+      error:          error ?? 'UPSTREAM',
+    }
   }
   const updated = await prisma.project.update({
     where: { id: project.id },
     data:  { domainRating: dr, domainRatingAt: new Date() },
     select: { domainRating: true, domainRatingAt: true },
   })
-  return updated
+  return { ...updated, error: null }
 }
 
 /**
  * Cron mensual: refresca el Domain Rating cacheado de todos los proyectos
  * activos con websiteUrl del workspace (independiente de tener GSC conectado).
- * Secuencial con un pequeño delay para no abusar del endpoint público.
+ * Secuencial con un pequeño delay para no abusar del endpoint.
  */
 async function refreshAllDomainRatings() {
+  if (!isAhrefsConfigured()) {
+    console.log('[ahrefs] AHREFS_API_KEY no configurada, saltando refresco de Domain Rating.')
+    return
+  }
+
   const projects = await prisma.project.findMany({
-    where:  { active: true, websiteUrl: { not: null } },
+    where:  { active: true, websiteUrl: { not: null }, ...MARKETING_PROJECT_WHERE },
     select: { id: true, websiteUrl: true, domainRating: true, domainRatingAt: true },
   })
 
@@ -64,8 +100,13 @@ async function refreshAllDomainRatings() {
   for (const project of projects) {
     try {
       const before = project.domainRatingAt
-      const { domainRatingAt } = await refreshProjectDomainRating(project)
+      const { domainRatingAt, error } = await refreshProjectDomainRating(project)
       domainRatingAt && domainRatingAt !== before ? updated++ : failed++
+      // Una key inválida falla igual en los 100 proyectos siguientes: cortar.
+      if (error === 'UNAUTHORIZED') {
+        console.error('[ahrefs] Ahrefs rechazó la API key — se corta el refresco masivo.')
+        break
+      }
     } catch (err) {
       console.error(`[ahrefs] refreshAll proyecto ${project.id}:`, err.message)
       failed++
@@ -75,4 +116,10 @@ async function refreshAllDomainRatings() {
   console.log(`[ahrefs] Domain Rating refrescado: ${updated} ok, ${failed} sin dato. Total: ${projects.length}`)
 }
 
-module.exports = { fetchDomainRating, refreshProjectDomainRating, refreshAllDomainRatings }
+module.exports = {
+  isAhrefsConfigured,
+  fetchDomainRating,
+  fetchDomainRatingResult,
+  refreshProjectDomainRating,
+  refreshAllDomainRatings,
+}

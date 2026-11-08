@@ -42,8 +42,8 @@ export default function ProjectDetail() {
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const { user: authUser } = useAuth()
-  const { enabled: marketingEnabled } = useFeatureFlag('marketing')
-  const { enabled: contenidoEnabled } = useFeatureFlag('contenido')
+  const { enabled: marketingFlag } = useFeatureFlag('marketing')
+  const { enabled: contenidoFlag } = useFeatureFlag('contenido')
   const { enabled: calendarioEnabled } = useFeatureFlag('calendario')
   const { members: workspaceMembers } = useMembers()
   const [data,    setData]    = useState(null)
@@ -275,6 +275,12 @@ export default function ProjectDetail() {
   const blockedCount = allTasks.filter(t => t.status === 'BLOCKED').length
   const inProgressCount = allTasks.filter(t => t.status === 'IN_PROGRESS').length
   const canEditProject = authUser?.isAdmin || (data?.project.members ?? []).some(pm => pm.user.id === authUser?.id)
+  // Dos capas para Marketing/Contenido: el feature flag dice si el workspace tiene
+  // el módulo; el toggle del proyecto, si esta cuenta lo usa (ver concepto "Marketing
+  // y Contenido por proyecto"). `!== false` para que el módulo no desaparezca mientras
+  // el proyecto todavía carga ni en una respuesta sin el campo.
+  const marketingEnabled = marketingFlag && data?.project.marketingEnabled !== false
+  const contenidoEnabled = contenidoFlag && data?.project.contenidoEnabled !== false
 
   const tabs = data ? [
     { key: 'resumen',   label: 'Resumen' },

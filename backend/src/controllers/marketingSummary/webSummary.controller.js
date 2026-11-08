@@ -6,6 +6,7 @@
 const prisma = require('../../lib/prisma')
 const { saveMonthSnapshot } = require('../../services/analyticsSnapshot.service')
 const { todayString } = require('../../utils/dates')
+const { MARKETING_PROJECT_WHERE } = require('../../lib/projectModules')
 
 /**
  * GET /api/marketing/summary/analytics
@@ -189,7 +190,7 @@ async function getSeoSummary(req, res, next) {
     const workspaceId = req.workspace.id
 
     const projects = await prisma.project.findMany({
-      where:  { workspaceId, active: true, websiteUrl: { not: null } },
+      where:  { workspaceId, active: true, websiteUrl: { not: null }, ...MARKETING_PROJECT_WHERE },
       select: { id: true, name: true, websiteUrl: true, domainRating: true, domainRatingAt: true },
     })
 

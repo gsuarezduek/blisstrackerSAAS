@@ -57,8 +57,21 @@ export default function Marketing() {
   const [projectId,  setProjectId]  = useState(searchParams.get('projectId') ?? '')
 
   useEffect(() => {
-    api.get('/projects').then(r => setProjects(r.data)).catch(() => {})
+    // Solo las cuentas que usan Marketing (ver concepto "Marketing y Contenido por
+    // proyecto"): las apagadas no están en esta sección, así que ofrecerlas en el
+    // selector sería una opción muerta — el backend las responde con 404.
+    api.get('/projects')
+      .then(r => setProjects(r.data.filter(p => p.marketingEnabled !== false)))
+      .catch(() => {})
   }, [])
+
+  // Si la URL llegó con una cuenta que ya no usa Marketing (un link viejo, o alguien
+  // que acaba de apagarlo), se cae a "Todos los proyectos" en vez de quedar pidiendo
+  // datos que el backend ya no entrega.
+  useEffect(() => {
+    if (!projectId || projects.length === 0) return
+    if (!projects.some(p => String(p.id) === String(projectId))) handleProjectChange('')
+  }, [projectId, projects]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const disabledSections = workspace?.marketingDisabledSections || []
   const visibleNav = NAV.filter(n => !disabledSections.includes(n.id))

@@ -114,11 +114,12 @@ async function runPageSpeedAnalysis(url, strategy = 'mobile') {
  */
 async function runAllMonthlyPageSpeed() {
   const prisma = require('../lib/prisma')
+const { MARKETING_PROJECT_WHERE } = require('../lib/projectModules')
   const { enabledWorkspaceIds } = require('../lib/featureFlags')
 
   const enabled = await enabledWorkspaceIds('marketing')
   const projects = enabled.size === 0 ? [] : await prisma.project.findMany({
-    where:  { websiteUrl: { not: null }, active: true, workspaceId: { in: [...enabled] } },
+    where:  { websiteUrl: { not: null }, active: true, workspaceId: { in: [...enabled] }, ...MARKETING_PROJECT_WHERE },
     select: { id: true, workspaceId: true, websiteUrl: true, name: true },
   })
 

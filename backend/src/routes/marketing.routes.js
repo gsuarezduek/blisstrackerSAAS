@@ -4,7 +4,7 @@ const { auth }             = require('../middleware/auth')
 const { resolveWorkspace } = require('../middleware/workspace')
 const { requireFeatureFlag } = require('../lib/featureFlags')
 const { moduleAccessGuard } = require('../lib/moduleAccess')
-const { requireProjectAccessPrefix } = require('../middleware/projectPrivacy')
+const { requireProjectModulePrefix } = require('../middleware/projectPrivacy')
 
 const geo               = require('../controllers/geo.controller')
 const integrations      = require('../controllers/integrations.controller')
@@ -68,7 +68,12 @@ router.use(moduleAccessGuard('marketing'))
 // es el id del GeoAudit). Ver middleware/projectPrivacy.js y concepto "Proyectos
 // privados" en CLAUDE.md. '/summary/*' y los *-auth-url/callback de arriba no
 // matchean este prefijo, siguen abiertos como siempre (son cross-proyecto o sin auth).
-router.use('/projects/:id', requireProjectAccessPrefix)
+//
+// El mismo middleware resuelve el gate de módulo por proyecto: un proyecto con
+// Marketing apagado no existe para esta sección (404), tampoco para las tools de
+// MCP, que entran por estas mismas rutas. Ver concepto "Marketing y Contenido por
+// proyecto" en CLAUDE.md.
+router.use('/projects/:id', requireProjectModulePrefix('marketing'))
 
 // GEO
 router.post('/geo/audit',                    geo.runAudit)

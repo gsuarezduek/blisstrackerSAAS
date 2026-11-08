@@ -1,4 +1,5 @@
 const prisma = require('../lib/prisma')
+const { MARKETING_PROJECT_WHERE } = require('../lib/projectModules')
 const { getValidFacebookToken } = require('./metaTokenRefresh.service')
 const { fetchFacebookMetrics }  = require('./facebook.service')
 const { scrapeFacebookPage }    = require('./socialScrape.service')
@@ -121,7 +122,7 @@ async function saveAllMonthlyFacebookSnapshots() {
   const month = prevMonthStr(currentMonthStr())
 
   const integrations = await prisma.projectIntegration.findMany({
-    where:  { type: 'facebook', status: 'active', propertyId: { not: null }, project: { active: true } },
+    where:  { type: 'facebook', status: 'active', propertyId: { not: null }, project: { active: true, ...MARKETING_PROJECT_WHERE } },
     select: { projectId: true, project: { select: { workspaceId: true } } },
   })
 

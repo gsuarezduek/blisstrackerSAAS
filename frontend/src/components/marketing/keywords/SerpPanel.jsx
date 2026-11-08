@@ -11,12 +11,14 @@ export default function SerpPanel({ projectId, kwId, onAddKeyword }) {
   const [error,     setError]     = useState('')
   const [refreshing, setRefreshing] = useState(false)
   const [waitMins,  setWaitMins]  = useState(null)
+  const [warning,   setWarning]   = useState('')
 
   useEffect(() => {
     setLoading(true)
     setError('')
+    setWarning('')
     api.get(`/marketing/projects/${projectId}/keywords/${kwId}/serp`)
-      .then(r => setSnapshot(r.data.snapshot))
+      .then(r => { setSnapshot(r.data.snapshot); setWarning(r.data.warning ?? '') })
       .catch(err => setError(err.response?.data?.error ?? 'Error al cargar datos SERP'))
       .finally(() => setLoading(false))
   }, [projectId, kwId])
@@ -25,6 +27,7 @@ export default function SerpPanel({ projectId, kwId, onAddKeyword }) {
     setRefreshing(true)
     setError('')
     setWaitMins(null)
+    setWarning('')
     try {
       const r = await api.post(`/marketing/projects/${projectId}/keywords/${kwId}/serp/refresh`)
       setSnapshot(r.data.snapshot)
@@ -59,6 +62,13 @@ export default function SerpPanel({ projectId, kwId, onAddKeyword }) {
 
   return (
     <div className="space-y-4">
+      {/* Captura vieja porque no se pudo pedir una nueva (ej: cuota de SerpAPI agotada) */}
+      {warning && (
+        <p className="text-xs text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/20 border border-orange-100 dark:border-orange-900/40 rounded-lg px-3 py-2">
+          {warning}
+        </p>
+      )}
+
       {/* Posición + URL */}
       <div className="flex items-center gap-4 flex-wrap">
         <div className="flex items-center gap-2">

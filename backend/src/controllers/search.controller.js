@@ -4,6 +4,7 @@ const { hasModuleAccess } = require('../lib/moduleAccess')
 const { isAdmin } = require('../lib/projectAccess')
 const { taskInclude } = require('./tasks/_shared')
 const { buildTextSearchFilters } = require('../lib/textSearch')
+const { CONTENIDO_PROJECT_WHERE } = require('../lib/projectModules')
 
 const MIN_QUERY_LENGTH = 2
 const LIMIT = 6
@@ -52,9 +53,10 @@ async function moduleAvailable(req, key) {
  * Buscador global (Cmd/Ctrl+K): tareas, piezas de Contenido, reuniones de
  * Calendario y archivos de proyecto en una sola llamada. Cada bloque respeta el
  * mismo criterio de acceso que su módulo (Contenido/Calendario: flag + acceso
- * por rol; Archivos: `Project.filesEnabled`) — un módulo no disponible devuelve
- * lista vacía. Tareas, reuniones y archivos son visibles para cualquier miembro
- * del workspace ("equipo = etiqueta, no barrera"), igual que en sus pantallas.
+ * por rol; Contenido también `Project.contenidoEnabled`, Archivos
+ * `Project.filesEnabled`) — un módulo no disponible devuelve lista vacía.
+ * Tareas, reuniones y archivos son visibles para cualquier miembro del workspace
+ * ("equipo = etiqueta, no barrera"), igual que en sus pantallas.
  */
 async function globalSearch(req, res, next) {
   try {
@@ -94,7 +96,10 @@ async function globalSearch(req, res, next) {
       taskId === null ? null : prisma.task.findFirst({ where: { ...taskWhere, id: taskId }, ...taskArgs }),
       contenidoOk && textOk
         ? prisma.contentPiece.findMany({
-            where: { workspaceId, deletedAt: null, ...matching('title'), ...projectVisibilityWhere(req) },
+            where: {
+              workspaceId, deletedAt: null, ...matching('title'),
+              project: { ...CONTENIDO_PROJECT_WHERE, ...projectVisibilityWhere(req).project },
+            },
             select: { id: true, title: true, status: true, projectId: true, project: { select: { name: true } } },
             orderBy: { updatedAt: 'desc' },
             take: LIMIT,

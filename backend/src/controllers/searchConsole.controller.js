@@ -3,7 +3,7 @@ const { fetchSearchConsoleData, fetchQueryPages, querySearchConsole } = require(
 const { getValidAccessToken } = require('../services/tokenRefresh.service')
 const { normalizeSiteUrl } = require('../utils/seo')
 const { saveMonthSnapshot, generateSeoAiInsights } = require('../services/searchConsoleSnapshot.service')
-const { refreshProjectDomainRating } = require('../services/ahrefs.service')
+const { refreshProjectDomainRating, isAhrefsConfigured } = require('../services/ahrefs.service')
 const { getSetting } = require('../lib/platformSettings')
 
 // Acepta 'YYYY-MM-DD' solamente (Search Console no acepta 'NdaysAgo')
@@ -207,8 +207,25 @@ async function getDomainRating(req, res, next) {
       domainRating:   project.domainRating,
       domainRatingAt: project.domainRatingAt,
       hasUrl:         !!project.websiteUrl,
+      configured:     isAhrefsConfigured(),
     })
   } catch (err) { next(err) }
+}
+
+// Motivo del fallo de Ahrefs → qué ve y qué puede hacer quien apretó el botón.
+const DR_ERROR_STATUS = {
+  NOT_CONFIGURED: 503,
+  INVALID_URL:    400,
+  UNAUTHORIZED:   502,
+  RATE_LIMITED:   429,
+  UPSTREAM:       502,
+}
+const DR_ERROR_MESSAGE = {
+  NOT_CONFIGURED: 'El Domain Rating no está disponible: falta configurar la API key de Ahrefs en el servidor (AHREFS_API_KEY).',
+  INVALID_URL:    'La URL del sitio no es válida. Revisala en la tab Info del proyecto.',
+  UNAUTHORIZED:   'Ahrefs rechazó la consulta (API key inválida o sin permiso para el endpoint de Domain Rating).',
+  RATE_LIMITED:   'Ahrefs limitó las consultas por volumen. Probá de nuevo en unos minutos.',
+  UPSTREAM:       'No se pudo obtener el Domain Rating desde Ahrefs. Probá de nuevo en unos minutos.',
 }
 
 /**
@@ -232,10 +249,14 @@ async function refreshDomainRating(req, res, next) {
       })
     }
 
-    const result = await refreshProjectDomainRating(project)
-    if (result.domainRatingAt == null && result.domainRating == null) {
-      return res.status(502).json({ error: 'No se pudo obtener el Domain Rating desde Ahrefs. Probá de nuevo en unos minutos.' })
-    }
+    const { error, ...result } = await refreshProjectDomainRating(project)
+    // Un fallo es un fallo aunque haya un DR cacheado de antes: si se devolviera
+    // 200 con el valor viejo, el botón "Actualizar DR" no haría nada visible.
+    if (error) return res.status(DR_ERROR_STATUS[error] ?? 502).json({
+      error: DR_ERROR_MESSAGE[error] ?? DR_ERROR_MESSAGE.UPSTREAM,
+      code:  `AHREFS_${error}`,
+      ...result,
+    })
     res.json(result)
   } catch (err) { next(err) }
 }

@@ -1,4 +1,5 @@
 const prisma = require('../lib/prisma')
+const { MARKETING_PROJECT_WHERE } = require('../lib/projectModules')
 const { todayString } = require('../utils/dates')
 const { callApi } = require('../mcp/apiBridge')
 const { isProjectMember } = require('../lib/projectAccess')
@@ -154,7 +155,7 @@ async function runForProjectSource(source, project, integrationsByType, identity
 }
 
 async function resolveTargetProjects(job) {
-  const where = { workspaceId: job.workspaceId, active: true }
+  const where = { workspaceId: job.workspaceId, active: true, ...MARKETING_PROJECT_WHERE }
   if (job.projectId) where.id = job.projectId
   const projects = await prisma.project.findMany({
     where,

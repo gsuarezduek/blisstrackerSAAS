@@ -1,5 +1,6 @@
 const axios  = require('axios')
 const prisma = require('../lib/prisma')
+const { MARKETING_PROJECT_WHERE } = require('../lib/projectModules')
 
 const SERP_API_BASE = 'https://serpapi.com/search.json'
 
@@ -47,12 +48,31 @@ function urlToDomain(url) {
 // ─── Llamada a SerpAPI ────────────────────────────────────────────────────────
 
 /**
+ * Error de SerpAPI ya traducido a algo que se puede mostrar: lleva `message`
+ * propio, `status` HTTP nuestro y `isOperational` para que el handler global de
+ * `app.js` lo muestre tal cual en producción (si se dejara pasar el AxiosError,
+ * `isUpstreamError` lo convertiría en el 502 genérico "un servicio externo no
+ * está disponible", que es lo que se veía en SERP Live con la cuota agotada).
+ */
+function serpError(message, status, code) {
+  const err = new Error(message)
+  err.status        = status
+  err.code          = code
+  err.isOperational = true
+  return err
+}
+
+const SERP_QUOTA_MESSAGE =
+  'Se agotó la cuota mensual de búsquedas de SerpAPI. Se renueva al inicio del ciclo del plan; ' +
+  'hasta entonces no se pueden capturar SERPs nuevas (los snapshots ya guardados se siguen viendo).'
+
+/**
  * Consulta SerpAPI para una keyword en un país dado.
  * countryCode ya en formato SerpAPI (2 letras, ej: "ar").
  */
 async function fetchSerpData(query, countryCode = 'ar') {
   const apiKey = process.env.SERP_API_KEY
-  if (!apiKey) throw new Error('SERP_API_KEY no configurada')
+  if (!apiKey) throw serpError('SerpAPI no está configurado en este servidor.', 503, 'SERP_NOT_CONFIGURED')
 
   const params = {
     q:       query,
@@ -62,9 +82,25 @@ async function fetchSerpData(query, countryCode = 'ar') {
     api_key: apiKey,
   }
 
-  const { data } = await axios.get(SERP_API_BASE, { params, timeout: 15000 })
+  let data
+  try {
+    ({ data } = await axios.get(SERP_API_BASE, { params, timeout: 15000 }))
+  } catch (err) {
+    const status = err.response?.status
+    // 429 de SerpAPI = el plan se quedó sin búsquedas (no es rate limit por minuto).
+    if (status === 429) throw serpError(SERP_QUOTA_MESSAGE, 503, 'SERP_QUOTA_EXCEEDED')
+    if (status === 401) throw serpError('SerpAPI rechazó la API key de este servidor.', 502, 'SERP_UNAUTHORIZED')
+    throw err
+  }
 
-  if (data.error) throw new Error(`SerpAPI error: ${data.error}`)
+  if (data.error) {
+    // SerpAPI también informa la falta de búsquedas con 200 + error en el body.
+    const msg = String(data.error)
+    if (/run out of searches|exceeded your.*searches/i.test(msg)) {
+      throw serpError(SERP_QUOTA_MESSAGE, 503, 'SERP_QUOTA_EXCEEDED')
+    }
+    throw serpError(`SerpAPI: ${msg}`, 502, 'SERP_ERROR')
+  }
 
   return data
 }
@@ -196,13 +232,13 @@ async function captureAllSerpSnapshots() {
   }
 
   const projects = await prisma.trackedKeyword.findMany({
-    where:    {},
+    where:    { project: MARKETING_PROJECT_WHERE },
     select:   { projectId: true, workspaceId: true },
     distinct: ['projectId'],
   })
 
   console.log(`[SerpAPI] Capturando snapshots para ${projects.length} proyecto(s)...`)
-  let total = 0; let errors = 0
+  let total = 0; let errors = 0; let quotaStop = false
 
   for (const { projectId, workspaceId } of projects) {
     const keywords = await prisma.trackedKeyword.findMany({
@@ -217,14 +253,22 @@ async function captureAllSerpSnapshots() {
       } catch (err) {
         errors++
         console.error(`[SerpAPI] Error en keyword ${kw.id} ("${kw.query}"):`, err.message)
+        // Sin cuota, las keywords que faltan fallan todas igual: cortar la corrida
+        // en vez de gastar cientos de requests y llenar el log del mismo error.
+        if (err.code === 'SERP_QUOTA_EXCEEDED' || err.code === 'SERP_UNAUTHORIZED') {
+          console.error(`[SerpAPI] Corte de la captura semanal: ${err.message}`)
+          quotaStop = true
+          break
+        }
       }
       await new Promise(r => setTimeout(r, 800))
     }
+    if (quotaStop) break
 
     await new Promise(r => setTimeout(r, 500))
   }
 
-  console.log(`[SerpAPI] ${total} snapshots capturados, ${errors} errores.`)
+  console.log(`[SerpAPI] ${total} snapshots capturados, ${errors} errores${quotaStop ? ' (cortado por falta de cuota)' : ''}.`)
 }
 
 module.exports = {

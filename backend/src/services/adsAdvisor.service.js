@@ -1,4 +1,5 @@
 const prisma = require('../lib/prisma')
+const { MARKETING_PROJECT_WHERE } = require('../lib/projectModules')
 const { parseAIJson } = require('../utils/parseAIJson')
 const { briefLines, briefDump } = require('../lib/briefContext')
 const { createMessage } = require('../lib/claude')
@@ -282,7 +283,7 @@ async function runWeeklyAdsAdvisor() {
   }
   const perPlatform = await Promise.all(Object.entries(PLATFORM_READY).map(([platform, ready]) =>
     prisma.projectIntegration.findMany({
-      where:  { type: platform, status: 'active', ...ready, workspaceId: { in: wsIds }, project: { active: true } },
+      where:  { type: platform, status: 'active', ...ready, workspaceId: { in: wsIds }, project: { active: true, ...MARKETING_PROJECT_WHERE } },
       select: { projectId: true, workspaceId: true },
     }).then(rows => rows.map(i => ({ ...i, platform }))),
   ))

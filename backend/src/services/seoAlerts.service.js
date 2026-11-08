@@ -3,6 +3,7 @@
 // posición, Domain Rating, keywords que salen del top 10). Solo envía si hay alertas
 // (cero ruido). Se ejecuta dentro de la cadena mensual MONTHLY_CHAIN el 1° del mes.
 const prisma = require('../lib/prisma')
+const { MARKETING_PROJECT_WHERE } = require('../lib/projectModules')
 const { prevMonthStr, monthLabel } = require('../lib/monthUtils')
 const { sendSeoAlertEmail } = require('./email.service')
 const { DEFAULT_TZ } = require('../utils/dates')
@@ -60,7 +61,10 @@ async function buildProjectAlerts(projectId, month, prevMonth) {
 
 // Arma y envía el aviso de un workspace. No-op si no hay alertas ni destinatarios.
 async function sendWorkspaceSeoAlerts(workspace, month, prevMonth) {
-  const projects = await prisma.project.findMany({ where: { workspaceId: workspace.id }, select: { id: true, name: true } })
+  const projects = await prisma.project.findMany({
+    where:  { workspaceId: workspace.id, ...MARKETING_PROJECT_WHERE },
+    select: { id: true, name: true },
+  })
 
   const projectAlerts = []
   for (const p of projects) {

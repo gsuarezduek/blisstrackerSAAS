@@ -1,4 +1,5 @@
 const prisma    = require('../lib/prisma')
+const { MARKETING_PROJECT_WHERE } = require('../lib/projectModules')
 const { fetchSearchConsoleData } = require('./googleSearchConsole.service')
 const { fetchDomainRating }      = require('./ahrefs.service')
 const { logTokens }              = require('../lib/logTokens')
@@ -92,7 +93,7 @@ async function saveAllSearchConsoleSnapshots() {
   const targetMonth = `${prevY}-${String(prevM).padStart(2, '0')}`
 
   const integrations = await prisma.projectIntegration.findMany({
-    where:   { type: 'google_search_console', status: 'active', project: { active: true } },
+    where:   { type: 'google_search_console', status: 'active', project: { active: true, ...MARKETING_PROJECT_WHERE } },
     select:  { projectId: true, project: { select: { workspaceId: true } } },
   })
 
