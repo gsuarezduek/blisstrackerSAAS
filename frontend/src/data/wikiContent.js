@@ -561,7 +561,7 @@ Ignorarlo es perder valor del sistema. Si no lo querés, podés apagar todo el s
         summary: 'Tu actividad y productividad personal. Los admins además tienen los reportes del equipo.',
         body: `**Reportes** muestra tu actividad: tareas completadas, tiempo trabajado y evolución.
 
-Si sos admin, el ítem Reportes de Administración es el del equipo completo (por proyecto y por persona). Este es el personal, el que ven quienes no son admin. La vista de Actividad en tiempo real sigue siendo aparte.
+Si sos admin, el ítem Reportes de Administración es el del equipo completo (por proyecto y por persona). Este es el personal, el que ven quienes no son admin. La vista de Actividad en tiempo real sigue siendo aparte.`,
         related: ['insight-ia-reporte-semanal'],
       },
     ],
