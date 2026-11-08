@@ -931,6 +931,7 @@ model ProjectAccess {
   twofa       String? // Segundo factor (2FA) cifrado ("iv:tag:ciphertext")
   extra       String? // Notas / dato extra
   createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   project    Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
   workspace  Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
@@ -940,17 +941,22 @@ model ProjectAccess {
   @@index([workspaceId])
 }
 
-// Log de auditoría: registra quién solicitó ver un dato sensible (contraseña o 2FA)
-// de un acceso. Por ahora solo se persiste el evento; la visualización del log se
-// desarrollará más adelante. accessId queda en SetNull para conservar el historial
-// aunque el acceso se elimine.
+// Log de auditoría de un acceso: quién vio un dato sensible y quién lo cambió.
+// Es también el "Historial" que se muestra en la pestaña Links y accesos.
+// NUNCA guarda valores: de una contraseña registra QUE cambió, no a qué — un
+// historial de contraseñas en claro sería peor que no tener historial.
+// accessId queda en SetNull para conservar el historial aunque el acceso se
+// elimine; por eso `label` congela el nombre de la cuenta al momento del evento.
 model ProjectAccessLog {
   id          Int      @id @default(autoincrement())
   workspaceId Int
   projectId   Int
   accessId    Int?
   userId      Int
-  field       String // "password" | "twofa" — qué dato se solicitó
+  action      String   @default("reveal") // "reveal" | "create" | "update" | "delete"
+  field       String? // solo action="reveal": "password" | "twofa" — qué dato se solicitó
+  fields      Json? // solo create/update: nombres de los campos cargados/cambiados
+  label       String? // nombre de la cuenta al momento del evento (sobrevive al borrado)
   createdAt   DateTime @default(now())
 
   workspace Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
@@ -959,7 +965,7 @@ model ProjectAccessLog {
   user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([workspaceId])
-  @@index([projectId])
+  @@index([projectId, createdAt])
   @@index([accessId])
   @@index([userId])
 }

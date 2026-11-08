@@ -106,7 +106,13 @@ PATCH  /api/projects/:id/star            # toggle destacado del proyecto para el
 GET    /api/projects/:id/members
 GET    /api/projects/:id/tasks
 GET    /api/projects/:id/completed       # ?skip=N
-PUT    /api/projects/:id/links
+PUT    /api/projects/:id/links                            # reemplaza la lista completa (alta, edición y baja de un link pasan por acá) — admin/owner o miembro del proyecto
+GET    /api/projects/:id/accesos                          # credenciales del proyecto, sin password/2FA (hasPassword/hasTwofa) — cualquier miembro del workspace
+POST   /api/projects/:id/accesos                          # alta { account?, username?, password?, twofa?, extra? } (al menos uno); password/2FA se guardan cifrados
+PATCH  /api/projects/:id/accesos/:accessId                # edita: clave ausente = sin cambios, '' = borra el campo, valor = lo reemplaza
+DELETE /api/projects/:id/accesos/:accessId
+GET    /api/projects/:id/accesos/:accessId/reveal         # ?field=password|twofa — descifra UN dato y lo registra en el historial
+GET    /api/projects/:id/accesos/logs                     # historial: ?type=changes|reveals|all, ?accessId=, ?limit= (máx 100). Nunca devuelve valores, solo qué campo cambió
 GET    /api/projects/:id/situation                   # hojas de la Situación de la cuenta, la más nueva primero (isCurrent, canDelete) — cualquier miembro del workspace
 POST   /api/projects/:id/situation                   # hoja nueva { content } (no vacía); la anterior pasa al historial
 PATCH  /api/projects/:id/situation/:entryId          # edita la hoja actual { content }; sobre una anterior → 409 (solo lectura)

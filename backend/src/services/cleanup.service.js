@@ -39,6 +39,15 @@ function daysAgo(d) {
   return new Date(Date.now() - d * 24 * 60 * 60 * 1000)
 }
 
+// El retention de ProjectAccessLog aplica SOLO a los reveals (quién vio una
+// contraseña), que son los que crecen sin techo. Los eventos de cambio
+// (alta/edición/baja de un acceso) son el historial que se muestra en la ficha
+// del proyecto: son pocos y la pregunta que responden ("¿cuándo cambió esta
+// contraseña?") no vence con el tiempo.
+function revealLogsOlderThan(s) {
+  return { action: 'reveal', createdAt: { lt: daysAgo(s.accessLogRetentionDays) } }
+}
+
 function hoursAgo(h) {
   return new Date(Date.now() - h * 60 * 60 * 1000)
 }
@@ -106,9 +115,7 @@ async function previewWeeklyCleanup(tables = null) {
     })
   }
   if ((!tables || tables.includes('accessLogs')) && s.accessLogRetentionDays > 0) {
-    result.accessLogs = await prisma.projectAccessLog.count({
-      where: { createdAt: { lt: daysAgo(s.accessLogRetentionDays) } },
-    })
+    result.accessLogs = await prisma.projectAccessLog.count({ where: revealLogsOlderThan(s) })
   }
   if (!tables || tables.includes('contentAssetsPending')) {
     // Retention en HORAS (no días, no entra en RETENTION_KEYS) — un upload
@@ -228,9 +235,7 @@ async function runWeeklyCleanup(tables = null) {
     result.conversionEvents = count
   }
   if ((!tables || tables.includes('accessLogs')) && s.accessLogRetentionDays > 0) {
-    const { count } = await prisma.projectAccessLog.deleteMany({
-      where: { createdAt: { lt: daysAgo(s.accessLogRetentionDays) } },
-    })
+    const { count } = await prisma.projectAccessLog.deleteMany({ where: revealLogsOlderThan(s) })
     result.accessLogs = count
   }
   if (!tables || tables.includes('contentAssetsPending')) {

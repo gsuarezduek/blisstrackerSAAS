@@ -17,7 +17,7 @@
 
 // Fecha de última actualización del Wiki (YYYY-MM-DD). Actualizar al cambiar el contenido.
 // Se muestra al inicio del Wiki como referencia para el equipo.
-export const WIKI_LAST_UPDATED = '2026-10-19'
+export const WIKI_LAST_UPDATED = '2026-11-07'
 
 export const WIKI_CATEGORIES = [
   // ── Primeros pasos ────────────────────────────────────────────────────────
@@ -414,7 +414,40 @@ El repositorio de archivos del proyecto, con carpetas. Los adjuntos de las tarea
           'Usá la Situación de la cuenta como "estado en dos líneas": cualquiera del workspace la puede actualizar.',
           'Cargá los to-dos de la reunión con responsable: al finalizarla llegan solos al dashboard de cada uno.',
         ],
-        related: ['ficha-proyecto', 'proyectos-privados', 'calendario'],
+        related: ['ficha-proyecto', 'links-y-accesos', 'proyectos-privados', 'calendario'],
+      },
+      {
+        id: 'links-y-accesos',
+        title: 'Links y accesos del proyecto',
+        audience: 'todos',
+        module: null,
+        summary: 'Los links del cliente y las credenciales de sus cuentas, cifradas. Se editan cuando cambia una contraseña y queda registrado quién la cambió y quién la vio.',
+        body: `La pestaña **Links y accesos** es lo que el equipo abre para entrar a trabajar en la cuenta: los links del cliente (drive, sitio, tableros) y las credenciales de sus cuentas.
+
+## Accesos
+
+Cada acceso tiene cuenta, usuario, contraseña, 2FA y un campo extra — todos opcionales, cargá lo que tengas. **La contraseña y el 2FA se guardan cifrados** y no se muestran: aparecen como puntitos y se revelan de a uno con **ver**, que además deja registrado quién los pidió.
+
+Los ve y los gestiona **cualquier persona del workspace**, no solo el equipo del proyecto (salvo que el proyecto sea privado).
+
+## Cuando cambia una contraseña
+
+Tocá el **lápiz** del acceso y escribí la nueva. Lo importante: **los campos de contraseña y 2FA arrancan vacíos y vacío significa "dejala como está"**. Así podés corregir el usuario o el nombre de la cuenta sin tener que revelar antes la contraseña. Si lo que querés es borrar una contraseña guardada, usá **quitar**.
+
+## Historial
+
+Al pie de la tarjeta, **Historial de cambios** muestra qué pasó con cada acceso: quién lo cargó, quién cambió qué campo y cuándo, y quién lo eliminó. La pestaña **Quién vio qué** lista los pedidos de ver una contraseña o un 2FA.
+
+El historial registra **qué campo cambió, nunca el valor**: no hay forma de recuperar desde ahí una contraseña vieja.
+
+## Links
+
+Se agregan con nombre y URL, y se editan con el lápiz del chip. Los links los edita el **equipo del proyecto o un admin**.`,
+        tips: [
+          'Si una credencial dejó de funcionar, mirá el historial antes de preguntar: suele estar ahí quién la cambió.',
+          'Al editar, dejá vacía la contraseña si no la querés cambiar — no hace falta revelarla para tocar los otros campos.',
+        ],
+        related: ['ficha-proyecto-resumen', 'proyectos-privados'],
       },
       {
         id: 'proyectos-privados',

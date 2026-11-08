@@ -279,7 +279,7 @@ const PLATFORM_SETTINGS = [
     max:     3650,
     group:   'operational',
     label:   'Retención de logs de accesos a credenciales (días)',
-    help:    'Después de cuántos días se borran los ProjectAccessLog (auditoría de quién reveló una contraseña/2FA de un proyecto). Piso alto (90 días) por ser un registro de auditoría de seguridad.',
+    help:    'Después de cuántos días se borran los ProjectAccessLog de tipo reveal (quién pidió ver una contraseña/2FA de un proyecto). Piso alto (90 días) por ser un registro de auditoría de seguridad. NO aplica a los eventos de cambio (alta/edición/baja de un acceso): son el historial que muestra la ficha del proyecto y no se purgan.',
   },
   {
     key:     'contentStorageMaxMbPerWorkspace',

@@ -188,12 +188,17 @@ export default function ProjectDetail() {
     setArchive(prev => prev.map(bump))
   }
 
-  async function handleAddLink() {
+  // Alta y edición de un link comparten endpoint: PUT /links reemplaza la lista
+  // completa, así que editar es mandarla con ese link cambiado (linkForm.id).
+  async function handleSaveLink() {
     if (!linkForm?.label?.trim() || !linkForm?.url?.trim()) return
     setLinkSaving(true)
     try {
-      const existing = (data.project.links ?? []).map(l => ({ label: l.label, url: l.url }))
-      const newLinks = [...existing, { label: linkForm.label.trim(), url: linkForm.url.trim() }]
+      const edited = { label: linkForm.label.trim(), url: linkForm.url.trim() }
+      const existing = (data.project.links ?? [])
+      const newLinks = linkForm.id
+        ? existing.map(l => (l.id === linkForm.id ? edited : { label: l.label, url: l.url }))
+        : [...existing.map(l => ({ label: l.label, url: l.url })), edited]
       const { data: updated } = await api.put(`/projects/${encodedId}/links`, { links: newLinks })
       setData(prev => ({ ...prev, project: { ...prev.project, links: updated.links } }))
       setLinkForm(null)
@@ -517,7 +522,7 @@ export default function ProjectDetail() {
                   linkForm={linkForm}
                   setLinkForm={setLinkForm}
                   linkSaving={linkSaving}
-                  onAddLink={handleAddLink}
+                  onSaveLink={handleSaveLink}
                   onDeleteLink={handleDeleteLink}
                 />
               )}
