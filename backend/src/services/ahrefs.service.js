@@ -11,6 +11,10 @@ const { extractDomain } = require('./serpApi.service')
 // https://docs.ahrefs.com/en/api/reference/public/get-domain-rating-free
 const AHREFS_DR_FREE = 'https://api.ahrefs.com/v3/public/domain-rating-free'
 
+// La card muestra las últimas lecturas como las pastillas de Web → Performance
+// (ahí el frontend pide limit=6). El resto queda en la tabla.
+const DR_HISTORY_LIMIT = 6
+
 /** ¿Hay API key de Ahrefs en este servidor? Mismo criterio que SERP_API_KEY. */
 function isAhrefsConfigured() {
   return !!process.env.AHREFS_API_KEY
@@ -57,11 +61,22 @@ async function fetchDomainRating(websiteUrl) {
   return domainRating
 }
 
+/** Últimas lecturas, la más nueva primero — el mismo orden que el historial de PageSpeed. */
+function listDomainRatingHistory(projectId) {
+  return prisma.domainRatingReading.findMany({
+    where:   { projectId },
+    orderBy: { createdAt: 'desc' },
+    take:    DR_HISTORY_LIMIT,
+    select:  { id: true, domainRating: true, createdAt: true },
+  })
+}
+
 /**
  * Refresca el Domain Rating cacheado de un proyecto (Project.domainRating +
- * domainRatingAt). Devuelve `{ domainRating, domainRatingAt, error }`. Si el
- * fetch falla devuelve el valor previo sin tocar la fecha **y el motivo** — el
- * valor cacheado no puede hacer pasar un fallo por éxito.
+ * domainRatingAt) y agrega la lectura al historial. Devuelve
+ * `{ domainRating, domainRatingAt, history, error }`. Si el fetch falla
+ * devuelve el valor previo sin tocar la fecha **ni el historial**, y el motivo:
+ * el valor cacheado no puede hacer pasar un fallo por éxito.
  */
 async function refreshProjectDomainRating(project) {
   const { domainRating: dr, error } = await fetchDomainRatingResult(project.websiteUrl)
@@ -77,7 +92,14 @@ async function refreshProjectDomainRating(project) {
     data:  { domainRating: dr, domainRatingAt: new Date() },
     select: { domainRating: true, domainRatingAt: true },
   })
-  return { ...updated, error: null }
+  let history = []
+  if (project.workspaceId) {
+    await prisma.domainRatingReading.create({
+      data: { projectId: project.id, workspaceId: project.workspaceId, domainRating: dr },
+    })
+    history = await listDomainRatingHistory(project.id)
+  }
+  return { ...updated, history, error: null }
 }
 
 /**
@@ -93,7 +115,7 @@ async function refreshAllDomainRatings() {
 
   const projects = await prisma.project.findMany({
     where:  { active: true, websiteUrl: { not: null }, ...MARKETING_PROJECT_WHERE },
-    select: { id: true, websiteUrl: true, domainRating: true, domainRatingAt: true },
+    select: { id: true, workspaceId: true, websiteUrl: true, domainRating: true, domainRatingAt: true },
   })
 
   let updated = 0, failed = 0
@@ -120,6 +142,7 @@ module.exports = {
   isAhrefsConfigured,
   fetchDomainRating,
   fetchDomainRatingResult,
+  listDomainRatingHistory,
   refreshProjectDomainRating,
   refreshAllDomainRatings,
 }

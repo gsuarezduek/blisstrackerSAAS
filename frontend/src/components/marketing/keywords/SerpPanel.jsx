@@ -31,6 +31,7 @@ export default function SerpPanel({ projectId, kwId, onAddKeyword }) {
     try {
       const r = await api.post(`/marketing/projects/${projectId}/keywords/${kwId}/serp/refresh`)
       setSnapshot(r.data.snapshot)
+      setWarning(r.data.warning ?? '')
     } catch (err) {
       const data = err.response?.data
       if (err.response?.status === 429) {
@@ -50,11 +51,14 @@ export default function SerpPanel({ projectId, kwId, onAddKeyword }) {
     </div>
   )
 
-  if (error) return (
-    <div className="text-sm text-red-500 dark:text-red-400 py-2">{error}</div>
-  )
-
-  if (!snapshot) return null
+  // Sin ninguna captura guardada, el error es toda la pantalla. Si ya había una,
+  // se sigue mostrando y el motivo queda arriba: actualizar no tiene que taparla.
+  if (!snapshot) {
+    if (error) return (
+      <div className="text-sm text-red-500 dark:text-red-400 py-2">{error}</div>
+    )
+    return null
+  }
 
   const capturedDate = new Date(snapshot.capturedAt).toLocaleString('es-AR', {
     day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
@@ -63,6 +67,11 @@ export default function SerpPanel({ projectId, kwId, onAddKeyword }) {
   return (
     <div className="space-y-4">
       {/* Captura vieja porque no se pudo pedir una nueva (ej: cuota de SerpAPI agotada) */}
+      {error && (
+        <p className="text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-900/40 rounded-lg px-3 py-2">
+          {error}
+        </p>
+      )}
       {warning && (
         <p className="text-xs text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/20 border border-orange-100 dark:border-orange-900/40 rounded-lg px-3 py-2">
           {warning}

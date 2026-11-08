@@ -3,7 +3,7 @@ const { fetchSearchConsoleData, fetchQueryPages, querySearchConsole } = require(
 const { getValidAccessToken } = require('../services/tokenRefresh.service')
 const { normalizeSiteUrl } = require('../utils/seo')
 const { saveMonthSnapshot, generateSeoAiInsights } = require('../services/searchConsoleSnapshot.service')
-const { refreshProjectDomainRating, isAhrefsConfigured } = require('../services/ahrefs.service')
+const { refreshProjectDomainRating, listDomainRatingHistory, isAhrefsConfigured } = require('../services/ahrefs.service')
 const { getSetting } = require('../lib/platformSettings')
 
 // Acepta 'YYYY-MM-DD' solamente (Search Console no acepta 'NdaysAgo')
@@ -203,11 +203,13 @@ async function getDomainRating(req, res, next) {
     })
     if (!project) return res.status(404).json({ error: 'Proyecto no encontrado' })
 
+    const history = await listDomainRatingHistory(projectId)
     res.json({
       domainRating:   project.domainRating,
       domainRatingAt: project.domainRatingAt,
       hasUrl:         !!project.websiteUrl,
       configured:     isAhrefsConfigured(),
+      history,
     })
   } catch (err) { next(err) }
 }
@@ -239,7 +241,7 @@ async function refreshDomainRating(req, res, next) {
 
     const project = await prisma.project.findFirst({
       where:  { id: projectId, workspaceId },
-      select: { id: true, websiteUrl: true, domainRating: true, domainRatingAt: true },
+      select: { id: true, workspaceId: true, websiteUrl: true, domainRating: true, domainRatingAt: true },
     })
     if (!project) return res.status(404).json({ error: 'Proyecto no encontrado' })
     if (!project.websiteUrl) {

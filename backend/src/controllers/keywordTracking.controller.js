@@ -443,6 +443,26 @@ async function getHistoryBatch(req, res, next) {
   } catch (err) { next(err) }
 }
 
+// Captura un SERP nuevo. Si el proveedor no responde (cuota, key, red), devuelve
+// el último snapshot guardado con `warning` en vez de una pantalla de error:
+// un dato de la semana pasada sigue siendo el SERP, y el motivo va al lado.
+async function captureOrLastSnapshot(kwId, projectId, workspaceId) {
+  try {
+    const snapshot = await captureAndSaveSerpSnapshot(kwId, projectId, workspaceId)
+    return { snapshot: formatSnapshot(snapshot), fresh: true }
+  } catch (err) {
+    const stale = await prisma.serpSnapshot.findFirst({
+      where:   { trackedKeywordId: kwId },
+      orderBy: { capturedAt: 'desc' },
+    })
+    if (!stale) throw err
+    const warning = err.isOperational
+      ? err.message
+      : 'No se pudo actualizar el SERP. Se muestra la última captura guardada.'
+    return { snapshot: formatSnapshot(stale), fresh: false, stale: true, warning }
+  }
+}
+
 // ─── GET /projects/:id/keywords/:kwId/serp ────────────────────────────────────
 // Devuelve el snapshot SERP más reciente. Si tiene <24h, lo reutiliza.
 // Si no existe o es viejo, dispara una nueva captura en SerpAPI.
@@ -476,21 +496,7 @@ async function getSerpSnapshot(req, res, next) {
       })
     }
 
-    try {
-      const snapshot = await captureAndSaveSerpSnapshot(kwId, projectId, workspaceId)
-      return res.json({ snapshot: formatSnapshot(snapshot), fresh: true })
-    } catch (err) {
-      // Sin cuota de SerpAPI no se puede capturar, pero el último snapshot
-      // guardado sigue siendo mejor que una pantalla de error: se devuelve
-      // rotulado (`stale`) y con su fecha de captura, que el panel ya muestra.
-      if (err.code !== 'SERP_QUOTA_EXCEEDED' && err.code !== 'SERP_UNAUTHORIZED') throw err
-      const stale = await prisma.serpSnapshot.findFirst({
-        where:   { trackedKeywordId: kwId },
-        orderBy: { capturedAt: 'desc' },
-      })
-      if (!stale) throw err
-      return res.json({ snapshot: formatSnapshot(stale), fresh: false, stale: true, warning: err.message })
-    }
+    return res.json(await captureOrLastSnapshot(kwId, projectId, workspaceId))
   } catch (err) { next(err) }
 }
 
@@ -526,8 +532,7 @@ async function refreshSerpSnapshot(req, res, next) {
       })
     }
 
-    const snapshot = await captureAndSaveSerpSnapshot(kwId, projectId, workspaceId)
-    res.json({ snapshot: formatSnapshot(snapshot), fresh: true })
+    res.json(await captureOrLastSnapshot(kwId, projectId, workspaceId))
   } catch (err) { next(err) }
 }
 

@@ -166,6 +166,7 @@ model Workspace {
   reportFeedback             ReportFeedback[]
   reportGenerationLogs       ReportGenerationLog[]
   searchConsoleSnapshots     SearchConsoleSnapshot[]
+  domainRatingReadings       DomainRatingReading[]
   seoAiInsights              SeoAiInsight[]
   cannibalReports            CannibalReport[]
   cannibalResolutions        CannibalResolution[]
@@ -725,6 +726,7 @@ model Project {
   monthlyReports           MonthlyReport[]
   reportGenerationLogs     ReportGenerationLog[]
   searchConsoleSnapshots   SearchConsoleSnapshot[]
+  domainRatingReadings     DomainRatingReading[]
   seoAiInsights            SeoAiInsight[]
   cannibalReports          CannibalReport[]
   cannibalResolutions      CannibalResolution[]
@@ -3254,6 +3256,22 @@ model SearchConsoleSnapshot {
   @@unique([projectId, month])
   @@index([workspaceId])
   @@index([projectId])
+}
+
+// Cada lectura exitosa de Ahrefs. La card de SEO muestra las últimas como las
+// pastillas de Web → Performance: no se pisa el valor anterior.
+model DomainRatingReading {
+  id           Int      @id @default(autoincrement())
+  projectId    Int
+  workspaceId  Int
+  domainRating Float
+  createdAt    DateTime @default(now())
+
+  project   Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, createdAt])
+  @@index([workspaceId])
 }
 
 model SeoAiInsight {

@@ -62,9 +62,38 @@ function serpError(message, status, code) {
   return err
 }
 
-const SERP_QUOTA_MESSAGE =
-  'Se agotó la cuota mensual de búsquedas de SerpAPI. Se renueva al inicio del ciclo del plan; ' +
-  'hasta entonces no se pueden capturar SERPs nuevas (los snapshots ya guardados se siguen viendo).'
+const SERP_QUOTA_BASE =
+  'Se agotó la cuota mensual de búsquedas de SerpAPI. '
+
+// La fecha de renovación sale de la cuenta, no de la búsqueda que falló. Se cachea
+// una hora: un cron que recorre keywords no tiene que preguntarla una vez por cada una.
+let quotaRenewalCache = { at: 0, when: '' }
+
+function formatRenewalDate(iso) {
+  if (typeof iso !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return ''
+  const [y, m, d] = iso.split('-').map(Number)
+  const label = new Date(Date.UTC(y, m - 1, d)).toLocaleDateString('es-AR', {
+    day: 'numeric', month: 'long', timeZone: 'UTC',
+  })
+  return `Se renueva el ${label}. `
+}
+
+async function serpQuotaMessage() {
+  const fresh = process.env.NODE_ENV === 'test' || Date.now() - quotaRenewalCache.at > 60 * 60 * 1000
+  if (fresh) {
+    quotaRenewalCache = { at: Date.now(), when: '' }
+    try {
+      const { data } = await axios.get('https://serpapi.com/account.json', {
+        params:  { api_key: process.env.SERP_API_KEY },
+        timeout: 8000,
+      })
+      quotaRenewalCache.when = formatRenewalDate(data?.plan_renewal_date)
+    } catch { /* sin la fecha, el mensaje igual dice que es la cuota */ }
+  }
+  const when = quotaRenewalCache.when || 'Se renueva al inicio del ciclo del plan. '
+  return SERP_QUOTA_BASE + when +
+    'Hasta entonces no se pueden capturar SERPs nuevas (los snapshots ya guardados se siguen viendo).'
+}
 
 /**
  * Consulta SerpAPI para una keyword en un país dado.
@@ -87,17 +116,29 @@ async function fetchSerpData(query, countryCode = 'ar') {
     ({ data } = await axios.get(SERP_API_BASE, { params, timeout: 15000 }))
   } catch (err) {
     const status = err.response?.status
+    const body   = err.response?.data?.error
+    const msg    = typeof body === 'string' ? body : ''
     // 429 de SerpAPI = el plan se quedó sin búsquedas (no es rate limit por minuto).
-    if (status === 429) throw serpError(SERP_QUOTA_MESSAGE, 503, 'SERP_QUOTA_EXCEEDED')
-    if (status === 401) throw serpError('SerpAPI rechazó la API key de este servidor.', 502, 'SERP_UNAUTHORIZED')
-    throw err
+    if (status === 429 || /run out of searches|exceeded your.*searches/i.test(msg)) {
+      throw serpError(await serpQuotaMessage(), 503, 'SERP_QUOTA_EXCEEDED')
+    }
+    if (status === 401 || status === 403) {
+      throw serpError('SerpAPI rechazó la API key de este servidor.', 502, 'SERP_UNAUTHORIZED')
+    }
+    // Cualquier otro fallo de red se traduce acá. Si se reenviara el AxiosError,
+    // el handler global lo taparía con "un servicio externo no está disponible".
+    throw serpError(
+      msg ? `SerpAPI: ${msg}` : 'No se pudo consultar SerpAPI. Probá de nuevo en unos minutos.',
+      502,
+      'SERP_ERROR',
+    )
   }
 
   if (data.error) {
     // SerpAPI también informa la falta de búsquedas con 200 + error en el body.
     const msg = String(data.error)
     if (/run out of searches|exceeded your.*searches/i.test(msg)) {
-      throw serpError(SERP_QUOTA_MESSAGE, 503, 'SERP_QUOTA_EXCEEDED')
+      throw serpError(await serpQuotaMessage(), 503, 'SERP_QUOTA_EXCEEDED')
     }
     throw serpError(`SerpAPI: ${msg}`, 502, 'SERP_ERROR')
   }

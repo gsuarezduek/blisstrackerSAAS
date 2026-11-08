@@ -6,11 +6,14 @@
 // está disponible". Acá se fija QUÉ motivo sale de cada falla.
 
 jest.mock('axios')
-jest.mock('../../src/lib/prisma')
+jest.mock('../../src/lib/prisma', () => ({
+  project: { update: jest.fn(), findMany: jest.fn() },
+  domainRatingReading: { create: jest.fn(), findMany: jest.fn() },
+}))
 
 const axios  = require('axios')
 const prisma = require('../../src/lib/prisma')
-const { fetchDomainRatingResult, isAhrefsConfigured } = require('../../src/services/ahrefs.service')
+const { fetchDomainRatingResult, isAhrefsConfigured, refreshProjectDomainRating } = require('../../src/services/ahrefs.service')
 const { fetchSerpData } = require('../../src/services/serpApi.service')
 
 function axiosFail(status) {
@@ -73,6 +76,29 @@ describe('Ahrefs — Domain Rating', () => {
     expect(r.domainRating).toBe(30)        // no se pierde lo que había
     expect(r.error).toBe('UNAUTHORIZED')   // pero el refresh no fue un éxito
     expect(prisma.project.update).not.toHaveBeenCalled()
+    expect(prisma.domainRatingReading.create).not.toHaveBeenCalled()
+  })
+
+  it('una lectura nueva queda en el historial y vuelve con las últimas', async () => {
+    process.env.AHREFS_API_KEY = 'key-123'
+    axios.get.mockResolvedValue({ data: { domain_rating: { domain_rating: 8 } } })
+    const recordedAt = new Date('2026-11-08T12:00:00Z')
+    prisma.project.update.mockResolvedValue({ domainRating: 8, domainRatingAt: recordedAt })
+    prisma.domainRatingReading.create.mockResolvedValue({ id: 9 })
+    prisma.domainRatingReading.findMany.mockResolvedValue([
+      { id: 9, domainRating: 8, createdAt: recordedAt },
+      { id: 4, domainRating: 7, createdAt: new Date('2026-10-01T12:00:00Z') },
+    ])
+
+    const r = await refreshProjectDomainRating({
+      id: 1, workspaceId: 3, websiteUrl: 'https://mdzrentacar.com', domainRating: 7, domainRatingAt: new Date('2026-10-01'),
+    })
+
+    expect(prisma.domainRatingReading.create).toHaveBeenCalledWith({
+      data: { projectId: 1, workspaceId: 3, domainRating: 8 },
+    })
+    expect(r.error).toBeNull()
+    expect(r.history.map(h => h.domainRating)).toEqual([8, 7])
   })
 })
 
@@ -108,10 +134,25 @@ describe('SerpAPI', () => {
     await expect(fetchSerpData('zapatos')).rejects.toMatchObject({ code: 'SERP_UNAUTHORIZED', status: 502 })
   })
 
-  it('un error de red cualquiera sigue siendo del proveedor (502 genérico)', async () => {
+  it('429 dice cuándo se renueva la cuota, si la cuenta lo informa', async () => {
+    process.env.SERP_API_KEY = 'k'
+    axios.get.mockImplementation(url => {
+      if (String(url).includes('account.json')) {
+        return Promise.resolve({ data: { plan_renewal_date: '2026-11-15' } })
+      }
+      return Promise.reject(axiosFail(429))
+    })
+    await expect(fetchSerpData('zapatos')).rejects.toThrow(/15 de noviembre/)
+  })
+
+  it('un error de red se traduce: no llega al handler como AxiosError', async () => {
     process.env.SERP_API_KEY = 'k'
     const netErr = Object.assign(new Error('socket hang up'), { isAxiosError: true })
     axios.get.mockRejectedValue(netErr)
-    await expect(fetchSerpData('zapatos')).rejects.toBe(netErr)
+    // Si se reenviara el AxiosError, app.js lo taparía con "un servicio externo
+    // no está disponible", que es el mensaje que se veía en SERP Live.
+    await expect(fetchSerpData('zapatos')).rejects.toMatchObject({
+      code: 'SERP_ERROR', isOperational: true, status: 502,
+    })
   })
 })

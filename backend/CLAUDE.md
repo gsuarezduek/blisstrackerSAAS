@@ -21,6 +21,7 @@ ENCRYPTION_KEY=<64 chars hex>         # AES-256-GCM key para cifrar tokens OAuth
 BACKEND_URL=https://blisstrackersaas-production.up.railway.app  # URL pública del backend (para construir redirect URI de OAuth)
 PAGESPEED_API_KEY=...                 # Google Cloud API Key con acceso a PageSpeed Insights API
 SERP_API_KEY=...                      # SerpAPI key (serpapi.com) — SERP snapshots, features y competidores
+AHREFS_API_KEY=...                    # API key v3 de Ahrefs (gratis, Account settings → API keys). El endpoint de Domain Rating la exige desde ago 2026; sin ella "Actualizar DR" responde 503
 GIPHY_API_KEY=...                     # (opcional) API key gratuita de Giphy (developers.giphy.com) — habilita el envío de GIFs en el Chat interno. Sin ella, GET /api/chat/gifs/search y /trending devuelven 503 GIFS_NOT_CONFIGURED; el resto del chat funciona igual
 META_APP_ID=...                       # App ID de Meta usada por Instagram Business Login y Facebook Pages (Meta for Developers)
 META_APP_SECRET=...                   # App Secret de esa misma app

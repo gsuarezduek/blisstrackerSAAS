@@ -495,7 +495,7 @@ GET    /api/marketing/projects/:id/seo/snapshot/:month      # obtener SEOSnapsho
 POST   /api/marketing/projects/:id/seo/snapshots            # body: { month } — guardar snapshot GSC manualmente
 GET    /api/marketing/projects/:id/seo/ai-insights          # análisis IA SEO del mes
 POST   /api/marketing/projects/:id/seo/ai-insights          # generar análisis IA SEO
-GET    /api/marketing/projects/:id/domain-rating            # Domain Rating (Ahrefs) cacheado del proyecto
+GET    /api/marketing/projects/:id/domain-rating            # Domain Rating (Ahrefs) cacheado + historial (últimas 6 lecturas)
 POST   /api/marketing/projects/:id/domain-rating/refresh    # refresca el Domain Rating desde Ahrefs (endpoint free)
 
 # Marketing — Keyword Tracking

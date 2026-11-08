@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import api from '../../../api/client'
 import SetupHintCard from '../../SetupHintCard'
 import { Globe } from 'lucide-react'
-import { drBand, fmtDateShort } from './seoHelpers'
+import { drBand, drPill, fmtDateShort } from './seoHelpers'
 
 // Card de Domain Rating con botón de refresh (vista de proyecto)
 export default function DomainRatingCard({ projectId }) {
@@ -31,7 +31,12 @@ export default function DomainRatingCard({ projectId }) {
     setError(null)
     try {
       const { data: r } = await api.post(`/marketing/projects/${projectId}/domain-rating/refresh`)
-      setData(d => ({ ...d, domainRating: r.domainRating, domainRatingAt: r.domainRatingAt }))
+      setData(d => ({
+        ...d,
+        domainRating: r.domainRating,
+        domainRatingAt: r.domainRatingAt,
+        history: r.history ?? d?.history,
+      }))
     } catch (err) {
       setError(err.response?.data?.error ?? 'No se pudo actualizar el Domain Rating.')
     } finally { setRefreshing(false) }
@@ -50,8 +55,9 @@ export default function DomainRatingCard({ projectId }) {
     />
   )
 
-  const dr   = data?.domainRating
-  const band = drBand(dr)
+  const dr      = data?.domainRating
+  const band    = drBand(dr)
+  const history = data?.history ?? []
   // `configured: false` = el servidor no tiene AHREFS_API_KEY. El dato cacheado
   // (si hay) se sigue mostrando, pero actualizarlo es imposible.
   const notConfigured = data?.configured === false
@@ -77,7 +83,7 @@ export default function DomainRatingCard({ projectId }) {
         <div className="flex flex-col items-end gap-1">
           <button
             onClick={refresh}
-            disabled={refreshing || !data?.hasUrl || notConfigured}
+            disabled={refreshing || !data?.hasUrl}
             title={!data?.hasUrl ? 'El proyecto no tiene URL configurada'
               : notConfigured ? 'Falta configurar la API key de Ahrefs en el servidor' : ''}
             className="px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
@@ -89,9 +95,28 @@ export default function DomainRatingCard({ projectId }) {
           )}
         </div>
       </div>
+      {history.length > 0 && (
+        <div className="flex items-center gap-2 flex-wrap mt-3">
+          <span className="text-xs text-gray-400">Historial:</span>
+          {history.map((h, i) => {
+            const pill = drPill(h.domainRating)
+            return (
+              <span
+                key={h.id}
+                title={new Date(h.createdAt).toLocaleString('es-AR')}
+                className={`text-xs font-semibold px-2 py-0.5 rounded-full border ${
+                  i === 0 ? 'ring-2 ring-primary-400' : 'opacity-60'
+                } ${pill.bg}`}
+              >
+                <span className={pill.text}>{Math.round(h.domainRating)}</span>
+              </span>
+            )
+          })}
+        </div>
+      )}
       {notConfigured && !error && (
-        <p className="text-xs text-gray-400 mt-2">
-          Sin actualización automática: falta la API key de Ahrefs en el servidor.
+        <p className="text-xs text-amber-600 dark:text-amber-400 mt-2">
+          Ahrefs pide una API key para el Domain Rating y este servidor no la tiene (AHREFS_API_KEY). El número de arriba es el último que se pudo guardar.
         </p>
       )}
       {error && <p className="text-xs text-red-500 mt-2">{error}</p>}
