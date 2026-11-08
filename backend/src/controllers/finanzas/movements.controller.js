@@ -54,6 +54,7 @@ async function resolveMovementFields(workspaceId, fields, { excludeMovementId } 
   let resolvedPaymentMethod = null
   let resolvedAccountApplication = null
   let resolvedInvoiceId = null
+  let resolvedInvoice = null
 
   if (type === 'income') {
     if (!paymentMethod || !isValidPaymentMethod(paymentMethod)) throw businessError(400, 'Forma de cobro requerida')
@@ -68,6 +69,17 @@ async function resolveMovementFields(workspaceId, fields, { excludeMovementId } 
         if (!Number.isInteger(invoiceId)) throw businessError(400, 'Falta la factura')
         const invoice = await prisma.financeInvoice.findFirst({ where: { id: invoiceId, workspaceId, itemId, deletedAt: null } })
         if (!invoice) throw businessError(400, 'Factura no encontrada')
+        // Una nota de crédito/débito no tiene cuenta corriente propia, y una
+        // factura que ARCA rechazó nunca existió legalmente — las dos quedan
+        // fuera del "facturado" del cliente (ver `signedAmount` en
+        // customers.controller.js), así que aplicarles un cobro descuadraría
+        // el saldo: lo cobrado existiría y lo facturado no.
+        if (invoice.kind && invoice.kind !== 'invoice') {
+          throw businessError(400, 'Una nota de crédito/débito no se cobra — aplicá el cobro a la factura que corrige.')
+        }
+        if (invoice.arcaStatus === 'rejected') {
+          throw businessError(400, 'ARCA rechazó esa factura — no se le pueden aplicar cobros.')
+        }
         const collectedAgg = await prisma.financeMovement.aggregate({
           where: { invoiceId, deletedAt: null, ...(excludeMovementId ? { id: { not: excludeMovementId } } : {}) },
           _sum: { amount: true },
@@ -77,6 +89,7 @@ async function resolveMovementFields(workspaceId, fields, { excludeMovementId } 
           throw businessError(400, `El monto supera el saldo pendiente de la factura ($ ${pending.toString()})`)
         }
         resolvedInvoiceId = invoiceId
+        resolvedInvoice = invoice
       }
     } else if (accountApplication) {
       throw businessError(400, 'Este item no tiene seguimiento de cuenta')
@@ -94,7 +107,17 @@ async function resolveMovementFields(workspaceId, fields, { excludeMovementId } 
     throw businessError(400, 'Forma de cobro y aplicación a cuenta son solo para ingresos')
   }
 
-  return { item, category, account, amountDecimal, resolvedPaymentMethod, resolvedAccountApplication, resolvedInvoiceId }
+  return { item, category, account, amountDecimal, resolvedPaymentMethod, resolvedAccountApplication, resolvedInvoiceId, resolvedInvoice }
+}
+
+// Etiqueta legible de a qué se aplica un cobro de un cliente — para el
+// historial: pasar un ingreso de "A cuenta" a "Factura FC A 0001-00000161" es
+// un cambio tan auditable como el monto o la fecha.
+function appliedToLabel(accountApplication, invoiceNumber) {
+  if (accountApplication === 'invoice') return `Factura ${invoiceNumber || '(sin número)'}`
+  if (accountApplication === 'on_account') return 'A cuenta'
+  if (accountApplication === 'no_effect') return 'No afecta la cuenta'
+  return null
 }
 
 // GET /api/finanzas/movements?type=income|expense&from=&to=&itemId=&categoryId=&accountId=&search=
@@ -226,7 +249,10 @@ async function updateMovement(req, res, next) {
     const id = Number(req.params.id)
     const existing = await prisma.financeMovement.findFirst({
       where: { id, workspaceId },
-      include: { item: true, category: true, account: true, invoice: true, check: true, taxes: true },
+      include: {
+        item: true, category: true, account: true, invoice: true, check: true, taxes: true,
+        extraPayment: { select: { id: true, extraId: true } },
+      },
     })
     if (!existing) return res.status(404).json({ error: 'Movimiento no encontrado' })
     if (existing.sourceMovementId != null) {
@@ -257,7 +283,7 @@ async function updateMovement(req, res, next) {
     }
 
     const resolved = await resolveMovementFields(workspaceId, merged, { excludeMovementId: id })
-    const { item, account, amountDecimal, resolvedAccountApplication, resolvedInvoiceId } = resolved
+    const { item, account, amountDecimal, resolvedAccountApplication, resolvedInvoiceId, resolvedInvoice } = resolved
 
     const parsedDate = body.date !== undefined ? parseDate(body.date) : existing.date
     if (parsedDate === undefined) return res.status(400).json({ error: 'Fecha inválida' })
@@ -276,6 +302,18 @@ async function updateMovement(req, res, next) {
           accountApplication: resolvedAccountApplication, invoiceId: resolvedInvoiceId,
         },
       })
+
+      // Un cobro "a cuenta" puede estar vinculado a una cuota de un Extra. Si
+      // pasa a aplicarse a una factura (o a "no afecta la cuenta"), esa cuota
+      // ya no está cobrada por este movimiento: se desvincula, igual que al
+      // eliminarlo (y un extra "cobrado" vuelve a "terminado").
+      if (existing.extraPayment && resolvedAccountApplication !== 'on_account') {
+        await tx.financeExtraPayment.update({ where: { id: existing.extraPayment.id }, data: { movementId: null } })
+        await tx.financeExtra.updateMany({
+          where: { id: existing.extraPayment.extraId, status: 'collected' },
+          data: { status: 'finished' },
+        })
+      }
 
       if (hasCheck && body.checkInvoiceNumber !== undefined) {
         await tx.financeCheck.update({
@@ -304,14 +342,17 @@ async function updateMovement(req, res, next) {
       before: {
         date: existing.date, item: existing.item.name, category: existing.category.name, account: existing.account.name,
         amount: existing.amount.toString(), note: existing.note,
+        appliedTo: appliedToLabel(existing.accountApplication, existing.invoice?.number),
       },
       after: {
         date: parsedDate, item: item.name, category: resolved.category.name,
         account: account.name, amount: amountDecimal.toString(), note: body.note !== undefined ? (body.note?.trim() || null) : existing.note,
+        appliedTo: appliedToLabel(resolvedAccountApplication, resolvedInvoice?.number),
       },
       fieldLabels: {
         date: { label: 'Fecha', format: 'date' }, item: { label: 'Item' }, category: { label: 'Categoría' },
         account: { label: 'Cuenta' }, amount: { label: 'Monto', format: 'money' }, note: { label: 'Nota' },
+        appliedTo: { label: 'Aplicado a' },
       },
     })
 

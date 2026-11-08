@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import api from '../../api/client'
 import { fmtMoney } from '../../utils/format'
-import { ACCOUNT_APPLICATIONS, TRANSFER_REASONS, isFundTransferReason } from './financeCatalog'
+import { ACCOUNT_APPLICATIONS, TRANSFER_REASONS, isFundTransferReason, isCollectableInvoice, invoiceHeadroom } from './financeCatalog'
 import ItemPicker from './ItemPicker'
 import TaxesBlock from './TaxesBlock'
 
@@ -91,7 +91,9 @@ function MovementForm({ type, accounts, categories, items, taxes, prefill, onClo
     let cancelled = false
     api.get('/finanzas/invoices', { params: { itemId: item.id } }).then(res => {
       if (cancelled) return
-      const pending = res.data.filter(i => i.status !== 'paid').sort((a, b) => new Date(a.issueDate) - new Date(b.issueDate))
+      const pending = res.data
+        .filter(i => isCollectableInvoice(i) && invoiceHeadroom(i) > 0)
+        .sort((a, b) => new Date(a.issueDate) - new Date(b.issueDate))
       setPendingInvoices(pending)
       if (!invoiceId && pending.length && accountApplication === 'invoice') {
         const first = prefill?.invoiceId && pending.some(p => p.id === prefill.invoiceId) ? prefill.invoiceId : pending[0].id
@@ -240,7 +242,7 @@ function MovementForm({ type, accounts, categories, items, taxes, prefill, onClo
                   else { setAccountApplication(v); setInvoiceId('') }
                 }}>
                 {pendingInvoices.map(inv => (
-                  <option key={inv.id} value={`inv:${inv.id}`}>{inv.number || 'Sin número'} · pendiente {fmtMoney(Number(inv.amount) - Number(inv.collected), account?.currency)}</option>
+                  <option key={inv.id} value={`inv:${inv.id}`}>{inv.number || 'Sin número'} · pendiente {fmtMoney(invoiceHeadroom(inv), inv.currency || 'ARS')}</option>
                 ))}
                 <option value="on_account">Sin factura — queda a cuenta del cliente</option>
                 <option value="no_effect">No afecta la cuenta del cliente</option>
@@ -271,7 +273,7 @@ function MovementForm({ type, accounts, categories, items, taxes, prefill, onClo
             pendingInvoices.length > 0 ? (
               <select className={`${input} mt-2`} value={invoiceId} onChange={e => setInvoiceId(e.target.value)}>
                 {pendingInvoices.map(inv => (
-                  <option key={inv.id} value={inv.id}>{inv.number} · pendiente {fmtMoney(Number(inv.amount) - Number(inv.collected), account?.currency)}</option>
+                  <option key={inv.id} value={inv.id}>{inv.number || 'Sin número'} · pendiente {fmtMoney(invoiceHeadroom(inv), inv.currency || 'ARS')}</option>
                 ))}
               </select>
             ) : (

@@ -180,6 +180,22 @@ export function checkInvoiceLabel(check, movement) {
   return movement?.invoice?.number || check?.invoiceNumber || null
 }
 
+// Facturas a las que se le puede aplicar un cobro: un comprobante normal (una
+// nota de crédito/débito no se cobra — corrige otra factura) que ARCA no
+// rechazó. Mismo criterio que `resolveMovementFields` en el backend, que
+// rechaza las otras dos con 400.
+export function isCollectableInvoice(inv) {
+  return (!inv.kind || inv.kind === 'invoice') && inv.arcaStatus !== 'rejected'
+}
+
+// Cuánto se le puede aplicar a una factura. `ownAmount` es lo que el
+// movimiento que se está editando ya le aplica: se le devuelve al pendiente
+// (mismo criterio que `excludeMovementId` en el backend), si no la factura que
+// ese mismo ingreso paga aparecería en 0 y no se podría ni reelegir.
+export function invoiceHeadroom(inv, ownAmount = 0) {
+  return Number(inv.amount) - Number(inv.collected) + Number(ownAmount || 0)
+}
+
 // Para el panel "Historial" global (Configuración) — espejo de
 // AUDIT_ENTITY_TYPES/AUDIT_ACTIONS del backend (financeCatalog.js).
 const AUDIT_ENTITY_TYPE_LABELS = {

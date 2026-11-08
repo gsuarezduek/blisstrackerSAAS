@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import api from '../../api/client'
+import { fmtMoney } from '../../utils/format'
 import ConfirmModal from '../ConfirmModal'
-import { ACCOUNT_APPLICATIONS, checkInvoiceLabel } from './financeCatalog'
+import { ACCOUNT_APPLICATIONS, isCollectableInvoice, invoiceHeadroom } from './financeCatalog'
 import { Avatar } from '../../pages/project-detail/ui.jsx'
 import ItemPicker from './ItemPicker'
 import TaxesBlock from './TaxesBlock'
@@ -31,6 +32,8 @@ export default function EditMovementModal({ movement, accounts, categories, item
   const [amount, setAmount] = useState(String(movement.amount))
   const [note, setNote] = useState(movement.note || '')
   const [accountApplication, setAccountApplication] = useState(movement.accountApplication || 'on_account')
+  const [invoiceId, setInvoiceId] = useState(movement.invoiceId ? String(movement.invoiceId) : '')
+  const [customerInvoices, setCustomerInvoices] = useState([])
   const [taxIds, setTaxIds] = useState(new Set(movement.taxes.map(t => t.taxId)))
   const [checkInvoiceNumber, setCheckInvoiceNumber] = useState(movement.check?.invoiceNumber || '')
   const [saving, setSaving] = useState(false)
@@ -41,13 +44,56 @@ export default function EditMovementModal({ movement, accounts, categories, item
   const typeCategories = categories.filter(c => c.type === movement.type && c.active)
   const account = accounts.find(a => a.id === Number(accountId)) || null
   const isCheck = !!movement.check
+  const isCustomerIncome = movement.type === 'income' && !!item?.tracksAccount
+
+  // Facturas del cliente, para poder aplicar a una factura un ingreso que se
+  // cargó "a cuenta" (el caso típico: el cliente pagó antes de que se emita la
+  // factura). Se piden al abrir y cada vez que cambia el cliente del movimiento.
+  useEffect(() => {
+    if (!isCustomerIncome) { setCustomerInvoices([]); return }
+    let cancelled = false
+    api.get('/finanzas/invoices', { params: { itemId: item.id } })
+      .then(res => { if (!cancelled) setCustomerInvoices(res.data) })
+      .catch(() => { if (!cancelled) setCustomerInvoices([]) })
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isCustomerIncome, item?.id])
+
+  // El pendiente de cada factura le devuelve lo que ESTE movimiento ya le
+  // aplica, igual que el `excludeMovementId` del backend. La ya elegida queda
+  // siempre en la lista, aunque no le quede saldo.
+  const ownAmountFor = inv => (inv.id === movement.invoiceId ? movement.amount : 0)
+  const invoiceOptions = customerInvoices
+    .filter(inv => (isCollectableInvoice(inv) && invoiceHeadroom(inv, ownAmountFor(inv)) > 0) || String(inv.id) === invoiceId)
+    .sort((a, b) => new Date(a.issueDate) - new Date(b.issueDate))
+
+  // Al pasar a "Factura" sin ninguna elegida, se preselecciona la más vieja
+  // con saldo (es la que se cobra primero).
+  useEffect(() => {
+    if (accountApplication !== 'invoice' || invoiceId || invoiceOptions.length === 0) return
+    setInvoiceId(String(invoiceOptions[0].id))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accountApplication, invoiceId, customerInvoices])
+
+  function handleItemChange(next) {
+    setItem(next)
+    // Las facturas son de un cliente puntual: cambiar el item invalida la elegida.
+    if (next?.id !== item?.id) setInvoiceId(next?.id === movement.itemId && movement.invoiceId ? String(movement.invoiceId) : '')
+  }
 
   async function handleSave() {
     if (!item || !categoryId || !accountId || !amount || Number(amount) <= 0) { setError('Revisá los campos requeridos'); return }
+    if (isCustomerIncome && accountApplication === 'invoice' && !invoiceId) { setError('Elegí a qué factura se aplica'); return }
     setSaving(true); setError('')
     try {
       const body = { date, itemId: item.id, categoryId: Number(categoryId), accountId: Number(accountId), amount: Number(amount), note: note.trim() }
-      if (movement.type === 'income' && item.tracksAccount) body.accountApplication = accountApplication
+      if (movement.type === 'income') {
+        // Explícitos y no omitidos: si el item pasó a ser uno sin cuenta
+        // corriente, el backend conserva lo que no se manda y rechazaría la
+        // aplicación a cuenta que quedó colgada del cliente anterior.
+        body.accountApplication = item.tracksAccount ? accountApplication : null
+        body.invoiceId = item.tracksAccount && accountApplication === 'invoice' ? Number(invoiceId) : null
+      }
       if (!isCheck) body.taxIds = [...taxIds]
       else if (!item.tracksAccount) body.checkInvoiceNumber = checkInvoiceNumber.trim()
       await api.patch(`/finanzas/movements/${movement.id}`, body)
@@ -92,7 +138,7 @@ export default function EditMovementModal({ movement, accounts, categories, item
             <div className={`space-y-4 ${readOnly ? 'opacity-50 pointer-events-none' : ''}`}>
               <div>
                 <label className={label}>Item</label>
-                <ItemPicker type={movement.type} items={items} categories={categories} value={item?.id} onChange={setItem} />
+                <ItemPicker type={movement.type} items={items} categories={categories} value={item?.id} onChange={handleItemChange} />
               </div>
 
               <div>
@@ -123,9 +169,7 @@ export default function EditMovementModal({ movement, accounts, categories, item
               {isCheck ? (
                 <div className="space-y-2">
                   <p className="text-xs text-gray-400 bg-gray-50 dark:bg-gray-900/40 rounded-lg p-2">
-                    Cobrado con cheque N° {movement.check.number}
-                    {item?.tracksAccount && ` · Factura: ${checkInvoiceLabel(movement.check, movement) || 'sin factura asociada'}`}
-                    {' '}— los impuestos se cargan al acreditarlo.
+                    Cobrado con cheque N° {movement.check.number} — los impuestos se cargan al acreditarlo.
                   </p>
                   {!item?.tracksAccount && (
                     <div>
@@ -138,12 +182,26 @@ export default function EditMovementModal({ movement, accounts, categories, item
                 account && <TaxesBlock account={account} allTaxes={taxes} baseAmount={amount} selectedTaxIds={taxIds} onChange={setTaxIds} />
               )}
 
-              {movement.type === 'income' && item?.tracksAccount && (
+              {isCustomerIncome && (
                 <div>
                   <label className={label}>Aplicar a cuenta</label>
-                  <select className={input} value={accountApplication} onChange={e => setAccountApplication(e.target.value)}>
-                    {ACCOUNT_APPLICATIONS.filter(o => o.key !== 'invoice' || movement.accountApplication === 'invoice').map(o => <option key={o.key} value={o.key}>{o.label}</option>)}
+                  <select className={input} value={accountApplication} onChange={e => { setAccountApplication(e.target.value); setInvoiceId('') }}>
+                    {ACCOUNT_APPLICATIONS.map(o => <option key={o.key} value={o.key}>{o.label}</option>)}
                   </select>
+                  {accountApplication === 'invoice' && (
+                    invoiceOptions.length > 0 ? (
+                      <select className={`${input} mt-2`} value={invoiceId} onChange={e => setInvoiceId(e.target.value)}>
+                        <option value="">Elegir factura…</option>
+                        {invoiceOptions.map(inv => (
+                          <option key={inv.id} value={inv.id}>
+                            {inv.number || 'Sin número'} · pendiente {fmtMoney(invoiceHeadroom(inv, ownAmountFor(inv)), inv.currency || 'ARS')}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <p className="text-xs text-gray-400 mt-1">Este cliente no tiene facturas con saldo pendiente.</p>
+                    )
+                  )}
                 </div>
               )}
 

@@ -4,6 +4,7 @@ import { fmtMoney } from '../../utils/format'
 import { customerStatusMeta, STATUS_BADGE } from './financeCatalog'
 import CustomerDetail from './CustomerDetail'
 import NewCustomerModal from './NewCustomerModal'
+import NewInvoiceModal from './NewInvoiceModal'
 
 const input = 'border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500'
 
@@ -18,13 +19,16 @@ const SORT_KEY = 'bliss_finanzas_customers_sort'
 function readSort() {
   try { return localStorage.getItem(SORT_KEY) === 'balance' ? 'balance' : 'name' } catch { return 'name' }
 }
-export default function CustomersTab({ accounts, categories, items, taxes, issuers, financeIvaMode, onDataChange }) {
+export default function CustomersTab({ accounts, categories, items, taxes, issuers, financeIvaMode, refreshKey, onDataChange }) {
   const [search, setSearch] = useState('')
   const [onlyWithBalance, setOnlyWithBalance] = useState(false)
   const [sort, setSort] = useState(readSort)
   const [customers, setCustomers] = useState(null)
   const [openId, setOpenId] = useState(null)
   const [showNew, setShowNew] = useState(false)
+  // Facturar sin entrar al cliente: el botón de la fila abre el mismo modal
+  // del detalle, ya con ese cliente elegido.
+  const [invoiceFor, setInvoiceFor] = useState(null)
 
   const load = useCallback(async () => {
     const params = {}
@@ -40,11 +44,14 @@ export default function CustomersTab({ accounts, categories, items, taxes, issue
     try { localStorage.setItem(SORT_KEY, value) } catch { /* sin storage: queda en memoria */ }
   }
 
-  useEffect(() => { load() }, [load])
+  useEffect(() => { load() }, [load, refreshKey])
 
   if (openId) {
     return (
-      <CustomerDetail itemId={openId} accounts={accounts} categoriesList={categories} items={items} taxes={taxes} issuers={issuers} financeIvaMode={financeIvaMode}
+      // `key`: lo que se carga o se factura desde el encabezado de la página
+      // también cambia este cliente — remontar es la forma más simple de que
+      // el detalle no quede mostrando el saldo viejo.
+      <CustomerDetail key={refreshKey} itemId={openId} accounts={accounts} categoriesList={categories} items={items} taxes={taxes} issuers={issuers} financeIvaMode={financeIvaMode}
         onDataChange={onDataChange}
         onBack={() => { setOpenId(null); load(); onDataChange?.() }} />
     )
@@ -89,6 +96,7 @@ export default function CustomersTab({ accounts, categories, items, taxes, issue
               <th className="px-4 py-2 font-medium text-right">Saldo</th>
               <th className="px-4 py-2 font-medium">Estado</th>
               <th className="px-4 py-2 font-medium">Última factura</th>
+              <th className="px-4 py-2"><span className="sr-only">Acciones</span></th>
             </tr>
           </thead>
           <tbody>
@@ -105,11 +113,17 @@ export default function CustomersTab({ accounts, categories, items, taxes, issue
                   <td className="px-4 py-2.5 text-right font-medium text-gray-900 dark:text-white">{fmtMoney(c.saldo, 'ARS')}</td>
                   <td className="px-4 py-2.5"><span className={`text-[11px] rounded-full px-2 py-0.5 ${STATUS_BADGE[meta.color]}`}>{meta.label}</span></td>
                   <td className="px-4 py-2.5 text-gray-500 dark:text-gray-400">{c.lastInvoice ? `${c.lastInvoice.number} · ${fmtDate(c.lastInvoice.issueDate)}` : '—'}</td>
+                  <td className="px-4 py-2.5 text-right">
+                    <button type="button" onClick={e => { e.stopPropagation(); setInvoiceFor(c) }}
+                      className="border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg px-2.5 py-1 text-xs font-medium whitespace-nowrap">
+                      Facturar
+                    </button>
+                  </td>
                 </tr>
               )
             })}
             {customers !== null && customers.length === 0 && (
-              <tr><td colSpan={6} className="text-center text-sm text-gray-400 py-8">Sin clientes todavía — creá el primero con "+ Nuevo cliente".</td></tr>
+              <tr><td colSpan={7} className="text-center text-sm text-gray-400 py-8">Sin clientes todavía — creá el primero con "+ Nuevo cliente".</td></tr>
             )}
           </tbody>
         </table>
@@ -119,6 +133,13 @@ export default function CustomersTab({ accounts, categories, items, taxes, issue
         <NewCustomerModal categories={categories} issuers={issuers}
           onClose={() => setShowNew(false)}
           onCreated={(created) => { setShowNew(false); load(); onDataChange?.(); setOpenId(created.id) }}
+        />
+      )}
+
+      {invoiceFor && (
+        <NewInvoiceModal items={items} issuers={issuers} defaultItemId={invoiceFor.id} financeIvaMode={financeIvaMode}
+          onClose={() => setInvoiceFor(null)}
+          onSaved={() => { setInvoiceFor(null); load(); onDataChange?.() }}
         />
       )}
     </div>

@@ -9,6 +9,7 @@ import { Icon } from '../components/ui/Icon'
 import api from '../api/client'
 import FinanzasConfiguracion from '../components/finanzas/FinanzasConfiguracion'
 import LoadMovementModal from '../components/finanzas/LoadMovementModal'
+import NewInvoiceModal from '../components/finanzas/NewInvoiceModal'
 import MovementsTab from '../components/finanzas/MovementsTab'
 import BalancesTab from '../components/finanzas/BalancesTab'
 import SummaryTab from '../components/finanzas/SummaryTab'
@@ -31,6 +32,7 @@ export default function Finanzas() {
   const [searchParams, setSearchParams] = useSearchParams()
   const [showConfig, setShowConfig] = useState(false)
   const [showLoadModal, setShowLoadModal] = useState(false)
+  const [showInvoiceModal, setShowInvoiceModal] = useState(false)
 
   // Datos compartidos por el modal "+ Cargar" (y, en etapas siguientes, por
   // las pestañas Ingresos/Egresos/Saldos) — se cargan una vez acá arriba,
@@ -70,6 +72,15 @@ export default function Finanzas() {
 
   function handleMovementSaved() {
     setShowLoadModal(false)
+    loadShared()
+    setRefreshKey(k => k + 1)
+  }
+
+  // "Facturar" desde el encabezado: facturar es una de las dos cosas que se
+  // hacen todos los días (la otra es cargar plata) y estaba a tres clics,
+  // adentro del detalle de un cliente. El cliente se elige en el modal.
+  function handleInvoiceSaved() {
+    setShowInvoiceModal(false)
     loadShared()
     setRefreshKey(k => k + 1)
   }
@@ -118,6 +129,7 @@ export default function Finanzas() {
                 {user?.isAdmin && (
                   <button onClick={() => setShowConfig(true)} className="border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-xl px-4 py-2 text-sm font-medium">Configuración</button>
                 )}
+                <button onClick={() => setShowInvoiceModal(true)} className="border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-xl px-4 py-2 text-sm font-medium">Facturar</button>
                 <button onClick={() => setShowLoadModal(true)} className="bg-primary-600 hover:bg-primary-700 text-white font-semibold rounded-xl px-4 py-2 text-sm transition-colors">+ Cargar</button>
               </div>
             </div>
@@ -149,12 +161,20 @@ export default function Finanzas() {
             ) : tab === 'resumen' ? (
               <SummaryTab key={refreshKey} accounts={accounts} />
             ) : tab === 'clientes' ? (
-              <CustomersTab accounts={accounts} categories={categories} items={items} taxes={taxes} issuers={issuers} financeIvaMode={financeIvaMode} onDataChange={loadShared} />
+              <CustomersTab accounts={accounts} categories={categories} items={items} taxes={taxes} issuers={issuers} financeIvaMode={financeIvaMode} refreshKey={refreshKey} onDataChange={loadShared} />
             ) : (
               <PendingTab items={items} accounts={accounts} categories={categories} taxes={taxes} issuers={issuers}
                 onNavigate={handleTaskNavigate} onDataChange={loadShared} />
             )}
           </>
+        )}
+
+        {showInvoiceModal && (
+          <NewInvoiceModal
+            items={items} issuers={issuers} financeIvaMode={financeIvaMode}
+            onClose={() => setShowInvoiceModal(false)}
+            onSaved={handleInvoiceSaved}
+          />
         )}
 
         {showLoadModal && (

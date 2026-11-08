@@ -341,6 +341,7 @@ backend/
       cannibalResolution.test.js          # marcar/desmarcar un conflicto como resuelto (persona y agente), el split abierto/resuelto en la lectura del reporte con los conteos recalculados, y los permisos (canWrite)
       connectionsStatus.test.js           # GET /marketing/connections: los tres estados + reconnectUrl, secciones apagadas, vista de todo el workspace y gate de proyectos privados resuelto en el handler
       financeInvoiceEdit.test.js          # editar una factura de Finanzas: sólo las informativas (un comprobante de ARCA se rechaza con o sin CAE) y el monto no puede bajar de lo ya cobrado
+      financeMovementInvoice.test.js      # imputar un ingreso ya cargado a una factura: pasar de "a cuenta" a factura, el pendiente que no se cuenta dos veces a sí mismo, nota de crédito y factura rechazada afuera, y la cuota del extra que se desvincula
       externalCalendars.test.js           # suscribir un calendario de afuera: la URL iCal se guarda cifrada y nunca vuelve, son de cada persona (404 sobre el de otro), el título de la agenda ajena se enmascara salvo showDetails, y las reuniones que empujamos a Google no vuelven como "externas"
 
 frontend/

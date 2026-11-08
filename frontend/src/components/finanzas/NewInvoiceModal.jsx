@@ -25,7 +25,10 @@ function fmtDate(iso) {
 // que AccountModal (crea, después gestiona sub-recursos con el id ya asignado).
 export default function NewInvoiceModal({ items, issuers, defaultItemId, financeIvaMode, onClose, onSaved }) {
   const customers = items.filter(i => i.tracksAccount && i.active)
-  const [itemId, setItemId] = useState(defaultItemId ? String(defaultItemId) : (customers[0]?.id ? String(customers[0].id) : ''))
+  // Sin `defaultItemId` (el modal abierto desde el encabezado de Finanzas, sin
+  // un cliente de contexto) arranca vacío a propósito: preseleccionar el
+  // primero de la lista es la forma de emitirle una factura al cliente equivocado.
+  const [itemId, setItemId] = useState(defaultItemId ? String(defaultItemId) : '')
   const customer = customers.find(c => c.id === Number(itemId))
   const [issuerId, setIssuerId] = useState(customer?.defaultIssuer?.id ? String(customer.defaultIssuer.id) : '')
   const issuer = (issuers || []).find(i => i.id === Number(issuerId))
