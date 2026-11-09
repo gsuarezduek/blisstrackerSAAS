@@ -410,6 +410,10 @@ model User {
   totpSecret      String?
   totpConfirmedAt DateTime?
 
+  // Los JWT emitidos antes de este instante dejan de servir (cambio o reset de
+  // contraseña). null = ninguna sesión fue revocada. Se compara contra `iat`.
+  sessionValidAfter DateTime?
+
   // Relaciones
   workspaceMembers                  WorkspaceMember[]
   workDays                          WorkDay[]

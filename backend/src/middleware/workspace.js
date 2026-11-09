@@ -1,5 +1,6 @@
 const prisma = require('../lib/prisma')
 const { hasModuleAccess } = require('../lib/moduleAccess')
+const { isImpersonation } = require('../lib/jwt')
 
 // Métodos HTTP de solo lectura — nunca se bloquean por billing.
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS'])
@@ -41,6 +42,13 @@ async function resolveWorkspace(req, res, next) {
 
     if (!row) {
       return res.status(404).json({ error: 'Workspace no encontrado' })
+    }
+
+    // La impersonación queda en el workspace con el que se abrió. Sin esto el
+    // header X-Workspace la mueve a cualquier otro workspace del que esa persona
+    // sea miembro, y desde ahí se puede cambiar la cuenta.
+    if (isImpersonation(req.user) && Number(req.user.workspaceId) !== row.id) {
+      return res.status(403).json({ error: 'Esta sesión solo puede usarse en el workspace en el que se abrió.' })
     }
 
     // Separamos la membresía de los campos del workspace: `workspace` no debe

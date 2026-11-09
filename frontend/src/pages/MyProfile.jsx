@@ -237,6 +237,7 @@ export default function MyProfile() {
   const [emailMsg, setEmailMsg] = useState({ text: '', error: false })
 
   const [googleBusy, setGoogleBusy] = useState(false)
+  const [googlePassword, setGooglePassword] = useState('')
   const [googleMsg, setGoogleMsg] = useState({ text: '', error: false })
 
   const [avatars, setAvatars] = useState([])  // lista desde API: [{ id, filename, label }]
@@ -401,10 +402,11 @@ export default function MyProfile() {
     setPwSaving(true)
     setPwMsg({ text: '', error: false })
     try {
-      await api.post('/profile/change-password', {
+      const { data } = await api.post('/profile/change-password', {
         currentPassword: pwForm.currentPassword,
         newPassword: pwForm.newPassword,
       })
+      if (data.token) localStorage.setItem('token', data.token)
       setPwMsg({ text: 'Contraseña actualizada correctamente.', error: false })
       setPwForm({ currentPassword: '', newPassword: '', confirmPassword: '' })
     } catch (err) {
@@ -441,13 +443,19 @@ export default function MyProfile() {
     setGoogleMsg({ text: '', error: false })
     setGoogleBusy(true)
 
+    if (!googlePassword) {
+      setGoogleBusy(false)
+      setGoogleMsg({ text: 'Ingresá tu contraseña para confirmar.', error: true })
+      return
+    }
+
     let linkToken
     try {
-      const { data } = await api.post('/profile/google-link-token')
+      const { data } = await api.post('/profile/google-link-token', { password: googlePassword })
       linkToken = data.linkToken
-    } catch {
+    } catch (err) {
       setGoogleBusy(false)
-      setGoogleMsg({ text: 'No se pudo iniciar la conexión. Intentá de nuevo.', error: true })
+      setGoogleMsg({ text: err.response?.data?.error || 'No se pudo iniciar la conexión. Intentá de nuevo.', error: true })
       return
     }
 
@@ -480,10 +488,15 @@ export default function MyProfile() {
   }
 
   async function handleDisconnectGoogle() {
+    if (!googlePassword) {
+      setGoogleMsg({ text: 'Ingresá tu contraseña para confirmar.', error: true })
+      return
+    }
     setGoogleBusy(true)
     setGoogleMsg({ text: '', error: false })
     try {
-      await api.delete('/profile/connect-google')
+      await api.delete('/profile/connect-google', { data: { password: googlePassword } })
+      setGooglePassword('')
       setProfile(p => ({ ...p, googleConnected: false }))
       setGoogleMsg({ text: 'Cuenta de Google desconectada.', error: false })
     } catch (err) {
@@ -990,6 +1003,13 @@ export default function MyProfile() {
           <p className="text-xs text-gray-400 dark:text-gray-500 mb-4">
             Conectá tu cuenta de Google para poder iniciar sesión con un clic. Funciona aunque el email de Google sea distinto a tu email primario.
           </p>
+          <PasswordInput
+            value={googlePassword}
+            onChange={e => setGooglePassword(e.target.value)}
+            placeholder="Tu contraseña, para confirmar"
+            autoComplete="current-password"
+            className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-xl px-4 py-2.5 mb-3 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+          />
 
           {profile.googleConnected ? (
             <div className="flex items-center justify-between gap-3 flex-wrap">

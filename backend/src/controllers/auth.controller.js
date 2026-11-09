@@ -12,7 +12,7 @@ const { createAndSendVerificationEmail, RESEND_COOLDOWN_MS } = require('../lib/e
 const { normalizeEmail } = require('../lib/normalizeEmail')
 const { hasMfa, verifySecondFactor, countUnusedRecoveryCodes } = require('../lib/mfa')
 const { signChallenge, verifyChallenge, assertNotExhausted, registerFailure, consumeChallenge } = require('../lib/mfaChallenge')
-const { verifyToken } = require('../lib/jwt')
+const { verifyToken, isImpersonation } = require('../lib/jwt')
 const { createHandoff, consumeHandoff } = require('../lib/authHandoff')
 
 /**
@@ -335,7 +335,10 @@ async function resetPassword(req, res, next) {
     const hashed = await bcrypt.hash(password, 10)
 
     await prisma.$transaction([
-      prisma.user.update({ where: { id: resetToken.userId }, data: { password: hashed } }),
+      prisma.user.update({
+        where: { id: resetToken.userId },
+        data: { password: hashed, sessionValidAfter: new Date() },
+      }),
       prisma.passwordResetToken.update({ where: { id: resetToken.id }, data: { used: true } }),
     ])
 
@@ -581,6 +584,9 @@ async function exchangeAuthHandoff(req, res, next) {
  */
 async function switchWorkspace(req, res, next) {
   try {
+    if (isImpersonation(req.user)) {
+      return res.status(403).json({ error: 'Esta sesión no puede cambiar de workspace.' })
+    }
     const { targetSlug } = req.body
     if (!targetSlug) return res.status(400).json({ error: 'targetSlug requerido' })
 

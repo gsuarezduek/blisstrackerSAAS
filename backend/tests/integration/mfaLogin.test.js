@@ -274,7 +274,10 @@ describe('POST /api/auth/reset-password con 2FA', () => {
       .send({ token: 'tok-reset', password: 'nuevaPassword1', code: authenticator.generate(SECRET) })
 
     expect(res.status).toBe(200)
-    expect(prisma.user.update).toHaveBeenCalledWith({ where: { id: 1 }, data: { password: '$2a$10$nuevo' } })
+    expect(prisma.user.update).toHaveBeenCalledWith({
+      where: { id: 1 },
+      data: { password: '$2a$10$nuevo', sessionValidAfter: expect.any(Date) },
+    })
     expect(prisma.passwordResetToken.update).toHaveBeenCalledWith({ where: { id: 9 }, data: { used: true } })
   })
 })

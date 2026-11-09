@@ -24,6 +24,11 @@ describe('verifyToken — sólo tokens de sesión', () => {
     expect(() => verifyToken(signState({ userId: 1, workspaceId: 1, slug: 'bliss' }))).toThrow()
   })
 
+  it('acepta la sesión de soporte, que es una sesión restringida y no un token de un solo uso', () => {
+    const token = jwt.sign({ userId: 1, workspaceId: 4, purpose: 'impersonation', impersonatedBy: 9 }, SECRET)
+    expect(verifyToken(token)).toMatchObject({ userId: 1, workspaceId: 4, purpose: 'impersonation' })
+  })
+
   it('rechaza el linkToken de conectar Google', () => {
     const token = jwt.sign({ userId: 1, purpose: 'google-link' }, SECRET, { expiresIn: '5m' })
     expect(() => verifyToken(token)).toThrow()

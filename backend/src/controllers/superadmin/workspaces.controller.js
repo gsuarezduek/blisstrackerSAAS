@@ -361,6 +361,7 @@ async function impersonate(req, res, next) {
         role:        ownerMember.role,
         teamRole:    ownerMember.teamRole,
         isSuperAdmin: false,
+        purpose: 'impersonation',
         impersonatedBy: req.user.userId,
         name:        ownerMember.user.name,
         email:       ownerMember.user.email,

@@ -17,12 +17,21 @@ const jwt = require('jsonwebtoken')
 //
 // Al agregar un JWT que no sea de sesión: ponerle `purpose` y validarlo donde
 // se consume (ver lib/oauthState.js como ejemplo).
+//
+// Excepción única: `purpose: 'impersonation'`. Es una sesión de soporte, no un
+// token de un solo uso. Entra por acá para poder usar la app, y queda atada al
+// workspace del token (resolveWorkspace) y afuera de la cuenta (perfil, 2FA,
+// Google). Cualquier otro `purpose` sigue rechazado.
 function verifyToken(token) {
   const decoded = jwt.verify(token, process.env.JWT_SECRET, { algorithms: ['HS256'] })
-  if (decoded.purpose) {
+  if (decoded.purpose && decoded.purpose !== 'impersonation') {
     throw new Error('Invalid token')
   }
   return decoded
 }
 
-module.exports = { verifyToken }
+function isImpersonation(decoded) {
+  return decoded?.purpose === 'impersonation' || decoded?.impersonatedBy != null
+}
+
+module.exports = { verifyToken, isImpersonation }

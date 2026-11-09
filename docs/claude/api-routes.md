@@ -23,7 +23,9 @@ PATCH  /api/profile/preferences          # weeklyEmailEnabled, dailyInsightEnabl
 GET    /api/legajo/fields                 # config efectiva de campos (cualquier miembro)
 PUT    /api/legajo/fields                 # admin: reemplaza config { fields, legajoEnabled }
 POST   /api/profile/weekly-email/send    # trigger test email immediately
-POST   /api/profile/change-password
+POST   /api/profile/change-password      # revoca las sesiones ya emitidas y devuelve un token nuevo para esta pestaña
+POST   /api/profile/google-link-token    # { password } — la contraseña confirma antes de vincular Google
+DELETE /api/profile/connect-google       # { password }
 
 # Segundo factor (2FA) — autoadministración, opt-in personal (mfa.controller.js)
 GET    /api/profile/mfa                   # { mfaEnabled, mfaPendingSetup, confirmedAt, recoveryCodesLeft }
@@ -645,7 +647,7 @@ PUT    /api/superadmin/settings                         # body: { changes: { key
 GET    /api/superadmin/settings/log                     # ?key=&limit= — audit log de cambios
 GET    /api/superadmin/settings/cleanup-preview         # ?tables=notifications,emailLog — preview rows a borrar
 POST   /api/superadmin/settings/cleanup-now             # body: { tables?: [] } — aplica cleanup inmediato con los retention actuales
-POST   /api/superadmin/impersonate
+POST   /api/superadmin/impersonate         # sesión de soporte atada a ese workspace; no administra la cuenta (perfil, 2FA, Google)
 GET    /api/superadmin/feedback
 PUT    /api/superadmin/feedback/:id/read
 GET    /api/superadmin/email-logs

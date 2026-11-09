@@ -4,6 +4,7 @@
 // una regla que cambie ahí se propague acá solo.
 const prisma = require('../prisma')
 const { verifyToken } = require('../jwt')
+const { sessionRevoked } = require('../sessionFreshness')
 const { canWrite } = require('../projectAccess')
 const { hasModuleAccess } = require('../moduleAccess')
 const { isFlagEnabledForWorkspace } = require('../featureFlags')
@@ -27,6 +28,7 @@ async function assertFeatureFlag(key, workspace, isSuperAdmin) {
 // conexión (onLoadDocument/onStoreDocument no vuelven a resolver permisos).
 async function resolveDocAccess(docKey, token) {
   const decoded = verifyToken(token) // lanza si el JWT es inválido/expirado
+  if (await sessionRevoked(decoded)) throw new Error('Sesión vencida')
   const parsed = parseDocKey(docKey)
   if (!parsed) throw new Error('Documento desconocido')
 

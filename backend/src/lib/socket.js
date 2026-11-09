@@ -1,5 +1,6 @@
 const { Server } = require('socket.io')
 const { verifyToken } = require('./jwt')
+const { sessionRevoked } = require('./sessionFreshness')
 const { isAllowedOrigin } = require('./corsOrigins')
 const prisma = require('./prisma')
 
@@ -76,11 +77,13 @@ function initSocket(httpServer) {
     },
   })
 
-  io.use((socket, next) => {
+  io.use(async (socket, next) => {
     try {
       const token = socket.handshake.auth?.token
       if (!token) throw new Error('No token provided')
-      socket.user = verifyToken(token) // { userId, workspaceId, role, isSuperAdmin, ... }
+      const user = verifyToken(token) // { userId, workspaceId, role, isSuperAdmin, ... }
+      if (await sessionRevoked(user)) throw new Error('Unauthorized')
+      socket.user = user
       next()
     } catch {
       next(new Error('Unauthorized'))

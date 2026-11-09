@@ -309,8 +309,27 @@ async function changePassword(req, res, next) {
     }
 
     const hashed = await bcrypt.hash(newPassword, 10)
-    await prisma.user.update({ where: { id: req.user.userId }, data: { password: hashed } })
-    res.json({ message: 'Contraseña actualizada correctamente' })
+    const sessionValidAfter = new Date()
+    await prisma.user.update({
+      where: { id: req.user.userId },
+      data: { password: hashed, sessionValidAfter },
+    })
+    // Esta pestaña sigue adentro: el token nuevo nace después del corte. El resto
+    // de las sesiones (otros dispositivos, una impersonación abierta) dejan de servir.
+    const token = jwt.sign(
+      {
+        userId: user.id,
+        workspaceId: req.workspace.id,
+        role: req.workspaceMember.role,
+        teamRole: req.workspaceMember.teamRole,
+        isSuperAdmin: user.isSuperAdmin ?? false,
+        name: user.name,
+        email: user.email,
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: '12h' },
+    )
+    res.json({ message: 'Contraseña actualizada correctamente', token })
   } catch (err) { next(err) }
 }
 
@@ -380,15 +399,34 @@ async function requestEmailChange(req, res, next) {
  * registrado en Google). El popup lo presenta junto al credential de Google a
  * POST /api/auth/connect-google, evitando depender de window.opener (COOP).
  */
+async function assertCurrentPassword(userId, password) {
+  if (!password) {
+    const err = new Error('Ingresá tu contraseña para confirmar.')
+    err.status = 400
+    throw err
+  }
+  const user = await prisma.user.findUnique({ where: { id: userId } })
+  const valid = user && await bcrypt.compare(password, user.password)
+  if (!valid) {
+    const err = new Error('La contraseña es incorrecta')
+    err.status = 400
+    throw err
+  }
+}
+
 async function googleLinkToken(req, res, next) {
   try {
+    await assertCurrentPassword(req.user.userId, req.body?.password)
     const linkToken = jwt.sign(
       { userId: req.user.userId, purpose: 'google-link' },
       process.env.JWT_SECRET,
       { expiresIn: '5m' }
     )
     res.json({ linkToken })
-  } catch (err) { next(err) }
+  } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message })
+    next(err)
+  }
 }
 
 /**
@@ -397,12 +435,16 @@ async function googleLinkToken(req, res, next) {
  */
 async function disconnectGoogle(req, res, next) {
   try {
+    await assertCurrentPassword(req.user.userId, req.body?.password)
     await prisma.user.update({
       where: { id: req.user.userId },
       data: { googleId: null },
     })
     res.json({ googleConnected: false })
-  } catch (err) { next(err) }
+  } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message })
+    next(err)
+  }
 }
 
 /**
