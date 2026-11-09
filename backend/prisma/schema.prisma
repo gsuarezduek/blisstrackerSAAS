@@ -629,6 +629,18 @@ model MfaRecoveryCode {
   @@index([userId])
 }
 
+// Código de un solo uso para cruzar del dominio raíz al subdominio sin poner
+// el JWT de 12 horas en la URL. Vive 60 segundos y se borra al canjearlo.
+model AuthHandoff {
+  id        Int      @id @default(autoincrement())
+  codeHash  String   @unique
+  token     String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([expiresAt])
+}
+
 model Feedback {
   id          Int          @id @default(autoincrement())
   userId      Int

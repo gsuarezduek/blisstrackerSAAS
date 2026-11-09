@@ -49,6 +49,15 @@ function canHaveThumbnail(mimeType) {
   if (!mimeType) return false
   return mimeType.startsWith('image/') || mimeType.startsWith('video/') || mimeType === 'application/pdf'
 }
+
+// Una miniatura propia vive bajo files/<workspaceId>/thumbs/. Cualquier otro
+// posterKey (el confirm viejo copiaba el objectKey de OTRO archivo) no se
+// borra: borrar esa clave borraría el archivo de otra fila.
+function ownedThumbKey(posterKey, workspaceId) {
+  if (!posterKey || workspaceId == null) return null
+  const prefix = `files/${workspaceId}/thumbs/`
+  return posterKey.startsWith(prefix) ? posterKey : null
+}
 const PENDING_MAX_AGE_MS = 60 * 60 * 1000
 const MAX_PENDING_PER_PROJECT = 5
 const MAX_ZIP_ENTRIES = 2000 // tope de archivos por ZIP — protege memoria/tiempo del proceso
@@ -147,11 +156,11 @@ async function buildPath(folderId, projectId) {
  * Usa el override puntual del workspace si lo tiene (SuperAdmin → Workspaces),
  * si no el default global `projectFilesMaxMbPerWorkspace`.
  */
-async function assertWithinQuota(workspaceId, extraBytes) {
+async function assertWithinQuota(workspaceId, extraBytes, db = prisma) {
   const limitMb = await getEffectiveCategoryLimitMb(workspaceId, 'projectFilesMaxMbOverride', 'projectFilesMaxMbPerWorkspace')
   if (!limitMb) return null
   const limitBytes = limitMb * 1024 * 1024
-  const agg = await prisma.projectFile.aggregate({
+  const agg = await db.projectFile.aggregate({
     where: { workspaceId, type: 'file', status: { in: ['ready', 'pending'] } },
     _sum: { sizeBytes: true },
   })
@@ -160,6 +169,41 @@ async function assertWithinQuota(workspaceId, extraBytes) {
     return `Se alcanzó el límite de almacenamiento del workspace (${limitMb} MB).`
   }
   return null
+}
+
+// Confirma un pending dentro de un lock del workspace. El presign reservó el
+// tamaño que declaró el cliente (puede ser 1 byte); acá se suma la diferencia
+// contra el HeadObject real, y dos confirmaciones del mismo workspace no
+// pueden pasar las dos el tope.
+async function commitFileReady(workspaceId, fileId, data, after) {
+  return prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM "Workspace" WHERE id = ${workspaceId} FOR UPDATE`
+    const current = await tx.projectFile.findFirst({
+      where: { id: fileId, status: 'pending' },
+      select: { id: true, sizeBytes: true },
+    })
+    if (!current) {
+      const err = new Error('ALREADY_CONFIRMED')
+      err.code = 'ALREADY_CONFIRMED'
+      throw err
+    }
+    const extra = (data.sizeBytes || 0) - (current.sizeBytes || 0)
+    if (extra > 0) {
+      const quotaError = await assertWithinQuota(workspaceId, extra, tx)
+      if (quotaError) {
+        const err = new Error(quotaError)
+        err.code = 'STORAGE_QUOTA_EXCEEDED'
+        throw err
+      }
+    }
+    const updated = await tx.projectFile.update({
+      where: { id: fileId },
+      data,
+      include: { uploadedBy: { select: { id: true, name: true } } },
+    })
+    if (after) await after(tx)
+    return updated
+  })
 }
 
 /**
@@ -339,7 +383,7 @@ async function abortUpload(req, res, next) {
 }
 
 /**
- * POST /api/projects/:id/files/:fileId/confirm — { width?, height?, posterFileId? }
+ * POST /api/projects/:id/files/:fileId/confirm — { width?, height? }
  * Confirma un upload directo a R2: valida tamaño real sobre el objeto ya
  * subido. Si el mimeType declarado corresponde a un formato de imagen/video
  * conocido, corrige el mimeType con la firma real (best-effort); para el
@@ -350,7 +394,7 @@ async function confirmFile(req, res, next) {
   try {
     const guard = await resolveFilesGuard(req)
     if (guard.error) return res.status(guard.status).json({ error: guard.error })
-    const { projectId } = guard
+    const { projectId, workspaceId } = guard
 
     const file = await prisma.projectFile.findFirst({
       where: { id: Number(req.params.fileId), projectId, type: 'file' },
@@ -380,28 +424,23 @@ async function confirmFile(req, res, next) {
       || (detectDocumentType(headerBuf) === 'pdf' ? 'application/pdf' : null) || mimeType
     if (isDangerousMime(mimeType)) return reject(400, 'Este tipo de archivo no está permitido.')
 
-    let posterKey = null
-    if (req.body?.posterFileId) {
-      const poster = await prisma.projectFile.findFirst({
-        where: { id: Number(req.body.posterFileId), projectId, type: 'file', status: 'ready', mimeType: { startsWith: 'image/' } },
-        select: { objectKey: true },
-      })
-      if (poster) posterKey = poster.objectKey
-    }
-
-    const updated = await prisma.projectFile.update({
-      where: { id: file.id },
-      data: {
+    // La miniatura no entra por acá. Antes `posterFileId` copiaba el objectKey
+    // de otro archivo ya listo, y al purgar este se borraba aquel del bucket.
+    let updated
+    try {
+      updated = await commitFileReady(workspaceId, file.id, {
         status: 'ready',
         sizeBytes: head.size, // autoritativo, no lo declarado en el presign
         mimeType,
         width:  clampDim(req.body?.width),
         height: clampDim(req.body?.height),
-        posterKey,
         confirmedAt: new Date(),
-      },
-      include: { uploadedBy: { select: { id: true, name: true } } },
-    })
+      })
+    } catch (err) {
+      if (err.code === 'STORAGE_QUOTA_EXCEEDED') return reject(413, err.message, 'STORAGE_QUOTA_EXCEEDED')
+      if (err.code === 'ALREADY_CONFIRMED') return res.status(409).json({ error: 'Este archivo ya fue confirmado.' })
+      throw err
+    }
     res.json(shapeItem(updated))
   } catch (err) { next(err) }
 }
@@ -608,9 +647,9 @@ async function purgeItem(req, res, next) {
     const ids = item.type === 'folder' ? [item.id, ...(await collectDescendantIds(item.id, projectId))] : [item.id]
     const files = await prisma.projectFile.findMany({
       where:  { id: { in: ids }, type: 'file' },
-      select: { objectKey: true, posterKey: true, sizeBytes: true },
+      select: { objectKey: true, posterKey: true, sizeBytes: true, workspaceId: true },
     })
-    await objectStorage.deleteObjects(files.flatMap(f => [f.objectKey, f.posterKey].filter(Boolean)))
+    await objectStorage.deleteObjects(files.flatMap(f => [f.objectKey, ownedThumbKey(f.posterKey, f.workspaceId)].filter(Boolean)))
     const freedBytes = files.reduce((sum, f) => sum + (f.sizeBytes || 0), 0)
 
     await prisma.projectFile.delete({ where: { id: item.id } }) // cascada del subárbol en DB
@@ -742,8 +781,9 @@ async function uploadThumbnail(req, res, next) {
     })
     // Recién después de persistir la nueva: si el borrado falla queda un objeto
     // huérfano (lo barre cleanup), pero nunca una fila apuntando a algo borrado.
-    if (previousKey && previousKey !== key) {
-      await objectStorage.deleteObject(previousKey).catch(() => {})
+    const previousThumb = ownedThumbKey(previousKey, workspaceId)
+    if (previousThumb && previousThumb !== key) {
+      await objectStorage.deleteObject(previousThumb).catch(() => {})
     }
 
     res.json(shapeItem(updated))
@@ -1171,6 +1211,7 @@ module.exports = {
   MAX_FILE_BYTES,
   DENIED_MIME,
   canHaveThumbnail,
+  ownedThumbKey,
   // exportados para el controller de solo lectura del portal de cliente
   shapeItem,
   buildPath,
@@ -1178,5 +1219,6 @@ module.exports = {
   sanitizeName,
   // exportados para tasks/attachments.controller.js (mismo presign/confirm/cuota que Archivos)
   assertWithinQuota,
+  commitFileReady,
   PRESIGN_EXPIRES_IN,
 }

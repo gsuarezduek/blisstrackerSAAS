@@ -232,8 +232,9 @@ async function createWorkspace(req, res, next) {
 
     // Auto-login: el owner ya tiene una sesión válida (usuario existente que creó un
     // workspace adicional) o definió su contraseña en el formulario (usuario nuevo), así
-    // que lo logueamos directo en su workspace recién creado (el frontend navega a
-    // /auth?token=... con esto, el mismo mecanismo que usa el login normal) en vez de
+    // que lo logueamos directo en su workspace recién creado (el frontend canjea
+    // este token por un código de un solo uso y navega a /auth?code=, el mismo
+    // mecanismo que usa el login normal) en vez de
     // mandarlo a una pantalla de login.
     const token = jwt.sign(
       {

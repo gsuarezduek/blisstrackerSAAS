@@ -108,6 +108,7 @@ export default function Dashboard() {
   const [insightExpanded, setInsightExpanded] = useState(false)
   const [insightDismissed, setInsightDismissed] = useState(false)
   const [workdayError, setWorkdayError] = useState(null)
+  const [finishError, setFinishError] = useState('')
 
   const loadToday = useCallback(async () => {
     setWorkdayError(null)
@@ -254,13 +255,25 @@ export default function Dashboard() {
 
   async function handleFinish() {
     setFinishing(true)
+    setFinishError('')
     try {
       await api.post('/workdays/finish')
       logout()
       navigate('/login')
+    } catch (err) {
+      setFinishError(err.response?.data?.error || 'No se pudo terminar la jornada')
     } finally {
       setFinishing(false)
     }
+  }
+
+  // La jornada puede no existir todavía (el GET /workdays/today sigue en vuelo, o
+  // falló). Los botones de agregar ya están visibles en ese momento: escribir
+  // sobre prev.tasks sin jornada tira y la tarea, que el POST ya creó, se pierde
+  // de la pantalla.
+  function withTasks(prev, map) {
+    if (!prev?.tasks) return prev
+    return { ...prev, tasks: map(prev.tasks) }
   }
 
   function handleAddTask(task) {
@@ -287,13 +300,13 @@ export default function Dashboard() {
       setLaterTab('programadas')
       return
     }
-    setWorkDay(prev => ({ ...prev, tasks: [...prev.tasks, task] }))
+    setWorkDay(prev => withTasks(prev, tasks => [...tasks, task]))
   }
 
   // Adelantar una tarea futura a hoy: sale de "Futuras" y entra al foco del día.
   function handleBringToToday(updated) {
     setFuture(prev => prev.filter(t => t.id !== updated.id))
-    setWorkDay(prev => ({ ...prev, tasks: [...prev.tasks, updated] }))
+    setWorkDay(prev => withTasks(prev, tasks => [...tasks, updated]))
   }
 
   function handleUpdateTask(updated) {
@@ -306,16 +319,13 @@ export default function Dashboard() {
       // sale del carry-over y entra a las tareas del día para que cuente y quede como pendiente de hoy.
       if (updated.status === 'COMPLETED' || updated.workDayId === workDay?.id) {
         setCarryOver(prev => prev.filter(t => t.id !== updated.id))
-        setWorkDay(prev => ({ ...prev, tasks: [...prev.tasks, updated] }))
+        setWorkDay(prev => withTasks(prev, tasks => [...tasks, updated]))
       } else {
         setCarryOver(prev => prev.map(t => t.id === updated.id ? updated : t))
       }
       return
     }
-    setWorkDay(prev => ({
-      ...prev,
-      tasks: prev.tasks.map(t => t.id === updated.id ? updated : t),
-    }))
+    setWorkDay(prev => withTasks(prev, tasks => tasks.map(t => t.id === updated.id ? updated : t)))
   }
 
   function handleDeleteTask(id, recurrenceId) {
@@ -325,7 +335,7 @@ export default function Dashboard() {
       const keep = t => t.recurrenceId !== recurrenceId
       setCarryOver(prev => prev.filter(keep))
       setFuture(prev => prev.filter(keep))
-      setWorkDay(prev => ({ ...prev, tasks: prev.tasks.filter(keep) }))
+      setWorkDay(prev => withTasks(prev, tasks => tasks.filter(keep)))
       return
     }
     if (carryOver.find(t => t.id === id)) {
@@ -336,14 +346,14 @@ export default function Dashboard() {
       setFuture(prev => prev.filter(t => t.id !== id))
       return
     }
-    setWorkDay(prev => ({ ...prev, tasks: prev.tasks.filter(t => t.id !== id) }))
+    setWorkDay(prev => withTasks(prev, tasks => tasks.filter(t => t.id !== id)))
   }
 
   function handleCommentAdded(taskId, newCount) {
     const update = list => list.map(t =>
       t.id === taskId ? { ...t, _count: { ...t._count, comments: newCount } } : t
     )
-    setWorkDay(prev => ({ ...prev, tasks: update(prev.tasks) }))
+    setWorkDay(prev => withTasks(prev, update))
     setCarryOver(prev => update(prev))
     setCompletedHistory(prev => update(prev))
   }
@@ -723,16 +733,17 @@ export default function Dashboard() {
           {!dayEnded && (
             <div className="flex items-center gap-2 sm:flex-shrink-0">
               <button
-                onClick={() => setFinishOpen(true)}
-                disabled={finishing}
+                onClick={() => { setFinishError(''); setFinishOpen(true) }}
+                disabled={finishing || !workDay}
                 className="px-4 py-2.5 rounded-xl text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors disabled:opacity-50"
               >
                 Terminar jornada
               </button>
               <button
                 onClick={() => setShowModal(true)}
+                disabled={!workDay}
                 title="Nueva tarea (tecla N)"
-                className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-5 py-2.5 rounded-xl text-sm font-semibold bg-primary-600 hover:bg-primary-700 text-white shadow-sm transition-colors"
+                className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-5 py-2.5 rounded-xl text-sm font-semibold bg-primary-600 hover:bg-primary-700 text-white shadow-sm transition-colors disabled:opacity-50"
               >
                 <span className="text-base leading-none">+</span> Agregar tarea
                 <kbd className="hidden sm:inline ml-1 text-[10px] font-medium bg-white/20 rounded px-1.5 py-0.5">N</kbd>
@@ -973,7 +984,7 @@ export default function Dashboard() {
       <ConfirmModal
         open={finishOpen}
         title="¿Terminar la jornada?"
-        message={`Hoy completaste ${completed.length} tarea${completed.length === 1 ? '' : 's'} y registraste ${fmtMins(totalMins)}.${agentMins > 0 ? `\nTus agentes de IA sumaron ${fmtMins(agentMins)} en ${agentDoneCount} tarea${agentDoneCount === 1 ? '' : 's'}.` : ''}${leftToday === 1 ? '\nLa que queda pendiente pasa a mañana.' : leftToday > 1 ? `\nLas ${leftToday} que quedan pendientes pasan a mañana.` : ''}${activeTask ? '\nLa tarea en curso se va a pausar.' : ''}\n\nSe cierra tu sesión.`}
+        message={`${finishError ? `${finishError}\n\n` : ''}Hoy completaste ${completed.length} tarea${completed.length === 1 ? '' : 's'} y registraste ${fmtMins(totalMins)}.${agentMins > 0 ? `\nTus agentes de IA sumaron ${fmtMins(agentMins)} en ${agentDoneCount} tarea${agentDoneCount === 1 ? '' : 's'}.` : ''}${leftToday === 1 ? '\nLa que queda pendiente pasa a mañana.' : leftToday > 1 ? `\nLas ${leftToday} que quedan pendientes pasan a mañana.` : ''}${activeTask ? '\nLa tarea en curso se va a pausar.' : ''}\n\nSe cierra tu sesión.`}
         confirmLabel="Terminar jornada"
         danger={false}
         loading={finishing}

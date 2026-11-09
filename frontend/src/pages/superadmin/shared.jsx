@@ -6,6 +6,7 @@ import { avatarUrl } from '../../utils/avatarUrl'
 import LoadingSpinner from '../../components/LoadingSpinner'
 import { X } from 'lucide-react'
 import { Icon } from '../../components/ui/Icon'
+import { handoffUrl } from '../../utils/authHandoff'
 
 export const STATUS_LABELS = {
   trialing:  { label: 'Trial',      color: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300' },
@@ -203,7 +204,7 @@ export function WorkspaceDetailModal({ workspace, onClose, onStatusChange, onDel
     setImpersonating(true)
     try {
       const { data } = await api.post('/superadmin/impersonate', { workspaceId: workspace.id })
-      window.open(`https://${data.slug}.${appDomain}/auth?token=${data.token}`, '_blank')
+      window.open(await handoffUrl(data.slug, data.token), '_blank')
     } catch (err) {
       alert(err.response?.data?.error || 'Error al impersonar')
     } finally { setImpersonating(false) }

@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect } from 'react'
 import api from '../api/client'
+import { handoffUrl } from '../utils/authHandoff'
 
 const AuthContext = createContext(null)
 
@@ -84,10 +85,11 @@ export function AuthProvider({ children }) {
     return meRes.data
   }
 
-  // Google no pide el segundo factor propio (ya lo aplicó Google), así que acá
-  // no hay rama de 2FA — igual que en el backend (`googleLogin`).
+  // Con googleId ya vinculado no hay segundo factor. Si el match fue solo por email
+  // y la cuenta tiene 2FA, el backend responde mfaRequired y todavía no hay token.
   async function loginWithGoogle(credential) {
     const { data } = await api.post('/auth/google', { credential })
+    if (data.mfaRequired) return data
     localStorage.setItem('token', data.token)
     const meRes = await api.get('/auth/me').catch(() => ({ data: data.user }))
     setUser(meRes.data)
@@ -105,8 +107,7 @@ export function AuthProvider({ children }) {
   // Cambia al usuario a otro workspace: obtiene un nuevo JWT y redirige al subdominio
   async function switchWorkspace(targetSlug) {
     const { data } = await api.post('/auth/switch-workspace', { targetSlug })
-    const appDomain = import.meta.env.VITE_APP_DOMAIN || 'blisstracker.app'
-    window.location.href = `https://${targetSlug}.${appDomain}/auth?token=${data.token}`
+    window.location.assign(await handoffUrl(targetSlug, data.token))
   }
 
   function logout() {

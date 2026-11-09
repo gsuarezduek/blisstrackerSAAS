@@ -15,6 +15,12 @@ jest.mock('../../src/services/email.service', () => ({
   sendEmailChangeVerification:  jest.fn().mockResolvedValue(undefined),
 }))
 jest.mock('../../src/services/lateNotification.service', () => ({ triggerLateCheck: jest.fn() }))
+const mockVerifyIdToken = jest.fn()
+jest.mock('google-auth-library', () => ({
+  OAuth2Client: jest.fn().mockImplementation(() => ({
+    verifyIdToken: (...args) => mockVerifyIdToken(...args),
+  })),
+}))
 
 const request = require('supertest')
 const { authenticator } = require('otplib')
@@ -270,5 +276,35 @@ describe('POST /api/auth/reset-password con 2FA', () => {
     expect(res.status).toBe(200)
     expect(prisma.user.update).toHaveBeenCalledWith({ where: { id: 1 }, data: { password: '$2a$10$nuevo' } })
     expect(prisma.passwordResetToken.update).toHaveBeenCalledWith({ where: { id: 9 }, data: { used: true } })
+  })
+})
+
+describe('POST /api/auth/google con 2FA', () => {
+  const googlePayload = { email: 'ana@test.com', email_verified: true, sub: 'google-sub' }
+
+  beforeEach(() => {
+    mockVerifyIdToken.mockResolvedValue({ getPayload: () => googlePayload })
+  })
+
+  it('match solo por email y con 2FA no entrega sesión', async () => {
+    prisma.user.findUnique.mockResolvedValue(null)
+    prisma.user.findFirst.mockResolvedValue(userWithMfa)
+
+    const res = await request(app).post('/api/auth/google').send({ credential: 'tok' })
+
+    expect(res.status).toBe(200)
+    expect(res.body.mfaRequired).toBe(true)
+    expect(res.body.token).toBeUndefined()
+    expect(res.body.workspaces).toBeUndefined()
+  })
+
+  it('con googleId ya vinculado entra sin pedir el TOTP', async () => {
+    prisma.user.findUnique.mockResolvedValue({ ...userWithMfa, googleId: 'google-sub' })
+
+    const res = await request(app).post('/api/auth/google').send({ credential: 'tok' })
+
+    expect(res.status).toBe(200)
+    expect(res.body.mfaRequired).toBeUndefined()
+    expect(res.body.workspaces).toHaveLength(1)
   })
 })

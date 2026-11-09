@@ -179,6 +179,7 @@ export default function AddTaskModal({ onAdd, onClose, lockedProject, defaultPro
   const [scheduledTime, setScheduledTime] = useState('')
   const [scheduledDurationMins, setScheduledDurationMins] = useState(30)
   const [optErr, setOptErr] = useState('')
+  const [submitError, setSubmitError] = useState('')
 
   // Adjuntos elegidos ANTES de crear la tarea: se guardan como File[] en memoria
   // (no se puede presignar sin un taskId real — la carpeta destino en R2 depende
@@ -323,6 +324,7 @@ export default function AddTaskModal({ onAdd, onClose, lockedProject, defaultPro
 
   async function doSubmit(startNow = false) {
     setLoading(true)
+    setSubmitError('')
     try {
       const body = { description: description.trim(), projectId }
       if (assigneeId.startsWith('agent:')) {
@@ -364,6 +366,8 @@ export default function AddTaskModal({ onAdd, onClose, lockedProject, defaultPro
         return
       }
       onClose()
+    } catch (err) {
+      setSubmitError(err.response?.data?.error || 'No se pudo crear la tarea')
     } finally {
       setLoading(false)
     }
@@ -797,6 +801,7 @@ export default function AddTaskModal({ onAdd, onClose, lockedProject, defaultPro
             </div>
 
             {optErr && <p className="text-xs text-red-500">{optErr}</p>}
+            {submitError && <p className="text-xs text-red-500">{submitError}</p>}
           </div>
         </form>
       </div>

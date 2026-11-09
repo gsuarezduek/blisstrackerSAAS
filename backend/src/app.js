@@ -180,6 +180,27 @@ app.use('/api/auth/google', loginLimiter)
 app.use('/api/auth/mfa/verify', mfaVerifyLimiter)
 app.use('/api/auth/reset-password', resetPasswordLimiter)
 app.use('/api/auth/forgot-password', forgotPasswordLimiter)
+// Instancia propia: el código de cruce de dominio dura 60s y es de un solo uso.
+// No comparte contador con /login, que ya gastó el suyo al emitir la sesión.
+const handoffLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  message: { error: 'Demasiados intentos. Intentá de nuevo en 15 minutos.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+})
+app.use('/api/auth/handoff', handoffLimiter)
+// Misma instancia propia que el reset: /join ahora verifica contraseña y, con
+// 2FA, un código de 6 dígitos. El token de la invitación es secreto, pero quien
+// lo tiene no puede probar contraseñas sin tope.
+const joinLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 15,
+  message: { error: 'Demasiados intentos. Intentá de nuevo en 15 minutos.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+})
+app.use('/api/workspaces/join', joinLimiter)
 app.use('/api/insights/refresh', aiLimiter)
 app.use('/api/marketing/geo/audit', aiLimiter)
 app.use('/api/landing/contact', contactLimiter)

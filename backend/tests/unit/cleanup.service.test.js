@@ -91,8 +91,9 @@ describe('cleanup.service — projectFilesTrash', () => {
       // 2 archivos vencidos en R2 (uno es hijo de una carpeta también vencida)
       prisma.projectFile.findMany
         .mockResolvedValueOnce([
-          { objectKey: 'files/1/a.pdf', posterKey: null },
-          { objectKey: 'files/1/b.mp4', posterKey: 'files/1/b-poster.jpg' },
+          { objectKey: 'files/1/a.pdf', posterKey: null, workspaceId: 1 },
+          { objectKey: 'files/1/b.mp4', posterKey: 'files/1/thumbs/b.jpg', workspaceId: 1 },
+          { objectKey: 'files/1/c.png', posterKey: 'files/1/otro-archivo.png', workspaceId: 1 },
         ])
         // Solo la carpeta raíz (padre no vencido/borrado, o sin padre) es lo que se borra en DB
         .mockResolvedValueOnce([{ id: 9 }])
@@ -101,7 +102,7 @@ describe('cleanup.service — projectFilesTrash', () => {
       const result = await runWeeklyCleanup(['projectFilesTrash'])
 
       expect(objectStorage.deleteObjects).toHaveBeenCalledWith([
-        'files/1/a.pdf', 'files/1/b.mp4', 'files/1/b-poster.jpg',
+        'files/1/a.pdf', 'files/1/b.mp4', 'files/1/thumbs/b.jpg', 'files/1/c.png',
       ])
       expect(prisma.projectFile.deleteMany).toHaveBeenCalledWith({ where: { id: { in: [9] } } })
       expect(result.projectFilesTrash).toBe(1)

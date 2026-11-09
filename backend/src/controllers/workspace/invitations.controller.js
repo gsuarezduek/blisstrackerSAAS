@@ -2,12 +2,14 @@ const bcrypt = require('bcryptjs')
 const crypto = require('crypto')
 const jwt = require('jsonwebtoken')
 const prisma = require('../../lib/prisma')
-const { sendInvitationEmail } = require('../../services/email.service')
+const { sendInvitationEmail, sendMfaRecoveryCodeUsedNotice } = require('../../services/email.service')
 const { syncSeatsToStripe } = require('../billing.controller')
 const { reconcileWorkspaceTier } = require('../../services/billingTier.service')
 const { validatePassword } = require('../../lib/passwordPolicy')
 const { assertValidMemberRoleAssignment } = require('./_shared')
 const { normalizeEmail } = require('../../lib/normalizeEmail')
+const { hasMfa, verifySecondFactor, countUnusedRecoveryCodes } = require('../../lib/mfa')
+const { assertNotExhausted, registerFailure } = require('../../lib/mfaChallenge')
 
 /**
  * POST /api/workspaces/current/invitations
@@ -103,13 +105,19 @@ async function getInvitation(req, res, next) {
 /**
  * POST /api/workspaces/join
  * Aceptar invitación.
- * Body: { token, name?, password? }
- *   - Si tiene cuenta existente: solo token (o token + password para verificar)
- *   - Si es usuario nuevo: token + name + password
+ * Body: { token, name?, password?, code? }
+ *   - Cuenta existente: token + contraseña. Con 2FA, el primer intento sin `code`
+ *     responde 401 MFA_REQUIRED (no se avisa antes: el GET de la invitación lo
+ *     vería cualquiera con el link).
+ *   - Usuario nuevo: token + name + password.
+ *
+ * El link solo prueba que alguien leyó el mail. No alcanza para abrir sesión:
+ * si alcanzara, el 2FA del login y del reset de contraseña se saltearía con
+ * una invitación al mismo email.
  */
 async function joinWorkspace(req, res, next) {
   try {
-    const { token, name, password } = req.body
+    const { token, name, password, code } = req.body
     if (!token) return res.status(400).json({ error: 'Token requerido' })
 
     const inv = await prisma.workspaceInvitation.findUnique({
@@ -139,14 +147,41 @@ async function joinWorkspace(req, res, next) {
       user = await prisma.user.create({
         data: { name, email: normalizeEmail(inv.email), password: hashed },
       })
+    } else {
+      // Cuenta que ya existe: la invitación no reemplaza a la contraseña ni al 2FA.
+      if (!password) return res.status(400).json({ error: 'Contraseña requerida' })
+      const valid = await bcrypt.compare(password, user.password)
+      if (!valid) return res.status(401).json({ error: 'Credenciales inválidas' })
+
+      if (hasMfa(user)) {
+        const attemptKey = `join:${inv.id}`
+        assertNotExhausted(attemptKey)
+        if (!code) {
+          return res.status(401).json({
+            error: 'Esta cuenta tiene verificación en dos pasos. Ingresá el código de tu app de autenticación.',
+            code:  'MFA_REQUIRED',
+          })
+        }
+        const { ok, method } = await verifySecondFactor(user, code)
+        if (!ok) {
+          const attemptsLeft = registerFailure(attemptKey)
+          return res.status(401).json({
+            error: attemptsLeft > 0
+              ? 'El código no es correcto. Revisá que sea el que muestra tu app en este momento.'
+              : 'Demasiados códigos incorrectos. Pedí una invitación nueva.',
+            code: attemptsLeft > 0 ? 'MFA_CODE_INVALID' : 'MFA_TOO_MANY_ATTEMPTS',
+            attemptsLeft,
+          })
+        }
+        if (method === 'recovery') {
+          const remaining = await countUnusedRecoveryCodes(user.id)
+          sendMfaRecoveryCodeUsedNotice(user.email, user.name, remaining)
+            .catch(err => console.error('[MFA] Aviso de código de recuperación falló:', err.message))
+        }
+      }
     }
 
-    // Upsert WorkspaceMember
-    await prisma.workspaceMember.upsert({
-      where: { workspaceId_userId: { workspaceId, userId: user.id } },
-      create: { workspaceId, userId: user.id, role: inv.memberRole, teamRole: inv.teamRole, active: true },
-      update: { role: inv.memberRole, teamRole: inv.teamRole, active: true },
-    })
+    const member = await applyInviteMembership(inv, user)
 
     // Marcar invitación como usada
     await prisma.workspaceInvitation.update({
@@ -159,8 +194,8 @@ async function joinWorkspace(req, res, next) {
       {
         userId:      user.id,
         workspaceId: inv.workspace.id,
-        role:        inv.memberRole,
-        teamRole:    inv.teamRole,
+        role:        member.role,
+        teamRole:    member.teamRole,
         isSuperAdmin: user.isSuperAdmin ?? false,
         name:        user.name,
         email:       user.email,
@@ -181,8 +216,36 @@ async function joinWorkspace(req, res, next) {
     })
   } catch (err) {
     if (err.code === 'P2002') return res.status(409).json({ error: 'Email ya registrado' })
+    if (err.status) return res.status(err.status).json({ error: err.message, code: err.code })
     next(err)
   }
+}
+
+// Alta o reactivación. Una membresía que ya está activa no cambia de rol: aceptar
+// el link no es una vía para bajar a un owner o a un admin. Un owner desactivado
+// se reactiva como owner; el rol de la invitación solo aplica al crear la fila o
+// al reactivar a quien no era owner.
+async function applyInviteMembership(inv, user) {
+  const where = { workspaceId_userId: { workspaceId: inv.workspaceId, userId: user.id } }
+  const existing = await prisma.workspaceMember.findUnique({ where })
+  if (!existing) {
+    return prisma.workspaceMember.create({
+      data: {
+        workspaceId: inv.workspaceId,
+        userId: user.id,
+        role: inv.memberRole,
+        teamRole: inv.teamRole,
+        active: true,
+      },
+    })
+  }
+  if (existing.active) return existing
+  const data = { active: true }
+  if (existing.role !== 'owner') {
+    data.role = inv.memberRole
+    data.teamRole = inv.teamRole
+  }
+  return prisma.workspaceMember.update({ where, data })
 }
 
 /**

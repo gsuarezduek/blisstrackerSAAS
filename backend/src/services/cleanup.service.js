@@ -11,6 +11,15 @@ const { getSettings, getSetting } = require('../lib/platformSettings')
 const { findOrphanImageIds, cleanupOrphanImages } = require('./storageStats.service')
 const objectStorage = require('./objectStorage.service')
 
+// Misma regla que ownedThumbKey en projectFiles.controller.js: solo se borra
+// una miniatura que vive bajo files/<workspaceId>/thumbs/. Un posterKey que
+// apunte al objectKey de otro archivo no se toca.
+function ownedThumbKey(posterKey, workspaceId) {
+  if (!posterKey || workspaceId == null) return null
+  const prefix = `files/${workspaceId}/thumbs/`
+  return posterKey.startsWith(prefix) ? posterKey : null
+}
+
 const RETENTION_KEYS = [
   'notificationReadRetentionDays',
   'notificationUnreadRetentionDays',
@@ -267,9 +276,9 @@ async function runWeeklyCleanup(tables = null) {
     const hours = await getSetting('projectFilesPendingRetentionHours')
     const stale = await prisma.projectFile.findMany({
       where:  { type: 'file', status: 'pending', createdAt: { lt: hoursAgo(hours) } },
-      select: { id: true, objectKey: true, posterKey: true },
+      select: { id: true, objectKey: true, posterKey: true, workspaceId: true },
     })
-    await objectStorage.deleteObjects(stale.flatMap(f => [f.objectKey, f.posterKey].filter(Boolean)))
+    await objectStorage.deleteObjects(stale.flatMap(f => [f.objectKey, ownedThumbKey(f.posterKey, f.workspaceId)].filter(Boolean)))
     const { count } = await prisma.projectFile.deleteMany({ where: { id: { in: stale.map(f => f.id) } } })
     result.projectFilesPending = count
   }
@@ -282,9 +291,9 @@ async function runWeeklyCleanup(tables = null) {
     // filas, nunca bytes de R2.
     const staleFiles = await prisma.projectFile.findMany({
       where:  { type: 'file', deletedAt: { lt: cutoff } },
-      select: { objectKey: true, posterKey: true },
+      select: { objectKey: true, posterKey: true, workspaceId: true },
     })
-    await objectStorage.deleteObjects(staleFiles.flatMap(f => [f.objectKey, f.posterKey].filter(Boolean)))
+    await objectStorage.deleteObjects(staleFiles.flatMap(f => [f.objectKey, ownedThumbKey(f.posterKey, f.workspaceId)].filter(Boolean)))
     // Solo hace falta borrar las filas "raíz" del subárbol vencido (padre no
     // vencido/borrado, o sin padre) — el Cascade de Postgres se encarga del
     // resto del subárbol, ya limpiado de R2 arriba.

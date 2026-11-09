@@ -15,11 +15,12 @@ const { detectVideoType } = require('../../lib/mediaType')
 const { detectDocumentType } = require('../../lib/documentType')
 const { findOrCreateFolder } = require('../../lib/projectFileTree')
 const { resolveDirectUpload, DIRECT_MAX_BYTES } = require('../../lib/directUpload')
+const { isAdmin, isProjectMember } = require('../../lib/projectAccess')
 const { monthLabel } = require('../../lib/monthUtils')
 const { todayString } = require('../../utils/dates')
 const { isDangerousMime } = require('../../lib/dangerousMime')
 const {
-  sanitizeName, shapeItem, clampDim, MAX_FILE_BYTES, assertWithinQuota, PRESIGN_EXPIRES_IN,
+  sanitizeName, shapeItem, clampDim, MAX_FILE_BYTES, assertWithinQuota, commitFileReady, PRESIGN_EXPIRES_IN,
 } = require('../projects/projectFiles.controller')
 
 const PENDING_MAX_AGE_MS = 60 * 60 * 1000
@@ -30,15 +31,22 @@ const ROOT_FOLDER_NAME = 'Tareas'
 
 // Mismo criterio de acceso que los comentarios de tareas (comments.controller.js
 // getTaskWithAccess): cualquier miembro activo del workspace, no solo el equipo
-// del proyecto — "equipo = etiqueta, no barrera".
-async function getTaskWithAccess(taskId, workspaceId) {
-  return prisma.task.findFirst({
-    where:  { id: taskId, workDay: { workspaceId } },
+// del proyecto — "equipo = etiqueta, no barrera". Un proyecto privado sí exige
+// ser del equipo o admin/owner: sin esto, el id de la tarea alcanza para listar
+// y bajar los archivos de una cuenta que el resto del workspace no ve.
+async function getTaskWithAccess(req, taskId) {
+  const task = await prisma.task.findFirst({
+    where:  { id: taskId, workDay: { workspaceId: req.workspace.id } },
     select: {
       id: true, description: true, projectId: true,
-      project: { select: { id: true, name: true, timezone: true, filesEnabled: true } },
+      project: { select: { id: true, name: true, timezone: true, filesEnabled: true, isPrivate: true } },
     },
   })
+  if (!task) return null
+  if (task.project?.isPrivate && !isAdmin(req) && !(await isProjectMember(task.projectId, req.user.userId))) {
+    return null
+  }
+  return task
 }
 
 // Resuelve (creando si hace falta) "Tareas / <Mes> / <título de la tarea>".
@@ -58,7 +66,7 @@ async function resolveTaskFolder(task, workspaceId, uploaderId) {
 async function listAttachments(req, res, next) {
   try {
     const taskId = Number(req.params.id)
-    const task = await getTaskWithAccess(taskId, req.workspace.id)
+    const task = await getTaskWithAccess(req, taskId)
     if (!task) return res.status(403).json({ error: 'No tenés acceso a esta tarea' })
 
     const links = await prisma.taskFile.findMany({
@@ -79,7 +87,7 @@ async function listAttachments(req, res, next) {
 async function presignAttachment(req, res, next) {
   try {
     const taskId = Number(req.params.id)
-    const task = await getTaskWithAccess(taskId, req.workspace.id)
+    const task = await getTaskWithAccess(req, taskId)
     if (!task) return res.status(403).json({ error: 'No tenés acceso a esta tarea' })
     if (task.project?.filesEnabled === false) {
       return res.status(403).json({ error: 'La sección de Nube está deshabilitada para este workspace' })
@@ -142,7 +150,7 @@ async function presignAttachment(req, res, next) {
 async function confirmAttachment(req, res, next) {
   try {
     const taskId = Number(req.params.id)
-    const task = await getTaskWithAccess(taskId, req.workspace.id)
+    const task = await getTaskWithAccess(req, taskId)
     if (!task) return res.status(403).json({ error: 'No tenés acceso a esta tarea' })
 
     const file = await prisma.projectFile.findFirst({
@@ -169,21 +177,21 @@ async function confirmAttachment(req, res, next) {
       || (detectDocumentType(headerBuf) === 'pdf' ? 'application/pdf' : null) || mimeType
     if (isDangerousMime(mimeType)) return reject(400, 'Este tipo de archivo no está permitido.')
 
-    const [updated] = await prisma.$transaction([
-      prisma.projectFile.update({
-        where: { id: file.id },
-        data:  {
-          status: 'ready', sizeBytes: head.size, mimeType, confirmedAt: new Date(),
-          // Las manda el browser tras decodificar el archivo, junto con la
-          // miniatura (ver makeThumbnail) — mismo criterio que confirmFile.
-          width: clampDim(req.body?.width), height: clampDim(req.body?.height),
-        },
-        include: { uploadedBy: { select: { id: true, name: true } } },
-      }),
-      prisma.taskFile.create({
+    let updated
+    try {
+      updated = await commitFileReady(req.workspace.id, file.id, {
+        status: 'ready', sizeBytes: head.size, mimeType, confirmedAt: new Date(),
+        // Las manda el browser tras decodificar el archivo, junto con la
+        // miniatura (ver makeThumbnail) — mismo criterio que confirmFile.
+        width: clampDim(req.body?.width), height: clampDim(req.body?.height),
+      }, (tx) => tx.taskFile.create({
         data: { workspaceId: req.workspace.id, taskId, fileId: file.id, linkedById: req.user.userId },
-      }),
-    ])
+      }))
+    } catch (err) {
+      if (err.code === 'STORAGE_QUOTA_EXCEEDED') return reject(413, err.message, 'STORAGE_QUOTA_EXCEEDED')
+      if (err.code === 'ALREADY_CONFIRMED') return res.status(409).json({ error: 'Este archivo ya fue confirmado.' })
+      throw err
+    }
     res.json({ ...shapeItem(updated), projectId: task.projectId })
   } catch (err) { next(err) }
 }
@@ -197,7 +205,7 @@ async function confirmAttachment(req, res, next) {
 async function removeAttachment(req, res, next) {
   try {
     const taskId = Number(req.params.id)
-    const task = await getTaskWithAccess(taskId, req.workspace.id)
+    const task = await getTaskWithAccess(req, taskId)
     if (!task) return res.status(403).json({ error: 'No tenés acceso a esta tarea' })
 
     const link = await prisma.taskFile.findFirst({
@@ -221,7 +229,7 @@ async function removeAttachment(req, res, next) {
 async function directAttachment(req, res, next) {
   try {
     const taskId = Number(req.params.id)
-    const task = await getTaskWithAccess(taskId, req.workspace.id)
+    const task = await getTaskWithAccess(req, taskId)
     if (!task) return res.status(403).json({ error: 'No tenés acceso a esta tarea' })
     if (task.project?.filesEnabled === false) {
       return res.status(403).json({ error: 'La sección de Nube está deshabilitada para este workspace' })

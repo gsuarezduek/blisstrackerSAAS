@@ -144,6 +144,17 @@ async function updateMember(req, res, next) {
     })
     if (!target) return res.status(404).json({ error: 'Miembro no encontrado' })
 
+    // Email y contraseña son de la cuenta (User es global, no de este workspace).
+    // Escribirlos acá le cambiaba el login en todos sus workspaces a un admin,
+    // sin el mail de confirmación ni el 2FA que pide el perfil.
+    if (email !== undefined || password !== undefined) {
+      return res.status(400).json({ error: 'El email y la contraseña los cambia cada persona desde su perfil.' })
+    }
+    // Un admin no toca la fila de un owner: ni el rol, ni el horario, ni el rol de equipo.
+    if (target.role === 'owner' && req.workspaceMember.role !== 'owner') {
+      return res.status(403).json({ error: 'Solo un owner puede modificar a otro owner' })
+    }
+
     const roleErr = assertValidMemberRoleAssignment(req, memberRole)
     if (roleErr) return res.status(roleErr.status).json({ error: roleErr.error })
 
@@ -271,6 +282,9 @@ async function toggleMemberActive(req, res, next) {
       where: { workspaceId_userId: { workspaceId, userId } },
     })
     if (!member) return res.status(404).json({ error: 'Miembro no encontrado' })
+    if (member.role === 'owner' && req.workspaceMember.role !== 'owner') {
+      return res.status(403).json({ error: 'Solo un owner puede modificar a otro owner' })
+    }
 
     const newActive = !member.active
 

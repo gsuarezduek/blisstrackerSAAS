@@ -8,20 +8,26 @@ import BlissLogo from '../components/BlissLogo'
 import PasswordInput from '../components/PasswordInput'
 import MfaCodeInput from '../components/MfaCodeInput'
 import { isWorkspaceSubdomain } from '../utils/domain'
+import { handoffUrl } from '../utils/authHandoff'
 
 // ── Selector de workspace post-login ──────────────────────────────────────────
 
-function workspaceUrl(slug, token) {
-  const appDomain = import.meta.env.VITE_APP_DOMAIN || 'blisstracker.app'
-  // En producción: subdominio real. En localhost: misma pestaña con ?ws= para conservar
-  // el slug (mismo criterio que Register.jsx — "local" = dev server, no dominio raíz).
-  const isLocal = window.location.hostname === 'localhost'
-  if (isLocal) return `/auth?token=${token}&ws=${slug}`
-  return `https://${slug}.${appDomain}/auth?token=${token}`
-}
-
 function WorkspacePicker({ workspaces }) {
   const appDomain = import.meta.env.VITE_APP_DOMAIN || 'blisstracker.app'
+  const [pending, setPending] = useState(null)
+  const [error, setError] = useState('')
+
+  async function enter(ws) {
+    setError('')
+    setPending(ws.slug)
+    try {
+      window.location.assign(await handoffUrl(ws.slug, ws.token))
+    } catch (err) {
+      setError(err.response?.data?.error || 'No se pudo abrir el workspace. Intentá de nuevo.')
+      setPending(null)
+    }
+  }
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 px-6">
       <div className="w-full max-w-sm space-y-6">
@@ -30,12 +36,17 @@ function WorkspacePicker({ workspaces }) {
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-1">Tus workspaces</h1>
           <p className="text-gray-500 dark:text-gray-400 text-sm">Elegí a cuál querés ingresar.</p>
         </div>
+        {error && (
+          <div className="bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 text-sm rounded-xl px-4 py-3">{error}</div>
+        )}
         <div className="space-y-2">
           {workspaces.map(ws => (
-            <a
+            <button
               key={ws.slug}
-              href={workspaceUrl(ws.slug, ws.token)}
-              className="flex items-center justify-between w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:border-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors group"
+              type="button"
+              disabled={!!pending}
+              onClick={() => enter(ws)}
+              className="flex items-center justify-between w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:border-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors group disabled:opacity-60"
             >
               <div>
                 <p className="font-medium text-gray-900 dark:text-white group-hover:text-primary-700 dark:group-hover:text-primary-400">
@@ -46,7 +57,7 @@ function WorkspacePicker({ workspaces }) {
               <svg className="w-4 h-4 text-gray-400 group-hover:text-primary-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
               </svg>
-            </a>
+            </button>
           ))}
         </div>
         <p className="text-center text-xs text-gray-400 dark:text-gray-500">
@@ -159,15 +170,21 @@ function RootLogin() {
     return Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('')
   }, [])
 
-  function redirect(workspaces) {
+  async function redirect(workspaces) {
     const target = fromSlug
       ? workspaces.find(w => w.slug === fromSlug) ?? workspaces[0]
       : workspaces.length === 1 ? workspaces[0] : null
 
-    if (target) {
-      window.location.href = `https://${target.slug}.${appDomain}/auth?token=${target.token}`
-    } else {
+    if (!target) {
       setWorkspaces(workspaces)
+      return
+    }
+    try {
+      // Cruza a <slug>.localhost en local, o al subdominio en producción.
+      // En los dos casos la URL lleva el código, no el JWT.
+      window.location.assign(await handoffUrl(target.slug, target.token))
+    } catch (err) {
+      setError(err.response?.data?.error || 'No se pudo abrir el workspace')
     }
   }
 
@@ -182,7 +199,7 @@ function RootLogin() {
         setChallenge(data)
         return
       }
-      redirect(data.workspaces)
+      await redirect(data.workspaces)
     } catch (err) {
       setError(err.response?.data?.error || 'Error al iniciar sesión')
     } finally {
@@ -195,7 +212,12 @@ function RootLogin() {
     setLoading(true)
     try {
       const { data } = await axios.post(`${import.meta.env.VITE_API_URL}/api/auth/google`, { credential, nonce })
-      redirect(data.workspaces)
+      // Cuenta todavía no vinculada por googleId y con 2FA: misma pantalla que el login con contraseña.
+      if (data.mfaRequired) {
+        setChallenge(data)
+        return
+      }
+      await redirect(data.workspaces)
     } catch (err) {
       setError(err.response?.data?.error || 'No se pudo iniciar sesión con Google')
     } finally {
@@ -284,9 +306,15 @@ export default function Login2() {
 
   if (!isWorkspaceSubdomain()) return <RootLogin />
 
-  // En subdominio de workspace → redirigir al login central
-  const appDomain = import.meta.env.VITE_APP_DOMAIN || 'blisstracker.app'
+  // En subdominio de workspace → redirigir al login central. En local ese
+  // login es localhost, no el dominio de producción.
   const theme = localStorage.getItem('theme') || 'light'
+  if (window.location.hostname.endsWith('.localhost')) {
+    const port = window.location.port ? `:${window.location.port}` : ''
+    window.location.replace(`http://localhost${port}/login?from=${slug}&theme=${theme}`)
+    return null
+  }
+  const appDomain = import.meta.env.VITE_APP_DOMAIN || 'blisstracker.app'
   window.location.replace(`https://${appDomain}/login?from=${slug}&theme=${theme}`)
   return null
 }

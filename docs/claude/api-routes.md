@@ -5,6 +5,8 @@
 ### API routes summary
 ```
 POST   /api/auth/login
+POST   /api/auth/handoff                 # { token } → { code } de un solo uso (60s) para cruzar de dominio
+POST   /api/auth/handoff/exchange        # { code } → { token }; el code se quema
 POST   /api/auth/google
 GET    /api/auth/me
 POST   /api/auth/mfa/verify              # paso 2 del login con 2FA: { mfaToken, code } → la misma respuesta que /login sin 2FA

@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import api from '../api/client'
 import { trackEvent } from '../lib/analytics'
 import { useAuth } from '../context/AuthContext'
 import PasswordInput from '../components/PasswordInput'
+import { handoffUrl } from '../utils/authHandoff'
 
 function SlugPreview({ slug }) {
   const domain = import.meta.env.VITE_APP_DOMAIN || 'blisstracker.app'
@@ -51,7 +52,6 @@ export default function Register() {
   const [invitationCode, setInvitationCode] = useState('')
   const [invCodeStatus,  setInvCodeStatus]  = useState(INV_CODE_STATUS.idle)
   const [invCodeMessage, setInvCodeMessage] = useState('')
-  const navigate = useNavigate()
 
   // Track inicio del signup flow (mount) — solo para el registro público
   useEffect(() => {
@@ -160,22 +160,10 @@ export default function Register() {
       }
 
       // Auto-login: el owner ya tiene sesión (workspace adicional) o definió su contraseña
-      // arriba (cuenta nueva), así que entra directo a su workspace nuevo en vez de pasar
-      // por la pantalla de login (mismo mecanismo que usa el login normal: AuthCallback en
-      // /auth?token= guarda el JWT y redirige al Dashboard).
-      // "Local" = corriendo el dev server (sin DNS wildcard real para navegar a
-      // slug.blisstracker.app). Antes se inferia comparando el hostname contra
-      // `.${domain}$` — pero esa regex nunca matchea el dominio raíz pelado
-      // (blisstracker.app, sin subdominio, que es justamente desde donde se registra
-      // un usuario nuevo en producción), así que en ese caso el "auto-login" quedaba
-      // pegado en el dominio raíz en vez de cruzar al subdominio nuevo.
-      const domain = import.meta.env.VITE_APP_DOMAIN || 'blisstracker.app'
-      const isLocal = window.location.hostname === 'localhost'
-      if (isLocal) {
-        navigate(`/auth?token=${data.token}&ws=${slug}`)
-      } else {
-        window.location.href = `https://${slug}.${domain}/auth?token=${data.token}`
-      }
+      // arriba (cuenta nueva), así que entra directo a su workspace nuevo. handoffUrl
+      // canjea el JWT por un código de un solo uso y cruza al subdominio
+      // (<slug>.localhost en local, <slug>.blisstracker.app en producción).
+      window.location.assign(await handoffUrl(slug, data.token))
     } catch (err) {
       setError(err.response?.data?.error || 'Error al crear el workspace')
     } finally {

@@ -1,5 +1,5 @@
 import axios from 'axios'
-import { isWorkspaceSubdomain } from '../utils/domain'
+import { isWorkspaceSubdomain, workspaceSlugFromHostname } from '../utils/domain'
 
 // Rutas que no requieren sesión (espejo de las rutas públicas de App.jsx). Un 401
 // disparado en una de estas páginas (ej: AuthContext validando un JWT viejo/vencido
@@ -17,18 +17,13 @@ function isPublicPagePath(pathname = window.location.pathname) {
 
 // Extrae el slug del workspace desde el hostname.
 // En producción: 'bliss.blisstracker.app' → 'bliss'
-// En desarrollo: usa VITE_WORKSPACE_SLUG o 'bliss' como fallback
-// Slugs reservados que no corresponden a ningún workspace
-const RESERVED_SLUGS = ['www', 'app', 'api', 'mail', 'static', 'cdn']
-
+// En local: 'bliss.localhost' → 'bliss'
+// Sin subdominio (localhost pelado): el último login, o VITE_WORKSPACE_SLUG.
 function getWorkspaceSlug() {
-  const hostname = window.location.hostname
-  const appDomain = import.meta.env.VITE_APP_DOMAIN || 'blisstracker.app'
-  const escapedDomain = appDomain.replace(/\./g, '\\.')
-  const match = hostname.match(new RegExp(`^([a-z0-9-]+)\\.${escapedDomain}$`))
-  if (match && !RESERVED_SLUGS.includes(match[1])) return match[1]
-  // En desarrollo: workspace elegido en el último login tiene prioridad sobre el env var
-  return localStorage.getItem('workspaceSlug') || import.meta.env.VITE_WORKSPACE_SLUG || ''
+  return workspaceSlugFromHostname()
+    || localStorage.getItem('workspaceSlug')
+    || import.meta.env.VITE_WORKSPACE_SLUG
+    || ''
 }
 
 const api = axios.create({

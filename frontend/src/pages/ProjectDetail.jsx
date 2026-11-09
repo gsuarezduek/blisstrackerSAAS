@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import Navbar from '../components/Navbar'
 import LoadingSpinner from '../components/LoadingSpinner'
@@ -80,18 +80,33 @@ export default function ProjectDetail() {
   const [archiveUserId, setArchiveUserId] = useState('')
 
   const encodedId = encodeURIComponent(id)
+  // Cambiar de proyecto dispara otro GET. Si la respuesta del anterior llega
+  // después, no puede pisar la ficha que se está viendo.
+  const projectGen = useRef(0)
+  const archiveGen = useRef(0)
 
   const loadProject = useCallback(() => {
+    const gen = ++projectGen.current
     return api.get(`/projects/${encodedId}/tasks`)
-      .then(r => { setData(r.data); setError(''); setErrorCode('') })
+      .then(r => {
+        if (gen !== projectGen.current) return
+        setData(r.data); setError(''); setErrorCode('')
+      })
       .catch(err => {
+        if (gen !== projectGen.current) return
         setError(err.response?.data?.error || 'Error al cargar el proyecto')
         setErrorCode(err.response?.data?.code || '')
       })
-      .finally(() => setLoading(false))
+      .finally(() => { if (gen === projectGen.current) setLoading(false) })
   }, [encodedId])
 
-  useEffect(() => { loadProject() }, [loadProject])
+  useEffect(() => {
+    setData(null)
+    setLoading(true)
+    setError('')
+    setErrorCode('')
+    loadProject()
+  }, [loadProject])
 
   // Una tarea creada desde el modal global (tecla N / botón flotante) puede ser de
   // este proyecto: refrescamos el tablero para que aparezca sin recargar la página.
@@ -147,6 +162,7 @@ export default function ProjectDetail() {
 
   const loadArchive = useCallback(async (skip = 0, filters = {}) => {
     const { from = archiveFrom, to = archiveTo, userId = archiveUserId } = filters
+    const gen = ++archiveGen.current
     setArchiveLoading(true)
     try {
       const params = new URLSearchParams({ skip })
@@ -154,16 +170,17 @@ export default function ProjectDetail() {
       if (to) params.set('to', to)
       if (userId) params.set('userId', userId)
       const { data: res } = await api.get(`/projects/${encodedId}/completed?${params}`)
+      if (gen !== archiveGen.current) return
       setArchive(prev => skip === 0 ? res.tasks : [...prev, ...res.tasks])
       setHasMore(res.hasMore)
       setArchiveSkip(skip + res.tasks.length)
     } finally {
-      setArchiveLoading(false)
+      if (gen === archiveGen.current) setArchiveLoading(false)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [encodedId, archiveFrom, archiveTo, archiveUserId])
 
-  useEffect(() => { loadArchive(0) }, [encodedId]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { setArchive([]); loadArchive(0) }, [encodedId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function handleArchiveDateSearch(from, to) {
     setArchiveFrom(from)

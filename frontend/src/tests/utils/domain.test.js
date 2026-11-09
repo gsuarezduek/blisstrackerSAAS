@@ -23,6 +23,14 @@ describe('isWorkspaceSubdomain', () => {
     expect(isWorkspaceSubdomain('localhost')).toBe(false)
   })
 
+  it('workspace en localhost → true', () => {
+    expect(isWorkspaceSubdomain('bliss.localhost')).toBe(true)
+  })
+
+  it('slug reservado en localhost → false', () => {
+    expect(isWorkspaceSubdomain('www.localhost')).toBe(false)
+  })
+
   it('127.0.0.1 → false', () => {
     expect(isWorkspaceSubdomain('127.0.0.1')).toBe(false)
   })

@@ -15,7 +15,7 @@
 // se confirmó bien y esa respuesta no debe romperse por esto.
 const prisma = require('../lib/prisma')
 const objectStorage = require('./objectStorage.service')
-const { sanitizeName } = require('../controllers/projects/projectFiles.controller')
+const { sanitizeName, assertWithinQuota } = require('../controllers/projects/projectFiles.controller')
 const { findOrCreateFolder } = require('../lib/projectFileTree')
 const { monthLabel } = require('../lib/monthUtils')
 const { todayString } = require('../utils/dates')
@@ -44,6 +44,14 @@ async function mirrorAssetToArchivos({ workspaceId, projectId, timezone, pieceId
     if (asset.fileName === 'poster.jpg') return
     if (!asset.objectKey) return
 
+    // El espejo suma bytes a la cuota de Archivos. Si no entra, la pieza ya
+    // quedó confirmada en Contenido y acá no se copia nada a R2.
+    const quotaError = await assertWithinQuota(workspaceId, asset.sizeBytes || 0)
+    if (quotaError) {
+      console.warn('[contentFileMirror] Sin cuota para espejar:', quotaError)
+      return
+    }
+
     const month = todayString(timezone).slice(0, 7)
     const monthName = sanitizeName(monthLabel(month)) || month
     const pieceName = sanitizeName(pieceTitle) || 'Sin título'
@@ -56,7 +64,7 @@ async function mirrorAssetToArchivos({ workspaceId, projectId, timezone, pieceId
 
     let destPosterKey = null
     if (asset.posterKey) {
-      destPosterKey = objectStorage.buildKey(`files/${workspaceId}`, 'image/jpeg')
+      destPosterKey = objectStorage.buildKey(`files/${workspaceId}/thumbs`, 'image/jpeg')
       await objectStorage.copyObject(asset.posterKey, destPosterKey)
     }
 

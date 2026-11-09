@@ -1,20 +1,20 @@
 import { useState, useEffect } from 'react'
-import { useSearchParams, useNavigate } from 'react-router-dom'
+import { useSearchParams } from 'react-router-dom'
 import axios from 'axios'
 import PasswordInput from '../components/PasswordInput'
+import MfaCodeInput from '../components/MfaCodeInput'
 import { TriangleAlert } from 'lucide-react'
 import { Icon } from '../components/ui/Icon'
 import BlissLogo from '../components/BlissLogo'
+import { handoffUrl } from '../utils/authHandoff'
 
 const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001'
-const APP_DOMAIN = import.meta.env.VITE_APP_DOMAIN || 'blisstracker.app'
 
 // Cliente axios sin auth (rutas públicas)
 const publicApi = axios.create({ baseURL: `${BASE_URL}/api` })
 
 export default function JoinWorkspace() {
   const [searchParams] = useSearchParams()
-  const navigate = useNavigate()
   const token = searchParams.get('token')
 
   const [invitation, setInvitation]   = useState(null)
@@ -26,6 +26,10 @@ export default function JoinWorkspace() {
   const [confirm, setConfirm]         = useState('')
   const [submitting, setSubmitting]   = useState(false)
   const [formError, setFormError]     = useState('')
+  // El GET de la invitación no dice si la cuenta tiene 2FA. El primer intento
+  // con la contraseña correcta vuelve con MFA_REQUIRED y recién ahí se pide el código.
+  const [needsCode, setNeedsCode]     = useState(false)
+  const [code, setCode]               = useState('')
 
   useEffect(() => {
     if (!token) {
@@ -49,29 +53,24 @@ export default function JoinWorkspace() {
       if (!name.trim()) return setFormError('El nombre es requerido')
       if (password.length < 8) return setFormError('La contraseña debe tener al menos 8 caracteres')
       if (password !== confirm) return setFormError('Las contraseñas no coinciden')
+    } else if (!password) {
+      return setFormError('Ingresá la contraseña de tu cuenta')
     }
 
     setSubmitting(true)
     try {
-      const payload = { token }
+      const payload = { token, password }
       if (!invitation.hasAccount) {
         payload.name = name.trim()
-        payload.password = password
       }
+      if (code) payload.code = code
 
       const { data } = await publicApi.post('/workspaces/join', payload)
-
-      // Redirigir al workspace con el token
-      const isProduction = window.location.hostname !== 'localhost'
-      if (isProduction) {
-        window.location.href = `https://${data.slug}.${APP_DOMAIN}/auth?token=${data.token}`
-      } else {
-        // En dev, guardar token y redirigir
-        localStorage.setItem('token', data.token)
-        navigate('/')
-      }
+      window.location.assign(await handoffUrl(data.slug, data.token))
     } catch (err) {
-      setFormError(err.response?.data?.error || 'Error al unirse al workspace')
+      const res = err.response?.data
+      if (res?.code === 'MFA_REQUIRED') setNeedsCode(true)
+      setFormError(res?.error || 'Error al unirse al workspace')
       setSubmitting(false)
     }
   }
@@ -178,11 +177,33 @@ export default function JoinWorkspace() {
             </>
           )}
 
-          {/* Usuario existente: mensaje simple */}
           {invitation.hasAccount && (
-            <div className="bg-green-50 dark:bg-green-900/20 rounded-xl p-4 text-sm text-green-700 dark:text-green-300">
-              Tu cuenta ya existe. Al hacer clic en Unirme quedarás agregado al workspace.
-            </div>
+            <>
+              <div className="bg-green-50 dark:bg-green-900/20 rounded-xl p-4 text-sm text-green-700 dark:text-green-300">
+                Tu cuenta ya existe. Ingresá tu contraseña para sumarte a este workspace.
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Contraseña
+                </label>
+                <PasswordInput
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  placeholder="La de tu cuenta"
+                  autoFocus
+                  required
+                  className="w-full px-3 py-2.5 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 transition-shadow"
+                />
+              </div>
+              {needsCode && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Código de verificación
+                  </label>
+                  <MfaCodeInput autoFocus value={code} onChange={setCode} required />
+                </div>
+              )}
+            </>
           )}
 
           {formError && (

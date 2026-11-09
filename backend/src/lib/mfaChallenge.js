@@ -23,11 +23,16 @@ function sweep() {
   }
 }
 
-function signChallenge({ userId, slug }) {
+function signChallenge({ userId, slug, method }) {
   if (attempts.size > 500) sweep()
   const jti = crypto.randomBytes(16).toString('hex')
+  const payload = { purpose: PURPOSE, userId, slug: slug ?? null, jti }
+  // 'google' cuando el segundo factor lo pide un login de Google que todavía
+  // no tiene googleId vinculado. Sin este claim, verifyMfa registraría el
+  // ingreso como email.
+  if (method) payload.method = method
   return jwt.sign(
-    { purpose: PURPOSE, userId, slug: slug ?? null, jti },
+    payload,
     process.env.JWT_SECRET,
     { algorithm: 'HS256', expiresIn: TTL_SECONDS },
   )
@@ -60,7 +65,7 @@ function verifyChallenge(token) {
     throw err
   }
 
-  return { userId: decoded.userId, slug: decoded.slug || null, jti: decoded.jti }
+  return { userId: decoded.userId, slug: decoded.slug || null, jti: decoded.jti, method: decoded.method || null }
 }
 
 // Mismo tope de intentos para una clave arbitraria (hoy: el reset de contraseña

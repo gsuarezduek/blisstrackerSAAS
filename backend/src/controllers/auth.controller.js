@@ -12,6 +12,8 @@ const { createAndSendVerificationEmail, RESEND_COOLDOWN_MS } = require('../lib/e
 const { normalizeEmail } = require('../lib/normalizeEmail')
 const { hasMfa, verifySecondFactor, countUnusedRecoveryCodes } = require('../lib/mfa')
 const { signChallenge, verifyChallenge, assertNotExhausted, registerFailure, consumeChallenge } = require('../lib/mfaChallenge')
+const { verifyToken } = require('../lib/jwt')
+const { createHandoff, consumeHandoff } = require('../lib/authHandoff')
 
 /**
  * Genera un JWT con el contexto workspace.
@@ -100,10 +102,10 @@ async function issueSession(req, res, user, method, slug) {
 
 // Respuesta del paso intermedio: la contraseña ya validó, falta el código.
 // No incluye NADA de sesión (ni token, ni la lista de workspaces).
-async function respondMfaRequired(res, user, slug) {
+async function respondMfaRequired(res, user, slug, method) {
   return res.json({
     mfaRequired: true,
-    mfaToken:    signChallenge({ userId: user.id, slug }),
+    mfaToken:    signChallenge({ userId: user.id, slug, method }),
     methods:     ['totp'],
     recoveryCodesLeft: await countUnusedRecoveryCodes(user.id),
   })
@@ -203,7 +205,8 @@ async function verifyMfa(req, res, next) {
         .catch(err => console.error('[MFA] Aviso de código de recuperación falló:', err.message))
     }
 
-    return issueSession(req, res, user, 'email', challenge.slug)
+    const loginMethod = challenge.method === 'google' ? 'google' : 'email'
+    return issueSession(req, res, user, loginMethod, challenge.slug)
   } catch (err) {
     if (err.status) return res.status(err.status).json({ error: err.message, code: err.code })
     next(err)
@@ -517,14 +520,56 @@ async function googleLogin(req, res, next) {
     // funciona aunque el email de Google difiera del primario). Si no hay vínculo,
     // caemos al match por email (cuentas que entran con Google sin haberlo conectado).
     let user = await prisma.user.findUnique({ where: { googleId: payload.sub } })
+    const linkedByGoogleId = Boolean(user)
     if (!user) user = await prisma.user.findFirst({ where: { email: { equals: normalizeEmail(payload.email), mode: 'insensitive' } } })
     if (!user) return res.status(404).json({ error: 'No existe una cuenta con ese email de Google' })
 
-    // Entrar con Google NO pide además el TOTP propio: Google ya aplicó el
-    // segundo factor de esa cuenta y acá se exige `email_verified`. Pedir los dos
-    // sería doble 2FA para el mismo login — el camino seguro a que la gente
-    // desactive el nuestro.
+    // Con googleId ya vinculado, Google es la puerta que la persona eligió y no
+    // se le pide el TOTP otra vez. El match solo por email es distinto: prueba la
+    // casilla, no que tenga el segundo factor de Bliss. Si está activo, se pide
+    // igual que en el login con contraseña.
+    if (!linkedByGoogleId && hasMfa(user)) return respondMfaRequired(res, user, slug, 'google')
     return issueSession(req, res, user, 'google', slug)
+  } catch (err) {
+    next(err)
+  }
+}
+
+/**
+ * POST /api/auth/handoff
+ * Body: { token } — un JWT de sesión ya emitido. Devuelve un código de un
+ * solo uso (60s) para cruzar al subdominio sin poner ese JWT en la URL.
+ */
+async function createAuthHandoff(req, res, next) {
+  try {
+    const token = req.body?.token
+    if (typeof token !== 'string' || !token) return res.status(400).json({ error: 'Token requerido' })
+    try {
+      verifyToken(token)
+    } catch {
+      return res.status(401).json({ error: 'Token inválido' })
+    }
+    const code = await createHandoff(token)
+    res.json({ code })
+  } catch (err) {
+    next(err)
+  }
+}
+
+/**
+ * POST /api/auth/handoff/exchange
+ * Body: { code }. Canjea el código por el JWT, una sola vez.
+ */
+async function exchangeAuthHandoff(req, res, next) {
+  try {
+    const token = await consumeHandoff(req.body?.code)
+    if (!token) {
+      return res.status(401).json({
+        error: 'El enlace de ingreso venció. Volvé a iniciar sesión.',
+        code: 'HANDOFF_EXPIRED',
+      })
+    }
+    res.json({ token })
   } catch (err) {
     next(err)
   }
@@ -587,4 +632,4 @@ function logout(req, res) {
   res.json({ ok: true })
 }
 
-module.exports = { login, verifyMfa, me, forgotPassword, resetPassword, verifyEmailChange, verifyEmail, resendVerificationEmail, connectGoogleWithToken, googleLogin, switchWorkspace, recordLogin, logout }
+module.exports = { login, verifyMfa, me, forgotPassword, resetPassword, verifyEmailChange, verifyEmail, resendVerificationEmail, connectGoogleWithToken, googleLogin, createAuthHandoff, exchangeAuthHandoff, switchWorkspace, recordLogin, logout }

@@ -4,7 +4,9 @@ jest.mock('../../src/lib/prisma', () => ({
   task:            { findFirst: jest.fn() },
   projectFile:     { findFirst: jest.fn(), create: jest.fn(), update: jest.fn(), delete: jest.fn() },
   taskFile:        { findMany: jest.fn(), findFirst: jest.fn(), count: jest.fn(), create: jest.fn(), delete: jest.fn() },
-  $transaction:    jest.fn(ops => Promise.all(ops)),
+  projectMember:   { findUnique: jest.fn() },
+  $queryRaw:       jest.fn().mockResolvedValue([{ id: 1 }]),
+  $transaction:    jest.fn(arg => (typeof arg === 'function' ? arg(require('../../src/lib/prisma')) : Promise.all(arg))),
 }))
 
 jest.mock('../../src/services/objectStorage.service', () => ({
@@ -90,6 +92,18 @@ describe('GET /api/tasks/:id/attachments', () => {
     expect(res.status).toBe(403)
   })
 
+  it('403 si el proyecto es privado y no soy del equipo', async () => {
+    prisma.task.findFirst.mockResolvedValue(dbTask({
+      project: { id: PROJECT_ID, name: 'Privado', timezone: 'America/Argentina/Buenos_Aires', filesEnabled: true, isPrivate: true },
+    }))
+    prisma.projectMember.findUnique.mockResolvedValue(null)
+
+    const res = await req('get', BASE)
+
+    expect(res.status).toBe(403)
+    expect(prisma.taskFile.findMany).not.toHaveBeenCalled()
+  })
+
   it('200 lista los archivos linkeados, shapeados', async () => {
     prisma.task.findFirst.mockResolvedValue(dbTask())
     prisma.taskFile.findMany.mockResolvedValue([
@@ -158,7 +172,6 @@ describe('POST /api/tasks/:id/attachments/:fileId/confirm', () => {
     prisma.projectFile.findFirst.mockResolvedValue(dbFile({ status: 'pending' }))
     objectStorage.headObject.mockResolvedValue({ size: 1000 })
     objectStorage.getObjectHead.mockResolvedValue(Buffer.from('%PDF-1.4'))
-    prisma.$transaction.mockImplementation(ops => Promise.all(ops))
     prisma.projectFile.update.mockResolvedValue(dbFile({ status: 'ready', mimeType: 'application/pdf' }))
     prisma.taskFile.create.mockResolvedValue({ id: 9 })
 
@@ -176,7 +189,6 @@ describe('POST /api/tasks/:id/attachments/:fileId/confirm', () => {
     prisma.projectFile.findFirst.mockResolvedValue(dbFile({ status: 'pending' }))
     objectStorage.headObject.mockResolvedValue({ size: 1000 })
     objectStorage.getObjectHead.mockResolvedValue(Buffer.from('%PDF-1.4'))
-    prisma.$transaction.mockImplementation(ops => Promise.all(ops))
     prisma.projectFile.update.mockResolvedValue(dbFile({ status: 'ready' }))
     prisma.taskFile.create.mockResolvedValue({ id: 9 })
 
@@ -194,7 +206,6 @@ describe('POST /api/tasks/:id/attachments/:fileId/confirm', () => {
     prisma.projectFile.findFirst.mockResolvedValue(dbFile({ status: 'pending' }))
     objectStorage.headObject.mockResolvedValue({ size: 1000 })
     objectStorage.getObjectHead.mockResolvedValue(Buffer.from('%PDF-1.4'))
-    prisma.$transaction.mockImplementation(ops => Promise.all(ops))
     prisma.projectFile.update.mockResolvedValue(dbFile({ status: 'ready' }))
     prisma.taskFile.create.mockResolvedValue({ id: 9 })
 

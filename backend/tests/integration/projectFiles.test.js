@@ -7,6 +7,8 @@ jest.mock('../../src/lib/prisma', () => ({
     aggregate: jest.fn(), create: jest.fn(), update: jest.fn(), delete: jest.fn(),
     deleteMany: jest.fn(), updateMany: jest.fn(),
   },
+  $queryRaw: jest.fn().mockResolvedValue([{ id: 1 }]),
+  $transaction: jest.fn(arg => (typeof arg === 'function' ? arg(require('../../src/lib/prisma')) : Promise.all(arg))),
 }))
 
 jest.mock('../../src/services/objectStorage.service', () => ({
@@ -238,6 +240,38 @@ describe('POST /files/:fileId/confirm', () => {
       where: { id: 1 },
       data: expect.objectContaining({ status: 'ready', sizeBytes: 2048, confirmedAt: expect.any(Date) }),
     }))
+    expect(prisma.projectFile.update.mock.calls[0][0].data.posterKey).toBeUndefined()
+  })
+
+  it('ignora posterFileId: no copia el objectKey de otro archivo', async () => {
+    mockBase()
+    prisma.projectFile.findFirst.mockResolvedValue(dbItem({ status: 'pending' }))
+    objectStorage.headObject.mockResolvedValue({ size: 100 })
+    objectStorage.getObjectHead.mockResolvedValue(Buffer.from('%PDF-1.4'))
+    prisma.projectFile.update.mockResolvedValue(dbItem({ status: 'ready' }))
+
+    const res = await req('post', `${BASE}/1/confirm`).send({ posterFileId: 99 })
+
+    expect(res.status).toBe(200)
+    const lookups = prisma.projectFile.findFirst.mock.calls.map(c => c[0].where.id)
+    expect(lookups).not.toContain(99)
+    expect(prisma.projectFile.update.mock.calls[0][0].data.posterKey).toBeUndefined()
+  })
+
+  it('rechaza el confirm si el tamaño real se pasa de la cuota reservada', async () => {
+    mockBase()
+    getSettings.mockResolvedValue({ projectFilesMaxMbPerWorkspace: 1 })
+    prisma.projectFile.findFirst.mockResolvedValue(dbItem({ status: 'pending', sizeBytes: 1 }))
+    prisma.projectFile.aggregate.mockResolvedValue({ _sum: { sizeBytes: 1 } })
+    objectStorage.headObject.mockResolvedValue({ size: 2 * 1024 * 1024 })
+    objectStorage.getObjectHead.mockResolvedValue(Buffer.from('%PDF-1.4'))
+
+    const res = await req('post', `${BASE}/1/confirm`).send({})
+
+    expect(res.status).toBe(413)
+    expect(res.body.code).toBe('STORAGE_QUOTA_EXCEEDED')
+    expect(prisma.projectFile.update).not.toHaveBeenCalled()
+    expect(objectStorage.deleteObject).toHaveBeenCalledWith('files/1/xyz.pdf')
   })
 
   it('409 si ya estaba confirmado', async () => {
@@ -547,6 +581,17 @@ describe('POST /files/:fileId/thumbnail', () => {
 
     expect(res.status).toBe(200)
     expect(objectStorage.deleteObject).toHaveBeenCalledWith('files/1/thumbs/old.jpg')
+  })
+
+  it('no borra un posterKey que apunta al archivo de otra fila', async () => {
+    mockBase()
+    prisma.projectFile.findFirst.mockResolvedValue(dbItem({ mimeType: 'video/mp4', posterKey: 'files/1/otro-archivo.png' }))
+    objectStorage.deleteObject.mockResolvedValue()
+
+    const res = await postThumb()
+
+    expect(res.status).toBe(200)
+    expect(objectStorage.deleteObject).not.toHaveBeenCalled()
   })
 
   it('rechaza un buffer que no es imagen, aunque venga con nombre .jpg', async () => {
