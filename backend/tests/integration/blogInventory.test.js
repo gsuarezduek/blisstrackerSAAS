@@ -1,5 +1,6 @@
-// Inventario SEO del blog: la tabla, el refresco contra Search Console, la
-// importación inicial del sitio y el vínculo entre traducciones.
+// Inventario del blog (Marketing → GEO / SEO → Contenido SEO): la tabla, el
+// refresco contra Search Console, la importación inicial del sitio, los datos SEO
+// de cada nota y el vínculo entre traducciones.
 jest.mock('../../src/lib/prisma', () => ({
   workspace:           { findUnique: jest.fn() },
   workspaceMember:     { findUnique: jest.fn(), findMany: jest.fn() },
@@ -41,7 +42,8 @@ const SECRET         = process.env.JWT_SECRET
 const WORKSPACE_SLUG = 'bliss'
 const WORKSPACE_ID   = 1
 const PROJECT_ID     = 7
-const BASE           = `/api/contenido/projects/${PROJECT_ID}`
+const BASE           = `/api/marketing/projects/${PROJECT_ID}/blog`
+const CONTENT_BASE   = `/api/contenido/projects/${PROJECT_ID}`
 
 function req(method, url, role = 'admin') {
   const token = jwt.sign(
@@ -58,7 +60,7 @@ function mockBase({ workspaceRole = 'admin' } = {}) {
     members: [{ workspaceId: WORKSPACE_ID, userId: 1, role: workspaceRole, active: true }],
   })
   prisma.workspaceMember.findUnique.mockResolvedValue({ workspaceId: WORKSPACE_ID, userId: 1, role: workspaceRole, active: true })
-  prisma.featureFlag.findUnique.mockResolvedValue({ key: 'contenido', enabledGlobally: true, enabledWorkspaceIds: '[]' })
+  prisma.featureFlag.findUnique.mockImplementation(({ where }) => Promise.resolve({ key: where.key, enabledGlobally: true, enabledWorkspaceIds: '[]' }))
   prisma.project.findFirst.mockResolvedValue({
     id: PROJECT_ID, timezone: 'America/Argentina/Buenos_Aires', websiteUrl: 'https://mdz.com',
   })
@@ -90,13 +92,13 @@ const row = (over = {}) => ({
 
 beforeEach(() => jest.clearAllMocks())
 
-describe('GET /seo/inventory', () => {
+describe('GET /inventory', () => {
   it('devuelve las notas con sus métricas y la variación ya calculada', async () => {
     mockBase()
     prisma.contentPiece.findMany.mockResolvedValue([row()])
     prisma.projectIntegration.findUnique.mockResolvedValue({ status: 'active' })
 
-    const res = await req('get', `${BASE}/seo/inventory`)
+    const res = await req('get', `${BASE}/inventory`)
     expect(res.status).toBe(200)
     expect(res.body.searchConsole).toBe('active')
     expect(res.body.period).toEqual({ start: '2026-10-10', end: '2026-11-06' })
@@ -115,7 +117,7 @@ describe('GET /seo/inventory', () => {
     prisma.contentPiece.findMany.mockResolvedValue([])
     prisma.projectIntegration.findUnique.mockResolvedValue({ status: 'active' })
 
-    await req('get', `${BASE}/seo/inventory`)
+    await req('get', `${BASE}/inventory`)
     expect(prisma.contentPiece.findMany.mock.calls[0][0].where.publishedUrl).toEqual({ not: null })
   })
 
@@ -124,7 +126,7 @@ describe('GET /seo/inventory', () => {
     prisma.contentPiece.findMany.mockResolvedValue([row({ seoStat: null })])
     prisma.projectIntegration.findUnique.mockResolvedValue(null)
 
-    const res = await req('get', `${BASE}/seo/inventory`)
+    const res = await req('get', `${BASE}/inventory`)
     expect(res.body.searchConsole).toBe('missing')
     expect(res.body.pieces[0].seo).toBeNull()
     expect(res.body.pieces[0].trend).toBe('nuevo')
@@ -135,7 +137,7 @@ describe('GET /seo/inventory', () => {
     prisma.contentPiece.findMany.mockResolvedValue([])
     prisma.projectIntegration.findUnique.mockResolvedValue({ status: 'active' })
 
-    await req('get', `${BASE}/seo/inventory?language=none`)
+    await req('get', `${BASE}/inventory?language=none`)
     expect(prisma.contentPiece.findMany.mock.calls[0][0].where.language).toBeNull()
   })
 
@@ -147,10 +149,10 @@ describe('GET /seo/inventory', () => {
     ])
     prisma.projectIntegration.findUnique.mockResolvedValue({ status: 'active' })
 
-    const subiendo = await req('get', `${BASE}/seo/inventory?trend=sube`)
+    const subiendo = await req('get', `${BASE}/inventory?trend=sube`)
     expect(subiendo.body.pieces.map(p => p.id)).toEqual([1])
 
-    const conAlertas = await req('get', `${BASE}/seo/inventory?alert=1`)
+    const conAlertas = await req('get', `${BASE}/inventory?alert=1`)
     expect(conAlertas.body.pieces.map(p => p.id)).toEqual([2])
     // El conteo del encabezado se calcula sobre lo filtrado, no sobre el total.
     expect(conAlertas.body.counts.withAlerts).toBe(1)
@@ -165,7 +167,7 @@ describe('GET /seo/inventory', () => {
     ])
     prisma.projectIntegration.findUnique.mockResolvedValue({ status: 'active' })
 
-    const res = await req('get', `${BASE}/seo/inventory`)
+    const res = await req('get', `${BASE}/inventory`)
     expect(res.body.pieces.map(p => p.id)).toEqual([3, 1, 2])
   })
 
@@ -177,7 +179,7 @@ describe('GET /seo/inventory', () => {
     ])
     prisma.projectIntegration.findUnique.mockResolvedValue({ status: 'active' })
 
-    const res = await req('get', `${BASE}/seo/inventory?sort=position`)
+    const res = await req('get', `${BASE}/inventory?sort=position`)
     expect(res.body.pieces.map(p => p.id)).toEqual([2, 1])
   })
 
@@ -191,14 +193,14 @@ describe('GET /seo/inventory', () => {
       ])
     prisma.projectIntegration.findUnique.mockResolvedValue({ status: 'active' })
 
-    const res = await req('get', `${BASE}/seo/inventory`)
+    const res = await req('get', `${BASE}/inventory`)
     expect(res.body.pieces[0].translations).toEqual([
       { id: 11, title: 'Car rental', language: 'en', publishedUrl: 'https://mdz.com/en/blog/a', status: 'publicado' },
     ])
   })
 })
 
-describe('POST /seo/refresh', () => {
+describe('POST /refresh', () => {
   it('pide dos ventanas de 28 días + las consultas por página, y guarda una fila por nota', async () => {
     mockBase()
     prisma.contentPiece.findMany.mockResolvedValue([
@@ -214,7 +216,7 @@ describe('POST /seo/refresh', () => {
         { keys: ['https://mdz.com/blog/a', 'rent a car'],        clicks: 20, impressions: 400, ctr: 0.05,  position: 6 },
       ])
 
-    const res = await req('post', `${BASE}/seo/refresh`)
+    const res = await req('post', `${BASE}/refresh`)
     expect(res.status).toBe(200)
     expect(res.body).toMatchObject({ synced: 2, matched: 1 })
 
@@ -249,7 +251,7 @@ describe('POST /seo/refresh', () => {
       .mockResolvedValueOnce([])
       .mockResolvedValueOnce([])
 
-    await req('post', `${BASE}/seo/refresh`)
+    await req('post', `${BASE}/refresh`)
     expect(prisma.contentPieceSeoStat.upsert.mock.calls[0][0].create.clicks).toBe(7)
   })
 
@@ -260,7 +262,7 @@ describe('POST /seo/refresh', () => {
     ])
     prisma.projectIntegration.findUnique.mockResolvedValue(null)
 
-    const res = await req('post', `${BASE}/seo/refresh`)
+    const res = await req('post', `${BASE}/refresh`)
     expect(res.status).toBe(400)
     expect(res.body.code).toBe('NO_SEARCH_CONSOLE')
   })
@@ -269,7 +271,7 @@ describe('POST /seo/refresh', () => {
     mockBase()
     prisma.contentPieceSeoStat.findFirst.mockResolvedValue({ fetchedAt: new Date() })
 
-    const res = await req('post', `${BASE}/seo/refresh`)
+    const res = await req('post', `${BASE}/refresh`)
     expect(res.body).toMatchObject({ skipped: true, reason: 'cooldown' })
     expect(querySearchConsole).not.toHaveBeenCalled()
   })
@@ -278,7 +280,7 @@ describe('POST /seo/refresh', () => {
     mockBase()
     prisma.contentPiece.findMany.mockResolvedValue([])
 
-    const res = await req('post', `${BASE}/seo/refresh`)
+    const res = await req('post', `${BASE}/refresh`)
     expect(res.body).toMatchObject({ synced: 0 })
     expect(querySearchConsole).not.toHaveBeenCalled()
     // Y la fila de una pieza a la que le sacaron la URL se limpia.
@@ -291,12 +293,12 @@ describe('POST /seo/refresh', () => {
     mockBase({ workspaceRole: 'member' })
     prisma.projectMember.findUnique.mockResolvedValue(null)
 
-    const res = await req('post', `${BASE}/seo/refresh`, 'member')
+    const res = await req('post', `${BASE}/refresh`, 'member')
     expect(res.status).toBe(403)
   })
 })
 
-describe('POST /seo/import', () => {
+describe('POST /import', () => {
   const wpResponse = (posts, totalPages = 1) => ({
     status: 200,
     headers: { 'x-wp-totalpages': String(totalPages) },
@@ -311,7 +313,7 @@ describe('POST /seo/import', () => {
       { id: 2, link: 'https://mdz.com/en/blog/a', title: { rendered: 'Note A' }, date_gmt: '2026-01-05T13:00:00' },
     ]))
 
-    const res = await req('post', `${BASE}/seo/import`).send({ source: 'wordpress', defaultLanguage: 'es', dryRun: true })
+    const res = await req('post', `${BASE}/import`).send({ source: 'wordpress', defaultLanguage: 'es', dryRun: true })
     expect(res.status).toBe(200)
     expect(res.body.dryRun).toBe(true)
     expect(res.body.created).toHaveLength(2)
@@ -327,7 +329,7 @@ describe('POST /seo/import', () => {
       { id: 1, link: 'https://mdz.com/blog/a', title: { rendered: 'Nota A' }, date_gmt: '2026-01-05T13:00:00', lang: 'es' },
     ]))
 
-    const res = await req('post', `${BASE}/seo/import`).send({ source: 'wordpress' })
+    const res = await req('post', `${BASE}/import`).send({ source: 'wordpress' })
     expect(res.status).toBe(200)
     const { data } = prisma.contentPiece.create.mock.calls[0][0]
     expect(data).toMatchObject({
@@ -350,7 +352,7 @@ describe('POST /seo/import', () => {
       { id: 1, link: 'https://mdz.com/blog/a', title: { rendered: 'Nota A' }, date_gmt: '2026-01-05T13:00:00' },
     ]))
 
-    const res = await req('post', `${BASE}/seo/import`).send({ source: 'wordpress', dryRun: true })
+    const res = await req('post', `${BASE}/import`).send({ source: 'wordpress', dryRun: true })
     expect(res.body.created).toHaveLength(0)
     expect(res.body.skipped).toEqual([{ url: 'https://mdz.com/blog/a', reason: 'ya_cargada' }])
     expect(res.body.skippedCount).toBe(1)
@@ -368,7 +370,7 @@ describe('POST /seo/import', () => {
       </urlset>`,
     })
 
-    const res = await req('post', `${BASE}/seo/import`).send({ source: 'sitemap', filter: '/blog/', dryRun: true })
+    const res = await req('post', `${BASE}/import`).send({ source: 'sitemap', filter: '/blog/', dryRun: true })
     expect(res.body.created).toEqual([
       expect.objectContaining({ url: 'https://mdz.com/blog/alquiler-de-autos', title: 'Alquiler de autos' }),
     ])
@@ -379,7 +381,7 @@ describe('POST /seo/import', () => {
     prisma.contentPiece.findMany.mockResolvedValue([])
     fetchPublicUrl.mockRejectedValue(new Error('404'))
 
-    const res = await req('post', `${BASE}/seo/import`).send({ source: 'wordpress' })
+    const res = await req('post', `${BASE}/import`).send({ source: 'wordpress' })
     expect(res.status).toBe(400)
     expect(res.body.code).toBe('WP_API_UNAVAILABLE')
     expect(res.body.error).toContain('sitemap')
@@ -389,13 +391,13 @@ describe('POST /seo/import', () => {
     mockBase()
     prisma.project.findFirst.mockResolvedValue({ id: PROJECT_ID, timezone: 'America/Argentina/Buenos_Aires', websiteUrl: null })
 
-    const res = await req('post', `${BASE}/seo/import`).send({ source: 'wordpress' })
+    const res = await req('post', `${BASE}/import`).send({ source: 'wordpress' })
     expect(res.status).toBe(400)
     expect(res.body.code).toBe('NO_SITE_URL')
   })
 })
 
-describe('PATCH /pieces/:pid — campos SEO', () => {
+describe('PATCH /notes/:pid — datos SEO de la nota', () => {
   const existing = {
     id: 10, projectId: PROJECT_ID, workspaceId: WORKSPACE_ID, title: 'A', status: 'publicado',
     types: '[]', networks: '[]', seoKeywords: '[]', language: null, seoKeyword: null,
@@ -408,7 +410,7 @@ describe('PATCH /pieces/:pid — campos SEO', () => {
     prisma.contentPiece.findMany.mockResolvedValue([])
     prisma.contentPiece.update.mockResolvedValue({})
 
-    const res = await req('patch', `${BASE}/pieces/10`).send({
+    const res = await req('patch', `${BASE}/notes/10`).send({
       publishedUrl: 'https://mdz.com/blog/a',
       language: 'en',
       seoKeyword: '  alquiler de autos  ',
@@ -426,7 +428,7 @@ describe('PATCH /pieces/:pid — campos SEO', () => {
     mockBase()
     prisma.contentPiece.findFirst.mockResolvedValue(existing)
 
-    const res = await req('patch', `${BASE}/pieces/10`).send({ language: 'fr' })
+    const res = await req('patch', `${BASE}/notes/10`).send({ language: 'fr' })
     expect(res.status).toBe(400)
     expect(prisma.contentPiece.update).not.toHaveBeenCalled()
   })
@@ -437,10 +439,41 @@ describe('PATCH /pieces/:pid — campos SEO', () => {
     prisma.contentPiece.findMany.mockResolvedValue([])
     prisma.contentPiece.update.mockResolvedValue({})
 
-    await req('patch', `${BASE}/pieces/10`).send({ language: '', seoKeyword: '   ' })
+    await req('patch', `${BASE}/notes/10`).send({ language: '', seoKeyword: '   ' })
     const { data } = prisma.contentPiece.update.mock.calls[0][0]
     expect(data.language).toBeNull()
     expect(data.seoKeyword).toBeNull()
+  })
+
+  it('400 con una URL que no es http(s): no hay nada que cruzar con Search Console', async () => {
+    mockBase()
+    prisma.contentPiece.findFirst.mockResolvedValue(existing)
+
+    const res = await req('patch', `${BASE}/notes/10`).send({ publishedUrl: 'mdz.com/blog/a' })
+    expect(res.status).toBe(400)
+    expect(prisma.contentPiece.update).not.toHaveBeenCalled()
+  })
+
+  it('400 si no viene ningún dato SEO (el resto de la pieza es de Contenido)', async () => {
+    mockBase()
+    prisma.contentPiece.findFirst.mockResolvedValue(existing)
+
+    const res = await req('patch', `${BASE}/notes/10`).send({ title: 'Otro título' })
+    expect(res.status).toBe(400)
+    expect(prisma.contentPiece.update).not.toHaveBeenCalled()
+  })
+
+  it('Contenido ya no escribe los datos SEO de una pieza', async () => {
+    mockBase()
+    prisma.contentPiece.findFirst.mockResolvedValue(existing)
+    prisma.contentPiece.findMany.mockResolvedValue([])
+    prisma.contentPiece.update.mockResolvedValue(existing)
+
+    await req('patch', `${CONTENT_BASE}/pieces/10`).send({ title: 'B', seoKeyword: 'alquiler', language: 'en' })
+    const { data } = prisma.contentPiece.update.mock.calls[0][0]
+    expect(data.title).toBe('B')
+    expect(data).not.toHaveProperty('seoKeyword')
+    expect(data).not.toHaveProperty('language')
   })
 })
 
@@ -460,7 +493,7 @@ describe('traducciones de una nota', () => {
       tasks: [], assets: [], files: [], comments: [], _count: { comments: 0 },
     })
 
-    const res = await req('post', `${BASE}/pieces/10/translations`).send({ pieceId: 11 })
+    const res = await req('post', `${BASE}/notes/10/translations`).send({ pieceId: 11 })
     expect(res.status).toBe(200)
     // El grupo de la otra pieza se absorbe en el de esta, no se mueve una sola fila.
     expect(prisma.contentPiece.updateMany).toHaveBeenCalledWith({
@@ -471,14 +504,14 @@ describe('traducciones de una nota', () => {
 
   it('400 si se intenta vincular una nota consigo misma', async () => {
     mockBase()
-    const res = await req('post', `${BASE}/pieces/10/translations`).send({ pieceId: 10 })
+    const res = await req('post', `${BASE}/notes/10/translations`).send({ pieceId: 10 })
     expect(res.status).toBe(400)
   })
 
   it('404 si alguna de las dos no es de este proyecto', async () => {
     mockBase()
     prisma.contentPiece.findMany.mockResolvedValue([{ id: 10, translationGroupId: null }])
-    const res = await req('post', `${BASE}/pieces/10/translations`).send({ pieceId: 999 })
+    const res = await req('post', `${BASE}/notes/10/translations`).send({ pieceId: 999 })
     expect(res.status).toBe(404)
   })
 
@@ -494,7 +527,7 @@ describe('traducciones de una nota', () => {
     prisma.contentPiece.findMany.mockResolvedValueOnce([{ id: 11 }]).mockResolvedValueOnce([])
     prisma.contentPiece.update.mockResolvedValue({})
 
-    const res = await req('delete', `${BASE}/pieces/10/translations`)
+    const res = await req('delete', `${BASE}/notes/10/translations`)
     expect(res.status).toBe(200)
     expect(res.body.unlinked).toBe(true)
     expect(prisma.contentPiece.update).toHaveBeenCalledWith({ where: { id: 11 }, data: { translationGroupId: null } })

@@ -40,7 +40,7 @@ const AREAS = [
   { key: 'ventas',     label: 'Ventas / CRM',           match: n => n.startsWith('ventas_') },
   { key: 'whatsapp',   label: 'WhatsApp',               match: n => n.startsWith('whatsapp_') },
 ]
-const SEO_TOOLS = /^marketing_(cannibal|content_brief|content_gap|onpage|pagespeed|visibility|seo_action_plan)/
+const SEO_TOOLS = /^marketing_(cannibal|content_brief|content_gap|onpage|pagespeed|visibility|seo_action_plan|blog)/
 
 const SECTIONS = {
   general: `## Quién sos y cómo funcionan los permisos
@@ -149,6 +149,7 @@ Varias herramientas con el mismo patrón run → list → get → delete:
 - Content Gap (\`marketing_content_gap_*\`): temas que faltan vs el top 4 del SERP. Async.
 - PageSpeed (\`marketing_pagespeed_*\`): Core Web Vitals. Async. Consume cuota real de la API de Google — no lo repitas sin necesidad.
 - GEO Visibility (\`marketing_visibility_*\`): monitoreo de menciones de marca en respuestas de IA. Primero cargá preguntas (\`_prompt_add\`, máx 5 activas) y competidores (\`_competitor_add\`, máx 4) con las tools de catálogo; \`_run\` corre el chequeo contra un modelo con web search — es la más cara de todo Marketing, confirmá siempre antes de correrla. Async: pollea con \`_run_get\`.
+- **Inventario del blog** (\`marketing_blog_*\`): cada nota del blog es una pieza de Contenido con \`publishedUrl\` — eso la vuelve medible. \`marketing_blog_inventory\` cruza cada URL con Search Console (28 días + los 28 anteriores, top 5 consultas, alertas) — **leelo ANTES de proponer una nota nueva**: si ya existe una para esa keyword, lo que corresponde es actualizarla, no escribir otra que le compita. \`marketing_blog_refresh\` vuelve a pedir los datos (cuota de la API del cliente, mínimo 10 min entre refrescos). \`marketing_blog_import\` carga de una vez lo que el sitio ya publicó — corré siempre \`dryRun: true\` primero y mostrale al usuario qué se va a crear. Los datos SEO de una nota (URL, idioma, keywords) se cargan con \`marketing_blog_note_update\` —no con \`contenido_piece_update\`, que ya no los acepta— y las versiones en otros idiomas de la MISMA nota se unen con \`marketing_blog_translation_link\`/\`_unlink\`. La alerta \`keyword_overlap\` (esa nota aparece para una keyword que otra nota ya tiene asignada) es el aviso temprano de canibalización: el veredicto y el arreglo están en \`marketing_cannibal_*\`, y lo que ahí se marque como resuelto deja de alertar en el inventario.
 - \`marketing_seo_action_plan\`: agrega hallazgos de GEO/Canibalización/PageSpeed/oportunidades en un plan único priorizado.
 Todas las \`*_run\` consumen IA/APIs pagas: confirmá antes de dispararlas.`,
 
@@ -161,9 +162,6 @@ Calendario de piezas de redes con aprobación del cliente.
 - \`contenido_request_approval\` **manda un email al cliente**. Confirmá antes.
 - \`contenido_piece_send_to_dashboard\` crea la tarea en el dashboard del responsable actual de la pieza.
 - \`contenido_asset_upload\` sube la imagen o el video de la pieza (lo normal: \`url\` de un archivo ya generado, hasta 25MB; \`contentBase64\` solo para binarios chicos). Hasta 8 archivos por pieza, y queda espejado en la Nube del proyecto.
-- **Inventario SEO del blog** (\`contenido_seo_*\`): una pieza con \`publishedUrl\` es una nota medible. \`contenido_seo_inventory\` cruza cada URL con Search Console (28 días + los 28 anteriores, top 5 consultas, alertas) — **leelo ANTES de proponer una nota nueva**: si ya existe una para esa keyword, lo que corresponde es actualizarla, no escribir otra que le compita. \`contenido_seo_refresh\` vuelve a pedir los datos (cuota de la API del cliente, mínimo 10 min entre refrescos). \`contenido_seo_import\` carga de una vez lo que el sitio ya publicó — corré siempre \`dryRun: true\` primero y mostrale al usuario qué se va a crear.
-- **Alerta \`keyword_overlap\`**: esa nota aparece para una keyword que otra nota ya tiene asignada. Es el aviso temprano de canibalización; el veredicto y el arreglo están en Marketing (\`marketing_cannibal_*\`), y lo que ahí se marque como resuelto deja de alertar acá.
-- Para cargar los datos SEO de una nota se usan \`contenido_piece_update\` (\`publishedUrl\`, \`language\`, \`seoKeyword\`, \`seoKeywords\`) y \`contenido_piece_translation_link\`/\`_unlink\` para unir las versiones en otros idiomas de la MISMA nota.
 - **Mover una pieza de estado NO le avisa nada al cliente** (tampoco a "aprobacion"): el único mail lo manda \`contenido_request_approval\`. Así que la revisión interna del equipo se hace con \`contenido_piece_update\` y \`status\`, sin riesgo de escribirle al cliente. Lo que sí ve el cliente en su portal, en cualquier estado, son el título, el copy y los assets — \`designDetails\` e \`internalNotes\` nunca viajan.
 - No se puede por MCP: aprobar en nombre del cliente ni publicar en las redes.`,
 

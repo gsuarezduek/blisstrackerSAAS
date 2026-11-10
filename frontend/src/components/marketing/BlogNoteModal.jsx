@@ -1,8 +1,11 @@
-import { useState, useCallback, useMemo } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
+import { Link } from 'react-router-dom'
 import api from '../../api/client'
-import useDebouncedCommit from './useDebouncedCommit'
-import { CONTENT_LANGUAGES, languageMeta } from './contentCatalog'
+import LoadingSpinner from '../LoadingSpinner'
+import useDebouncedCommit from '../../hooks/useDebouncedCommit'
+import { useFeatureFlag } from '../../hooks/useFeatureFlag'
+import { useAuth } from '../../context/AuthContext'
+import { CONTENT_LANGUAGES, languageMeta, statusBadgeClass } from '../contenido/contentCatalog'
 import { ExternalLink, Link2, Plus, Search, TrendingDown, TrendingUp, X } from 'lucide-react'
 import { Icon } from '../ui/Icon'
 
@@ -48,21 +51,124 @@ function Metric({ label, value, delta, deltaSuffix, invert }) {
 }
 
 /**
- * Datos SEO de una nota: su URL publicada, idioma, keywords y las otras
- * versiones de la misma nota en otros idiomas — más lo que Search Console dice
- * de esa URL, si el inventario ya se refrescó.
+ * Ficha SEO de una nota del blog, abierta encima del Inventario del blog. La nota
+ * es una pieza de Contenido, pero acá se ve y se edita sólo lo de SEO: URL
+ * publicada, idioma, keywords, traducciones y lo que Search Console dice de esa
+ * URL. Título, estado, copy y aprobación siguen siendo de Contenido — por eso el
+ * link "Abrir en Contenido", para quien tenga ese módulo.
  *
- * Se muestra sólo cuando la pieza es (o puede ser) una nota del blog: en una
- * story de Instagram estos campos son ruido. El criterio es amplio a propósito
- * — alcanza con que ya tenga algún dato cargado — para que una pieza no quede
- * con una URL invisible por haberle sacado la red "blog".
+ * Saltar a una traducción cambia la nota que muestra el modal sin cerrarlo.
  */
-export default function ContentSeoFields({ piece, canEdit, onUpdate, onPieceChanged }) {
+export default function BlogNoteModal({ projectId, pieceId, canEdit, onClose, onChanged }) {
+  const [currentId, setCurrentId] = useState(pieceId)
+  const [note, setNote] = useState(null)
+  const [error, setError] = useState(null)
+  const [saveError, setSaveError] = useState(null)
+  const changed = useRef(false)
+  const { user } = useAuth()
+  const { enabled: contenidoEnabled } = useFeatureFlag('contenido')
+  const canOpenContenido = contenidoEnabled && !!user?.moduleAccess?.contenido
+
+  const load = useCallback(async (id) => {
+    try {
+      const r = await api.get(`/marketing/projects/${projectId}/blog/notes/${id}`)
+      setNote(r.data)
+      setError(null)
+    } catch (err) {
+      setError(err.response?.data?.error || 'No se pudo cargar la nota')
+    }
+  }, [projectId])
+
+  useEffect(() => { setNote(null); load(currentId) }, [currentId, load])
+
+  const close = useCallback(() => {
+    if (changed.current) onChanged?.()
+    onClose()
+  }, [onChanged, onClose])
+
+  useEffect(() => {
+    function onKey(e) { if (e.key === 'Escape') close() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [close])
+
+  const update = useCallback(async (patch) => {
+    setSaveError(null)
+    try {
+      const r = await api.patch(`/marketing/projects/${projectId}/blog/notes/${currentId}`, patch)
+      setNote(r.data)
+      changed.current = true
+    } catch (err) {
+      setSaveError(err.response?.data?.error || 'No se pudo guardar')
+    }
+  }, [projectId, currentId])
+
+  function onTranslationsChanged(fresh) {
+    changed.current = true
+    if (fresh) setNote(fresh)
+    else load(currentId)
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={close}>
+      <div
+        className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-3 px-5 pt-4 pb-3 border-b border-gray-100 dark:border-gray-700">
+          <div className="min-w-0">
+            <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 break-words">
+              {note?.title ?? 'Nota del blog'}
+            </h3>
+            {note && (
+              <div className="flex items-center gap-2 mt-1 flex-wrap text-xs">
+                <span className={`px-1.5 py-0.5 rounded-full ${statusBadgeClass(note.status)}`}>{note.statusLabel}</span>
+                {canOpenContenido && (
+                  <Link
+                    to={`/contenido?projectId=${projectId}&piece=${note.id}`}
+                    className="text-primary-600 dark:text-primary-400 hover:underline"
+                  >
+                    Abrir en Contenido
+                  </Link>
+                )}
+              </div>
+            )}
+          </div>
+          <button onClick={close} title="Cerrar" className="flex-shrink-0 p-1 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700">
+            <Icon as={X} size={18} />
+          </button>
+        </div>
+
+        <div className="px-5 py-4">
+          {error ? (
+            <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+          ) : !note ? (
+            <div className="py-10"><LoadingSpinner /></div>
+          ) : (
+            <NoteFields
+              key={note.id}
+              projectId={projectId}
+              note={note}
+              canEdit={canEdit}
+              onUpdate={update}
+              onOpenNote={setCurrentId}
+              onTranslationsChanged={onTranslationsChanged}
+            />
+          )}
+          {saveError && <p className="mt-3 text-xs text-red-600 dark:text-red-400">{saveError}</p>}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/** Los datos SEO de la nota y sus métricas. */
+function NoteFields({ projectId, note: piece, canEdit, onUpdate, onOpenNote, onTranslationsChanged }) {
   const [publishedUrl, setPublishedUrl] = useDebouncedCommit(
-    piece.publishedUrl ?? '', v => onUpdate(piece.id, { publishedUrl: v.trim() || null }),
+    piece.publishedUrl ?? '', v => onUpdate({ publishedUrl: v.trim() || null }),
   )
   const [seoKeyword, setSeoKeyword] = useDebouncedCommit(
-    piece.seoKeyword ?? '', v => onUpdate(piece.id, { seoKeyword: v.trim() || null }),
+    piece.seoKeyword ?? '', v => onUpdate({ seoKeyword: v.trim() || null }),
   )
   const [newKeyword, setNewKeyword] = useState('')
 
@@ -72,22 +178,24 @@ export default function ContentSeoFields({ piece, canEdit, onUpdate, onPieceChan
     e.preventDefault()
     const value = newKeyword.trim()
     if (!value || secondary.includes(value)) { setNewKeyword(''); return }
-    onUpdate(piece.id, { seoKeywords: [...secondary, value] })
+    onUpdate({ seoKeywords: [...secondary, value] })
     setNewKeyword('')
   }
 
   function removeKeyword(kw) {
-    onUpdate(piece.id, { seoKeywords: secondary.filter(k => k !== kw) })
+    onUpdate({ seoKeywords: secondary.filter(k => k !== kw) })
   }
 
   const seo = piece.seo
   const translations = piece.translations ?? []
 
   return (
-    <div className="sm:col-span-2 rounded-xl border border-gray-200 dark:border-gray-700 p-3 space-y-3">
-      <p className="text-xs font-semibold text-gray-600 dark:text-gray-300">
-        SEO <span className="font-normal italic text-gray-400">(para notas del blog — habilita el inventario y el cruce con Search Console)</span>
-      </p>
+    <div className="space-y-3">
+      {!piece.publishedUrl && (
+        <p className="text-xs px-2.5 py-1.5 rounded-lg border bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-300">
+          Esta pieza todavía no tiene URL publicada: cargala para que entre al inventario y se mida contra Search Console.
+        </p>
+      )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div className="sm:col-span-2">
@@ -118,7 +226,7 @@ export default function ContentSeoFields({ piece, canEdit, onUpdate, onPieceChan
           <label className={LABEL}>Idioma</label>
           <select
             value={piece.language ?? ''}
-            onChange={e => onUpdate(piece.id, { language: e.target.value || null })}
+            onChange={e => onUpdate({ language: e.target.value || null })}
             disabled={!canEdit}
             className={INPUT}
           >
@@ -170,10 +278,12 @@ export default function ContentSeoFields({ piece, canEdit, onUpdate, onPieceChan
       </div>
 
       <TranslationLinks
+        projectId={projectId}
         piece={piece}
         translations={translations}
         canEdit={canEdit}
-        onPieceChanged={onPieceChanged}
+        onOpenNote={onOpenNote}
+        onChanged={onTranslationsChanged}
       />
 
       {seo && (
@@ -227,8 +337,7 @@ export default function ContentSeoFields({ piece, canEdit, onUpdate, onPieceChan
  * del proyecto en vez de ofrecer un desplegable con todas: un blog con 65 notas
  * hace de ese desplegable algo inusable, y la traducción se busca por su nombre.
  */
-function TranslationLinks({ piece, translations, canEdit, onPieceChanged }) {
-  const [searchParams, setSearchParams] = useSearchParams()
+function TranslationLinks({ projectId, piece, translations, canEdit, onOpenNote, onChanged }) {
   const [open, setOpen] = useState(false)
   const [q, setQ] = useState('')
   const [results, setResults] = useState([])
@@ -243,28 +352,17 @@ function TranslationLinks({ piece, translations, canEdit, onPieceChanged }) {
   const search = useCallback(async (term) => {
     if (!term.trim()) { setResults([]); return }
     try {
-      const r = await api.get(`/contenido/projects/${piece.projectId}/pieces`, {
-        params: { q: term.trim(), take: 8, status: 'publicado,programado,aprobado,produccion,idea,revision,aprobacion,cambios' },
-      })
+      const r = await api.get(`/marketing/projects/${projectId}/blog/pieces`, { params: { q: term.trim() } })
       setResults(r.data.pieces.filter(p => !linkedIds.has(p.id)))
     } catch { setResults([]) }
-  }, [piece.projectId, linkedIds])
-
-  // Saltar a la traducción cambia el `?piece=` de la URL, igual que abrir una
-  // pieza desde cualquier vista: la página ya reacciona a ese parámetro. Un
-  // <a href> con el query string recargaría toda la app.
-  function openPiece(id) {
-    const next = new URLSearchParams(searchParams)
-    next.set('piece', String(id))
-    setSearchParams(next, { replace: true })
-  }
+  }, [projectId, linkedIds])
 
   async function link(otherId) {
     setBusy(true); setError(null)
     try {
-      await api.post(`/contenido/projects/${piece.projectId}/pieces/${piece.id}/translations`, { pieceId: otherId })
+      const r = await api.post(`/marketing/projects/${projectId}/blog/notes/${piece.id}/translations`, { pieceId: otherId })
       setOpen(false); setQ(''); setResults([])
-      onPieceChanged()
+      onChanged(r.data)
     } catch (err) {
       setError(err.response?.data?.error || 'No se pudo vincular')
     } finally { setBusy(false) }
@@ -273,8 +371,8 @@ function TranslationLinks({ piece, translations, canEdit, onPieceChanged }) {
   async function unlink() {
     setBusy(true); setError(null)
     try {
-      await api.delete(`/contenido/projects/${piece.projectId}/pieces/${piece.id}/translations`)
-      onPieceChanged()
+      const r = await api.delete(`/marketing/projects/${projectId}/blog/notes/${piece.id}/translations`)
+      onChanged(r.data?.note ?? null)
     } catch (err) {
       setError(err.response?.data?.error || 'No se pudo desvincular')
     } finally { setBusy(false) }
@@ -288,7 +386,7 @@ function TranslationLinks({ piece, translations, canEdit, onPieceChanged }) {
         {translations.map(t => (
           <button
             key={t.id}
-            onClick={() => openPiece(t.id)}
+            onClick={() => onOpenNote(t.id)}
             className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400 hover:underline"
             title={t.publishedUrl || t.title}
           >

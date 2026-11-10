@@ -1038,6 +1038,52 @@ Instagram, TikTok y LinkedIn: seguidores, engagement, mejores posts del mes y sn
 Meta Ads y Google Ads: inversión, impresiones, clicks, CTR y conversiones, con snapshots mensuales.`,
         related: ['marketing-intro', 'marketing-informes'],
       },
+      {
+        id: 'marketing-inventario-blog',
+        title: 'Inventario del blog',
+        audience: 'todos',
+        module: 'marketing',
+        summary: 'Las notas publicadas con sus clics, impresiones y posición de Search Console, sus alertas y la importación inicial desde el sitio.',
+        body: `Está en **Marketing → GEO / SEO → Contenido SEO → Inventario del blog**, junto al Content Brief y el Content Gap. Cada nota del blog es una pieza de Contenido; pasa a ser una **nota medible** en el momento en que le cargás su **URL publicada**. Desde ahí, el inventario te dice cómo le está yendo a cada nota — y eso es lo que permite decidir qué actualizar antes de escribir algo nuevo.
+
+## Qué le cargás a cada nota
+
+Hacé clic en una nota y se abre su **ficha SEO**, ahí mismo en Marketing:
+
+- **URL publicada** — es la que habilita todo lo demás. Sin ella la nota no entra al inventario.
+- **Idioma** (español, inglés o portugués) y **keyword principal** + **secundarias**.
+- **Traducciones** — la misma nota en otro idioma. Vinculadas, las ves juntas desde cualquiera de las tres.
+
+El resto de la pieza (título, estado, copy, aprobación del cliente) se maneja en Contenido; si tenés acceso, la ficha te lleva con **Abrir en Contenido**.
+
+## Sumar una nota nueva
+
+Una nota se produce y se aprueba en Contenido como cualquier pieza. Cuando se publica, en el inventario usá **Agregar nota**: buscás la pieza por título y le cargás la URL.
+
+## Qué te muestra
+
+Para cada nota, los **últimos 28 días** de Search Console (clics, impresiones, CTR y posición media) y la **variación** contra los 28 anteriores, más sus **5 consultas principales**. Podés filtrar por idioma, estado o tendencia, y ordenar por clics, impresiones o posición.
+
+## Las alertas
+
+- **Pierde tráfico** — se le cayeron los clics o bajó de posición.
+- **CTR bajo** — tiene muchas impresiones y poco clic para la posición en la que está: lo que conviene es reescribirle el título y la meta descripción, no el contenido.
+- **Keyword ya asignada a otra nota** — dos notas apuntando a lo mismo. Es el aviso temprano de canibalización; el diagnóstico y el arreglo están en Marketing → GEO/SEO → Canibalización, y lo que marques resuelto ahí deja de avisarte acá.
+
+## Si el blog ya está publicado, no lo cargues a mano
+
+**Importar del sitio** trae las entradas que ya existen y crea una nota por cada una, con su URL, título, fecha e idioma. Lee la API de WordPress (lo mejor si el sitio es WordPress: trae los títulos y las fechas reales) o el sitemap (sirve con cualquier CMS). Siempre te muestra primero qué va a crear, y correrlo de nuevo más adelante sólo trae lo nuevo: lo que ya está cargado no se duplica.
+
+## Requiere Search Console
+
+El inventario lista las notas igual, pero para medirlas el proyecto necesita **Google Search Console** conectado (ficha del proyecto → Ajustes). Los datos se actualizan solos una vez por día; el botón **Actualizar** los vuelve a pedir en el momento.`,
+        tips: [
+          'Antes de proponer una nota nueva, buscá la keyword en el inventario: si ya hay una nota para eso, suele rendir más actualizarla que escribir otra que le compita.',
+          'Search Console publica con 2 o 3 días de atraso: el período que ves termina unos días antes de hoy, a propósito.',
+          'Si importás desde el sitemap, filtrá por "/blog/" para no traerte también las páginas del sitio.',
+        ],
+        related: ['marketing-avanzado', 'contenido-intro'],
+      },
     ],
   },
 
@@ -1111,14 +1157,13 @@ Cada notificación es un link que abre directamente la tarea, el comentario o la
 
 Es un **módulo opcional** que habilita el equipo de BlissTracker. Aparece en \`/contenido\`, y también como un botón 📅 en la cabecera de cada proyecto.
 
-## Las cuatro vistas
+## Las tres vistas
 
 - **Calendario** — las piezas agrupadas por fecha de publicación, mes a mes.
 - **Tabla** — estilo Airtable: edición directa de cada campo (fecha, estado, tipo, redes, responsable) sin abrir nada.
 - **Kanban** — arrastrá una pieza entre columnas para cambiar su estado.
-- **Inventario SEO** — las notas del blog ya publicadas, con lo que Search Console dice de cada una (ver el artículo "Inventario SEO del blog").
 
-Las tres primeras muestran las mismas piezas del mes; elegí la que te resulte más cómoda según lo que estés haciendo.
+Las tres muestran las mismas piezas del mes; elegí la que te resulte más cómoda según lo que estés haciendo. Cómo le va a cada nota del blog ya publicada (Search Console, keywords, alertas) se mira en Marketing → GEO / SEO → Contenido SEO → **Inventario del blog**.
 
 ## El camino de una pieza
 
@@ -1136,46 +1181,6 @@ Desde el detalle de una pieza podés crearle una tarea a su responsable con un c
           'Escribí el copy y cargá los archivos antes de mandar a "Esperando aprobación": una vez ahí, el próximo paso es pedirle al cliente que la revise.',
         ],
         related: ['contenido-aprobacion', 'ficha-proyecto'],
-      },
-      {
-        id: 'contenido-inventario-seo',
-        title: 'Inventario SEO del blog',
-        audience: 'todos',
-        module: 'contenido',
-        summary: 'Las notas publicadas con sus clics, impresiones y posición de Search Console, sus alertas y la importación inicial desde el sitio.',
-        body: `Una pieza de blog pasa a ser una **nota medible** en el momento en que le cargás su **URL publicada**. Desde ahí, la vista **Inventario SEO** te dice cómo le está yendo a cada nota — y eso es lo que permite decidir qué actualizar antes de escribir algo nuevo.
-
-## Qué le cargás a cada nota
-
-En el detalle de la pieza, el bloque **SEO**:
-
-- **URL publicada** — es la que habilita todo lo demás. Sin ella la nota no entra al inventario.
-- **Idioma** (español, inglés o portugués) y **keyword principal** + **secundarias**.
-- **Traducciones** — la misma nota en otro idioma. Vinculadas, las ves juntas desde cualquiera de las tres.
-
-## Qué te muestra
-
-Para cada nota, los **últimos 28 días** de Search Console (clics, impresiones, CTR y posición media) y la **variación** contra los 28 anteriores, más sus **5 consultas principales**. Podés filtrar por idioma, estado o tendencia, y ordenar por clics, impresiones o posición.
-
-## Las alertas
-
-- **Pierde tráfico** — se le cayeron los clics o bajó de posición.
-- **CTR bajo** — tiene muchas impresiones y poco clic para la posición en la que está: lo que conviene es reescribirle el título y la meta descripción, no el contenido.
-- **Keyword ya asignada a otra nota** — dos notas apuntando a lo mismo. Es el aviso temprano de canibalización; el diagnóstico y el arreglo están en Marketing → GEO/SEO → Canibalización, y lo que marques resuelto ahí deja de avisarte acá.
-
-## Si el blog ya está publicado, no lo cargues a mano
-
-**Importar del sitio** trae las entradas que ya existen y crea una nota por cada una, con su URL, título, fecha e idioma. Lee la API de WordPress (lo mejor si el sitio es WordPress: trae los títulos y las fechas reales) o el sitemap (sirve con cualquier CMS). Siempre te muestra primero qué va a crear, y correrlo de nuevo más adelante sólo trae lo nuevo: lo que ya está cargado no se duplica.
-
-## Requiere Search Console
-
-El inventario lista las notas igual, pero para medirlas el proyecto necesita **Google Search Console** conectado (ficha del proyecto → Ajustes). Los datos se actualizan solos una vez por día; el botón **Actualizar** los vuelve a pedir en el momento.`,
-        tips: [
-          'Antes de proponer una nota nueva, buscá la keyword en el inventario: si ya hay una nota para eso, suele rendir más actualizarla que escribir otra que le compita.',
-          'Search Console publica con 2 o 3 días de atraso: el período que ves termina unos días antes de hoy, a propósito.',
-          'Si importás desde el sitemap, filtrá por "/blog/" para no traerte también las páginas del sitio.',
-        ],
-        related: ['contenido-intro', 'marketing-avanzado'],
       },
       {
         id: 'contenido-aprobacion',
@@ -1409,8 +1414,8 @@ Así el agente sabe sus límites desde el primer mensaje, sin que tengas que exp
 - **Tareas propias del agente** — el agente puede crear tareas que **ejecuta él mismo** (no vos): quedan en su propia lista de trabajo, puede tener varias en curso a la vez y no ocupan tu lugar de "una tarea en curso". También puede tomar las tareas que le delegues, devolvértelas y **borrar** las de su lista que todavía no completó (nunca tus tareas ni las ya completadas). Si algo lo frena, bloquea la tarea con un motivo para pedirte ayuda — ver abajo cómo se le contesta.
 - **Equipo** — listar el equipo. Los admins además: asistencia y tardanzas de una persona, historial detallado de tareas y ver la jornada de otra persona (solo lectura).
 - **Marketing** — salud del proyecto, GA4, Search Console (+ desglose por query, snapshot mensual, sugerencias IA), Domain Rating (+ actualizar), keywords (+ sugerir, dejar de trackear, histórico/heatmap, SERP y análisis IA), oportunidades SEO y plan de acción, las 5 redes, Meta y Google Ads, competidores, objetivos, informes y auditorías GEO (+ borrar, generar llms.txt, generar schema y vincular un hallazgo a una tarea). Puede agregar o sacar keywords y competidores, correr una auditoría GEO, regenerar un informe y refrescar todas las fuentes.
-- **SEO avanzado** — Canibalización, Content Brief, Auditoría On-Page, Content Gap y PageSpeed Insights: correr, listar, ver y borrar (PageSpeed no tiene borrar). En Canibalización también puede **marcar un conflicto como resuelto** (con la acción, la nota y la fecha) y desmarcarlo, igual que una persona. **GEO Visibility** (menciones de marca en respuestas de IA): cargar preguntas y competidores a monitorear, y correr el chequeo (consume IA con búsqueda web — la acción más cara de Marketing).
-- **Contenido** — ver, crear, editar y borrar piezas; **subir la imagen o el video de la pieza** (queda también en la Nube del proyecto); ver historial y comentarios; comentar; enviar al dashboard del responsable; pedir aprobación al cliente. Mover una pieza de estado no le avisa nada al cliente: el único mail sale cuando se pide la aprobación. También el **inventario SEO del blog**: leer cómo viene cada nota publicada (clics, impresiones, posición, alertas), cargarle URL, idioma y keywords, vincular traducciones e importar del sitio las notas que ya están publicadas.
+- **SEO avanzado** — Canibalización, Content Brief, Auditoría On-Page, Content Gap y PageSpeed Insights: correr, listar, ver y borrar (PageSpeed no tiene borrar). En Canibalización también puede **marcar un conflicto como resuelto** (con la acción, la nota y la fecha) y desmarcarlo, igual que una persona. **GEO Visibility** (menciones de marca en respuestas de IA): cargar preguntas y competidores a monitorear, y correr el chequeo (consume IA con búsqueda web — la acción más cara de Marketing). También el **inventario del blog**: leer cómo viene cada nota publicada (clics, impresiones, posición, alertas), cargarle URL, idioma y keywords, vincular traducciones e importar del sitio las notas que ya están publicadas.
+- **Contenido** — ver, crear, editar y borrar piezas; **subir la imagen o el video de la pieza** (queda también en la Nube del proyecto); ver historial y comentarios; comentar; enviar al dashboard del responsable; pedir aprobación al cliente. Mover una pieza de estado no le avisa nada al cliente: el único mail sale cuando se pide la aprobación.
 - **Ventas** — dashboard y métricas; empresas, contactos y leads (crear, editar, borrar); cambiar estado y responsable; archivar; convertir a proyecto; próximas acciones y notas; investigación con IA, informe de diagnóstico y propuestas.
 - **WhatsApp** — leer las conversaciones y **responder con texto** dentro de la ventana de 24 hs desde el último mensaje del contacto. El mensaje sale a tu nombre y en la bandeja queda rotulado con el nombre del agente. **El agente tiene prioridad sobre el bot**: cuando toma una conversación o responde, el bot deja de contestar ahí y el chip muestra "Agente «nombre»". También podés asignarle una conversación a tu agente desde el chat, en el selector **"La atiende mi agente"**. En la configuración del bot podés activar **"Darle prioridad a los agentes de IA"**: el bot espera unos minutos antes de responder y, si en ese rato un agente o una persona toma la conversación, no contesta. Para que el bot vuelva a atenderla, elegí **"La atiende el bot"**. También puede **fijar o desfijar** una conversación (el mismo pin 📌 compartido de la bandeja, lo ve todo el equipo).
 

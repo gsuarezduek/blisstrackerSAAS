@@ -13,8 +13,6 @@ const {
   getClientContacts,
   formatPiece,
   loadPiece,
-  loadTranslationGroups,
-  siblingsFrom,
   logEvent,
   resolveCtx,
   buildPieceData,
@@ -88,15 +86,7 @@ async function listPieces(req, res, next) {
       }),
     ])
 
-    // Las traducciones de todas las piezas del listado en un solo query: la
-    // ficha las muestra, y la ficha se abre desde la lista en memoria (no se
-    // refetchea), así que sin esto quedarían vacías hasta recargar.
-    const groups = await loadTranslationGroups(projectId, workspaceId, pieces.map(p => p.translationGroupId))
-
-    res.json({
-      members, clientContacts, total,
-      pieces: pieces.map(p => ({ ...formatPiece(p), translations: siblingsFrom(groups, p) })),
-    })
+    res.json({ members, clientContacts, pieces: pieces.map(formatPiece), total })
   } catch (err) { next(err) }
 }
 
@@ -140,8 +130,7 @@ async function getPiece(req, res, next) {
     const piece = await loadPiece(req.params.pid, ctx.projectId, ctx.workspaceId)
     if (!piece) return res.status(404).json({ error: 'Pieza no encontrada' })
 
-    const groups = await loadTranslationGroups(ctx.projectId, ctx.workspaceId, [piece.translationGroupId])
-    res.json({ ...formatPiece(piece), translations: siblingsFrom(groups, piece) })
+    res.json(formatPiece(piece))
   } catch (err) { next(err) }
 }
 

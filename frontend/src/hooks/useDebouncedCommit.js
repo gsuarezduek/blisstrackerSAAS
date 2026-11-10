@@ -2,8 +2,8 @@ import { useState, useEffect, useRef } from 'react'
 
 /**
  * Debounce genérico para inputs de texto libre: evita mandar un PATCH por tecla.
- * Vive en su propio archivo desde que lo usan la ficha de la pieza y el bloque
- * de datos SEO — antes estaba adentro de ContentPieceModal.jsx.
+ * Lo usan la ficha de la pieza de Contenido y la ficha SEO de una nota del
+ * blog (Marketing → GEO / SEO → Contenido SEO → Inventario del blog).
  */
 export default function useDebouncedCommit(value, onCommit, delay = 600) {
   const [draft, setDraft] = useState(value)

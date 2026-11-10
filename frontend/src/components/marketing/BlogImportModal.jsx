@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import api from '../../api/client'
-import { CONTENT_LANGUAGES, languageMeta } from './contentCatalog'
+import { CONTENT_LANGUAGES, languageMeta } from '../contenido/contentCatalog'
 import { X } from 'lucide-react'
 import { Icon } from '../ui/Icon'
 
@@ -21,12 +21,14 @@ const SOURCES = [
 ]
 
 /**
- * Importación inicial del blog. Siempre en dos pasos: primero se previsualiza
+ * Importación inicial del blog (Inventario del blog). Cada entrada importada
+ * nace como una pieza "publicado" de Contenido, con fecha en su calendario.
+ * Siempre en dos pasos: primero se previsualiza
  * (`dryRun`) y recién después se crea. Una importación crea decenas de piezas de
  * una sola vez — mostrar antes qué va a entrar es la diferencia entre poder
  * ajustar el filtro y tener que borrar 300 filas a mano.
  */
-export default function ContentImportModal({ projectId, onClose, onImported }) {
+export default function BlogImportModal({ projectId, onClose, onImported }) {
   const [source, setSource] = useState('wordpress')
   const [url, setUrl] = useState('')
   const [filter, setFilter] = useState('')
@@ -41,7 +43,7 @@ export default function ContentImportModal({ projectId, onClose, onImported }) {
   async function run(dryRun) {
     setBusy(true); setError(null)
     try {
-      const r = await api.post(`/contenido/projects/${projectId}/seo/import`, { ...body, dryRun })
+      const r = await api.post(`/marketing/projects/${projectId}/blog/import`, { ...body, dryRun })
       if (dryRun) setPreview(r.data)
       else { setResult(r.data); setPreview(null); onImported?.() }
     } catch (err) {

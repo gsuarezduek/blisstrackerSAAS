@@ -28,7 +28,7 @@ export const CONTENT_TYPES = [
   { key: 'otro',       label: 'Otro',       media: 'any' },
 ]
 
-// Idiomas de una nota del inventario SEO. Espejo de CONTENT_LANGUAGES del backend.
+// Idiomas de una nota del blog (Marketing → Inventario del blog). Espejo de CONTENT_LANGUAGES del backend.
 export const CONTENT_LANGUAGES = [
   { key: 'es', label: 'Español',   short: 'ES' },
   { key: 'en', label: 'Inglés',    short: 'EN' },

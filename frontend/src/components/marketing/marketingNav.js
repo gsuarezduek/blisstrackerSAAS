@@ -26,6 +26,9 @@ export const NAV = [
       { id: 'contenido', label: 'Contenido SEO', views: [
         { id: 'brief', label: 'Content Brief' },
         { id: 'gap',   label: '🆚 Content Gap' },
+        // Lo ya publicado: cada nota del blog con sus métricas de Search Console.
+        // Antes era la vista "Inventario SEO" de /contenido (que redirige acá).
+        { id: 'blog',  label: 'Inventario del blog' },
       ] },
     ],
   },
@@ -69,7 +72,7 @@ export const NAV = [
 // visibles" en Preferencias → Módulos → Marketing.
 export const SECTION_DESCRIPTIONS = {
   hoy:        'Recomendaciones top del workspace: objetivos atrasados, hallazgos de SEO/GEO, performance, anuncios e informes pendientes.',
-  'geo-seo':  'Diagnóstico (GEO, SEO, On-Page, canibalización), keywords y contenido SEO.',
+  'geo-seo':  'Diagnóstico (GEO, SEO, On-Page, canibalización), keywords y contenido SEO (briefs, content gap e inventario del blog).',
   web:        'Analytics (GA4) y Performance (PageSpeed).',
   rrss:       'Instagram, TikTok, LinkedIn, Facebook, YouTube y Competidores.',
   anuncios:   'Meta Ads, Google Ads y ChatGPT Ads.',

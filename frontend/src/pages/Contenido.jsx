@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
-import { useSearchParams, Link } from 'react-router-dom'
+import { useSearchParams, Link, Navigate } from 'react-router-dom'
 import Navbar from '../components/Navbar'
 import LoadingSpinner from '../components/LoadingSpinner'
 import HowToButton from '../components/HowToButton'
@@ -9,7 +9,6 @@ import ContentMonthTabs from '../components/contenido/ContentMonthTabs'
 import ContentTableView from '../components/contenido/ContentTableView'
 import ContentKanbanView from '../components/contenido/ContentKanbanView'
 import ContentCalendarView, { currentMonthStr } from '../components/contenido/ContentCalendarView'
-import ContentInventoryView from '../components/contenido/ContentInventoryView'
 import ContentPieceModal from '../components/contenido/ContentPieceModal'
 import ContentTrashModal from '../components/contenido/ContentTrashModal'
 import ConfirmModal from '../components/ConfirmModal'
@@ -30,9 +29,6 @@ const VIEWS = [
   { id: 'calendario', label: 'Calendario' },
   { id: 'tabla',      label: 'Tabla' },
   { id: 'kanban',     label: 'Kanban' },
-  // El inventario no se acota al mes ni al estado: es todo lo publicado del
-  // blog, medido contra Search Console. Ver ContentInventoryView.jsx.
-  { id: 'inventario', label: 'Inventario SEO' },
 ]
 const VALID_VIEWS = new Set(VIEWS.map(v => v.id))
 const MONTH_RE = /^\d{4}-\d{2}$/
@@ -330,21 +326,6 @@ export default function Contenido() {
       )
     }
 
-    // El Inventario SEO no comparte nada con las otras tres vistas: trae sus
-    // propias filas (de `/seo/inventory`, con las métricas ya cruzadas), no se
-    // acota al mes y tiene sus propios filtros. Sale antes de todo lo demás
-    // para no arrastrar las pestañas de mes ni los filtros del calendario.
-    if (view === 'inventario') {
-      return (
-        <ContentInventoryView
-          projectId={projectId}
-          canEdit={canEdit}
-          onOpen={p => patchParams({ piece: p.id })}
-          onImported={reload}
-        />
-      )
-    }
-
     return (
       <>
         {/* Las pestañas de mes son la navegación primaria de la Tabla. El
@@ -418,6 +399,15 @@ export default function Contenido() {
         )}
       </>
     )
+  }
+
+  // El Inventario SEO del blog fue la cuarta vista de esta página; se mudó a
+  // Marketing → GEO / SEO → Contenido SEO. Los links viejos (`?view=inventario`)
+  // llevan allá con el mismo proyecto.
+  if (rawView === 'inventario') {
+    const dest = new URLSearchParams({ tab: 'geo-seo', sub: 'contenido', view: 'blog' })
+    if (projectId) dest.set('projectId', projectId)
+    return <Navigate to={`/marketing?${dest}`} replace />
   }
 
   if (flagLoading) return <LoadingSpinner size="lg" fullPage />

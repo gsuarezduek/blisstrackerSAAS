@@ -13,6 +13,7 @@ import ContentBriefTab   from '../components/marketing/ContentBriefTab'
 import OnPageTab         from '../components/marketing/OnPageTab'
 import AiVisibilityTab   from '../components/marketing/AiVisibilityTab'
 import ContentGapTab     from '../components/marketing/ContentGapTab'
+import BlogInventoryTab  from '../components/marketing/BlogInventoryTab'
 import CanibalizacionTab from '../components/marketing/CanibalizacionTab'
 import InformesTab  from '../components/marketing/InformesTab'
 import InstagramTab from '../components/marketing/InstagramTab'
@@ -176,6 +177,7 @@ export default function Marketing() {
     if (tab === 'geo-seo' && sub === 'keywords')  return <KeywordsTab projectId={projectId} projects={projects} />
     if (tab === 'geo-seo' && sub === 'contenido') {
       if (view === 'gap') return <ContentGapTab projectId={projectId} projects={projects} />
+      if (view === 'blog') return <BlogInventoryTab projectId={projectId} projects={projects} />
       return <ContentBriefTab projectId={projectId} projects={projects} />
     }
     if (tab === 'web')                           return <WebTab subtab={sub} projectId={projectId} projects={projects} onSelectProject={handleProjectChange} />

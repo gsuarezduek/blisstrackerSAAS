@@ -1,10 +1,13 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import api from '../../api/client'
 import LoadingSpinner from '../LoadingSpinner'
-import ContentImportModal from './ContentImportModal'
-import { CONTENT_STATUSES, CONTENT_LANGUAGES, languageMeta, statusBadgeClass } from './contentCatalog'
+import { useAuth } from '../../context/AuthContext'
+import BlogImportModal from './BlogImportModal'
+import BlogNoteModal from './BlogNoteModal'
+import BlogAddNoteModal from './BlogAddNoteModal'
+import { CONTENT_STATUSES, CONTENT_LANGUAGES, languageMeta, statusBadgeClass } from '../contenido/contentCatalog'
 import {
-  AlertTriangle, Download, ExternalLink, Link2, RefreshCw, Search,
+  AlertTriangle, Download, ExternalLink, Link2, Plus, RefreshCw, Search,
   TrendingDown, TrendingUp, Minus, Sparkles,
 } from 'lucide-react'
 import { Icon } from '../ui/Icon'
@@ -56,12 +59,24 @@ function Delta({ value, suffix = '%', invert = false }) {
  * Inventario del blog: una fila por nota publicada, con lo que Search Console
  * dice de su URL en los últimos 28 días y la variación contra los 28 anteriores.
  *
- * Es la cuarta vista de Contenido y no una sección de Marketing porque la fila
- * ES la pieza: desde acá se abre su ficha, se le carga la keyword y se decide si
- * se actualiza o se escribe algo nuevo. Marketing mira el sitio entero; esto
- * mira nota por nota.
+ * Vive en Marketing → GEO / SEO → Contenido SEO, junto al Content Brief y el
+ * Content Gap: es la otra mitad de la misma pregunta ("¿qué escribo?" / "¿qué ya
+ * escribí y cómo le va?"). Cada nota es una pieza de Contenido con URL publicada,
+ * pero su ficha SEO (URL, idioma, keywords, traducciones, métricas) se abre y se
+ * edita acá, sin pasar por Contenido.
  */
-export default function ContentInventoryView({ projectId, canEdit, onOpen, onImported }) {
+export default function BlogInventoryTab({ projectId, projects = [] }) {
+  const { user } = useAuth()
+  // Espejo de canWrite() del backend: admin/owner del workspace, o miembro del
+  // equipo del proyecto. Mirar el inventario está abierto a quien tenga Marketing.
+  const canEdit = useMemo(() => {
+    if (user?.isAdmin) return true
+    const project = projects.find(p => String(p.id) === String(projectId))
+    return (project?.members ?? []).some(pm => pm.user?.id === user?.id)
+  }, [user, projects, projectId])
+
+  const [openNoteId, setOpenNoteId] = useState(null)
+  const [addOpen, setAddOpen] = useState(false)
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -84,7 +99,7 @@ export default function ContentInventoryView({ projectId, canEdit, onOpen, onImp
     if (!projectId) return
     setLoading(true)
     try {
-      const r = await api.get(`/contenido/projects/${projectId}/seo/inventory`, { params })
+      const r = await api.get(`/marketing/projects/${projectId}/blog/inventory`, { params })
       setData(r.data)
       setError(null)
     } catch (err) {
@@ -100,7 +115,7 @@ export default function ContentInventoryView({ projectId, canEdit, onOpen, onImp
   const refresh = useCallback(async (force) => {
     setRefreshing(true)
     try {
-      await api.post(`/contenido/projects/${projectId}/seo/refresh`, { force })
+      await api.post(`/marketing/projects/${projectId}/blog/refresh`, { force })
       await load()
     } catch (err) {
       setError(err.response?.data?.error || 'No se pudieron actualizar las métricas')
@@ -122,6 +137,17 @@ export default function ContentInventoryView({ projectId, canEdit, onOpen, onImp
   }, [data, autoTried, refreshing, canEdit, refresh])
 
   const rows = data?.pieces ?? []
+
+  if (!projectId) {
+    return (
+      <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-10 text-center">
+        <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-1">Inventario del blog</h3>
+        <p className="text-sm text-gray-400 dark:text-gray-500 max-w-sm mx-auto">
+          Elegí un proyecto para ver sus notas publicadas con lo que Search Console dice de cada una: clics, posición, tendencia y alertas.
+        </p>
+      </div>
+    )
+  }
 
   function patchFilter(key, value) {
     setFilters(f => ({ ...f, [key]: value }))
@@ -159,6 +185,14 @@ export default function ContentInventoryView({ projectId, canEdit, onOpen, onImp
             >
               <Icon as={RefreshCw} size={14} className={refreshing ? 'animate-spin' : ''} />
               {refreshing ? 'Actualizando…' : 'Actualizar'}
+            </button>
+            <button
+              onClick={() => setAddOpen(true)}
+              title="Cargarle la URL a una pieza que ya existe en Contenido"
+              className="px-3 py-1.5 rounded-lg text-sm font-medium border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 inline-flex items-center gap-1.5"
+            >
+              <Icon as={Plus} size={14} />
+              Agregar nota
             </button>
             <button
               onClick={() => setImportOpen(true)}
@@ -244,8 +278,8 @@ export default function ContentInventoryView({ projectId, canEdit, onOpen, onImp
             {Object.values(filters).some(Boolean) ? 'Ninguna nota coincide con los filtros' : 'Todavía no hay notas con URL publicada'}
           </h3>
           <p className="text-sm text-gray-400 dark:text-gray-500 max-w-md mx-auto">
-            Una pieza entra al inventario cuando tiene su URL cargada. Si el blog ya está publicado,
-            importalo del sitio en vez de cargarlo a mano.
+            Una nota entra al inventario cuando tiene su URL cargada. Si el blog ya está publicado,
+            importalo del sitio; si la nota ya existe en Contenido, usá «Agregar nota» para cargarle la URL.
           </p>
         </div>
       ) : (
@@ -264,7 +298,7 @@ export default function ContentInventoryView({ projectId, canEdit, onOpen, onImp
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                {rows.map(row => <InventoryRow key={row.id} row={row} onOpen={onOpen} />)}
+                {rows.map(row => <InventoryRow key={row.id} row={row} onOpen={r => setOpenNoteId(r.id)} />)}
               </tbody>
             </table>
           </div>
@@ -272,10 +306,28 @@ export default function ContentInventoryView({ projectId, canEdit, onOpen, onImp
       )}
 
       {importOpen && (
-        <ContentImportModal
+        <BlogImportModal
           projectId={projectId}
           onClose={() => setImportOpen(false)}
-          onImported={() => { load(); onImported?.() }}
+          onImported={load}
+        />
+      )}
+
+      {addOpen && (
+        <BlogAddNoteModal
+          projectId={projectId}
+          onClose={() => setAddOpen(false)}
+          onPick={id => { setAddOpen(false); setOpenNoteId(id) }}
+        />
+      )}
+
+      {openNoteId && (
+        <BlogNoteModal
+          projectId={projectId}
+          pieceId={openNoteId}
+          canEdit={canEdit}
+          onClose={() => setOpenNoteId(null)}
+          onChanged={load}
         />
       )}
     </div>

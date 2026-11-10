@@ -8,16 +8,6 @@ const { z } = require('zod')
 
 const projectIdParam = { projectId: z.number().int().describe('ID del proyecto (ver marketing_list_projects / list_projects)') }
 
-// Campos del inventario SEO de una pieza — los mismos en crear y en editar.
-// Están acá y no repetidos en cada tool porque son una unidad: una nota sin URL
-// no se puede medir, y una URL sin idioma no entra en ningún filtro.
-const seoPieceFields = {
-  publishedUrl: z.string().optional().describe('URL publicada de la nota. Es lo que permite cruzarla con Search Console'),
-  language: z.enum(['es', 'en', 'pt']).optional().describe('Idioma de la nota'),
-  seoKeyword: z.string().optional().describe('Keyword principal que la nota busca rankear'),
-  seoKeywords: z.array(z.string()).optional().describe('Keywords secundarias (máx. 10)'),
-}
-
 // Una entrada por red social — misma forma de endpoint (GET /marketing/projects/:id/<red>),
 // evita repetir 5 objetos casi idénticos a mano.
 const NETWORKS = ['instagram', 'tiktok', 'youtube', 'linkedin', 'facebook']
@@ -484,6 +474,73 @@ const tools = [
     description: 'Reemplaza la lista completa de URLs protegidas de un proyecto para el análisis de canibalización.',
     inputSchema: { ...projectIdParam, urls: z.array(z.string()).describe('Lista completa de URLs protegidas (reemplaza la anterior)') },
     request: ({ projectId, urls }) => ({ method: 'PUT', path: `/marketing/projects/${projectId}/cannibal/protected-urls`, body: { urls } }),
+  },
+  {
+    name: 'marketing_blog_inventory',
+    description: 'Inventario del blog: las notas con URL publicada (cada una es una pieza de Contenido), con sus clics, impresiones, CTR y posición media de los últimos 28 días, la variación contra los 28 anteriores, sus 5 consultas principales y las alertas de cada una (pierde tráfico, CTR bajo para su posición, keyword ya asignada a otra nota). Usalo ANTES de proponer una nota nueva: puede que ya exista una para esa keyword y convenga actualizarla.',
+    inputSchema: {
+      ...projectIdParam,
+      language: z.enum(['es', 'en', 'pt', 'none']).optional().describe('"none" = las que todavía no tienen idioma cargado'),
+      status: z.enum(['idea', 'produccion', 'revision', 'aprobacion', 'cambios', 'aprobado', 'programado', 'publicado', 'archivado']).optional(),
+      trend: z.enum(['sube', 'baja', 'estable', 'nuevo']).optional().describe('Tendencia de clics contra el período anterior'),
+      alert: z.enum(['1']).optional().describe('Solo las notas que tienen alguna alerta'),
+      q: z.string().optional().describe('Búsqueda por título, URL o keyword'),
+      sort: z.enum(['clicks', 'impressions', 'position', 'published', 'title']).optional().describe('Default clicks'),
+      dir: z.enum(['asc', 'desc']).optional().describe('Default desc'),
+    },
+    request: ({ projectId, ...rest }) => ({ method: 'GET', path: `/marketing/projects/${projectId}/blog/inventory`, query: rest }),
+  },
+  {
+    name: 'marketing_blog_refresh',
+    description: 'Vuelve a traer de Search Console las métricas de todas las notas del blog del proyecto y recalcula sus alertas. Consume cuota de la API de Google del cliente: hay un mínimo de 10 minutos entre refrescos (con force se saltea). Si no hace falta, leé el inventario tal como está — ya trae la fecha del último refresco.',
+    inputSchema: { ...projectIdParam, force: z.boolean().optional() },
+    request: ({ projectId, force }) => ({ method: 'POST', path: `/marketing/projects/${projectId}/blog/refresh`, body: { force } }),
+  },
+  {
+    name: 'marketing_blog_import',
+    description: 'Importa las entradas YA publicadas del sitio y crea una pieza de Contenido "publicado" por cada una, con su URL, título, fecha e idioma. Dos fuentes: "wordpress" (lee /wp-json/wp/v2/posts — trae título y fecha reales, es la preferida si el sitio es WordPress) o "sitemap". Es idempotente: lo que ya está cargado no se duplica. Corré SIEMPRE primero con dryRun:true y mostrale al usuario qué se va a crear.',
+    inputSchema: {
+      ...projectIdParam,
+      source: z.enum(['wordpress', 'sitemap']).optional().describe('Default wordpress'),
+      url: z.string().optional().describe('Raíz del sitio, o URL del sitemap. Sin esto se usa el sitio configurado en el proyecto'),
+      filter: z.string().optional().describe('Sólo las URLs que contengan este texto, ej. "/blog/"'),
+      defaultLanguage: z.enum(['es', 'en', 'pt']).optional().describe('Idioma de las URLs sin prefijo de idioma en la ruta'),
+      dryRun: z.boolean().optional().describe('true = devuelve qué se importaría sin crear nada'),
+    },
+    request: ({ projectId, ...body }) => ({ method: 'POST', path: `/marketing/projects/${projectId}/blog/import`, body }),
+  },
+  {
+    name: 'marketing_blog_note_get',
+    description: 'Ficha SEO de una nota del blog (una pieza de Contenido): URL, idioma, keywords, traducciones y sus métricas de Search Console.',
+    inputSchema: { ...projectIdParam, pieceId: z.number().int() },
+    request: ({ projectId, pieceId }) => ({ method: 'GET', path: `/marketing/projects/${projectId}/blog/notes/${pieceId}` }),
+  },
+  {
+    name: 'marketing_blog_note_update',
+    description: 'Carga o corrige los datos SEO de una nota del blog: URL publicada, idioma, keyword principal y keywords secundarias. Cargarle la URL a una pieza de Contenido es lo que la suma al inventario; mandar publishedUrl vacío la saca. No toca el resto de la pieza (título, estado, copy): eso es de Contenido.',
+    inputSchema: {
+      ...projectIdParam,
+      pieceId: z.number().int(),
+      publishedUrl: z.string().optional().describe('URL publicada de la nota (http/https). Es lo que permite cruzarla con Search Console. "" la borra'),
+      language: z.enum(['es', 'en', 'pt', '']).optional().describe('Idioma de la nota. "" lo borra'),
+      seoKeyword: z.string().optional().describe('Keyword principal que la nota busca rankear. "" la borra'),
+      seoKeywords: z.array(z.string()).optional().describe('Keywords secundarias (máx. 10). Reemplaza la lista completa'),
+    },
+    request: ({ projectId, pieceId, ...body }) => ({ method: 'PATCH', path: `/marketing/projects/${projectId}/blog/notes/${pieceId}`, body }),
+  },
+  {
+    name: 'marketing_blog_translation_link',
+    description: 'Marca dos notas como traducciones de la misma nota (la versión en español y la misma nota en inglés, por ejemplo). Si alguna ya estaba vinculada a otras, los grupos se fusionan.',
+    inputSchema: { ...projectIdParam, pieceId: z.number().int(), otherPieceId: z.number().int().describe('La otra versión de la misma nota') },
+    request: ({ projectId, pieceId, otherPieceId }) => ({
+      method: 'POST', path: `/marketing/projects/${projectId}/blog/notes/${pieceId}/translations`, body: { pieceId: otherPieceId },
+    }),
+  },
+  {
+    name: 'marketing_blog_translation_unlink',
+    description: 'Saca una nota de su grupo de traducciones.',
+    inputSchema: { ...projectIdParam, pieceId: z.number().int() },
+    request: ({ projectId, pieceId }) => ({ method: 'DELETE', path: `/marketing/projects/${projectId}/blog/notes/${pieceId}/translations` }),
   },
   {
     name: 'marketing_content_brief_run',
@@ -1068,7 +1125,6 @@ const tools = [
       internalNotes: z.string().optional().describe('Notas internas — nunca viaja al portal'),
       scheduledAt: z.string().optional().describe('Fecha/hora ISO de publicación'),
       ownerId: z.number().int().optional().describe('Responsable (miembro del workspace)'),
-      ...seoPieceFields,
     },
     request: ({ projectId, ...body }) => ({ method: 'POST', path: `/contenido/projects/${projectId}/pieces`, body }),
   },
@@ -1088,7 +1144,6 @@ const tools = [
       internalNotes: z.string().optional(),
       scheduledAt: z.string().optional(),
       ownerId: z.number().int().optional(),
-      ...seoPieceFields,
     },
     request: ({ projectId, pieceId, ...body }) => ({ method: 'PATCH', path: `/contenido/projects/${projectId}/pieces/${pieceId}`, body }),
   },
@@ -1124,54 +1179,6 @@ const tools = [
     description: 'Manda el email de "pedir aprobación" a los contactos del cliente que pueden aprobar. Sin pieceIds, incluye todas las piezas en estado "aprobacion".',
     inputSchema: { ...projectIdParam, pieceIds: z.array(z.number().int()).optional() },
     request: ({ projectId, pieceIds }) => ({ method: 'POST', path: `/contenido/projects/${projectId}/request-approval`, body: { pieceIds } }),
-  },
-  {
-    name: 'contenido_seo_inventory',
-    description: 'Inventario SEO del blog: las notas con URL publicada, con sus clics, impresiones, CTR y posición media de los últimos 28 días, la variación contra los 28 anteriores, sus 5 consultas principales y las alertas de cada una (pierde tráfico, CTR bajo para su posición, keyword ya asignada a otra nota). Usalo ANTES de proponer una nota nueva: puede que ya exista una para esa keyword y convenga actualizarla.',
-    inputSchema: {
-      ...projectIdParam,
-      language: z.enum(['es', 'en', 'pt', 'none']).optional().describe('"none" = las que todavía no tienen idioma cargado'),
-      status: z.enum(['idea', 'produccion', 'revision', 'aprobacion', 'cambios', 'aprobado', 'programado', 'publicado', 'archivado']).optional(),
-      trend: z.enum(['sube', 'baja', 'estable', 'nuevo']).optional().describe('Tendencia de clics contra el período anterior'),
-      alert: z.enum(['1']).optional().describe('Solo las notas que tienen alguna alerta'),
-      q: z.string().optional().describe('Búsqueda por título, URL o keyword'),
-      sort: z.enum(['clicks', 'impressions', 'position', 'published', 'title']).optional().describe('Default clicks'),
-      dir: z.enum(['asc', 'desc']).optional().describe('Default desc'),
-    },
-    request: ({ projectId, ...rest }) => ({ method: 'GET', path: `/contenido/projects/${projectId}/seo/inventory`, query: rest }),
-  },
-  {
-    name: 'contenido_seo_refresh',
-    description: 'Vuelve a traer de Search Console las métricas de todas las notas del proyecto y recalcula sus alertas. Consume cuota de la API de Google del cliente: hay un mínimo de 10 minutos entre refrescos (con force se saltea). Si no hace falta, leé el inventario tal como está — ya trae la fecha del último refresco.',
-    inputSchema: { ...projectIdParam, force: z.boolean().optional() },
-    request: ({ projectId, force }) => ({ method: 'POST', path: `/contenido/projects/${projectId}/seo/refresh`, body: { force } }),
-  },
-  {
-    name: 'contenido_seo_import',
-    description: 'Importa las entradas YA publicadas del sitio y crea una pieza "publicado" por cada una, con su URL, título, fecha e idioma. Dos fuentes: "wordpress" (lee /wp-json/wp/v2/posts — trae título y fecha reales, es la preferida si el sitio es WordPress) o "sitemap". Es idempotente: lo que ya está cargado no se duplica. Corré SIEMPRE primero con dryRun:true y mostrale al usuario qué se va a crear.',
-    inputSchema: {
-      ...projectIdParam,
-      source: z.enum(['wordpress', 'sitemap']).optional().describe('Default wordpress'),
-      url: z.string().optional().describe('Raíz del sitio, o URL del sitemap. Sin esto se usa el sitio configurado en el proyecto'),
-      filter: z.string().optional().describe('Sólo las URLs que contengan este texto, ej. "/blog/"'),
-      defaultLanguage: z.enum(['es', 'en', 'pt']).optional().describe('Idioma de las URLs sin prefijo de idioma en la ruta'),
-      dryRun: z.boolean().optional().describe('true = devuelve qué se importaría sin crear nada'),
-    },
-    request: ({ projectId, ...body }) => ({ method: 'POST', path: `/contenido/projects/${projectId}/seo/import`, body }),
-  },
-  {
-    name: 'contenido_piece_translation_link',
-    description: 'Marca dos piezas como traducciones de la misma nota (la versión en español y la misma nota en inglés, por ejemplo). Si alguna ya estaba vinculada a otras, los grupos se fusionan.',
-    inputSchema: { ...projectIdParam, pieceId: z.number().int(), otherPieceId: z.number().int().describe('La otra versión de la misma nota') },
-    request: ({ projectId, pieceId, otherPieceId }) => ({
-      method: 'POST', path: `/contenido/projects/${projectId}/pieces/${pieceId}/translations`, body: { pieceId: otherPieceId },
-    }),
-  },
-  {
-    name: 'contenido_piece_translation_unlink',
-    description: 'Saca una pieza de su grupo de traducciones.',
-    inputSchema: { ...projectIdParam, pieceId: z.number().int() },
-    request: ({ projectId, pieceId }) => ({ method: 'DELETE', path: `/contenido/projects/${projectId}/pieces/${pieceId}/translations` }),
   },
   {
     name: 'contenido_piece_comment_add',

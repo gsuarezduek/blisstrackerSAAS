@@ -46,6 +46,7 @@ const contentBrief      = require('../controllers/contentBrief.controller')
 const onPageAudit       = require('../controllers/onPageAudit.controller')
 const geoVisibility      = require('../controllers/geoVisibility.controller')
 const contentGap        = require('../controllers/contentGap.controller')
+const blogSeo           = require('../controllers/blogSeo.controller')
 const adsAdvisor        = require('../controllers/adsAdvisor.controller')
 const rrssAdvisor       = require('../controllers/rrssAdvisor.controller')
 const marketingPending  = require('../controllers/marketingPending.controller')
@@ -280,6 +281,18 @@ router.post('/projects/:id/content-gap',             contentGap.runGap)
 router.get('/projects/:id/content-gaps',             contentGap.listGaps)
 router.get('/projects/:id/content-gaps/:gapId',      contentGap.getGap)
 router.delete('/projects/:id/content-gaps/:gapId',   contentGap.deleteGap)
+
+// SEO — Inventario del blog (Contenido SEO → Inventario del blog). Cada nota es
+// una pieza de Contenido con URL publicada, medida contra Search Console; ver
+// controllers/blogSeo.controller.js. Pide lo de Marketing, no lo de Contenido.
+router.get('/projects/:id/blog/inventory',                   blogSeo.getInventory)
+router.post('/projects/:id/blog/refresh',                    blogSeo.refreshSeo)
+router.post('/projects/:id/blog/import',                     blogSeo.importFromSite)
+router.get('/projects/:id/blog/pieces',                      blogSeo.searchPieces)
+router.get('/projects/:id/blog/notes/:pid',                  blogSeo.getNote)
+router.patch('/projects/:id/blog/notes/:pid',                blogSeo.updateNote)
+router.post('/projects/:id/blog/notes/:pid/translations',    blogSeo.linkTranslation)
+router.delete('/projects/:id/blog/notes/:pid/translations',  blogSeo.unlinkTranslation)
 
 // Keywords Tracking — rutas estáticas ANTES de las dinámicas /:kwId
 router.get('/projects/:id/keywords/suggest',              keywords.suggestKeywords)
