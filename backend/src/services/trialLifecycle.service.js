@@ -1,22 +1,28 @@
 /**
  * Email lifecycle del trial.
  *
- * Cron diario que busca workspaces en `trialing` y manda 4 emails escalonados
- * en días 3, 7, 12, 13 del trial. Cada uno tiene su propósito:
- *   - Día  3: check-in suave ("¿qué tal?")
- *   - Día  7: progreso + reminder de features no exploradas
- *   - Día 12: primera urgencia (quedan 2 días)
- *   - Día 13: último día (CTA fuerte a /pricing)
+ * Cron diario que busca workspaces en `trialing` y manda 4 emails escalonados.
+ * Cada uno tiene su propósito:
+ *   - Día 3 desde el alta:  check-in suave ("¿qué tal?")
+ *   - Mitad del trial:      progreso + reminder de features no exploradas
+ *   - Faltan 2 días:        primera urgencia
+ *   - Falta 1 día:          último día (CTA fuerte a /billing)
  *
- * Lógica:
- *   - workspaces con `status='trialing'` y sin `deletionRequest`
- *   - calcular días desde createdAt
- *   - elegir email correspondiente y enviar al owner
- *   - dedupe via EmailLog: no enviar 2 veces el mismo type al mismo email
+ * Los dos de urgencia se cuentan contra `Workspace.trialEndsAt`, NO contra
+ * `createdAt`: la duración del trial es configurable (`trialDays`), un código de
+ * invitación puede sumar días y SuperAdmin puede extender un trial a mano. Con
+ * días fijos desde el alta, "vence en 2 días" llegaba en el día equivocado.
+ * Los días se cuentan como fechas de calendario en la timezone del workspace.
+ *
+ * Dedupe via EmailLog: los dos primeros se mandan una sola vez en la vida del
+ * workspace; los de urgencia, una vez por ventana (`resendAfterDays`), así un
+ * trial extendido después del aviso vuelve a recibirlo cuando de verdad vence.
  *
  * Trigger: cron diario en index.js a las 09:00 ART (12:00 UTC).
  */
 const prisma = require('../lib/prisma')
+const { getSettings } = require('../lib/platformSettings')
+const { dateStringInTz } = require('../utils/dates')
 
 const resend = (() => {
   try {
@@ -51,29 +57,52 @@ async function logEmail(data) {
   await prisma.emailLog.create({ data }).catch(() => {})
 }
 
-async function alreadySent(workspaceId, type) {
+async function alreadySent(workspaceId, type, since) {
   const log = await prisma.emailLog.findFirst({
-    where:  { workspaceId, type, status: 'sent' },
+    where:  { workspaceId, type, status: 'sent', ...(since ? { createdAt: { gte: since } } : {}) },
     select: { id: true },
   })
   return !!log
 }
 
-async function sendOne({ to, subject, type, html, workspaceId }) {
+async function sendOne({ to, subject, type, html, workspaceId, since }) {
   if (!resend) {
     console.warn(`[trialLifecycle] Resend no inicializado, skip "${type}" a ${to}`)
-    return
+    return false
   }
-  if (await alreadySent(workspaceId, type)) return // dedupe
+  if (await alreadySent(workspaceId, type, since)) return false // dedupe
 
   try {
     const { error } = await resend.emails.send({ from: FROM_FALLBACK, to, subject, html })
     if (error) throw new Error(error.message)
     await logEmail({ workspaceId, to, subject, type, status: 'sent' })
+    return true
   } catch (err) {
     await logEmail({ workspaceId, to, subject, type, status: 'failed', errorMsg: err.message })
     console.error(`[trialLifecycle] Error enviando "${type}" a ${to}:`, err.message)
+    return false
   }
+}
+
+// ─── Precio y plan Gratis (desde SuperAdmin → Configuración) ────────────────
+// Nada de montos ni límites escritos a mano en los templates: salen de los
+// mismos settings que usan billing y la landing (`pricingTiers`, `freeSeatLimit`).
+
+function fmtUsd(n) {
+  return Number.isInteger(n) ? String(n) : n.toFixed(2)
+}
+
+function buildPricing({ pricingTiers, freeSeatLimit }) {
+  const tiers = Array.isArray(pricingTiers) && pricingTiers.length ? pricingTiers : [{ upTo: null, pricePerSeat: 0 }]
+  const first = tiers[0]
+  const last  = tiers[tiers.length - 1]
+  const base  = fmtUsd(first.pricePerSeat)
+
+  let priceHtml = `<strong>USD ${base} por usuario por mes</strong>`
+  if (tiers.length > 1 && first.upTo != null && last.pricePerSeat !== first.pricePerSeat) {
+    priceHtml += ` (USD ${fmtUsd(last.pricePerSeat)} a partir del usuario ${first.upTo + 1})`
+  }
+  return { priceHtml, priceShort: `USD ${base}/usuario/mes`, freeSeatLimit: Number(freeSeatLimit) || 0 }
 }
 
 // ─── Templates ───────────────────────────────────────────────────────────────
@@ -102,12 +131,12 @@ function tplDay3({ name }) {
   `)
 }
 
-function tplDay7({ name }) {
+function tplDay7({ name, age }) {
   return shell(`
     <div style="background:white;border:1px solid #e2e8f0;border-radius:12px;padding:28px 32px;">
       <h2 style="margin:0 0 12px;font-size:20px;">${name}, vas por la mitad del trial.</h2>
       <p style="color:#475569;line-height:1.6;margin:0 0 16px;">
-        Una semana usando BlissTracker. Si llegaste hasta acá, probablemente ya viste estas tres cosas:
+        ${age === 7 ? 'Una semana' : `${age} días`} usando BlissTracker. Si llegaste hasta acá, probablemente ya viste estas tres cosas:
       </p>
       <ul style="color:#475569;line-height:1.8;padding-left:20px;margin:0 0 16px;">
         <li>El coach de IA armando tu mañana sin que tengas que pensar prioridades.</li>
@@ -129,7 +158,12 @@ function tplDay7({ name }) {
   `)
 }
 
-function tplDay12({ name }) {
+function tplDay12({ name, pricing }) {
+  const { priceHtml, freeSeatLimit } = pricing
+  const whatHappens = freeSeatLimit > 0
+    ? `Si no activás y tenés hasta ${freeSeatLimit} usuario${freeSeatLimit === 1 ? '' : 's'}, pasás al plan Gratis (sin perder nada).
+          Si tenés más de ${freeSeatLimit}, el workspace queda en pausa hasta que actives.`
+    : `Si no activás, el workspace queda en pausa hasta que actives (no se borra nada).`
   return shell(`
     <div style="background:white;border:1px solid #e2e8f0;border-radius:12px;padding:28px 32px;">
       <h2 style="margin:0 0 12px;font-size:20px;">${name}, tu trial vence en 2 días.</h2>
@@ -139,12 +173,11 @@ function tplDay12({ name }) {
       <div style="background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;padding:14px 18px;margin:0 0 20px;">
         <p style="margin:0;color:#92400e;font-size:14px;">
           <strong>Qué pasa en 2 días:</strong> si activás el plan Pro, todo sigue igual.
-          Si no activás y tenés hasta 3 usuarios, pasás al plan Gratis (sin perder nada).
-          Si tenés más de 3, el workspace queda en pausa hasta que actives.
+          ${whatHappens}
         </p>
       </div>
       <p style="color:#475569;line-height:1.6;margin:0 0 24px;">
-        El plan Pro es <strong>USD 3 por usuario por mes</strong>, sin permanencia.
+        El plan Pro es ${priceHtml}, sin permanencia.
         Podés ver el detalle completo o ir directo a activar abajo.
       </p>
       <div style="display:flex;gap:10px;">
@@ -160,19 +193,23 @@ function tplDay12({ name }) {
   `)
 }
 
-function tplDay13({ name }) {
+function tplDay13({ name, pricing }) {
+  const { priceShort, freeSeatLimit } = pricing
+  const whatHappens = freeSeatLimit > 0
+    ? `Mañana tu workspace pasa de <strong>trial</strong> a <strong>plan Gratis</strong> (hasta ${freeSeatLimit} usuario${freeSeatLimit === 1 ? '' : 's'})
+        o a <strong>past_due</strong> (más de ${freeSeatLimit} usuario${freeSeatLimit === 1 ? '' : 's'}).`
+    : `Mañana tu workspace pasa de <strong>trial</strong> a <strong>past_due</strong> hasta que actives el plan Pro.`
   return shell(`
     <div style="background:white;border:1px solid #e2e8f0;border-radius:12px;padding:28px 32px;">
       <h2 style="margin:0 0 12px;font-size:20px;color:#dc2626;">Último día de trial, ${name}.</h2>
       <p style="color:#475569;line-height:1.6;margin:0 0 16px;">
-        Mañana tu workspace pasa de <strong>trial</strong> a <strong>plan Gratis</strong> (hasta 3 usuarios)
-        o a <strong>past_due</strong> (más de 3 usuarios). Tus datos no se borran — pero las funciones quedan limitadas.
+        ${whatHappens} Tus datos no se borran — pero las funciones quedan limitadas.
       </p>
       <p style="color:#475569;line-height:1.6;margin:0 0 24px;">
         Si querés mantener todo activo, activá el plan Pro en menos de 60 segundos:
       </p>
       <a href="${APP_URL}/billing" style="display:inline-block;background:#dc2626;color:white;text-decoration:none;padding:14px 28px;border-radius:8px;font-weight:700;font-size:16px;">
-        Activar plan Pro (USD 3/seat/mes)
+        Activar plan Pro (${priceShort})
       </a>
       <p style="color:#475569;line-height:1.6;margin:24px 0 0;">
         Si decidiste que BlissTracker no es para vos, también está bien.
@@ -184,15 +221,45 @@ function tplDay13({ name }) {
 
 // ─── Cron handler ────────────────────────────────────────────────────────────
 
+// Los `type` se conservan (dedupe contra el EmailLog histórico), aunque ya no
+// sean literalmente los días 7/12/13.
+//   age   = días de calendario desde el alta
+//   left  = días de calendario hasta trialEndsAt
+//   total = duración del trial en días de calendario
 const STAGES = [
-  { day: 3,  type: 'trialDay3CheckIn',  subject: '¿Qué tal van tus primeros días?',          tpl: tplDay3 },
-  { day: 7,  type: 'trialDay7Progress', subject: 'Vas por la mitad del trial',               tpl: tplDay7 },
-  { day: 12, type: 'trialDay12Urgency', subject: 'Tu trial vence en 2 días',                 tpl: tplDay12 },
-  { day: 13, type: 'trialDay13LastDay', subject: 'Último día de trial — activá tu plan',     tpl: tplDay13 },
+  { type: 'trialDay3CheckIn',  subject: '¿Qué tal van tus primeros días?',      tpl: tplDay3,
+    matches: ({ age, left }) => age === 3 && left > 3 },
+  { type: 'trialDay7Progress', subject: 'Vas por la mitad del trial',           tpl: tplDay7,
+    matches: ({ age, left, total }) => total >= 10 && age === Math.floor(total / 2) && left > 2 },
+  { type: 'trialDay12Urgency', subject: 'Tu trial vence en 2 días',             tpl: tplDay12, resendAfterDays: 5,
+    matches: ({ left }) => left === 2 },
+  { type: 'trialDay13LastDay', subject: 'Último día de trial — activá tu plan', tpl: tplDay13, resendAfterDays: 5,
+    matches: ({ left }) => left === 1 },
 ]
 
-function daysSince(date) {
-  return Math.floor((Date.now() - new Date(date).getTime()) / (1000 * 60 * 60 * 24))
+const DAY_MS = 24 * 60 * 60 * 1000
+
+/** Días entre dos fechas "YYYY-MM-DD" (b - a), sin horas de por medio. */
+function ymdDiff(a, b) {
+  const toUtc = ymd => { const [y, m, d] = ymd.split('-').map(Number); return Date.UTC(y, m - 1, d) }
+  return Math.round((toUtc(b) - toUtc(a)) / DAY_MS)
+}
+
+/**
+ * Ubica a un workspace en su trial, en fechas de calendario de su timezone.
+ * Sin `trialEndsAt` (no debería pasar en `trialing`) se asume `fallbackDays`
+ * desde el alta, para no dejar de avisar.
+ */
+function trialPosition({ createdAt, trialEndsAt, timezone }, now = new Date(), fallbackDays = 14) {
+  const end   = trialEndsAt ? new Date(trialEndsAt) : new Date(new Date(createdAt).getTime() + fallbackDays * DAY_MS)
+  const start = dateStringInTz(createdAt, timezone)
+  const today = dateStringInTz(now, timezone)
+  const last  = dateStringInTz(end, timezone)
+  return { age: ymdDiff(start, today), left: ymdDiff(today, last), total: ymdDiff(start, last) }
+}
+
+function pickStage(position) {
+  return STAGES.find(s => s.matches(position)) || null
 }
 
 /**
@@ -213,26 +280,31 @@ async function runTrialLifecycle() {
     },
   })
 
+  const settings = await getSettings(['pricingTiers', 'freeSeatLimit', 'trialDays'])
+  const pricing = buildPricing(settings)
+  const now = new Date()
+
   let sent = 0
   for (const ws of workspaces) {
     const owner = ws.members[0]?.user
     if (!owner?.email) continue
 
-    const age = daysSince(ws.createdAt)
-    const stage = STAGES.find(s => s.day === age)
+    const position = trialPosition(ws, now, settings.trialDays)
+    const stage = pickStage(position)
     if (!stage) continue
 
-    await sendOne({
+    const ok = await sendOne({
       to:          owner.email,
       subject:     stage.subject,
       type:        stage.type,
-      html:        stage.tpl({ name: owner.name?.split(' ')[0] || 'hola' }),
+      html:        stage.tpl({ name: owner.name?.split(' ')[0] || 'hola', pricing, age: position.age }),
       workspaceId: ws.id,
+      since:       stage.resendAfterDays ? new Date(now.getTime() - stage.resendAfterDays * DAY_MS) : null,
     })
-    sent++
+    if (ok) sent++
   }
 
   return { workspacesChecked: workspaces.length, emailsSent: sent }
 }
 
-module.exports = { runTrialLifecycle, STAGES }
+module.exports = { runTrialLifecycle, STAGES, buildPricing, trialPosition, pickStage }

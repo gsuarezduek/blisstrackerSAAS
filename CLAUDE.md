@@ -349,6 +349,7 @@ backend/
       projectFileThumbnails.test.js       # qué tipos de archivo de la Nube llevan portada propia (`canHaveThumbnail`): imagen, video y PDF sí; lo que el browser no puede rasterizar, no — es el espejo de servidor de `makeThumbnail`
       projectModules.test.js              # criterio de módulos por proyecto: el campo ausente cuenta como prendido, cada módulo mira el suyo, y los `where` que se esparcen en ~25 queries no se mutan
       contentSeo.test.js                  # inventario del blog (Marketing): las reglas de alerta con su piso de volumen (una nota que pasó de 2 clics a 1 no "perdió el 50%"), la curva de CTR esperado por posición, el idioma por prefijo de ruta y la lectura de un sitemap y de la API de WordPress
+      trialLifecycle.test.js              # mails del trial: urgencia contada contra trialEndsAt (trial de 30 días, extendido a mano, trial corto), días en la tz del workspace, y precio/plan Gratis leídos de la configuración en vez de escritos en el template
       externalCalendar.test.js            # calendarios traídos de afuera: instante UTC → hora de pared del workspace, y el mapeo de lo que devuelven Google y un ICS (fin EXCLUSIVO del día completo, el evento de las 22:00 que en UTC cae al día siguiente, series expandidas con EXDATE, lo rechazado y los carteles de Google que no son citas)
     integration/
       auth.test.js
