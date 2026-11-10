@@ -107,6 +107,12 @@ function TaskCard({ task, onUpdate, onDelete, activeTask, backlog, future, onAdd
   }
 
   const menu = []
+  // Pasar al día SIN arrancarla: es lo que llena la pestaña "Para hoy" del Dashboard.
+  // Va en el menú y no como acción principal porque "Iniciar" (que encadena este mismo
+  // add-to-today solo) sigue siendo el gesto más frecuente sobre el depósito.
+  if (task.isBacklog && !backlog && !future && onAddToToday) {
+    menu.push({ label: 'Agregar a hoy', onClick: () => run(async () => { const { data } = await api.patch(`/tasks/${task.id}/add-to-today`); onAddToToday(data) }) })
+  }
   if (!backlog && !future && onMoveToBacklog && task.status === 'PENDING') {
     menu.push({ label: 'Mover al Backlog', onClick: () => run(async () => onUpdate(await patch('move-to-backlog'))) })
   }

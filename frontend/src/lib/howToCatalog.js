@@ -19,6 +19,41 @@
 // `topic` al renderizar <HowToButton topic="..." /> — si la clave no existe,
 // el ícono simplemente no se muestra.
 export const HOW_TO_CATALOG = {
+  'dashboard.hoy': {
+    title: 'Para hoy',
+    hook: 'El foco del día son 3 tareas como máximo, y un día de trabajo real tiene más. "Para hoy" es esa capa del medio: la lista corta que te armaste para hoy, separada del Backlog, que es el depósito de todo lo demás.',
+    sections: [
+      {
+        id: 'logica',
+        bullets: [
+          'Entra acá lo que te pasaste al día desde el Backlog, lo que creaste hoy y lo que empezaste y pausaste.',
+          'Lo que quedó abierto de días anteriores también aparece acá, sin distinguirse: ya es un compromiso que asumiste, y esconderlo en el Backlog es la forma más rápida de no volver a verlo.',
+          'Una tarea pausada se queda en esta lista: ya tiene tiempo registrado, así que no vuelve al depósito.',
+        ],
+      },
+      {
+        id: 'uso',
+        bullets: [
+          { text: 'Armá esta lista una vez, a la mañana: lo que realmente entra en el día.', tone: 'do' },
+          { text: 'Si algo no va a entrar, devolvelo al Backlog desde el menú ⋯ — mejor eso que arrastrarlo una semana.', tone: 'do' },
+          { text: 'No la uses como segundo Backlog: si tiene 40 tareas, dejó de decirte qué hacer ahora.', tone: 'dont' },
+        ],
+      },
+      {
+        id: 'conecta',
+        bullets: [
+          { text: 'La tarjeta "Ahora" sugiere de acá cuando no tenés nada en curso y nada destacado: primero las pausadas, después las pendientes.' },
+          { text: 'Al terminar la jornada, lo que quede abierto pasa a mañana y sigue en esta lista.' },
+        ],
+      },
+      {
+        id: 'ejemplo',
+        text: 'Llegás, mirás el Backlog y te pasás 6 tareas a hoy. De esas, destacás las 3 que no pueden faltar. Las otras 3 quedan acá, listas para iniciar en cuanto se libere el día.',
+      },
+    ],
+    nextStep: 'Abrí el Backlog y pasá a hoy solo lo que vas a poder hacer en esta jornada.',
+  },
+
   'dashboard.backlog': {
     title: 'Backlog',
     hook: 'El Backlog es donde viven las tareas que todavía no necesitan tu atención inmediata — la idea es que no todo se vuelva urgente. Cuando una tarea está lista para trabajarse, la activás y pasa a tu foco del día.',

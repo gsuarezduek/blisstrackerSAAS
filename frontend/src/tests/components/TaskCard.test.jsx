@@ -76,4 +76,45 @@ describe('TaskCard (Dashboard)', () => {
     renderCard({ task: { ...task, createdByAgent: { id: 7, label: 'Grok' } } })
     expect(screen.getByTitle('La creó un agente de IA')).toHaveTextContent('Grok')
   })
+
+  // Pestañas "Para hoy" / "Backlog" del panel "Más tarde" (partición por Task.isBacklog).
+  it('una del Backlog ofrece "Agregar a hoy" SIN perder el "Iniciar" directo', async () => {
+    patch.mockResolvedValue({ data: { ...task, isBacklog: false } })
+    const onAddToToday = vi.fn()
+    renderCard({ task: { ...task, isBacklog: true }, onAddToToday })
+
+    // La acción principal sigue siendo arrancarla de una (encadena add-to-today en el backend).
+    expect(screen.getAllByRole('button', { name: 'Iniciar' }).length).toBeGreaterThan(0)
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Más acciones' })[0])
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Agregar a hoy' }))
+
+    await waitFor(() => expect(onAddToToday).toHaveBeenCalled())
+    expect(patch).toHaveBeenCalledWith('/tasks/2/add-to-today')
+    expect(onAddToToday.mock.calls[0][0].isBacklog).toBe(false)
+  })
+
+  it('una que ya está en el día no ofrece "Agregar a hoy"', () => {
+    renderCard({ task: { ...task, isBacklog: false }, onAddToToday: vi.fn() })
+    fireEvent.click(screen.getAllByRole('button', { name: 'Más acciones' })[0])
+    expect(screen.queryByRole('menuitem', { name: 'Agregar a hoy' })).toBeNull()
+  })
+
+  it('una pausada no se puede devolver al Backlog: ya está empezada', () => {
+    renderCard({ task: { ...task, status: 'PAUSED' }, onMoveToBacklog: vi.fn() })
+    fireEvent.click(screen.getAllByRole('button', { name: 'Más acciones' })[0])
+    expect(screen.queryByRole('menuitem', { name: 'Mover al Backlog' })).toBeNull()
+  })
+
+  it('una pendiente de "Para hoy" sí se puede devolver al Backlog', async () => {
+    patch.mockResolvedValue({ data: { ...task, isBacklog: true } })
+    const onUpdate = vi.fn()
+    renderCard({ onUpdate, onMoveToBacklog: vi.fn() })
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Más acciones' })[0])
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Mover al Backlog' }))
+
+    await waitFor(() => expect(patch).toHaveBeenCalledWith('/tasks/2/move-to-backlog'))
+    expect(onUpdate.mock.calls[0][0].isBacklog).toBe(true)
+  })
 })

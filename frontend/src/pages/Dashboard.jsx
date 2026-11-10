@@ -86,10 +86,11 @@ export default function Dashboard() {
     setBacklogSortState(dir)
     try { localStorage.setItem(BACKLOG_SORT_KEY, dir) } catch { /* sin storage */ }
   }
-  // Panel "Más tarde" (Backlog / Seguimiento / Programadas / Completadas): reemplaza a
-  // los 4 acordeones del final. Recuerda la última pestaña por navegador.
+  // Panel "Más tarde" (Para hoy / Backlog / Seguimiento / Programadas / Completadas):
+  // reemplaza a los 4 acordeones del final. Recuerda la última pestaña por navegador;
+  // quien nunca eligió una abre en "Para hoy", que es la lista con la que se trabaja.
   const [laterTab, setLaterTabState] = useState(() => {
-    try { return localStorage.getItem(LATER_TAB_KEY) || 'backlog' } catch { return 'backlog' }
+    try { return localStorage.getItem(LATER_TAB_KEY) || 'hoy' } catch { return 'hoy' }
   })
   const [finishOpen, setFinishOpen] = useState(false)
   const laterRef = useRef(null)
@@ -392,9 +393,10 @@ export default function Dashboard() {
   // Derived state
   const tasks = workDay?.tasks ?? []
 
-  // Dos zonas nada más: el FOCO (lo destacado, lo en curso y lo bloqueado) y el BACKLOG
-  // (todas las demás tareas abiertas: de hoy, arrastradas de días anteriores o marcadas
-  // como Backlog). Ya no hay una sección "Para hoy" aparte. Las programadas a futuro
+  // Tres capas, que son las que ya modela el backend vía Task.isBacklog: el FOCO (lo
+  // destacado, lo en curso y lo bloqueado), PARA HOY (lo que salió del depósito: me lo
+  // pasé al día, lo creé hoy, o lo empecé y pausé) y el BACKLOG (lo marcado como tal,
+  // que el backend no deja iniciar sin pasarlo al día primero). Las programadas a futuro
   // viven en su pestaña (vienen en `future`, no en tasks/carryOver).
   const isStarred = t => (t.starred ?? 0) > 0
   const allMine = useMemo(() =>
@@ -405,11 +407,19 @@ export default function Dashboard() {
     allMine.filter(t => t.status === 'COMPLETED' || t.status === 'IN_PROGRESS' || t.status === 'BLOCKED' || isStarred(t)),
     [allMine]
   )
-  // Backlog: pausadas primero (ya tienen trabajo invertido), después pendientes, newest first.
-  const allBacklog = useMemo(() => {
+  // Todo lo abierto fuera del foco: pausadas primero (ya tienen trabajo invertido),
+  // después pendientes, newest first. De acá salen las dos pestañas.
+  const openOutsideFocus = useMemo(() => {
     const open = allMine.filter(t => (t.status === 'PENDING' || t.status === 'PAUSED') && !isStarred(t))
     return [...open.filter(t => t.status === 'PAUSED'), ...open.filter(t => t.status === 'PENDING')]
   }, [allMine])
+
+  // "Para hoy": lo que ya salió del depósito. Incluye lo arrastrado de días anteriores
+  // SIN distinguirlo — también es un compromiso asumido, y esconderlo en el Backlog lo
+  // manda al lugar que menos se mira. El backend solo deja volver al Backlog una tarea
+  // PENDING, así que una pausada se queda acá: ya está empezada.
+  const todayTasks = useMemo(() => openOutsideFocus.filter(t => !t.isBacklog), [openOutsideFocus])
+  const allBacklog = useMemo(() => openOutsideFocus.filter(t => t.isBacklog), [openOutsideFocus])
 
   // Backlog agrupado por proyecto. Las tareas de Contenido (vinculadas a una pieza con fecha
   // de publicación) van primero, ordenadas por publicación más próxima — así se ve de un
@@ -690,13 +700,17 @@ export default function Dashboard() {
   const starredSorted = useMemo(() => [...starred].sort((a, b) => (b.starred ?? 0) - (a.starred ?? 0)), [starred])
 
   // Sugerencia de la tarjeta "Ahora" cuando no hay nada en curso: la destacada de mayor
-  // prioridad, si no la pausada más reciente del Backlog, si no la pendiente más nueva.
-  const suggestion = activeTask ? null : (starredSorted.find(t => t.status !== 'BLOCKED') ?? allBacklog[0] ?? null)
+  // prioridad, si no lo primero de "Para hoy" (pausadas antes que pendientes), y recién
+  // como último recurso el Backlog — no se mete la mano en el depósito si ya hay una
+  // lista armada para hoy.
+  const suggestion = activeTask ? null : (starredSorted.find(t => t.status !== 'BLOCKED') ?? todayTasks[0] ?? allBacklog[0] ?? null)
 
   const dayEnded = !!workDay?.endedAt
   const inFocus = starred.length + blocked.length
-  const leftToday = inFocus + allBacklog.length
-  // Sin onMoveToBacklog: con un solo Backlog para todo lo no destacado, "Mover al Backlog" ya no aplica.
+  const leftToday = inFocus + todayTasks.length + allBacklog.length
+  // onMoveToBacklog NO va acá: se pasa solo en la pestaña "Para hoy". Desde el foco
+  // dejaría una tarea destacada y en el depósito a la vez (allBacklog excluye las
+  // destacadas, así que quedaría marcada sin aparecer nunca en el Backlog).
   const taskProps = { onUpdate: handleUpdateTask, onDelete: handleDeleteTask, activeTask, onOpenComments: setCommentTask, onDelegated: handleAgentHandoff, onReassigned: handleAgentHandoff }
 
   return (
@@ -836,12 +850,13 @@ export default function Dashboard() {
             </TaskSection>
           )}
 
-          {/* 5. Más tarde: Backlog / Seguimiento / Programadas / Completadas */}
+          {/* 5. Más tarde: Para hoy / Backlog / Seguimiento / Programadas / Completadas */}
           <div ref={laterRef} className="scroll-mt-20 pt-2">
             <LaterTabs
               value={laterTab}
               onChange={setLaterTab}
               tabs={[
+                { key: 'hoy', label: 'Para hoy', count: todayTasks.length },
                 { key: 'backlog', label: 'Backlog', count: allBacklog.length },
                 { key: 'programadas', label: 'Programadas', count: future.length },
                 // Solo si tengo agentes conectados o alguno tiene tareas (ej. tokens ya revocados).
@@ -855,13 +870,35 @@ export default function Dashboard() {
             />
 
             <div className="mt-3">
-              {laterTab === 'backlog' && (
-                allBacklog.length === 0 ? (
-                  <p className="text-sm text-gray-400 dark:text-gray-500 px-1 py-6 text-center">No tenés tareas pendientes fuera de tu foco.</p>
+              {laterTab === 'hoy' && (
+                todayTasks.length === 0 ? (
+                  <p className="text-sm text-gray-400 dark:text-gray-500 px-1 py-6 text-center">
+                    Tu lista de hoy está vacía. Pasá desde el Backlog lo que vas a hacer, o destacá hasta 3 cosas como foco del día.
+                  </p>
                 ) : (
                   <div className="space-y-3">
                     <div className="flex items-center justify-between gap-3 px-1">
-                      <p className="text-xs text-gray-500 dark:text-gray-400">Todas tus tareas fuera del foco. Destacá con la estrella lo que querés hacer hoy, o iniciala directo.</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">
+                        Lo que te pasaste al día y lo que empezaste y pausaste. Iniciá cuando quieras, o devolvé al Backlog lo que no va a entrar, desde el menú ⋯.
+                      </p>
+                      <HowToButton topic="dashboard.hoy" />
+                    </div>
+                    <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200/80 dark:border-gray-700 divide-y divide-gray-100 dark:divide-gray-700/70">
+                      {todayTasks.map(t => (
+                        <TaskCard key={t.id} task={t} {...taskProps} onMoveToBacklog={handleUpdateTask} />
+                      ))}
+                    </div>
+                  </div>
+                )
+              )}
+
+              {laterTab === 'backlog' && (
+                allBacklog.length === 0 ? (
+                  <p className="text-sm text-gray-400 dark:text-gray-500 px-1 py-6 text-center">Tu Backlog está vacío: no te queda nada guardado para más adelante.</p>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between gap-3 px-1">
+                      <p className="text-xs text-gray-500 dark:text-gray-400">Tu depósito: lo que guardaste para más adelante. Iniciá directo lo que vayas a hacer ahora, pasalo a hoy desde el menú ⋯ para hacerlo más tarde, o destacalo con la estrella.</p>
                       <HowToButton topic="dashboard.backlog" />
                     </div>
                     <div className="flex items-center gap-2 px-1 text-xs text-gray-500 dark:text-gray-400">
@@ -892,7 +929,7 @@ export default function Dashboard() {
                           {isOpen && (
                             <div className="divide-y divide-gray-100 dark:divide-gray-700/70 border-t border-gray-100 dark:border-gray-700/70">
                               {projectTasks.map(t => (
-                                <TaskCard key={t.id} task={t} {...taskProps} />
+                                <TaskCard key={t.id} task={t} {...taskProps} onAddToToday={handleUpdateTask} />
                               ))}
                             </div>
                           )}
