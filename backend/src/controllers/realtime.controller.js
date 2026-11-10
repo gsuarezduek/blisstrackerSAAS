@@ -1,4 +1,5 @@
 const prisma = require('../lib/prisma')
+const { activeMemberUserWhere } = require('../lib/assertActiveMember')
 const { todayString } = require('../utils/dates')
 const { taskWorkedMinutes } = require('../lib/taskTime')
 const { isAdmin } = require('../lib/projectAccess')
@@ -161,6 +162,7 @@ async function snapshot(req, res, next) {
       where: {
         workspaceId,
         status: 'approved',
+        user: activeMemberUserWhere(workspaceId),
         startDate: { lte: date },
         endDate:   { gte: date },
       },

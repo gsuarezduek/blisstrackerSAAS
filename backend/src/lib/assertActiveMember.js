@@ -13,4 +13,11 @@ async function assertActiveMember(userId, workspaceId) {
   return !!m?.active
 }
 
-module.exports = { assertActiveMember }
+// Filtro relacional de Prisma para listas scopeadas por `workspaceId` pero no por
+// membresía (licencias, beneficios): la fila cuenta sólo si su `user` sigue siendo
+// miembro ACTIVO del workspace. Desactivar a alguien lo saca de RRHH, y sus
+// ausencias tienen que irse con él — sin borrar nada, para que reactivarlo las
+// devuelva y su legajo (que se pide por userId) las siga mostrando.
+const activeMemberUserWhere = workspaceId => ({ workspaceMembers: { some: { workspaceId, active: true } } })
+
+module.exports = { assertActiveMember, activeMemberUserWhere }

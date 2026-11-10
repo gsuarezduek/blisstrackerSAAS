@@ -1,4 +1,5 @@
 const prisma = require('../lib/prisma')
+const { activeMemberUserWhere } = require('../lib/assertActiveMember')
 const { sendBenefitRequestEmail, sendBenefitReviewEmail } = require('../services/email.service')
 const { BANKS, isValidBank, balanceFieldFor, labelFor } = require('../lib/benefitBanks')
 
@@ -102,7 +103,9 @@ async function listRequests(req, res, next) {
   try {
     const workspaceId = req.workspace.id
     const { bank, status } = req.query
-    const where = { workspaceId }
+    // Mismo criterio que las licencias: quien ya no es miembro activo no aparece
+    // en las listas de RRHH (su historial sigue en el legajo, que pide por userId).
+    const where = { workspaceId, user: activeMemberUserWhere(workspaceId) }
     if (bank) {
       if (!isValidBank(bank)) return res.status(400).json({ error: 'bank inválido' })
       where.bank = bank

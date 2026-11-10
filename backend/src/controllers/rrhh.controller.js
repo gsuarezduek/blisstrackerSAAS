@@ -1,6 +1,8 @@
 const prisma = require('../lib/prisma')
+const { activeMemberUserWhere } = require('../lib/assertActiveMember')
 const { saveAllCurrentMonth, METRIC_KEYS } = require('../services/rrhhMetricSnapshot.service')
-const { monthLabel, prevMonthsArr } = require('../lib/monthUtils')
+const { monthLabel, prevMonthsArr, monthBounds } = require('../lib/monthUtils')
+const { getAttendanceStats } = require('../services/productivityStats.service')
 const { inArrivalWindow, laborableDays } = require('../lib/attendance')
 const { deviceTypeFromUA } = require('../lib/deviceType')
 const { DEFAULT_TZ } = require('../utils/dates')
@@ -288,6 +290,7 @@ async function dashboardStats(req, res, next) {
         where: {
           workspaceId,
           status: 'approved',
+          user: activeMemberUserWhere(workspaceId),  // desactivado = ya no está "fuera del equipo"
           startDate: { lte: leaveHorizon },  // empieza dentro del horizonte
           endDate:   { gte: todayStrTz },     // y todavía no terminó
         },
@@ -440,4 +443,55 @@ async function metricHistory(req, res, next) {
   } catch (err) { next(err) }
 }
 
-module.exports = { loginHistory, lastLogins, userSummary, dashboardStats, updateLogin, deleteLogin, metricHistory }
+// ─── GET /api/admin/rrhh/attendance?month=YYYY-MM ─────────────────────────────
+// La asistencia del mes por persona, para la tabla de RRHH → Tiempo y asistencia.
+// Reusa `getAttendanceStats` de Productividad — es el mismo cálculo de siempre
+// (días laborables = días con >50% del equipo logueado, ventana de llegada ±2h,
+// tolerancia del workspace): si acá se recalculara aparte, la misma pantalla
+// mostraría dos números distintos de ausencias y tardanzas, que es justo lo que
+// la fusión de Ausencias + Asistencia viene a evitar.
+async function monthAttendance(req, res, next) {
+  try {
+    const workspaceId = req.workspace.id
+    const tz = req.workspace.timezone || DEFAULT_TZ
+    const month = String(req.query.month || '').trim() || new Date().toLocaleDateString('en-CA', { timeZone: tz }).slice(0, 7)
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) {
+      return res.status(400).json({ error: 'month debe tener formato YYYY-MM' })
+    }
+
+    const { startDate, endDate } = monthBounds(month)
+    // Un mes en curso se corta en hoy: los días que todavía no pasaron no son
+    // ausencias de nadie (laborableDays nunca los marcaría, pero el rango igual
+    // no tiene por qué incluirlos).
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: tz })
+    const curEnd = endDate > today ? today : endDate
+
+    const stats = await getAttendanceStats(workspaceId, tz, { curStart: startDate, curEnd })
+
+    const rows = [...stats.entries()].map(([userId, s]) => ({ userId, ...s }))
+    const businessDays = rows[0]?.businessDays ?? 0
+
+    // Resumen del mes: se arma acá y no en el frontend para que la puntualidad del
+    // equipo tenga una sola definición (la misma que dashboardStats).
+    const withSchedule = rows.filter(r => r.hasSchedule)
+    const lateDays     = withSchedule.reduce((n, r) => n + (r.lateDays || 0), 0)
+    const arrivalDays  = withSchedule.reduce((n, r) => n + (r.arrivalDays || 0), 0)
+
+    res.json({
+      month,
+      range: { from: startDate, to: curEnd },
+      businessDays,
+      rows,
+      summary: {
+        punctualityPct: arrivalDays > 0 ? Math.round((arrivalDays - lateDays) / arrivalDays * 100) : null,
+        lateDays,
+        arrivalDays,
+        leaveDays:  rows.reduce((n, r) => n + (r.leaveDays || 0), 0),
+        absentDays: rows.reduce((n, r) => n + (r.absentDays || 0), 0),
+        membersWithSchedule: withSchedule.length,
+      },
+    })
+  } catch (err) { next(err) }
+}
+
+module.exports = { loginHistory, lastLogins, userSummary, dashboardStats, updateLogin, deleteLogin, metricHistory, monthAttendance }

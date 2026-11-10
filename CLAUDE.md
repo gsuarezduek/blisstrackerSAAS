@@ -288,7 +288,7 @@ Hay además un quinto flag de preferencia personal, `notesBoardEnabled` (`@defau
 /billing          → Billing.jsx          (PrivateRoute) — visible para todos; acciones solo admin/owner
 /reports             → Reports.jsx          (AdminRoute)
 /admin               → Admin.jsx            (AdminRoute)  — ?tab= query param
-/admin/rrhh          → RRHH.jsx             (RRHHRoute)   — secciones Hoy · Personas · Ausencias (?view=calendario|solicitudes|saldos) · Asistencia · Productividad; los ?tab= viejos se redirigen. Requiere feature flag `rrhh`; acceso configurable por rol (admin/owner siempre, ver "Acceso a módulos por rol") — a diferencia de EOS/Gamification.
+/admin/rrhh          → RRHH.jsx             (RRHHRoute)   — secciones Hoy · Personas · Tiempo y asistencia (?view=quien-esta|solicitudes|saldos; fusiona las viejas Ausencias y Asistencia) · Desempeño (el Analizador de Personas de EOS; solo admin/owner con el flag `eos`) · Productividad; los ?tab= viejos se redirigen. Requiere feature flag `rrhh`; acceso configurable por rol (admin/owner siempre, ver "Acceso a módulos por rol") — a diferencia de EOS/Gamification.
 /admin/eos           → EOS.jsx              (AdminRoute)  — 7 tabs: Visión, Personas, Datos, Asuntos, Procesos, Tracción, Evaluación. Requiere feature flag `eos`. Estrictamente isAdmin, sin acceso configurable por rol.
 /admin/gamification  → Gamification.jsx     (AdminRoute)  — CRUD de juegos/desafíos (admin). Requiere feature flag `gamification`. Estrictamente isAdmin, sin acceso configurable por rol.
 /ventas              → Ventas.jsx           (SalesRoute — admin o user.isSales)  — CRM. Feature flag `ventas`. Tabs Dashboard/Empresas; vista del Lead vía ?lead=id

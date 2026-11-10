@@ -1,4 +1,5 @@
 const prisma = require('../lib/prisma')
+const { activeMemberUserWhere } = require('../lib/assertActiveMember')
 const { sendVacationRequestEmail, sendVacationReviewEmail } = require('../services/email.service')
 const { DEFAULT_TZ } = require('../utils/dates')
 
@@ -84,7 +85,10 @@ async function listRequests(req, res, next) {
     const { status, userId } = req.query
     const where = { workspaceId }
     if (status) where.status = status
+    // Pedir una persona concreta (el legajo) trae su historial aunque esté
+    // desactivada; la lista de todos muestra sólo a quienes siguen en el equipo.
     if (userId) where.userId = Number(userId)
+    else where.user = activeMemberUserWhere(workspaceId)
 
     const requests = await prisma.vacationRequest.findMany({
       where,

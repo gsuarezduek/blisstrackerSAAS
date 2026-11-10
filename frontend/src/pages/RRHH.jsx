@@ -3,12 +3,14 @@ import { useSearchParams } from 'react-router-dom'
 import Navbar from '../components/Navbar'
 import api from '../api/client'
 import { useFeatureFlag } from '../hooks/useFeatureFlag'
+import { useAuth } from '../context/AuthContext'
 import { useWorkspace } from '../context/WorkspaceContext'
 import { computePeopleScore, peopleColumnKeys } from '../utils/peopleScore'
 import { TabHoy } from './rrhh/hoy'
-import { TabIngresos } from './rrhh/ingresos'
 import { TabPersonas } from './rrhh/personas'
-import { TabCalendario, TabSolicitudes, TabSaldos } from './rrhh/ausencias'
+import { TabSolicitudes, TabSaldos } from './rrhh/ausencias'
+import { TabQuienEsta } from './rrhh/tiempo'
+import { TabDesempeno } from './rrhh/desempeno'
 import ProductivityTab from '../components/admin/ProductivityTab'
 import LoadingSpinner from '../components/LoadingSpinner'
 import { rrhhSections, resolveRrhhNav, DEFAULT_TAB } from './rrhh/rrhhNav'
@@ -16,8 +18,9 @@ import { todayStr } from './rrhh/shared'
 
 // ─── Shell del panel RRHH ─────────────────────────────────────────────────────
 // Secciones por tarea (ver rrhh/rrhhNav.js): Hoy (cola de aprobaciones + avisos +
-// indicadores) · Personas · Ausencias (calendario / solicitudes / saldos) ·
-// Asistencia · Productividad. Sección y vista viven en la URL
+// indicadores) · Personas · Tiempo y asistencia (quién está / solicitudes /
+// saldos) · Desempeño (el Analizador de Personas de EOS) · Productividad.
+// Sección y vista viven en la URL
 // (?tab=&view=); los ?tab= del panel anterior se reescriben vía LEGACY_TABS.
 
 const EMPTY_PENDING = { leaves: [], benefits: [], approvedLeaves: [], loading: true, error: false }
@@ -25,10 +28,8 @@ const EMPTY_PENDING = { leaves: [], benefits: [], approvedLeaves: [], loading: t
 export default function RRHH() {
   const [searchParams, setSearchParams] = useSearchParams()
   const { workspace } = useWorkspace()
+  const { user } = useAuth()
   const productivityEnabled = workspace?.productivityEnabled !== false
-  const sections = rrhhSections({ productivityEnabled })
-  const nav = resolveRrhhNav({ tab: searchParams.get('tab'), view: searchParams.get('view') }, { productivityEnabled })
-  const { tab, view } = nav
   const personId = searchParams.get('userId')
 
   const [users, setUsers]       = useState([])
@@ -37,16 +38,28 @@ export default function RRHH() {
   const [dashStats, setDashStats] = useState({ projectsPerPerson: 0 })
   const [peopleScore, setPeopleScore] = useState(null)
   const [pending, setPending] = useState(EMPTY_PENDING)
-  const { enabled: eosEnabled } = useFeatureFlag('eos')
+  const { enabled: eosEnabled, loading: eosLoading } = useFeatureFlag('eos')
+
+  // El Analizador de Personas es de EOS: pide el flag Y admin/owner (/api/eos/* es
+  // workspaceAdminOnly). Mientras el flag no se resolvió, la sección no se arma —
+  // si no, aparecería y desaparecería sola al cargar.
+  const peopleAnalyzerEnabled = !eosLoading && eosEnabled && user?.isAdmin === true
+  const navOpts = { productivityEnabled, peopleAnalyzerEnabled }
+  const sections = rrhhSections(navOpts)
+  const nav = resolveRrhhNav({ tab: searchParams.get('tab'), view: searchParams.get('view') }, navOpts)
+  const { tab, view } = nav
 
   // URL legacy o inválida → la canónica, sin sumar una entrada al historial.
+  // Mientras el flag de EOS no resolvió, "desempeno" todavía no es una sección
+  // válida: reescribir ahí borraría un link directo a Desempeño antes de saber
+  // si existe.
   useEffect(() => {
-    if (!nav.changed) return
+    if (eosLoading || !nav.changed) return
     const next = new URLSearchParams(searchParams)
     if (tab === DEFAULT_TAB) next.delete('tab'); else next.set('tab', tab)
     if (view) next.set('view', view); else next.delete('view')
     setSearchParams(next, { replace: true })
-  }, [nav.changed, tab, view]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [eosLoading, nav.changed, tab, view]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function goTo(nextTab, nextView = null, extra = {}) {
     const next = new URLSearchParams()
@@ -127,6 +140,9 @@ export default function RRHH() {
 
   const pendingCount = pending.loading ? 0 : pending.leaves.length + pending.benefits.length
   const activeSection = sections.find(s => s.id === tab)
+  // Todo RRHH mira sólo a quienes siguen en el equipo. La única excepción es el
+  // directorio de Personas, que recibe la lista completa porque su chip
+  // "Desactivadas" es el lugar donde queda guardado ese legajo.
   const activeUsers = users.filter(u => u.active)
 
   return (
@@ -183,18 +199,21 @@ export default function RRHH() {
         {tab === 'hoy' && !usersLoaded && <LoadingSpinner className="py-16" />}
         {tab === 'hoy' && usersLoaded && (
           <TabHoy users={users} lastLoginsMap={lastLoginsMap} dashStats={dashStats} peopleScore={peopleScore}
+            peopleAnalyzerEnabled={peopleAnalyzerEnabled}
             pending={pending} onDecided={handleDecided} onNavigate={goTo} />
         )}
         {tab === 'personas' && (
-          <TabPersonas users={activeUsers} lastLoginsMap={lastLoginsMap} leaves={dashStats.leaves ?? []}
+          <TabPersonas users={users} lastLoginsMap={lastLoginsMap} leaves={dashStats.leaves ?? []}
             selectedId={personId} onSelect={openPerson} initialFilter={searchParams.get('filter')} onUsersChanged={loadUsers} productivityEnabled={productivityEnabled} />
         )}
-        {tab === 'ausencias' && view === 'calendario' && <TabCalendario users={activeUsers} onOpenPerson={openPerson} />}
-        {tab === 'ausencias' && view === 'solicitudes' && (
+        {tab === 'tiempo' && view === 'quien-esta' && (
+          <TabQuienEsta users={activeUsers} onOpenPerson={openPerson} />
+        )}
+        {tab === 'tiempo' && view === 'solicitudes' && (
           <TabSolicitudes users={activeUsers} onUsersChanged={() => { loadUsers(); loadDashStats() }} onRequestsChanged={loadPending} />
         )}
-        {tab === 'ausencias' && view === 'saldos' && <TabSaldos users={activeUsers} onUsersChanged={loadUsers} />}
-        {tab === 'asistencia' && <TabIngresos users={activeUsers} />}
+        {tab === 'tiempo' && view === 'saldos' && <TabSaldos users={activeUsers} onUsersChanged={loadUsers} />}
+        {tab === 'desempeno' && peopleAnalyzerEnabled && <TabDesempeno />}
         {tab === 'productividad' && productivityEnabled && <ProductivityTab />}
       </main>
     </div>

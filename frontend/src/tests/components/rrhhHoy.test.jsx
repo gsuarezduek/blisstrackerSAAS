@@ -12,18 +12,35 @@ describe('rrhhNav', () => {
   })
 
   it('mapea las pestañas del panel anterior', () => {
-    expect(resolveRrhhNav({ tab: 'licencias' })).toEqual({ tab: 'ausencias', view: 'solicitudes', changed: true })
-    expect(resolveRrhhNav({ tab: 'beneficios' })).toMatchObject({ tab: 'ausencias', view: 'saldos' })
-    expect(resolveRrhhNav({ tab: 'ausencias', view: 'vacaciones' })).toMatchObject({ view: 'saldos', changed: true })
+    expect(resolveRrhhNav({ tab: 'licencias' })).toEqual({ tab: 'tiempo', view: 'solicitudes', changed: true })
+    expect(resolveRrhhNav({ tab: 'beneficios' })).toMatchObject({ tab: 'tiempo', view: 'saldos' })
     expect(resolveRrhhNav({ tab: 'legajos' })).toMatchObject({ tab: 'personas', view: null })
-    expect(resolveRrhhNav({ tab: 'ingresos' })).toMatchObject({ tab: 'asistencia' })
     expect(resolveRrhhNav({ tab: 'dashboard' })).toMatchObject({ tab: 'hoy', changed: true })
   })
 
+  // Ausencias y Asistencia se fusionaron en "Tiempo y asistencia": los links que
+  // ya circulan (emails, notificaciones, marcadores) tienen que seguir cayendo
+  // donde corresponde, conservando la vista cuando la traían.
+  it('manda las secciones fusionadas a Tiempo y asistencia', () => {
+    expect(resolveRrhhNav({ tab: 'asistencia' })).toMatchObject({ tab: 'tiempo', view: 'quien-esta' })
+    expect(resolveRrhhNav({ tab: 'ingresos' })).toMatchObject({ tab: 'tiempo', view: 'quien-esta' })
+    expect(resolveRrhhNav({ tab: 'ausencias' })).toMatchObject({ tab: 'tiempo', view: 'quien-esta' })
+    expect(resolveRrhhNav({ tab: 'ausencias', view: 'calendario' })).toMatchObject({ tab: 'tiempo', view: 'quien-esta' })
+    expect(resolveRrhhNav({ tab: 'ausencias', view: 'solicitudes' })).toMatchObject({ tab: 'tiempo', view: 'solicitudes' })
+    expect(resolveRrhhNav({ tab: 'ausencias', view: 'vacaciones' })).toMatchObject({ tab: 'tiempo', view: 'saldos' })
+  })
+
   it('completa la vista por defecto y descarta vistas inválidas', () => {
-    expect(resolveRrhhNav({ tab: 'ausencias' })).toMatchObject({ view: 'calendario', changed: true })
-    expect(resolveRrhhNav({ tab: 'ausencias', view: 'saldos' })).toMatchObject({ view: 'saldos', changed: false })
+    expect(resolveRrhhNav({ tab: 'tiempo' })).toMatchObject({ view: 'quien-esta', changed: true })
+    expect(resolveRrhhNav({ tab: 'tiempo', view: 'saldos' })).toMatchObject({ view: 'saldos', changed: false })
     expect(resolveRrhhNav({ tab: 'personas', view: 'x' })).toMatchObject({ view: null, changed: true })
+  })
+
+  it('Desempeño sólo existe con EOS habilitado y rol admin', () => {
+    expect(rrhhSections({}).map(s => s.id)).not.toContain('desempeno')
+    expect(rrhhSections({ peopleAnalyzerEnabled: true }).map(s => s.id)).toContain('desempeno')
+    expect(resolveRrhhNav({ tab: 'desempeno' }, {})).toMatchObject({ tab: 'hoy', changed: true })
+    expect(resolveRrhhNav({ tab: 'desempeno' }, { peopleAnalyzerEnabled: true })).toMatchObject({ tab: 'desempeno', changed: false })
   })
 
   it('oculta Productividad si el workspace la apagó', () => {

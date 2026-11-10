@@ -1,15 +1,24 @@
 // Navegación del panel RRHH: secciones por tarea (no por tipo de dato).
-// Hoy = lo que pide una decisión; Personas = directorio + legajo; Ausencias =
-// solicitudes y saldos; Asistencia = ingresos; Productividad (opcional).
+// Hoy = lo que pide una decisión; Personas = directorio + legajo; Tiempo y
+// asistencia = quién estuvo y quién no (+ solicitudes y saldos); Desempeño = el
+// Analizador de Personas de EOS (opcional); Productividad (opcional).
+//
+// "Ausencias" y "Asistencia" eran dos secciones que respondían la misma pregunta
+// con dos fuentes distintas (un calendario de licencias por un lado, un listado de
+// ingresos por otro) y nunca sobre el mismo recorte de tiempo. Se fusionaron en
+// `tiempo`, cuya vista principal cruza las dos sobre el mismo mes.
 export const RRHH_SECTIONS = [
   { id: 'hoy',        label: 'Hoy' },
   { id: 'personas',   label: 'Personas' },
-  { id: 'ausencias',  label: 'Ausencias', views: [
-    { id: 'calendario',  label: 'Calendario' },
+  { id: 'tiempo',     label: 'Tiempo y asistencia', views: [
+    { id: 'quien-esta',  label: 'Quién está' },
     { id: 'solicitudes', label: 'Solicitudes' },
     { id: 'saldos',      label: 'Saldos' },
   ] },
-  { id: 'asistencia', label: 'Asistencia' },
+  // El Analizador vive en /api/eos/*, que pide el flag `eos` Y admin/owner: un rol
+  // con acceso a RRHH pero sin EOS vería la pestaña y recibiría 403, así que la
+  // sección se arma recién cuando las dos condiciones se cumplen.
+  { id: 'desempeno',  label: 'Desempeño', requiresPeopleAnalyzer: true },
   { id: 'productividad', label: 'Productividad', requiresProductivity: true },
 ]
 
@@ -20,17 +29,23 @@ export const DEFAULT_TAB = 'hoy'
 export const LEGACY_TABS = {
   dashboard:  { tab: 'hoy' },
   legajos:    { tab: 'personas' },
-  licencias:  { tab: 'ausencias', view: 'solicitudes' },
-  vacaciones: { tab: 'ausencias', view: 'saldos' },
-  beneficios: { tab: 'ausencias', view: 'saldos' },
-  ingresos:   { tab: 'asistencia' },
+  licencias:  { tab: 'tiempo', view: 'solicitudes' },
+  vacaciones: { tab: 'tiempo', view: 'saldos' },
+  beneficios: { tab: 'tiempo', view: 'saldos' },
+  ingresos:   { tab: 'tiempo' },
+  // Las dos secciones que se fusionaron en "Tiempo y asistencia".
+  ausencias:  { tab: 'tiempo' },
+  asistencia: { tab: 'tiempo' },
 }
 
-// Vistas que existieron en una versión anterior de Ausencias → vista actual.
-export const LEGACY_VIEWS = { vacaciones: 'saldos', beneficios: 'saldos' }
+// Vistas que existieron en una versión anterior de la sección → vista actual.
+// `calendario` era la vista de Ausencias que hoy es la principal de Tiempo.
+export const LEGACY_VIEWS = { vacaciones: 'saldos', beneficios: 'saldos', calendario: 'quien-esta' }
 
-export function rrhhSections({ productivityEnabled = true } = {}) {
-  return RRHH_SECTIONS.filter(s => !s.requiresProductivity || productivityEnabled)
+export function rrhhSections({ productivityEnabled = true, peopleAnalyzerEnabled = false } = {}) {
+  return RRHH_SECTIONS.filter(s =>
+    (!s.requiresProductivity || productivityEnabled) &&
+    (!s.requiresPeopleAnalyzer || peopleAnalyzerEnabled))
 }
 
 // Resuelve los params de la URL a { tab, view } válidos. `changed` indica que

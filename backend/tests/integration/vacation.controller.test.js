@@ -241,3 +241,47 @@ describe('PATCH /api/vacation/admin/requests/:id', () => {
     expect(res.status).toBe(403)
   })
 })
+
+// ── GET /api/vacation/admin/requests ──────────────────────────────────────────
+// Desactivar a alguien lo saca de RRHH: sus licencias no pueden seguir en la cola
+// de aprobaciones, en el calendario ni en "fuera del equipo". No se borran — el
+// legajo (que pide por userId) las sigue mostrando y reactivarlo las devuelve.
+
+describe('GET /api/vacation/admin/requests', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+    mockWorkspace('admin')
+    prisma.workspaceMember.findUnique.mockResolvedValue({
+      workspaceId: WORKSPACE_ID, userId: 1, role: 'admin', active: true,
+    })
+    prisma.vacationRequest.findMany.mockResolvedValue([])
+  })
+
+  it('la lista de todos sólo trae licencias de miembros activos', async () => {
+    const res = await request(app)
+      .get('/api/vacation/admin/requests')
+      .set('Authorization', makeToken(1, 'admin'))
+      .set('X-Workspace', WORKSPACE_SLUG)
+
+    expect(res.status).toBe(200)
+    expect(prisma.vacationRequest.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          user: { workspaceMembers: { some: { workspaceId: WORKSPACE_ID, active: true } } },
+        }),
+      }),
+    )
+  })
+
+  it('pedir una persona concreta trae su historial aunque esté desactivada', async () => {
+    const res = await request(app)
+      .get('/api/vacation/admin/requests?userId=7')
+      .set('Authorization', makeToken(1, 'admin'))
+      .set('X-Workspace', WORKSPACE_SLUG)
+
+    expect(res.status).toBe(200)
+    const { where } = prisma.vacationRequest.findMany.mock.calls[0][0]
+    expect(where.userId).toBe(7)
+    expect(where.user).toBeUndefined()
+  })
+})

@@ -56,6 +56,7 @@ export const PEOPLE_FILTERS = [
   { id: 'incomplete', label: 'Legajo incompleto' },
   { id: 'noSchedule', label: 'Sin horario' },
   { id: 'away',      label: 'Fuera hoy' },
+  { id: 'inactive',  label: 'Desactivadas' },
 ]
 
 export const PEOPLE_SORTS = [
@@ -71,6 +72,11 @@ export function filterPeople(users, { query = '', filter = 'all', sort = 'name' 
   const q = query.trim().toLowerCase()
   const match = u => matchesAnyField([u.name, u.email, roleLabel(u.role)], q)
   const pass = u => {
+    // Desactivar a alguien lo saca de TODAS las vistas de RRHH (sus licencias
+    // incluidas, ver `activeMemberUserWhere` en el backend). Su legajo no se borra:
+    // queda acá, detrás de su propio chip, que es el único lugar que los muestra.
+    if (filter === 'inactive') return u.active === false
+    if (u.active === false) return false
     if (filter === 'incomplete') return legajoReady && !isLegajoComplete(u, legajoFields)
     if (filter === 'noSchedule') return !(u.workStartTime && u.workEndTime)
     if (filter === 'away') return awayIds.has(u.id)
@@ -121,7 +127,12 @@ export function TabPersonas({ users, lastLoginsMap, leaves = [], selectedId, onS
     )
   }
 
-  const visibleFilters = PEOPLE_FILTERS.filter(f => f.id === 'all' || (f.id === 'incomplete' ? legajoReady : true))
+  // "Desactivadas" sólo aparece si hay alguna — en un workspace donde nunca se
+  // desactivó a nadie sería un chip permanente en cero.
+  const visibleFilters = PEOPLE_FILTERS.filter(f =>
+    f.id === 'all' ||
+    ((f.id === 'incomplete' ? legajoReady : true) &&
+     (f.id !== 'inactive' || counts.inactive > 0)))
 
   return (
     <div className="space-y-3">
@@ -184,7 +195,11 @@ export function TabPersonas({ users, lastLoginsMap, leaves = [], selectedId, onS
           </>
         )}
       </Card>
-      <p className="text-xs text-gray-400 dark:text-gray-500 px-1">{list.length} de {users.length} personas activas</p>
+      <p className="text-xs text-gray-400 dark:text-gray-500 px-1">
+        {filter === 'inactive'
+          ? `${list.length} ${list.length === 1 ? 'persona desactivada' : 'personas desactivadas'}. No aparecen en ninguna otra vista; su legajo queda acá para consulta.`
+          : `${list.length} de ${counts.all} personas activas`}
+      </p>
     </div>
   )
 }

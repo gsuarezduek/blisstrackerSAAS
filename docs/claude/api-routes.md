@@ -186,6 +186,7 @@ PATCH  /api/admin/rrhh/vacation-days/:id
 PATCH  /api/admin/rrhh/logins/:loginId          # editar hora/fecha de un ingreso (UserLogin)
 DELETE /api/admin/rrhh/logins/:loginId          # eliminar un ingreso
 GET    /api/admin/rrhh/metric-history           # ?metric=activeMembers|tenure|projectsPerPerson|avgLoginTime|punctuality&year=YYYY — historial mensual (12 meses)
+GET    /api/admin/rrhh/attendance               # ?month=YYYY-MM — asistencia del mes por persona (presencia, licencias, ausencias, tardanzas, hora promedio de llegada, horas disponibles) + resumen. Reusa getAttendanceStats de Productividad; alimenta RRHH → Tiempo y asistencia
 
 GET    /api/notifications
 POST   /api/notifications/read-all

@@ -25,7 +25,9 @@ export function faltasColor(n) {
 }
 
 // Tarjeta de People Score (EOS) — salud del equipo según el Analizador de Personas.
-export function PeopleScoreCard({ peopleScore }) {
+// `onOpenAnalyzer` lleva a la sección Desempeño de RRHH, donde ahora vive el
+// Analizador; sin ella (o si la sección no está disponible) cae al tab de EOS.
+export function PeopleScoreCard({ peopleScore, onOpenAnalyzer }) {
   const { score, rightPeople, total, strikesTotal = 0 } = peopleScore
   const band = healthBand(score)
   const seatPct = total > 0 ? Math.round(rightPeople / total * 100) : null
@@ -37,10 +39,19 @@ export function PeopleScoreCard({ peopleScore }) {
         <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
           Salud del equipo
         </p>
-        <Link to="/admin/eos?tab=personas"
-          className="text-xs font-medium text-primary-600 dark:text-primary-400 hover:underline shrink-0">
-          Analizador de Personas →
-        </Link>
+        {onOpenAnalyzer
+          ? (
+            <button type="button" onClick={onOpenAnalyzer}
+              className="text-xs font-medium text-primary-600 dark:text-primary-400 hover:underline shrink-0">
+              Analizador de Personas →
+            </button>
+          )
+          : (
+            <Link to="/admin/eos?tab=personas"
+              className="text-xs font-medium text-primary-600 dark:text-primary-400 hover:underline shrink-0">
+              Analizador de Personas →
+            </Link>
+          )}
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {/* People Score */}

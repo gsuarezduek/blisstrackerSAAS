@@ -17,7 +17,7 @@ import { ApprovalRow, buildApprovalItems } from './approvals'
 
 const HORIZON = 30
 
-export function TabHoy({ users, lastLoginsMap, dashStats, peopleScore, pending, onDecided, onNavigate }) {
+export function TabHoy({ users, lastLoginsMap, dashStats, peopleScore, peopleAnalyzerEnabled, pending, onDecided, onNavigate }) {
   const navigate = useNavigate()
   const { labelFor } = useRoles()
   const { workspace } = useWorkspace()
@@ -214,7 +214,7 @@ export function TabHoy({ users, lastLoginsMap, dashStats, peopleScore, pending, 
           {/* Para resolver */}
           <Card>
             <CardHeader title="Para resolver" count={pending.loading ? null : items.length}
-              action={<TextButton onClick={() => onNavigate('ausencias', 'solicitudes')}>Ver historial</TextButton>} />
+              action={<TextButton onClick={() => onNavigate('tiempo', 'solicitudes')}>Ver historial</TextButton>} />
             {flash && (
               <p role="status" className="mx-4 mb-2 text-sm text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-900/20 rounded-lg px-3 py-2">{flash}</p>
             )}
@@ -250,7 +250,7 @@ export function TabHoy({ users, lastLoginsMap, dashStats, peopleScore, pending, 
         <div className="space-y-4">
           <Card>
             <CardHeader title="Fuera del equipo" count={leaves.length || null}
-              action={<TextButton onClick={() => onNavigate('ausencias', 'calendario')}>Ver calendario</TextButton>} />
+              action={<TextButton onClick={() => onNavigate('tiempo', 'quien-esta')}>Ver calendario</TextButton>} />
             {leaves.length === 0
               ? <EmptyNote>Nadie de licencia en los próximos 30 días.</EmptyNote>
               : (
@@ -311,7 +311,10 @@ export function TabHoy({ users, lastLoginsMap, dashStats, peopleScore, pending, 
 
         {moreOpen && (
           <div className="mt-3 space-y-3">
-            {peopleScore && peopleScore.score != null && <PeopleScoreCard peopleScore={peopleScore} />}
+            {peopleScore && peopleScore.score != null && (
+              <PeopleScoreCard peopleScore={peopleScore}
+                onOpenAnalyzer={peopleAnalyzerEnabled ? () => onNavigate('desempeno') : null} />
+            )}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Card>
                 <CardHeader title="Distribución por roles" />
@@ -328,7 +331,7 @@ export function TabHoy({ users, lastLoginsMap, dashStats, peopleScore, pending, 
                 </div>
               </Card>
               <Card>
-                <CardHeader title="Última conexión" action={<TextButton onClick={() => onNavigate('asistencia')}>Ver ingresos</TextButton>} />
+                <CardHeader title="Última conexión" action={<TextButton onClick={() => onNavigate('tiempo', 'quien-esta')}>Ver asistencia</TextButton>} />
                 <ul className="px-4 pb-4 space-y-2">
                   {lastLoginRows.slice(0, 8).map(u => {
                     const since = daysSince(u.lastLogin)

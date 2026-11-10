@@ -9,18 +9,19 @@ import { AdjustModal } from './beneficios'
 import { TZ, todayStr, LEAVE_TYPE_LABELS, BENEFIT_BANKS, leaveDayCount, leaveRangeLabel } from './shared'
 import { matchesSearch } from '../../utils/textSearch'
 
-// ─── Sección "Ausencias" del panel RRHH ───────────────────────────────────────
-// Tres vistas: Calendario (quién falta cuándo, todo el equipo en un mes),
-// Solicitudes (licencias + beneficios en una sola lista, con aprobación en el
-// lugar) y Saldos (vacaciones, horas libres y días home de cada persona, con
-// ajuste a un click). Reemplaza a las pestañas Licencias / Vacaciones / Beneficios.
+// ─── Vistas "Solicitudes" y "Saldos" de RRHH → Tiempo y asistencia ────────────
+// Solicitudes: licencias + beneficios en una sola lista, con aprobación en el
+// lugar. Saldos: vacaciones, horas libres y días home de cada persona, con ajuste
+// a un click. La tercera vista de la sección ("Quién está") vive en `tiempo.jsx`
+// y embebe de acá la grilla `AbsenceGrid` y el hook `useAllRequests`, para que las
+// tres lean exactamente las mismas solicitudes.
 
 const fmtNum = n => Number(n).toLocaleString('es-AR', { maximumFractionDigits: 2 })
 const pad = n => String(n).padStart(2, '0')
 const ymd = (y, m, d) => `${y}-${pad(m + 1)}-${pad(d)}`
 
 // Carga compartida: todas las solicitudes de licencias y de beneficios.
-function useAllRequests() {
+export function useAllRequests() {
   const [state, setState] = useState({ leaves: [], benefits: [], loading: true, error: false })
   const reload = useCallback(async () => {
     try {
@@ -34,7 +35,7 @@ function useAllRequests() {
   return [state, reload]
 }
 
-function LoadError({ onRetry }) {
+export function LoadError({ onRetry }) {
   return (
     <Card className="px-4 py-8 text-center">
       <p className="text-sm text-gray-500 dark:text-gray-400">No pudimos cargar las solicitudes.</p>
@@ -43,7 +44,7 @@ function LoadError({ onRetry }) {
   )
 }
 
-function Skeleton({ rows = 4 }) {
+export function Skeleton({ rows = 4 }) {
   return (
     <div className="space-y-2">
       {Array.from({ length: rows }).map((_, i) => <div key={i} className="h-12 rounded-xl bg-gray-100 dark:bg-gray-800 animate-pulse" />)}
@@ -91,111 +92,80 @@ export function buildAbsenceGrid({ users = [], leaves = [], benefits = [], year,
   return { days, rows: [...rows.values()] }
 }
 
-const MONTHS = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
+export const MONTHS = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
 const DOW = ['D', 'L', 'M', 'M', 'J', 'V', 'S']
 
-export function TabCalendario({ users, onOpenPerson }) {
-  const [req, reload] = useAllRequests()
+// Grilla persona × día de un mes: quién está y quién no. Es presentación pura —
+// el mes, las solicitudes y el recorte de personas los decide quien la embebe
+// (hoy `tiempo.jsx`), para que la grilla y la tabla de asistencia de abajo miren
+// siempre el mismo conjunto de gente y el mismo mes.
+export function AbsenceGrid({ users, leaves, benefits, year, month, loading, onOpenPerson, onlyAway = false }) {
   const today = todayStr()
-  const [ym, setYm] = useState(() => ({ y: Number(today.slice(0, 4)), m: Number(today.slice(5, 7)) - 1 }))
-  const [onlyAway, setOnlyAway] = useState(true)
-
-  const grid = useMemo(() => buildAbsenceGrid({ users, leaves: req.leaves, benefits: req.benefits, year: ym.y, month: ym.m, today }),
-    [users, req.leaves, req.benefits, ym, today])
+  const grid = useMemo(() => buildAbsenceGrid({ users, leaves, benefits, year, month, today }),
+    [users, leaves, benefits, year, month, today])
   const withAbsences = grid.rows.filter(r => r.count > 0)
-  const rows = (onlyAway ? withAbsences : grid.rows).slice().sort((a, b) => (b.count - a.count) || a.user.name.localeCompare(b.user.name, 'es'))
-  const totalDays = withAbsences.reduce((s, r) => s + r.count, 0)
-  const isCurrent = ym.y === Number(today.slice(0, 4)) && ym.m === Number(today.slice(5, 7)) - 1
+  const rows = (onlyAway ? withAbsences : grid.rows)
+    .slice()
+    .sort((a, b) => (b.count - a.count) || a.user.name.localeCompare(b.user.name, 'es'))
 
-  function shift(delta) {
-    setYm(({ y, m }) => {
-      const d = new Date(y, m + delta, 1)
-      return { y: d.getFullYear(), m: d.getMonth() }
-    })
+  if (loading) return <Card className="p-4"><Skeleton /></Card>
+  if (rows.length === 0) {
+    return (
+      <Card className="overflow-hidden">
+        <EmptyNote>
+          <span className="block py-6 text-center">
+            {onlyAway ? `Nadie falta en ${MONTHS[month]}.` : 'Nadie coincide con el filtro.'}
+          </span>
+        </EmptyNote>
+      </Card>
+    )
   }
 
-  if (req.error) return <LoadError onRetry={reload} />
-
   return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div className="flex items-center gap-1">
-          <button type="button" onClick={() => shift(-1)} aria-label="Mes anterior"
-            className="w-8 h-8 rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800">‹</button>
-          <h3 className="text-base font-semibold text-gray-900 dark:text-white capitalize w-40 text-center">{MONTHS[ym.m]} {ym.y}</h3>
-          <button type="button" onClick={() => shift(1)} aria-label="Mes siguiente"
-            className="w-8 h-8 rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800">›</button>
-          {!isCurrent && <TextButton className="ml-2" onClick={() => setYm({ y: Number(today.slice(0, 4)), m: Number(today.slice(5, 7)) - 1 })}>Hoy</TextButton>}
-        </div>
-        <p className="text-sm text-gray-500 dark:text-gray-400">
-          {req.loading ? 'Cargando…' : withAbsences.length === 0 ? 'Nadie falta este mes'
-            : `${withAbsences.length} ${withAbsences.length === 1 ? 'persona' : 'personas'} · ${totalDays} ${totalDays === 1 ? 'día' : 'días'} fuera`}
-        </p>
-        <label className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300 cursor-pointer">
-          <input type="checkbox" checked={onlyAway} onChange={e => setOnlyAway(e.target.checked)} className="accent-primary-600" />
-          Solo quienes faltan
-        </label>
+    <Card className="overflow-hidden">
+      <div className="overflow-x-auto">
+        <table className="border-collapse text-xs" style={{ minWidth: 112 + grid.days.length * 30 }}>
+          <thead>
+            <tr>
+              <th className="sticky left-0 z-10 bg-white dark:bg-gray-800 text-left font-semibold text-gray-500 dark:text-gray-400 px-2 sm:px-3 py-2 w-28 sm:w-40 border-b border-gray-100 dark:border-gray-700">Persona</th>
+              {grid.days.map(d => (
+                <th key={d.date} scope="col"
+                  className={`w-[30px] py-1.5 font-medium border-b border-gray-100 dark:border-gray-700 ${d.today ? 'text-primary-600 dark:text-primary-400' : d.weekend ? 'text-gray-300 dark:text-gray-600' : 'text-gray-500 dark:text-gray-400'}`}>
+                  <span className="block text-[10px]">{DOW[d.dow]}</span>
+                  <span className={`inline-flex w-5 h-5 items-center justify-center rounded-full ${d.today ? 'bg-primary-600 text-white' : ''}`}>{d.day}</span>
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(({ user, cells }) => (
+              <tr key={user.id} className="group">
+                <th scope="row" className="sticky left-0 z-10 bg-white dark:bg-gray-800 group-hover:bg-gray-50 dark:group-hover:bg-gray-700/60 text-left font-normal px-2 sm:px-3 py-1.5 border-b border-gray-100 dark:border-gray-700">
+                  <button type="button" onClick={() => onOpenPerson?.(user.id)} className="flex items-center gap-2 max-w-[6.5rem] sm:max-w-[9.5rem] hover:underline">
+                    <Avatar user={user} size="xs" />
+                    <span className="text-sm text-gray-800 dark:text-gray-200 truncate">{user.name}</span>
+                  </button>
+                </th>
+                {grid.days.map(d => {
+                  const entries = cells[d.date] ?? []
+                  const e = entries[0]
+                  return (
+                    <td key={d.date} title={entries.map(x => x.label).join(' · ') || undefined}
+                      className={`p-0.5 border-b border-gray-100 dark:border-gray-700 ${d.weekend ? 'bg-gray-50 dark:bg-gray-900/40' : ''} ${d.today ? 'bg-primary-50/60 dark:bg-primary-900/10' : ''}`}>
+                      {e && <span className={`block h-5 rounded ${CELL[e.kind][e.status === 'approved' ? 'approved' : 'pending']}`} />}
+                    </td>
+                  )
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
-
-      <Card className="overflow-hidden">
-        {req.loading ? <div className="p-4"><Skeleton /></div> : rows.length === 0 ? (
-          <EmptyNote>
-            <span className="block pt-6 text-center">Nadie tiene licencias ni beneficios en {MONTHS[ym.m]}.</span>
-          </EmptyNote>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="border-collapse text-xs" style={{ minWidth: 112 + grid.days.length * 30 }}>
-              <thead>
-                <tr>
-                  <th className="sticky left-0 z-10 bg-white dark:bg-gray-800 text-left font-semibold text-gray-500 dark:text-gray-400 px-2 sm:px-3 py-2 w-28 sm:w-40 border-b border-gray-100 dark:border-gray-700">Persona</th>
-                  {grid.days.map(d => (
-                    <th key={d.date} scope="col"
-                      className={`w-[30px] py-1.5 font-medium border-b border-gray-100 dark:border-gray-700 ${d.today ? 'text-primary-600 dark:text-primary-400' : d.weekend ? 'text-gray-300 dark:text-gray-600' : 'text-gray-500 dark:text-gray-400'}`}>
-                      <span className="block text-[10px]">{DOW[d.dow]}</span>
-                      <span className={`inline-flex w-5 h-5 items-center justify-center rounded-full ${d.today ? 'bg-primary-600 text-white' : ''}`}>{d.day}</span>
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map(({ user, cells }) => (
-                  <tr key={user.id} className="group">
-                    <th scope="row" className="sticky left-0 z-10 bg-white dark:bg-gray-800 group-hover:bg-gray-50 dark:group-hover:bg-gray-700/60 text-left font-normal px-2 sm:px-3 py-1.5 border-b border-gray-100 dark:border-gray-700">
-                      <button type="button" onClick={() => onOpenPerson?.(user.id)} className="flex items-center gap-2 max-w-[6.5rem] sm:max-w-[9.5rem] hover:underline">
-                        <Avatar user={user} size="xs" />
-                        <span className="text-sm text-gray-800 dark:text-gray-200 truncate">{user.name}</span>
-                      </button>
-                    </th>
-                    {grid.days.map(d => {
-                      const entries = cells[d.date] ?? []
-                      const e = entries[0]
-                      return (
-                        <td key={d.date} title={entries.map(x => x.label).join(' · ') || undefined}
-                          className={`p-0.5 border-b border-gray-100 dark:border-gray-700 ${d.weekend ? 'bg-gray-50 dark:bg-gray-900/40' : ''} ${d.today ? 'bg-primary-50/60 dark:bg-primary-900/10' : ''}`}>
-                          {e && <span className={`block h-5 rounded ${CELL[e.kind][e.status === 'approved' ? 'approved' : 'pending']}`} />}
-                        </td>
-                      )
-                    })}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </Card>
-
-      <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-gray-500 dark:text-gray-400 px-1">
-        <Legend cls="bg-primary-500" label="Licencia aprobada" />
-        <Legend cls="bg-amber-200 dark:bg-amber-700/60" label="Licencia pendiente" />
-        <Legend cls="bg-sky-400" label="Día home" />
-        <Legend cls="bg-violet-400" label="Horas libres" />
-        <span className="hidden sm:inline">Pasá el mouse por un día para ver el detalle.</span>
-      </div>
-    </div>
+    </Card>
   )
 }
 
-function Legend({ cls, label }) {
+export function Legend({ cls, label }) {
   return <span className="inline-flex items-center gap-1.5"><span className={`w-3 h-3 rounded ${cls}`} aria-hidden="true" />{label}</span>
 }
 

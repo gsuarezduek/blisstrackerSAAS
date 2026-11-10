@@ -125,10 +125,9 @@ export default function useNavDestinations() {
     const tabs = [
       { to: '/admin/rrhh',                                label: 'Hoy · Para resolver' },
       { to: '/admin/rrhh?tab=personas',                   label: 'Personas' },
-      { to: '/admin/rrhh?tab=ausencias&view=calendario',  label: 'Ausencias · Calendario del equipo' },
-      { to: '/admin/rrhh?tab=ausencias&view=solicitudes', label: 'Ausencias · Solicitudes' },
-      { to: '/admin/rrhh?tab=ausencias&view=saldos',      label: 'Ausencias · Saldos (vacaciones, horas libres, días home)' },
-      { to: '/admin/rrhh?tab=asistencia',                 label: 'Asistencia' },
+      { to: '/admin/rrhh?tab=tiempo&view=quien-esta',  label: 'Tiempo y asistencia · Quién está y quién no' },
+      { to: '/admin/rrhh?tab=tiempo&view=solicitudes', label: 'Tiempo y asistencia · Solicitudes' },
+      { to: '/admin/rrhh?tab=tiempo&view=saldos',      label: 'Tiempo y asistencia · Saldos (vacaciones, horas libres, días home)' },
       ...(productivityEnabled ? [{ to: '/admin/rrhh?tab=productividad', label: 'Productividad' }] : []),
     ]
     for (const t of tabs) destinations.push({ to: t.to, label: `RRHH · ${t.label}` })

@@ -373,12 +373,20 @@ async function getAttendanceStats(workspaceId, tz, period) {
     const key = `${l.userId}::${date}`
     if (!firstLogin.has(key)) firstLogin.set(key, loginMinsFromMidnight(l.loginAt, tz))
   }
+  // Mismo recorrido para la HORA PROMEDIO DE LLEGADA: sale de las mismas "llegadas
+  // válidas" que las tardanzas (primer login de un día laborable, dentro de la ventana
+  // ±2h si hay horario). Se calcula acá y no en quien la muestra para que la tabla de
+  // RRHH no pueda contar un universo de llegadas distinto del que cuenta las tardanzas.
   const lateByUser = new Map()
+  const arrivalByUser = new Map()   // uid -> { sum, count }
   for (const [key, mins] of firstLogin) {
     const uid = Number(key.split('::')[0])
     const start = scheduleMap[uid]
+    if (start != null && !inArrivalWindow(mins, start)) continue
+    const acc = arrivalByUser.get(uid) || { sum: 0, count: 0 }
+    acc.sum += mins; acc.count++
+    arrivalByUser.set(uid, acc)
     if (start == null) continue
-    if (!inArrivalWindow(mins, start)) continue
     if (mins - start - tolerance > 0) lateByUser.set(uid, (lateByUser.get(uid) || 0) + 1)
   }
 
@@ -390,6 +398,7 @@ async function getAttendanceStats(workspaceId, tz, period) {
     const expectedDays = Math.max(0, businessDays - leaveDays)
     const hasSchedule  = scheduleMap[uid] != null
     const dayMins      = dayMinsMap[uid] ?? null
+    const arrivals     = arrivalByUser.get(uid) ?? null
     result.set(uid, {
       businessDays,
       daysPresent,
@@ -398,6 +407,10 @@ async function getAttendanceStats(workspaceId, tz, period) {
       absentDays: Math.max(0, expectedDays - daysPresent),
       lateDays:   hasSchedule ? (lateByUser.get(uid) || 0) : null,
       hasSchedule,
+      // Llegadas válidas del período y su promedio en minutos desde medianoche
+      // (null = ninguna). Productividad no los usa; los consume RRHH → Tiempo.
+      arrivalDays:    arrivals?.count ?? 0,
+      avgArrivalMins: arrivals ? Math.round(arrivals.sum / arrivals.count) : null,
       // Horas disponibles del período = días esperados × jornada (workEnd - workStart). null = sin horario completo.
       dailyHours:     dayMins != null ? Math.round(dayMins / 60 * 10) / 10 : null,
       availableHours: dayMins != null ? Math.round(expectedDays * dayMins / 60 * 10) / 10 : null,
