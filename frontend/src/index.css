@@ -10,6 +10,14 @@
   }
 }
 
+/* Barra lateral de navegación (Navbar.jsx): es `fixed`, así que el lugar que ocupa
+   se reserva acá. Navbar pone/saca estas clases en <html> al montarse, así las
+   páginas que no la muestran (login, landing, portal) no quedan corridas. */
+@media (min-width: 1024px) {
+  html.has-sidebar body { padding-left: 16rem; }
+  html.has-sidebar.sidebar-collapsed body { padding-left: 4rem; }
+}
+
 @layer components {
   /* ── Pizarra de notas (NotesBoard) ─────────────────────────────────── */
   .chalk-font {

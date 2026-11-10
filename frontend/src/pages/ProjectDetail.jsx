@@ -18,6 +18,7 @@ import AccesosTab from './project-detail/accesos'
 import { AvatarStack } from './project-detail/ui'
 import { TriangleAlert, Lock } from 'lucide-react'
 import { Icon } from '../components/ui/Icon'
+import { notifyProjectStarChanged } from '../hooks/useStarredProjects'
 
 // Nombres viejos de pestañas que siguen llegando por links guardados/notificaciones
 // (`?infoTab=info` desde Marketing para cargar el sitio web, `reportes`).
@@ -284,8 +285,12 @@ export default function ProjectDetail() {
     if (!projectStar) return
     const next = !projectStar.starred
     setProjectList(prev => prev.map(p => p.id === projectStar.id ? { ...p, starred: next } : p))
+    notifyProjectStarChanged(projectStar, next)
     try { await api.patch(`/projects/${projectStar.id}/star`) }
-    catch { setProjectList(prev => prev.map(p => p.id === projectStar.id ? { ...p, starred: !next } : p)) }
+    catch {
+      setProjectList(prev => prev.map(p => p.id === projectStar.id ? { ...p, starred: !next } : p))
+      notifyProjectStarChanged(projectStar, !next)
+    }
   }
 
   const allTasks = data?.byUser.flatMap(u => u.tasks) ?? []

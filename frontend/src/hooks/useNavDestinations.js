@@ -5,7 +5,7 @@ import { NAV as MARKETING_NAV } from '../components/marketing/marketingNav'
 
 // Destinos navegables por ruta para el Command Palette (Cmd/Ctrl+K). Reimplementa,
 // a propósito en un hook separado (no compartido), el mismo criterio de gating por
-// feature flag + rol que ya usa Navbar.jsx (links/moduleSublinks/adminSublinks) —
+// feature flag + rol que ya usa Navbar.jsx (primaryItems/moduleItems/adminItems) —
 // se prefirió esta pequeña duplicación a refactorizar ese archivo central, de alto
 // tráfico y sin cobertura de tests, para un feature secundario.
 //
@@ -57,7 +57,7 @@ export default function useNavDestinations() {
     ...(calendarioAllowed ? [{ to: '/calendario', label: 'Calendario' }] : []),
     ...(finanzasAllowed ? [{ to: '/finanzas', label: 'Finanzas' }] : []),
 
-    // Administración — mismo gate isAdmin que el dropdown en Navbar.jsx (líneas 398/571).
+    // Administración — mismo gate isAdmin que el bloque Administración de Navbar.jsx (adminItems).
     ...(isAdmin ? [
       { to: '/reports', label: 'Reportes' },
       ...(eosEnabled ? [{ to: '/admin/eos', label: 'EOS' }] : []),

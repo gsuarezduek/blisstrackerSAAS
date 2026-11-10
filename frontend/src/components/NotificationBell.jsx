@@ -39,7 +39,9 @@ function timeAgo(dateStr) {
   return new Date(dateStr).toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })
 }
 
-export default function NotificationBell() {
+// `buttonClassName` / `panelClassName` reemplazan el estilo por defecto (pensado
+// para la esquina superior derecha) — la barra lateral la abre hacia el costado.
+export default function NotificationBell({ buttonClassName, panelClassName } = {}) {
   const { user } = useAuth()
   const [notifications, setNotifications] = useState([])
   const [open,          setOpen]          = useState(false)
@@ -141,7 +143,7 @@ export default function NotificationBell() {
       {/* Bell button */}
       <button
         onClick={handleOpen}
-        className="relative text-gray-500 hover:text-gray-800 transition-colors p-1"
+        className={buttonClassName || 'relative text-gray-500 hover:text-gray-800 transition-colors p-1'}
         title="Notificaciones"
       >
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
@@ -158,7 +160,7 @@ export default function NotificationBell() {
 
       {/* Dropdown */}
       {open && (
-        <div className="fixed inset-x-2 top-16 sm:absolute sm:inset-x-auto sm:right-0 sm:top-8 sm:w-80 bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-100 dark:border-gray-700 z-50 overflow-hidden">
+        <div className={`${panelClassName || 'fixed inset-x-2 top-16 sm:absolute sm:inset-x-auto sm:right-0 sm:top-8 sm:w-80'} bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-100 dark:border-gray-700 z-50 overflow-hidden`}>
           <div className="px-4 pt-3 pb-2 border-b dark:border-gray-700">
             <div className="flex items-baseline gap-1.5 mb-2.5 min-w-0">
               <span className="font-semibold text-gray-900 dark:text-white text-sm flex-shrink-0">Notificaciones</span>

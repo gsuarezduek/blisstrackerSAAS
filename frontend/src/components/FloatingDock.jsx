@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { useChat } from '../context/ChatContext'
-import useActiveGames from '../hooks/useActiveGames'
 import ChatWidget from './chat/ChatWidget'
 import GamificationFab from './GamificationFab'
 import VoiceCallIndicator from './VoiceCallIndicator'
@@ -15,10 +14,14 @@ import { Icon } from './ui/Icon'
 // que ya escuchan esos componentes para abrirse, así los deep-links externos
 // (NotificationBell.jsx, ProjectDetail.jsx → bliss:open-chat/bliss:open-game)
 // siguen funcionando sin ningún cambio.
-export default function FloatingDock() {
+//
+// Desde lg la barra lateral (Navbar.jsx) ya tiene Nueva tarea, Chat y Juegos, así
+// que el botón flotante solo se muestra en pantallas chicas; los paneles se montan
+// siempre. `games` llega desde Navbar para no sumar otro polling de /gamification/active.
+export default function FloatingDock({ games }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const { unreadChannelsCount = 0, mentionChannelsCount = 0 } = useChat() || {}
-  const { visible: gamificationVisible, newCount: gameNewCount } = useActiveGames()
+  const { visible: gamificationVisible = false, newCount: gameNewCount = 0 } = games || {}
 
   function openTask() {
     setMenuOpen(false)
@@ -54,11 +57,11 @@ export default function FloatingDock() {
       <VoiceReconnectPrompt />
 
       {menuOpen && (
-        <div className="fixed inset-0 z-30" onClick={() => setMenuOpen(false)} />
+        <div className="fixed inset-0 z-30 lg:hidden" onClick={() => setMenuOpen(false)} />
       )}
 
       {menuOpen && (
-        <div className="fixed bottom-24 right-6 z-40 flex flex-col-reverse gap-3 items-end">
+        <div className="lg:hidden fixed bottom-24 right-6 z-40 flex flex-col-reverse gap-3 items-end">
           {items.map(item => (
             <button
               key={item.key}
@@ -83,7 +86,7 @@ export default function FloatingDock() {
       <button
         onClick={() => setMenuOpen(v => !v)}
         title={menuOpen ? 'Cerrar' : 'Accesos rápidos'}
-        className="fixed bottom-6 right-6 z-40 bg-primary-600 hover:bg-primary-700 text-white rounded-full w-12 h-12 flex items-center justify-center shadow-lg transition-all hover:scale-110"
+        className="lg:hidden fixed bottom-6 right-6 z-40 bg-primary-600 hover:bg-primary-700 text-white rounded-full w-12 h-12 flex items-center justify-center shadow-lg transition-all hover:scale-110"
       >
         <span className={`text-2xl leading-none transition-transform duration-150 ${menuOpen ? 'rotate-45' : ''}`}>+</span>
         {!menuOpen && mainBadge?.n > 0 && (
