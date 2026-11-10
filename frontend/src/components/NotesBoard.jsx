@@ -280,8 +280,14 @@ export default function NotesBoard() {
       }
       if (e.key === 'Escape') { if (isMobile) setOpen(false); setFontMenu(false) }
     }
+    // El botón de pizarra de la barra lateral (Navbar.jsx) la abre/cierra igual que el atajo.
+    const onToggle = () => setOpen((o) => !o)
     document.addEventListener('keydown', onKey)
-    return () => document.removeEventListener('keydown', onKey)
+    window.addEventListener('bliss:toggle-notes', onToggle)
+    return () => {
+      document.removeEventListener('keydown', onKey)
+      window.removeEventListener('bliss:toggle-notes', onToggle)
+    }
   }, [isMobile])
 
   // ── Resize handle (solo desktop) ─────────────────────────────────────
@@ -510,7 +516,8 @@ export default function NotesBoard() {
            pegado a la derecha (bajo el menú de perfil), sin ocupar una barra propia.
            El contenedor tiene altura 0 → el botón "straddlea" el borde inferior de la
            pizarra: línea nav/main cuando está cerrada, borde de la pizarra cuando está abierta. ── */}
-      <div className="relative h-0 z-20">
+      {/* Desde lg la abre el botón de la barra lateral: esta flecha quedaría cortada contra el borde superior. */}
+      <div className="relative h-0 z-20 lg:hidden">
         <button
           type="button"
           onClick={() => setOpen((o) => !o)}

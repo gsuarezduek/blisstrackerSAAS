@@ -74,6 +74,15 @@ export default function GlobalShortcuts() {
     return () => window.removeEventListener('bliss:open-add-task', onOpenAddTask)
   }, [enabled])
 
+  // Disparado por el campo "Buscar o ir a…" de la barra lateral (Navbar.jsx):
+  // abre el mismo buscador que Cmd/Ctrl+K.
+  useEffect(() => {
+    if (!enabled) return
+    function onOpenPalette() { setPaletteOpen(true) }
+    window.addEventListener('bliss:open-palette', onOpenPalette)
+    return () => window.removeEventListener('bliss:open-palette', onOpenPalette)
+  }, [enabled])
+
   // Disparado por CommandPalette al elegir una tarea — abre el mismo modal de
   // detalle/comentarios que el Dashboard sin navegar (sirve también para tareas
   // ya completadas, que ?task= de ProjectDetail no encuentra).

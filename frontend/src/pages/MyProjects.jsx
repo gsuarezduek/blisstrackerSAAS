@@ -9,6 +9,7 @@ import { FolderOpen, Plus, Lock } from 'lucide-react'
 import { Icon } from '../components/ui/Icon'
 import NewProjectModal from '../components/NewProjectModal'
 import { matchesSearch } from '../utils/textSearch'
+import { notifyProjectStarChanged } from '../hooks/useStarredProjects'
 
 // ─── Iconos de integraciones ─────────────────────────────────────────────────
 
@@ -208,8 +209,10 @@ export default function MyProjects() {
     e.stopPropagation()
     const next = !project.starred
     setProjects(prev => prev.map(p => p.id === project.id ? { ...p, starred: next } : p))
+    notifyProjectStarChanged(project, next)
     api.patch(`/projects/${project.id}/star`).catch(() => {
       setProjects(prev => prev.map(p => p.id === project.id ? { ...p, starred: !next } : p))
+      notifyProjectStarChanged(project, !next)
     })
   }
 
