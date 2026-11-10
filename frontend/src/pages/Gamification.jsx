@@ -938,7 +938,11 @@ function SubmissionsPager({ submissions, questions, withPoints }) {
       ) : (
         <div className="border border-gray-200 dark:border-gray-600 rounded-xl p-3">
           <div className="flex items-center justify-between gap-2 mb-2">
-            <span className="text-sm font-semibold text-gray-900 dark:text-white truncate">{sub.userName}</span>
+            <span className="text-sm font-semibold text-gray-900 dark:text-white truncate">
+              {sub.userName}
+              {/* Su respuesta se conserva, pero ya no está en el equipo: no compite en el ranking. */}
+              {sub.inactive && <span className="ml-1.5 align-middle text-[10px] font-medium px-1.5 py-0.5 rounded-md bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400">fuera del equipo</span>}
+            </span>
             {withPoints && <span className="text-xs font-medium text-gray-500 dark:text-gray-400 shrink-0">{sub.score} pts</span>}
           </div>
           <div className="space-y-2.5">

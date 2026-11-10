@@ -297,13 +297,15 @@ describe('GET /api/gamification/games/:id (admin) — detalle de votación', () 
   it('devuelve participación + ranking, pero NO quién votó a quién (voto secreto)', async () => {
     mockWorkspace('admin')
     prisma.game.findFirst.mockResolvedValue(voteGame())
-    prisma.gameVote.count.mockResolvedValue(2)
-    prisma.gameVote.findMany.mockResolvedValue([{ targetUserId: 2 }, { targetUserId: 2 }]) // para el ranking
+    // Dos votos emitidos por miembros activos (3 y 4), los dos hacia Ana.
+    prisma.gameVote.findMany.mockResolvedValue([
+      { voterId: 3, targetUserId: 2 }, { voterId: 4, targetUserId: 2 },
+    ])
     prisma.workspaceMember.findMany.mockResolvedValue([
       { userId: 2, active: true, user: { id: 2, name: 'Ana' } },
       { userId: 3, active: true, user: { id: 3, name: 'Beto' } },
+      { userId: 4, active: true, user: { id: 4, name: 'Caro' } },
     ])
-    prisma.workspaceMember.count.mockResolvedValue(3)
 
     const res = await request(app)
       .get('/api/gamification/games/5')
@@ -314,6 +316,44 @@ describe('GET /api/gamification/games/:id (admin) — detalle de votación', () 
     expect(res.body.votes).toBeUndefined()
     // El ranking (no enmascarado para el admin) sí trae el conteo por candidato.
     expect(res.body.leaderboard.subjects[0]).toMatchObject({ label: 'Ana', score: 2 })
+  })
+})
+
+describe('GET /api/gamification/games/:id (admin) — detalle de cuestionario', () => {
+  it('deja fuera del ranking la entrega de quien ya no está activo, pero la conserva marcada', async () => {
+    mockWorkspace('admin')
+    prisma.game.findFirst.mockResolvedValue({
+      id: 7, workspaceId: WS, type: 'quiz_challenge', title: 'Trivia', description: null, prize: null,
+      subjectType: 'person', scoring: 'quiz', config: {}, visibilityRule: { mode: 'always' },
+      startDate: null, endDate: null, status: 'active', winnerSubject: null,
+      createdAt: new Date(), updatedAt: new Date(), teams: [],
+    })
+    prisma.gameQuestion.findMany.mockResolvedValue([
+      { id: 'q1', order: 0, kind: 'multiple_choice', text: '¿2+2?', options: [{ id: 'a', text: '4' }], correctOptionId: 'a', points: 3 },
+    ])
+    // Como las trae la query: por entrega más antigua primero.
+    prisma.gameQuizSubmission.findMany.mockResolvedValue([
+      { userId: 3, score: 3, submittedAt: new Date('2026-06-10T09:00:00Z'), answers: [{ questionId: 'q1', optionId: 'a' }] },
+      { userId: 2, score: 3, submittedAt: new Date('2026-06-10T10:00:00Z'), answers: [{ questionId: 'q1', optionId: 'a' }] },
+    ])
+    prisma.workspaceMember.findMany.mockResolvedValue([
+      { userId: 2, active: true,  user: { id: 2, name: 'Ana' } },
+      { userId: 3, active: false, user: { id: 3, name: 'Ex integrante' } },
+    ])
+
+    const res = await request(app)
+      .get('/api/gamification/games/7')
+      .set('Authorization', authHeader(1, 'admin')).set('X-Workspace', SLUG)
+
+    expect(res.status).toBe(200)
+    // El ranking solo muestra al miembro activo (antes el desactivado seguía con sus puntos).
+    expect(res.body.leaderboard.subjects.map((s) => s.label)).toEqual(['Ana'])
+    // Participación contra el equipo de hoy: 1 entrega de 1 persona activa.
+    expect(res.body.participation).toEqual({ submitted: 1, eligible: 1 })
+    // La entrega sigue estando para que el admin lea qué respondió, marcada como inactiva.
+    expect(res.body.submissions.map((s) => [s.userName, s.inactive])).toEqual([
+      ['Ex integrante', true], ['Ana', false],
+    ])
   })
 })
 

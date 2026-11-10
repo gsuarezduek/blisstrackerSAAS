@@ -132,24 +132,46 @@ async function computeLeaderboard(game) {
   return { subjects: [], warnings: [] }
 }
 
+/**
+ * Personas que pueden figurar en un ranking de sujetos-PERSONA, indexadas por userId.
+ *
+ * Quien fue desactivado del workspace deja de competir: su entrega, sus votos y sus
+ * puntos salen del ranking y de los conteos de participación, igual que desaparece del
+ * resto de los listados del equipo. Única excepción: el ganador que ya quedó anunciado
+ * (`winnerSubject` se congela al finalizar el juego) — sacarlo del podio dejaría el
+ * banner "🏆 Fulano" sin su fila, contradiciendo lo que el equipo ya vio.
+ */
+async function rankablePeople(game) {
+  const members = await prisma.workspaceMember.findMany({
+    where: { workspaceId: game.workspaceId },
+    include: { user: { select: { id: true, name: true, avatar: true } } },
+  })
+  const winnerId = String(game.winnerSubject?.subjectId ?? '')
+  const out = new Map()
+  for (const m of members) {
+    if (m.active || String(m.userId) === winnerId) out.set(m.userId, m)
+  }
+  return out
+}
+
 /** Cuestionario: ranking por puntaje de las entregas. */
 async function leaderboardQuiz(game) {
   const subs = await prisma.gameQuizSubmission.findMany({ where: { gameId: game.id } })
   if (!subs.length) return { subjects: [], warnings: [] }
 
-  const members = await prisma.workspaceMember.findMany({
-    where: { workspaceId: game.workspaceId, userId: { in: subs.map((s) => s.userId) } },
-    include: { user: { select: { id: true, name: true, avatar: true } } },
-  })
-  const byId = new Map(members.map((m) => [m.userId, m.user]))
-
-  const subjects = subs.map((s) => ({
-    subjectId: String(s.userId),
-    label: byId.get(s.userId)?.name || `Usuario ${s.userId}`,
-    avatar: byId.get(s.userId)?.avatar || null,
-    score: s.score,
-    detail: { submittedAt: s.submittedAt },
-  }))
+  const people = await rankablePeople(game)
+  const subjects = subs
+    .filter((s) => people.has(s.userId))
+    .map((s) => {
+      const u = people.get(s.userId)?.user
+      return {
+        subjectId: String(s.userId),
+        label: u?.name || `Usuario ${s.userId}`,
+        avatar: u?.avatar || null,
+        score: s.score,
+        detail: { submittedAt: s.submittedAt },
+      }
+    })
   // Mayor puntaje primero; a igualdad, quien entregó antes va arriba.
   subjects.sort((a, b) => b.score - a.score || new Date(a.detail.submittedAt) - new Date(b.detail.submittedAt))
   return { subjects, warnings: [] }
@@ -160,13 +182,10 @@ async function leaderboardVote(game) {
   const cfg = game.config || {}
   const candidateIds = Array.isArray(cfg.candidateIds) ? cfg.candidateIds.map(Number) : null
 
-  const members = await prisma.workspaceMember.findMany({
-    where: { workspaceId: game.workspaceId, active: true },
-    include: { user: { select: { id: true, name: true, avatar: true } } },
-  })
+  const people = await rankablePeople(game)
   const candidates = candidateIds?.length
-    ? members.filter((mm) => candidateIds.includes(mm.userId))
-    : members
+    ? [...people.values()].filter((mm) => candidateIds.includes(mm.userId))
+    : [...people.values()]
 
   const votes = await prisma.gameVote.findMany({ where: { gameId: game.id } })
   const tally = new Map()
@@ -180,7 +199,11 @@ async function leaderboardVote(game) {
     detail: {},
   }))
   subjects.sort((a, b) => b.score - a.score)
-  return { subjects, warnings: [], totalVotes: votes.length }
+  // El total son los votos que efectivamente se ven: un voto a alguien que ya no está en
+  // el equipo (o que quedó fuera de los candidatos) no aparece en ninguna fila, así que
+  // sumarlo al total dejaría un "N votos" que no cierra con el ranking.
+  const totalVotes = subjects.reduce((acc, s) => acc + s.score, 0)
+  return { subjects, warnings: [], totalVotes }
 }
 
 /** Manual: lee los puntos cargados por el admin. */
@@ -410,5 +433,5 @@ module.exports = {
   // visibilidad (puro)
   isGameVisible, isInRecurringWindow, localParts, daysInMonth, ymdString, monthsBetween,
   // leaderboards (DB)
-  computeLeaderboard, resolveWinner, resolveSubjectLabels,
+  computeLeaderboard, resolveWinner, resolveSubjectLabels, rankablePeople,
 }

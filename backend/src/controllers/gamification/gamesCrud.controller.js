@@ -183,12 +183,17 @@ async function getGame(req, res, next) {
 
 // Detalle extra para el admin según el tipo de juego.
 async function adminGameDetail(game) {
-  const eligible = await activeMemberCount(game.workspaceId)
+  // Participación = sobre el equipo de HOY: quien fue desactivado no suma ni al
+  // numerador ni al denominador (su entrega o su voto tampoco está en el ranking,
+  // ver rankablePeople en gamification.service.js).
+  const directory = await memberDirectory(game.workspaceId)
+  const isActive = (userId) => !!directory.get(userId)?.active
+  const eligible = [...directory.values()].filter((m) => m.active).length
 
   if (game.scoring === 'vote') {
     // El voto es secreto: el admin ve cuántos votaron y el ranking, pero NO quién votó a quién.
-    const voted = await prisma.gameVote.count({ where: { gameId: game.id } })
-    return { participation: { voted, eligible } }
+    const voters = await prisma.gameVote.findMany({ where: { gameId: game.id }, select: { voterId: true } })
+    return { participation: { voted: voters.filter((v) => isActive(v.voterId)).length, eligible } }
   }
 
   if (game.scoring === 'quiz') {
@@ -196,7 +201,6 @@ async function adminGameDetail(game) {
       prisma.gameQuestion.findMany({ where: { gameId: game.id }, orderBy: { order: 'asc' } }),
       prisma.gameQuizSubmission.findMany({ where: { gameId: game.id }, orderBy: { submittedAt: 'asc' } }),
     ])
-    const names = await memberNameMap(game.workspaceId)
     const maxScore = questions.reduce((s, q) => s + (q.points || 0), 0) + quizParticipationPoints(game)
     const questionIds = new Set(questions.map((q) => String(q.id)))
     const optionToQuestionId = new Map()
@@ -205,11 +209,15 @@ async function adminGameDetail(game) {
     }
     return {
       questions: questions.map(shapeQuestion),
-      participation: { submitted: subs.length, eligible },
+      participation: { submitted: subs.filter((s) => isActive(s.userId)).length, eligible },
       maxScore,
+      // Las entregas se conservan completas, también las de quien ya no está en el equipo
+      // (son el registro de lo que se respondió); van marcadas con `inactive` para que se
+      // entienda por qué no figuran en el ranking.
       submissions: subs.map((s) => ({
         userId: s.userId,
-        userName: names.get(s.userId) || `Usuario ${s.userId}`,
+        userName: directory.get(s.userId)?.name || `Usuario ${s.userId}`,
+        inactive: !isActive(s.userId),
         score: s.score,
         submittedAt: s.submittedAt,
         // Respuesta de cada persona a cada pregunta (opción elegida o texto libre), para
@@ -225,12 +233,15 @@ async function adminGameDetail(game) {
   return {}
 }
 
-async function activeMemberCount(workspaceId) {
-  return prisma.workspaceMember.count({ where: { workspaceId, active: true } })
-}
-async function memberNameMap(workspaceId) {
-  const members = await prisma.workspaceMember.findMany({ where: { workspaceId }, include: { user: { select: { id: true, name: true } } } })
-  return new Map(members.map((m) => [m.userId, m.user?.name]))
+// Nombre + si sigue activo, por userId. Una sola query cubre los tres usos: contar a
+// quienes pueden participar, ponerle nombre a cada entrega (incluidas las de gente que
+// ya no está) y marcar esas entregas como inactivas.
+async function memberDirectory(workspaceId) {
+  const members = await prisma.workspaceMember.findMany({
+    where: { workspaceId },
+    include: { user: { select: { id: true, name: true } } },
+  })
+  return new Map(members.map((m) => [m.userId, { name: m.user?.name, active: m.active }]))
 }
 
 // Pregunta para el admin (incluye la respuesta correcta).

@@ -116,6 +116,20 @@ describe('computeLeaderboard — vote', () => {
     expect(lb.totalVotes).toBe(3)
   })
 
+  test('quien fue desactivado sale del ranking y su voto no suma al total', async () => {
+    prisma.workspaceMember.findMany.mockResolvedValue([
+      { userId: 1, active: true,  user: { id: 1, name: 'Ana', avatar: null } },
+      { userId: 2, active: false, user: { id: 2, name: 'Ex integrante', avatar: null } },
+    ])
+    prisma.gameVote.findMany.mockResolvedValue([
+      { targetUserId: 2 }, { targetUserId: 2 }, { targetUserId: 1 },
+    ])
+    const lb = await computeLeaderboard({ id: 9, workspaceId: 1, scoring: 'vote', subjectType: 'person', config: {} })
+    expect(lb.subjects.map((s) => [s.label, s.score])).toEqual([['Ana', 1]])
+    // Los 2 votos al que ya no está no se muestran en ninguna fila: tampoco en el total.
+    expect(lb.totalVotes).toBe(1)
+  })
+
   test('respeta candidateIds acotados', async () => {
     prisma.workspaceMember.findMany.mockResolvedValue([
       { userId: 1, active: true, user: { id: 1, name: 'Ana' } },
@@ -227,12 +241,41 @@ describe('computeLeaderboard — quiz', () => {
       { userId: 4, score: 5, submittedAt: '2026-06-10T09:00:00Z' },
     ])
     prisma.workspaceMember.findMany.mockResolvedValue([
-      { userId: 2, user: { id: 2, name: 'Ana' } },
-      { userId: 3, user: { id: 3, name: 'Beto' } },
-      { userId: 4, user: { id: 4, name: 'Caro' } },
+      { userId: 2, active: true, user: { id: 2, name: 'Ana' } },
+      { userId: 3, active: true, user: { id: 3, name: 'Beto' } },
+      { userId: 4, active: true, user: { id: 4, name: 'Caro' } },
     ])
     const lb = await computeLeaderboard({ id: 9, workspaceId: 1, scoring: 'quiz' })
     expect(lb.subjects.map((s) => [s.label, s.score])).toEqual([['Beto', 8], ['Caro', 5], ['Ana', 5]])
+  })
+
+  test('la entrega de alguien desactivado no figura en el ranking', async () => {
+    prisma.gameQuizSubmission.findMany.mockResolvedValue([
+      { userId: 2, score: 5, submittedAt: '2026-06-10T10:00:00Z' },
+      { userId: 3, score: 9, submittedAt: '2026-06-10T11:00:00Z' },
+    ])
+    prisma.workspaceMember.findMany.mockResolvedValue([
+      { userId: 2, active: true,  user: { id: 2, name: 'Ana' } },
+      { userId: 3, active: false, user: { id: 3, name: 'Ex integrante' } },
+    ])
+    const lb = await computeLeaderboard({ id: 9, workspaceId: 1, scoring: 'quiz', subjectType: 'person' })
+    expect(lb.subjects.map((s) => s.label)).toEqual(['Ana'])
+  })
+
+  test('el ganador ya anunciado sigue en el podio aunque después lo desactiven', async () => {
+    prisma.gameQuizSubmission.findMany.mockResolvedValue([
+      { userId: 2, score: 5, submittedAt: '2026-06-10T10:00:00Z' },
+      { userId: 3, score: 9, submittedAt: '2026-06-10T11:00:00Z' },
+    ])
+    prisma.workspaceMember.findMany.mockResolvedValue([
+      { userId: 2, active: true,  user: { id: 2, name: 'Ana' } },
+      { userId: 3, active: false, user: { id: 3, name: 'Beto' } },
+    ])
+    const lb = await computeLeaderboard({
+      id: 9, workspaceId: 1, scoring: 'quiz', subjectType: 'person',
+      status: 'finished', winnerSubject: { subjectId: '3', label: 'Beto', score: 9 },
+    })
+    expect(lb.subjects.map((s) => s.label)).toEqual(['Beto', 'Ana'])
   })
 
   test('sin entregas → ranking vacío', async () => {
