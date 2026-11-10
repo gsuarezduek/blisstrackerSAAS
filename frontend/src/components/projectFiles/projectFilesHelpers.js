@@ -100,6 +100,21 @@ export function saveViewMode(mode) {
   try { localStorage.setItem(VIEW_STORAGE_KEY, mode) } catch { /* preferencia perdida, nada más */ }
 }
 
+// Aviso que aparece al abrir un PDF en pestaña nueva: la URL de esa pestaña es
+// una URL firmada de R2 que vence en 1 hora, y se parece lo suficiente a un
+// link "de verdad" como para que alguien la copie de la barra del navegador y
+// se la mande a un cliente (pasó). Se puede descartar para siempre en este
+// navegador.
+const PREVIEW_NOTICE_KEY = 'bliss_files_preview_notice_dismissed'
+
+export function previewNoticeDismissed() {
+  try { return localStorage.getItem(PREVIEW_NOTICE_KEY) === '1' } catch { return false }
+}
+
+export function dismissPreviewNotice() {
+  try { localStorage.setItem(PREVIEW_NOTICE_KEY, '1') } catch { /* se vuelve a mostrar, nada más */ }
+}
+
 // Qué columna ordena cada opción del selector, para poder pintar la flecha en
 // el encabezado correcto y para que clickear una columna cicle entre sus dos
 // sentidos. Es la misma lista de SORT_OPTIONS vista al revés: en la lista el

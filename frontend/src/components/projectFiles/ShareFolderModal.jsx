@@ -70,6 +70,11 @@ export default function ShareFolderModal({ projectId, item, onClose, onChanged }
                 {copied ? 'Copiado' : 'Copiar'}
               </button>
             </div>
+            {!isFolder && (
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                Este link no vence. No mandes el que aparece en la barra del navegador al abrir la vista previa: ese dura 1 hora.
+              </p>
+            )}
             {error && <p className="text-xs text-red-500 dark:text-red-400 mt-2">{error}</p>}
             <div className="flex justify-between items-center mt-4">
               <button onClick={handleRevoke} disabled={revoking} className="text-xs text-red-500 dark:text-red-400 hover:text-red-600 disabled:opacity-50">

@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext'
 import LoadingSpinner from './LoadingSpinner'
 import { useProjectFileUpload, fmtMb, MAX_FILE_BYTES } from './projectFilesUpload'
 import ContentFilePiecesModal from './contenido/ContentFilePiecesModal'
-import { FolderOpen, Search } from 'lucide-react'
+import { FolderOpen, Search, X } from 'lucide-react'
 import { Icon } from './ui/Icon'
 import { NewFolderModal, RenameModal, CopyLinkModal, ConfirmDeleteModal } from './projectFiles/SimpleModals'
 import MoveModal from './projectFiles/MoveModal'
@@ -17,7 +17,7 @@ import FilesSearchBar from './projectFiles/FilesSearchBar'
 import BulkActionBar from './projectFiles/BulkActionBar'
 import UploadQueue from './projectFiles/UploadQueue'
 import FilePreviewModals from './projectFiles/FilePreviewModals'
-import { fmtDate, fileDeepLink, sortItems, loadViewMode, saveViewMode } from './projectFiles/projectFilesHelpers'
+import { fmtDate, fileDeepLink, sortItems, loadViewMode, saveViewMode, previewNoticeDismissed, dismissPreviewNotice } from './projectFiles/projectFilesHelpers'
 import { useFileDragMove } from './projectFiles/useFileDragMove'
 
 // ─── Componente principal ──────────────────────────────────────────────────
@@ -46,6 +46,9 @@ export default function ProjectFiles({ projectId, deepLinkFileId, onCreateTaskFr
   const [searchResults, setSearchResults] = useState(null) // null = no buscando
   const [searching, setSearching] = useState(false)
   const [showTrash, setShowTrash] = useState(false)
+  // Archivo cuyo PDF se acaba de abrir en pestaña nueva — muestra el aviso de
+  // que ese link vence y que para mandarlo hay que usar Compartir.
+  const [previewNotice, setPreviewNotice] = useState(null)
   const deepLinkConsumedRef = useRef(false)
 
   const reload = useCallback(async (fid) => {
@@ -163,6 +166,7 @@ export default function ProjectFiles({ projectId, deepLinkFileId, onCreateTaskFr
     ;(async () => {
       try {
         win.location.href = await signedUrl(item, true)
+        if (!previewNoticeDismissed()) setPreviewNotice(item)
       } catch {
         win.close()
         setError('No se pudo cargar la vista previa del PDF')
@@ -334,6 +338,31 @@ export default function ProjectFiles({ projectId, deepLinkFileId, onCreateTaskFr
       )}
 
       {error && <p className="text-sm text-red-500 dark:text-red-400">{error}</p>}
+
+      {previewNotice && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 px-3 py-2 text-sm text-amber-900 dark:text-amber-200">
+          <p className="flex-1 min-w-[200px]">
+            Abriste "{previewNotice.name}" en una pestaña nueva. El link de esa pestaña es solo una vista previa y <strong>vence en 1 hora</strong>: para mandárselo a alguien, usá Compartir.
+          </p>
+          <div className="flex items-center gap-3 shrink-0">
+            <button
+              onClick={() => { setModal({ type: 'share', item: previewNotice }); setPreviewNotice(null) }}
+              className="text-sm px-3 py-1 rounded-lg bg-primary-600 hover:bg-primary-700 text-white font-medium"
+            >
+              Compartir
+            </button>
+            <button
+              onClick={() => { dismissPreviewNotice(); setPreviewNotice(null) }}
+              className="text-xs hover:underline"
+            >
+              No volver a mostrar
+            </button>
+            <button onClick={() => setPreviewNotice(null)} aria-label="Cerrar aviso" className="hover:opacity-70">
+              <Icon as={X} size={16} />
+            </button>
+          </div>
+        </div>
+      )}
 
       <UploadQueue queue={queue} onCancel={cancel} />
 
