@@ -46,6 +46,7 @@ const kanban    = require('../controllers/content/kanban.controller')
 const history   = require('../controllers/content/history.controller')
 const dashboard = require('../controllers/content/dashboard.controller')
 const approval  = require('../controllers/content/approval.controller')
+const seo       = require('../controllers/content/seo.controller')
 const assets    = require('../controllers/contentAssets.controller')
 const comments  = require('../controllers/contentComments.controller')
 const files     = require('../controllers/contentFiles.controller')
@@ -66,6 +67,14 @@ router.patch ('/projects/:id/pieces/:pid/position',  kanban.movePiece)
 router.patch ('/projects/:id/pieces/:pid/star',      kanban.starPiece)
 router.get   ('/projects/:id/pieces/:pid/history',   history.getHistory)
 router.post  ('/projects/:id/pieces/:pid/send-to-dashboard', dashboard.sendToDashboard)
+
+// Inventario SEO del blog (ver content/seo.controller.js). Antes de
+// '/pieces/:pid' no hace falta: cuelgan de '/seo', no de '/pieces'.
+router.get   ('/projects/:id/seo/inventory', seo.getInventory)
+router.post  ('/projects/:id/seo/refresh',   seo.refreshSeo)
+router.post  ('/projects/:id/seo/import',    seo.importFromSite)
+router.post  ('/projects/:id/pieces/:pid/translations', seo.linkTranslation)
+router.delete('/projects/:id/pieces/:pid/translations', seo.unlinkTranslation)
 
 router.get   ('/projects/:id/summary',     history.getSummary)
 router.post  ('/projects/:id/request-approval', approval.requestApproval)

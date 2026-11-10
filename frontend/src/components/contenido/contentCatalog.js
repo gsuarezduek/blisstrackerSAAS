@@ -28,6 +28,17 @@ export const CONTENT_TYPES = [
   { key: 'otro',       label: 'Otro',       media: 'any' },
 ]
 
+// Idiomas de una nota del inventario SEO. Espejo de CONTENT_LANGUAGES del backend.
+export const CONTENT_LANGUAGES = [
+  { key: 'es', label: 'Español',   short: 'ES' },
+  { key: 'en', label: 'Inglés',    short: 'EN' },
+  { key: 'pt', label: 'Portugués', short: 'PT' },
+]
+
+export function languageMeta(key) {
+  return CONTENT_LANGUAGES.find(l => l.key === key) || null
+}
+
 // `hasIcon` = tiene logo en marketing/SocialIcon.jsx; el resto se rinde con texto.
 export const CONTENT_NETWORKS = [
   { key: 'instagram', label: 'Instagram', hasIcon: true },

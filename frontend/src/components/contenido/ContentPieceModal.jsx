@@ -17,6 +17,8 @@ import { useContentHistory, useContentComments } from './useContentPieces'
 import useContentSocket from './useContentSocket'
 import { CONTENT_STATUSES, CONTENT_TYPES, CONTENT_NETWORKS } from './contentCatalog'
 import { toLocalInput } from './dateHelpers'
+import useDebouncedCommit from './useDebouncedCommit'
+import ContentSeoFields from './ContentSeoFields'
 import { fmtBytes, iconFor } from '../../lib/fileIcons'
 import { Link2, Trash2, X } from 'lucide-react'
 import { Icon } from '../ui/Icon'
@@ -28,23 +30,6 @@ const TABS  = [
   { id: 'comentarios', label: 'Comentarios' },
   { id: 'historial',   label: 'Historial' },
 ]
-
-// Debounce genérico para inputs de texto libre: evita mandar un PATCH por tecla.
-function useDebouncedCommit(value, onCommit, delay = 600) {
-  const [draft, setDraft] = useState(value)
-  const first = useRef(true)
-
-  useEffect(() => { setDraft(value) }, [value])
-
-  useEffect(() => {
-    if (first.current) { first.current = false; return }
-    const t = setTimeout(() => { if (draft !== value) onCommit(draft) }, delay)
-    return () => clearTimeout(t)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [draft])
-
-  return [draft, setDraft]
-}
 
 /**
  * Detalle de una pieza. Recibe el objeto `piece` ya cargado (viene de la lista
@@ -171,6 +156,12 @@ export default function ContentPieceModal({ piece, members = [], clientContacts 
   const [copy, setCopy] = useDebouncedCommit(piece.copy ?? '', v => onUpdate(piece.id, { copy: v || null }))
   const [hashtags, setHashtags] = useDebouncedCommit(piece.hashtags ?? '', v => onUpdate(piece.id, { hashtags: v || null }))
   const [internalNotes, setInternalNotes] = useDebouncedCommit(piece.internalNotes ?? '', v => onUpdate(piece.id, { internalNotes: v || null }))
+
+  const showSeo = useMemo(() => (
+    piece.networks.includes('blog') || piece.types.includes('articulo') ||
+    !!piece.publishedUrl || !!piece.seoKeyword || !!piece.language ||
+    (piece.seoKeywords?.length ?? 0) > 0 || !!piece.seo
+  ), [piece])
 
   useEffect(() => {
     function onKey(e) { if (e.key === 'Escape') onClose() }
@@ -560,6 +551,18 @@ export default function ContentPieceModal({ piece, members = [], clientContacts 
                   className={INPUT}
                 />
               </div>
+
+              {/* Datos SEO — sólo donde tienen sentido: una nota del blog. El
+                  criterio es amplio (alcanza con que ya tenga algo cargado)
+                  para que sacarle la red "blog" no esconda una URL ya puesta. */}
+              {showSeo && (
+                <ContentSeoFields
+                  piece={piece}
+                  canEdit={canEdit}
+                  onUpdate={onUpdate}
+                  onPieceChanged={onPieceChanged}
+                />
+              )}
 
               <div className="sm:col-span-2">
                 <label className={LABEL}>Notas internas <span className="italic text-gray-400">(el cliente nunca las ve)</span></label>

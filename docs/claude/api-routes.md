@@ -353,6 +353,14 @@ DELETE /api/contenido/projects/:id/pieces/:pid/assets/:aid
 GET    /api/contenido/projects/:id/pieces/:pid/comments           # hilo completo (internal + client), el front separa por tab
 POST   /api/contenido/projects/:id/pieces/:pid/comments           # { body, visibility? } — default 'internal'
 DELETE /api/contenido/projects/:id/pieces/:pid/comments/:cid      # autor o admin/owner
+POST   /api/contenido/projects/:id/pieces/:pid/translations        # { pieceId } — marca las dos piezas como la misma nota en otro idioma; FUSIONA los grupos si ya tenían
+DELETE /api/contenido/projects/:id/pieces/:pid/translations        # saca la pieza de su grupo (y si queda una sola, lo disuelve)
+
+# Inventario SEO del blog (ver concepto "Inventario SEO del blog"). Lo que define
+# el inventario es tener `publishedUrl`, no el estado ni el tipo de pieza.
+GET    /api/contenido/projects/:id/seo/inventory                   # ?language=(es|en|pt|none)&status=&trend=(sube|baja|estable|nuevo)&alert=1&q=&sort=(clicks|impressions|position|published|title)&dir= — las notas con su cruce de Search Console (28 días + variación contra los 28 anteriores), top 5 consultas, alertas y traducciones
+POST   /api/contenido/projects/:id/seo/refresh                      # { force? } — vuelve a pedirle los datos a Search Console (3 queries para todo el blog). Mínimo 10 min entre refrescos salvo force; 400 NO_SEARCH_CONSOLE / NO_SITE_URL
+POST   /api/contenido/projects/:id/seo/import                       # { source: 'wordpress'|'sitemap', url?, filter?, defaultLanguage?, dryRun? } — crea una pieza 'publicado' por entrada ya publicada del sitio. Idempotente (lo ya cargado se saltea); 400 WP_API_UNAVAILABLE / SITEMAP_UNAVAILABLE / NO_SITE_URL
 
 # Calendario (requiere feature flag 'calendario'). GET /google/callback es el único
 # sin auth (Google redirige el browser directo, no lleva Authorization header).

@@ -55,6 +55,26 @@ const CONTENT_NETWORKS = [
   { key: 'email',     label: 'Email' },
 ]
 
+// Idiomas de una nota del inventario SEO. Tres y no el catálogo completo de
+// ISO-639: son los que el equipo publica, y una lista larga convierte un
+// selector en un buscador. Agregar uno es un cambio de catálogo (más el espejo
+// del frontend), igual que agregar una red.
+//
+// Las claves son las mismas que usa el análisis de canibalización para el
+// idioma de una URL (lib/cannibalAnalysis.js `detectLanguage`), así que una
+// nota en inglés y el conflicto de canibalización de esa misma URL hablan del
+// mismo "en" — si no, cruzar las dos cosas pediría una tabla de equivalencias.
+const CONTENT_LANGUAGES = [
+  { key: 'es', label: 'Español',    short: 'ES' },
+  { key: 'en', label: 'Inglés',     short: 'EN' },
+  { key: 'pt', label: 'Portugués',  short: 'PT' },
+]
+
+const CONTENT_LANGUAGE_KEYS = CONTENT_LANGUAGES.map(l => l.key)
+
+function isValidLanguage(key) { return CONTENT_LANGUAGE_KEYS.includes(key) }
+function languageMeta(key)    { return CONTENT_LANGUAGES.find(l => l.key === key) || null }
+
 // Al completar la Task vinculada ("enviar al dashboard"), la pieza avanza a este
 // estado. Un estado fuera de este mapa no se mueve (completar la tarea de una
 // pieza ya aprobada no la retrocede ni la adelanta).
@@ -103,6 +123,8 @@ module.exports = {
   CONTENT_STATUSES,
   CONTENT_TYPES,
   CONTENT_NETWORKS,
+  CONTENT_LANGUAGES,
+  CONTENT_LANGUAGE_KEYS,
   CONTENT_STATUS_KEYS,
   CONTENT_TYPE_KEYS,
   CONTENT_NETWORK_KEYS,
@@ -115,6 +137,8 @@ module.exports = {
   isValidStatus,
   isValidType,
   isValidNetwork,
+  isValidLanguage,
+  languageMeta,
   statusMeta,
   isPortalVisible,
   awaitsClient,

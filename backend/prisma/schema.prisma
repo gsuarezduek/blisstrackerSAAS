@@ -226,6 +226,7 @@ model Workspace {
   contentComments            ContentComment[]
   contentStatusEvents        ContentStatusEvent[]
   contentPieceFiles          ContentPieceFile[]
+  contentPieceSeoStats       ContentPieceSeoStat[]
   taskFiles                  TaskFile[]
   projectFiles               ProjectFile[]
   whatsappAccounts           WhatsappAccount[]
@@ -766,6 +767,7 @@ model Project {
   financeTaskWorkspaces    Workspace[]               @relation("WorkspaceFinanceTaskProject")
   chatChannel              ChatChannel?
   contentPieces            ContentPiece[]
+  contentPieceSeoStats     ContentPieceSeoStat[]
   monthlyHoursLogs         ProjectMonthlyHoursLog[]
   files                    ProjectFile[]
   deletedTaskNotices       DeletedTaskNotice[]
@@ -4307,37 +4309,51 @@ model ChatChannelRead {
 // catálogo, no una migración de tipo (mismo criterio que Lead.status).
 
 model ContentPiece {
-  id             Int                  @id @default(autoincrement())
-  workspaceId    Int
-  workspace      Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  projectId      Int
-  project        Project              @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  title          String
-  status         String               @default("idea") // clave de CONTENT_STATUSES
+  id            Int       @id @default(autoincrement())
+  workspaceId   Int
+  workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  projectId     Int
+  project       Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  title         String
+  status        String    @default("idea") // clave de CONTENT_STATUSES
   // Prioridad compartida por todo el equipo (no por usuario, a diferencia de
   // Task.starred) — mismo formato 0-3 / mismos colores que las tareas: el CM
   // la marca para señalar "hacé esta primero" y cualquiera que abra la pieza
   // ve la misma estrella. Tope de 3 destacadas simultáneas por PROYECTO
   // (validado en content.controller.js#starPiece), excluyendo estados
   // terminales (publicado/archivado).
-  starred        Int                  @default(0)
-  types          String               @default("[]") // JSON array de claves de CONTENT_TYPES (multi-selección, mismo patrón que networks)
-  networks       String               @default("[]") // JSON array de claves de CONTENT_NETWORKS (una pieza puede salir a varias)
+  starred       Int       @default(0)
+  types         String    @default("[]") // JSON array de claves de CONTENT_TYPES (multi-selección, mismo patrón que networks)
+  networks      String    @default("[]") // JSON array de claves de CONTENT_NETWORKS (una pieza puede salir a varias)
   // Brief de diseño (WYSIWYG, HTML) — interno, NUNCA viaja al portal del cliente (mismo
   // criterio que internalNotes). Hasta la migración `add_content_piece_design_details`
   // este campo se llamaba `copy` y era el texto del posteo; ese dato viejo quedó acá
   // (envuelto en HTML básico) y `copy` pasó a ser un campo nuevo, simple.
-  designDetails  String?
-  copy           String? // texto simple del posteo — este SÍ viaja al portal del cliente
-  hashtags       String?
-  internalNotes  String? // NUNCA viaja al portal del cliente
-  scheduledAt    DateTime? // fecha+hora de publicación planificada (UTC)
+  designDetails String?
+  copy          String? // texto simple del posteo — este SÍ viaja al portal del cliente
+  hashtags      String?
+  internalNotes String? // NUNCA viaja al portal del cliente
+  scheduledAt   DateTime? // fecha+hora de publicación planificada (UTC)
   // "YYYY-MM-DD" en Project.timezone, calculado por el backend al escribir. El
   // calendario agrupa por este string para no hacer aritmética de zona horaria en
   // el cliente (mismo criterio que WorkDay.date y ProjectMeeting.date).
-  scheduledDate  String?
-  publishedAt    DateTime?
-  publishedUrl   String?
+  scheduledDate String?
+  publishedAt   DateTime?
+  publishedUrl  String?
+
+  // ── Inventario SEO del blog (ver concepto "Inventario SEO del blog") ──────
+  // Opcionales a propósito: una story de Instagram no tiene nada que hacer con
+  // una keyword ni con un idioma. Lo que convierte una pieza en una nota del
+  // inventario es `publishedUrl`: sin URL no hay nada que cruzar con Search
+  // Console, y por eso el inventario filtra por ese campo y no por tipo/red.
+  language           String? // 'es' | 'en' | 'pt' — catálogo CONTENT_LANGUAGES
+  seoKeyword         String? // keyword principal que la nota busca rankear
+  seoKeywords        String  @default("[]") // JSON array de keywords secundarias (mismo criterio que `networks`)
+  // Agrupa las traducciones de una MISMA nota. Un id compartido y no un FK a la
+  // "original" porque entre traducciones no hay jerarquía: borrar la que quedó
+  // marcada como original dejaría al resto sin vínculo entre sí.
+  translationGroupId String?
+
   ownerId        Int? // responsable interno
   owner          User?                @relation("ContentPieceOwner", fields: [ownerId], references: [id], onDelete: SetNull)
   // Responsable = el cliente (ej. "está en su cancha, esperando su aprobación").
@@ -4373,6 +4389,7 @@ model ContentPiece {
   statusEvents  ContentStatusEvent[]
   notifications Notification[]
   files         ContentPieceFile[]
+  seoStat       ContentPieceSeoStat?
   // Tareas del dashboard vinculadas a lo largo de la vida de la pieza ("enviar al
   // dashboard") — UNA pieza puede pasar por VARIAS tareas/responsables (CM arma
   // el copy → diseñador arma el reel → CM revisa → CM publica): cada handoff crea
@@ -4384,6 +4401,7 @@ model ContentPiece {
   @@index([workspaceId])
   @@index([projectId, scheduledDate]) // vista Calendario (rango de mes)
   @@index([projectId, status, order]) // vista Kanban
+  @@index([projectId, translationGroupId]) // traer las hermanas de una nota en un solo query
   @@index([projectId, updatedAt]) // tiebreak legacy / futuras vistas por última edición
   @@index([projectId, deletedAt]) // vista Papelera + limpieza semanal
 }
@@ -4521,6 +4539,59 @@ model ContentStatusEvent {
   createdAt      DateTime             @default(now())
 
   @@index([pieceId, createdAt])
+  @@index([workspaceId])
+}
+
+// Cruce de una nota publicada con Search Console: los últimos 28 días, los 28
+// anteriores, sus 5 consultas principales y las alertas que salen de comparar
+// las dos ventanas. Es CACHE — se puede borrar entera y se rearma con un
+// refresh; la fuente es siempre Search Console. Vive en una tabla propia y no
+// en columnas de ContentPiece por dos razones: así el inventario puede ORDENAR
+// por clics/impresiones en SQL (que es como se pide la tabla), y así los datos
+// de medición no se mezclan con lo que carga una persona a mano.
+//
+// Una fila por pieza (`pieceId @unique`): no es una serie histórica. El dato
+// histórico mensual del sitio entero ya lo guarda SearchConsoleSnapshot; acá lo
+// que importa es "cómo viene ESTA nota ahora", y guardar 28 días por nota por
+// día multiplicaría filas sin que nadie las mire.
+model ContentPieceSeoStat {
+  id          Int          @id @default(autoincrement())
+  workspaceId Int
+  workspace   Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  projectId   Int
+  project     Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  pieceId     Int          @unique
+  piece       ContentPiece @relation(fields: [pieceId], references: [id], onDelete: Cascade)
+
+  // URL normalizada con la que matcheó en Search Console. NULL = la URL cargada
+  // en la pieza no aparece en los datos del sitio — se guarda igual la fila para
+  // poder distinguir "nunca se midió" de "se midió y no tiene impresiones".
+  matchedUrl  String?
+  periodStart String // "YYYY-MM-DD" — ventana de 28 días que se midió
+  periodEnd   String
+
+  clicks      Int   @default(0)
+  impressions Int   @default(0)
+  ctr         Float @default(0)
+  position    Float @default(0)
+
+  // Los 28 días anteriores. NULL (y no 0) cuando la nota no aparecía todavía:
+  // "no existía" y "existía y no se llevó nada" dan variaciones distintas, y
+  // una nota recién publicada no tiene que figurar como si hubiera caído.
+  prevClicks      Int?
+  prevImpressions Int?
+  prevCtr         Float?
+  prevPosition    Float?
+
+  topQueries String @default("[]") // JSON [{query, clicks, impressions, ctr, position}] — las 5 principales
+  // JSON [{code, severity, message, data}] — ver lib/contentSeo.js `computeAlerts`.
+  // Se persisten ya calculadas porque dependen del período anterior, que no
+  // queda guardado en ningún otro lado una vez que la ventana se corre.
+  alerts     String @default("[]")
+
+  fetchedAt DateTime @default(now())
+
+  @@index([projectId, clicks])
   @@index([workspaceId])
 }
 

@@ -9,6 +9,7 @@ import ContentMonthTabs from '../components/contenido/ContentMonthTabs'
 import ContentTableView from '../components/contenido/ContentTableView'
 import ContentKanbanView from '../components/contenido/ContentKanbanView'
 import ContentCalendarView, { currentMonthStr } from '../components/contenido/ContentCalendarView'
+import ContentInventoryView from '../components/contenido/ContentInventoryView'
 import ContentPieceModal from '../components/contenido/ContentPieceModal'
 import ContentTrashModal from '../components/contenido/ContentTrashModal'
 import ConfirmModal from '../components/ConfirmModal'
@@ -29,6 +30,9 @@ const VIEWS = [
   { id: 'calendario', label: 'Calendario' },
   { id: 'tabla',      label: 'Tabla' },
   { id: 'kanban',     label: 'Kanban' },
+  // El inventario no se acota al mes ni al estado: es todo lo publicado del
+  // blog, medido contra Search Console. Ver ContentInventoryView.jsx.
+  { id: 'inventario', label: 'Inventario SEO' },
 ]
 const VALID_VIEWS = new Set(VIEWS.map(v => v.id))
 const MONTH_RE = /^\d{4}-\d{2}$/
@@ -323,6 +327,21 @@ export default function Contenido() {
             El calendario de contenido se organiza por proyecto. Seleccioná uno arriba para ver o planificar sus piezas.
           </p>
         </div>
+      )
+    }
+
+    // El Inventario SEO no comparte nada con las otras tres vistas: trae sus
+    // propias filas (de `/seo/inventory`, con las métricas ya cruzadas), no se
+    // acota al mes y tiene sus propios filtros. Sale antes de todo lo demás
+    // para no arrastrar las pestañas de mes ni los filtros del calendario.
+    if (view === 'inventario') {
+      return (
+        <ContentInventoryView
+          projectId={projectId}
+          canEdit={canEdit}
+          onOpen={p => patchParams({ piece: p.id })}
+          onImported={reload}
+        />
       )
     }
 

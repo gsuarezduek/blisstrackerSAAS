@@ -4,12 +4,14 @@ const { canWrite } = require('../../lib/projectAccess')
 const { emitTo } = require('../../lib/socket')
 const {
   isValidType,
+  isValidLanguage,
   sanitizeNetworks,
   sanitizeTypes,
   statusMeta,
   CONTENT_NETWORKS,
   OPEN_STATUSES,
 } = require('../../lib/contentCatalog')
+const { deltaPct, trendOf } = require('../../lib/contentSeo')
 const { SYSTEM_TYPES, postProjectSystemMessage } = require('../../lib/chatSystemMessage')
 const { shapeItem: shapeProjectFile } = require('../projects/projectFiles.controller')
 
@@ -17,6 +19,10 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 const DEFAULT_PAGE_SIZE = 50
 const MAX_PAGE_SIZE = 200
 const MAX_TITLE = 200
+// Tope de keywords secundarias por nota. No es una restricción técnica: una
+// lista de 40 keywords no es un foco, es un deseo, y la alerta de solapamiento
+// la vuelve ruido (cada keyword declarada es un choque potencial con otra nota).
+const MAX_SEO_KEYWORDS = 10
 
 // Tope de destacadas simultáneas por proyecto (mismo número que tareas, ver
 // starPiece). Publicado/Archivado no cuentan — ya no hay nada que priorizar.
@@ -153,6 +159,10 @@ const PIECE_INCLUDE = {
     take:    1,
     select:  { id: true, body: true, authorName: true, createdAt: true },
   },
+  // Cruce con Search Console (una fila por pieza, ver ContentPieceSeoStat).
+  // Viaja en el include general y no sólo en el inventario porque la ficha de
+  // la pieza muestra lo mismo: son los números de ESA nota, no un agregado.
+  seoStat:     true,
   _count:      { select: { comments: true } },
 }
 
@@ -217,6 +227,39 @@ function formatPieceTask(t) {
   }
 }
 
+/**
+ * Métricas de Search Console de una nota, listas para la tabla: los números de
+ * la ventana actual, la variación contra la anterior ya calculada (null =
+ * no había período anterior con qué comparar, ver ContentPieceSeoStat) y las
+ * alertas que dejó el último refresh.
+ */
+function formatSeoStat(st) {
+  return {
+    matched:     st.matchedUrl != null,
+    periodStart: st.periodStart,
+    periodEnd:   st.periodEnd,
+    clicks:      st.clicks,
+    impressions: st.impressions,
+    ctr:         st.ctr,
+    position:    st.position,
+    prevClicks:      st.prevClicks,
+    prevImpressions: st.prevImpressions,
+    prevPosition:    st.prevPosition,
+    delta: {
+      clicks:      deltaPct(st.clicks, st.prevClicks),
+      impressions: deltaPct(st.impressions, st.prevImpressions),
+      // La posición NO va en porcentaje sino en posiciones, y con el signo
+      // dado vuelta: en Search Console un número más chico es mejor, así que
+      // +2 acá significa "subió 2 puestos" y no "empeoró un 2%".
+      position: st.prevPosition != null ? Number((st.prevPosition - st.position).toFixed(1)) : null,
+    },
+    trend:      trendOf(st),
+    topQueries: safeParseArr(st.topQueries),
+    alerts:     safeParseArr(st.alerts),
+    fetchedAt:  st.fetchedAt,
+  }
+}
+
 // Formatter INTERNO (equipo). El del portal del cliente es una función aparte en
 // contentPortal.controller.js y nunca expone internalNotes ni datos de equipo.
 function formatPiece(p) {
@@ -236,6 +279,13 @@ function formatPiece(p) {
     scheduledDate: p.scheduledDate,
     publishedAt:   p.publishedAt,
     publishedUrl:  p.publishedUrl,
+    language:      p.language ?? null,
+    seoKeyword:    p.seoKeyword ?? null,
+    seoKeywords:   safeParseArr(p.seoKeywords),
+    translationGroupId: p.translationGroupId ?? null,
+    // Métricas de Search Console de ESTA nota. null = todavía no se refrescó el
+    // inventario (o la pieza no tiene URL publicada, que es lo mismo acá).
+    seo:           p.seoStat ? formatSeoStat(p.seoStat) : null,
     starred:       p.starred,
     order:         p.order,
     owner:         p.owner ? { id: p.owner.id, name: p.owner.name, avatar: p.owner.avatar } : null,
@@ -269,6 +319,36 @@ function formatPiece(p) {
     createdAt:     p.createdAt,
     updatedAt:     p.updatedAt,
   }
+}
+
+/**
+ * Las otras versiones de cada nota (ver `translationGroupId`), para un conjunto
+ * de piezas, en UN solo query. El grupo no es una relación de Prisma —es un id
+ * compartido—, así que no entra en PIECE_INCLUDE: resolverlo fila por fila
+ * serían N queries por listado.
+ * Devuelve Map<groupId, [{id,title,language,publishedUrl,status}]>.
+ */
+async function loadTranslationGroups(projectId, workspaceId, groupIds) {
+  const ids = [...new Set(groupIds.filter(Boolean))]
+  if (ids.length === 0) return new Map()
+  const rows = await prisma.contentPiece.findMany({
+    where:  { projectId, workspaceId, deletedAt: null, translationGroupId: { in: ids } },
+    select: { id: true, title: true, language: true, publishedUrl: true, status: true, translationGroupId: true },
+    orderBy: { language: 'asc' },
+  })
+  const map = new Map()
+  for (const r of rows) {
+    const list = map.get(r.translationGroupId) ?? []
+    list.push({ id: r.id, title: r.title, language: r.language, publishedUrl: r.publishedUrl, status: r.status })
+    map.set(r.translationGroupId, list)
+  }
+  return map
+}
+
+/** Las traducciones de UNA pieza: su grupo, menos ella misma. */
+function siblingsFrom(groups, piece) {
+  if (!piece.translationGroupId) return []
+  return (groups.get(piece.translationGroupId) ?? []).filter(s => s.id !== piece.id)
 }
 
 async function loadPiece(pid, projectId, workspaceId) {
@@ -344,6 +424,34 @@ function buildPieceData(body, timezone, { isCreate = false } = {}) {
     }
   }
 
+  // La keyword SÍ se recorta (a diferencia de los campos de arriba, que se
+  // guardan tal cual porque son texto libre y HTML del editor): se compara
+  // contra lo que devuelve Search Console, y un espacio al final la convierte
+  // en otra keyword que no matchea con nada.
+  if (body.seoKeyword !== undefined) {
+    const kw = typeof body.seoKeyword === 'string' ? body.seoKeyword.trim() : ''
+    data.seoKeyword = kw || null
+  }
+
+  // Idioma: '' o null lo borra (una pieza de Instagram no tiene idioma), y un
+  // valor fuera del catálogo es un error del cliente, no algo a ignorar —
+  // guardarlo dejaría una nota que ningún filtro del inventario encuentra.
+  if (body.language !== undefined) {
+    if (body.language === null || body.language === '') data.language = null
+    else if (!isValidLanguage(body.language)) return { error: 'Idioma inválido' }
+    else data.language = body.language
+  }
+
+  if (body.seoKeywords !== undefined) {
+    if (!Array.isArray(body.seoKeywords)) return { error: 'seoKeywords debe ser un array' }
+    // Dedup ANTES del tope: si no, tres copias de la misma keyword se gastan
+    // tres de los diez lugares.
+    const clean = [...new Set(
+      body.seoKeywords.map(k => String(k ?? '').trim()).filter(Boolean),
+    )].slice(0, MAX_SEO_KEYWORDS)
+    data.seoKeywords = JSON.stringify(clean)
+  }
+
   if (body.scheduledAt !== undefined) {
     if (body.scheduledAt === null || body.scheduledAt === '') {
       data.scheduledAt = null
@@ -408,6 +516,7 @@ module.exports = {
   DEFAULT_PAGE_SIZE,
   MAX_PAGE_SIZE,
   MAX_STARRED,
+  MAX_SEO_KEYWORDS,
   OPEN_STATUS_KEYS,
   PIECE_INCLUDE,
   // helpers
@@ -418,7 +527,10 @@ module.exports = {
   getClientContacts,
   formatAsset,
   formatLinkedFile,
+  formatSeoStat,
   formatPiece,
+  loadTranslationGroups,
+  siblingsFrom,
   loadPiece,
   logEvent,
   resolveCtx,
