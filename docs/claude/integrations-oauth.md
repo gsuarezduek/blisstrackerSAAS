@@ -31,7 +31,7 @@ Proyecto OAuth: el mismo que usa el login con Google (`GOOGLE_CLIENT_ID` / `GOOG
 **Redirect URIs registradas en Meta for Developers:**
 - Instagram Business Login: `https://blisstrackersaas-production.up.railway.app/api/marketing/integrations/meta/callback`
 - Meta Ads (Facebook Login): `https://blisstrackersaas-production.up.railway.app/api/marketing/integrations/meta-ads/callback`
-- Facebook Pages (Facebook Login): `https://blisstrackersaas-production.up.railway.app/api/marketing/integrations/facebook/callback` (scopes `pages_show_list, pages_read_engagement, read_insights` — App Review en curso; con System User Token no hace falta esperar)
+- Facebook Pages (Facebook Login): `https://blisstrackersaas-production.up.railway.app/api/marketing/integrations/facebook/callback` (scopes `pages_show_list, pages_read_engagement, read_insights` — **App Review pendiente**: NO entraron en la aprobación del 9-nov-2026, que cubrió solo los dos de Instagram y `ads_read`; con System User Token no hace falta esperar)
 - (+ variantes `http://localhost:3001/...` para desarrollo)
 
 **Redirect URIs registradas en TikTok for Developers:**
@@ -51,8 +51,8 @@ Proyecto OAuth: el mismo que usa el login con Google (`GOOGLE_CLIENT_ID` / `GOOG
 **Dos apps de Meta distintas, mismo backend:** Instagram Business Login + Facebook Pages usan una app (`META_APP_ID`/`META_APP_SECRET`); Meta Ads usa **otra app separada** (`META_ADS_APP_ID`/`META_ADS_APP_SECRET`) — `integrations.meta.controller.js` (`getMetaAdsAuthUrl`/`handleMetaAdsCallback`) y `metaAds.service.js` (`getValidFbToken`, refresh de token) son los únicos que leen las variables `META_ADS_*`. Hay que registrar el redirect URI de Meta Ads (`/api/marketing/integrations/meta-ads/callback`) en ESA app, no en la de Instagram.
 
 **Permisos requeridos en Meta App:**
-- Instagram Business Login (app `META_APP_ID`): `instagram_business_basic`, `instagram_business_manage_insights` — App Review en curso
-- Facebook Login (Meta Ads, app `META_ADS_APP_ID`): `ads_read` — requiere Business Verification + App Review. En desarrollo: usar System User Token generado desde Business Manager → Settings → System Users → Generate Token (Never expiry).
+- Instagram Business Login (app `META_APP_ID`): `instagram_business_basic`, `instagram_business_manage_insights` — **aprobados por Meta el 9-nov-2026**. Se aplican al público solo con la app en **Modo en vivo**: en modo desarrollo únicamente autorizan las cuentas con rol en la app, que es lo que mantenía a la conexión oficial como método de respaldo.
+- Facebook Login (Meta Ads, app `META_ADS_APP_ID`): `ads_read` — **aprobado por Meta el 9-nov-2026** (requiere además Business Verification). ⚠️ **Verificar en qué app quedó la aprobación**: `getMetaAdsAuthUrl` firma con `META_ADS_APP_ID`, que es una app distinta de la de Instagram, y las tres solicitudes se aprobaron juntas — si `ads_read` cayó en la app de Instagram, el OAuth de Ads sigue sin funcionar hasta re-solicitarlo en la app correcta. Alternativa sin OAuth (y la que está operativa hoy): System User Token generado desde Business Manager → Settings → System Users → Generate Token (Never expiry).
 - Notas de implementación Instagram:
   - Usar `instagram.com/oauth/authorize` (NO `facebook.com/dialog/oauth`)
   - Token exchange: POST `api.instagram.com/oauth/access_token`

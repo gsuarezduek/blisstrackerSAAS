@@ -419,7 +419,7 @@ Tab **RRSS** en Marketing: conecta redes sociales y muestra métricas de audienc
 
 ### Instagram
 
-- **Conexión OAuth:** usa Instagram Business Login (`instagram.com/oauth/authorize`) con scope `instagram_business_basic`.
+- **Conexión OAuth:** usa Instagram Business Login (`instagram.com/oauth/authorize`) con scopes `instagram_business_basic` + `instagram_business_manage_insights`, **aprobados por Meta el 9-nov-2026**. Es el método recomendado: el cliente se loguea con su cuenta profesional, sin Business Manager ni tokens. `manage_insights` es el que habilita alcance, guardados, compartidos e historias.
 - **Token exchange:** short-lived → long-lived (60 días) vía `api.instagram.com/oauth/access_token` + `graph.instagram.com/access_token`.
 - **Métricas en tiempo real:** seguidores, engagement rate, likes promedio, comentarios promedio, posts por semana (media últimas 4 semanas), últimas publicaciones.
 - **Snapshots mensuales:** cron automático cada 1° del mes a las 04:30 ART guarda snapshot histórico.
@@ -437,11 +437,11 @@ Tab **RRSS** en Marketing: conecta redes sociales y muestra métricas de audienc
 
 ### Meta Ads
 
-- **Conexión OAuth:** scope `ads_read` vía `facebook.com/dialog/oauth`. Requiere Business Verification de Meta para uso en producción.
-- **Workaround System User Token:** mientras Business Verification está pendiente, insertar token permanente generado desde Business Manager → System Users → Generate Token (Never expiry) usando el script `backend/scripts/insert-meta-ads-token.js`.
+- **Conexión OAuth:** scope `ads_read` vía `facebook.com/dialog/oauth`, **aprobado por Meta el 9-nov-2026** (requiere además Business Verification). El cliente se loguea con Facebook y elige su cuenta publicitaria.
+- **Alternativa System User Token:** token permanente generado desde Business Manager → System Users → Generate Token (Never expiry), insertado con el script `backend/scripts/insert-meta-ads-token.js`. Era el camino obligado antes de la aprobación; sigue sirviendo para las cuentas que ya administrás desde Business Manager.
 - **Métricas:** gasto total, impresiones, clics, CTR, CPC, CPM por período (7/30/90 días).
 - **Desglose por campaña:** tabla de campañas activas con métricas individuales.
-- **Nota:** `ads_read` requiere aprobación del Developer Token de Google Ads y Business Verification antes de funcionar en producción con OAuth estándar.
+- **Nota:** los permisos aprobados solo aplican al público con la app en **Modo en vivo**; en modo desarrollo solo autorizan las cuentas con rol en la app. Verificar también que la aprobación de `ads_read` esté en la app `META_ADS_APP_ID`, que es distinta de la de Instagram.
 
 ### Patrón común de expiración de tokens
 
