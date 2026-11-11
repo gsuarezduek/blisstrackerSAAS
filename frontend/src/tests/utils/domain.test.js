@@ -65,3 +65,30 @@ describe('isWorkspaceSubdomain', () => {
     expect(isWorkspaceSubdomain('a.b.blisstracker.app')).toBe(false)
   })
 })
+
+describe('dirección de prueba (<slug>--preview)', () => {
+  it('se reconoce como el workspace real, sin el sufijo', async () => {
+    const { workspaceSlugFromHostname, isPreviewHost } = await import('../../utils/domain')
+    expect(workspaceSlugFromHostname('bliss--preview.blisstracker.app')).toBe('bliss')
+    expect(isPreviewHost('bliss--preview.blisstracker.app')).toBe(true)
+  })
+
+  it('también en local', async () => {
+    const { workspaceSlugFromHostname, isPreviewHost } = await import('../../utils/domain')
+    expect(workspaceSlugFromHostname('bliss--preview.localhost')).toBe('bliss')
+    expect(isPreviewHost('bliss--preview.localhost')).toBe(true)
+  })
+
+  it('el subdominio de siempre no es de prueba', async () => {
+    const { workspaceSlugFromHostname, isPreviewHost } = await import('../../utils/domain')
+    expect(workspaceSlugFromHostname('mi-agencia.blisstracker.app')).toBe('mi-agencia')
+    expect(isPreviewHost('mi-agencia.blisstracker.app')).toBe(false)
+  })
+
+  it('el sufijo solo, o sobre un slug reservado, no es un workspace', async () => {
+    const { isWorkspaceSubdomain, isPreviewHost } = await import('../../utils/domain')
+    expect(isWorkspaceSubdomain('--preview.blisstracker.app')).toBe(false)
+    expect(isWorkspaceSubdomain('www--preview.blisstracker.app')).toBe(false)
+    expect(isPreviewHost('www--preview.blisstracker.app')).toBe(false)
+  })
+})
