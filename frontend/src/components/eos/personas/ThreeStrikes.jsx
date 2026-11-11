@@ -50,14 +50,16 @@ function StrikesDots({ count, max = 3 }) {
 function AddStrikeModal({ members, strikesMap, onSave, onClose, saving }) {
   const [userId, setUserId] = useState('')
   const [reason, setReason] = useState('')
+  const [agreement, setAgreement] = useState('')
 
-  const available = members.filter(m => (strikesMap[m.id]?.length ?? 0) < 3)
-  const selectedStrikes = userId ? (strikesMap[Number(userId)]?.length ?? 0) : 0
-  const nextNumber = selectedStrikes + 1
+  // Solo cuentan las faltas ACTIVAS: una vencida o levantada no ocupa lugar.
+  const activeCount = id => (strikesMap[id] ?? []).filter(s => s.active).length
+  const available = members.filter(m => activeCount(m.id) < 3)
+  const nextNumber = userId ? activeCount(Number(userId)) + 1 : 1
 
   function handleSave() {
     if (!userId || !reason.trim()) return
-    onSave(Number(userId), reason.trim())
+    onSave(Number(userId), reason.trim(), agreement.trim())
   }
 
   return (
@@ -74,7 +76,7 @@ function AddStrikeModal({ members, strikesMap, onSave, onClose, saving }) {
               className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500">
               <option value="">Seleccioná una persona…</option>
               {available.map(m => (
-                <option key={m.id} value={m.id}>{m.name} ({strikesMap[m.id]?.length ?? 0}/3 faltas)</option>
+                <option key={m.id} value={m.id}>{m.name} ({activeCount(m.id)}/3 faltas activas)</option>
               ))}
             </select>
           </div>
@@ -92,6 +94,16 @@ function AddStrikeModal({ members, strikesMap, onSave, onClose, saving }) {
               className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none"
             />
           </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Acuerdo <span className="font-normal text-gray-400">(opcional, se puede cargar después)</span>
+            </label>
+            <textarea value={agreement} onChange={e => setAgreement(e.target.value)}
+              rows={2} maxLength={1000}
+              placeholder="A qué se comprometió la persona. Es lo que se revisa en el próximo 1on1."
+              className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none"
+            />
+          </div>
         </div>
         <div className="flex gap-2 mt-5">
           <button onClick={onClose} className="flex-1 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">Cancelar</button>
@@ -105,15 +117,16 @@ function AddStrikeModal({ members, strikesMap, onSave, onClose, saving }) {
   )
 }
 
-export default function ThreeStrikes({ members, strikesMap, onAddStrike, onRemoveStrike }) {
+export default function ThreeStrikes({ members, strikesMap, onAddStrike, onRemoveStrike, onLiftStrike }) {
   const [expanded,     setExpanded]     = useState(null)
   const [showAddModal, setShowAddModal] = useState(false)
   const [saving,       setSaving]       = useState(false)
   const [confirmDel,   setConfirmDel]   = useState(null)
+  const [lifting,      setLifting]      = useState(null)   // { strikeId, reason }
 
-  async function handleAdd(userId, reason) {
+  async function handleAdd(userId, reason, agreement) {
     setSaving(true)
-    try { await onAddStrike(userId, reason); setShowAddModal(false) }
+    try { await onAddStrike(userId, reason, agreement); setShowAddModal(false) }
     finally { setSaving(false) }
   }
 
@@ -122,8 +135,23 @@ export default function ThreeStrikes({ members, strikesMap, onAddStrike, onRemov
     setConfirmDel(null)
   }
 
-  const membersWithStrikes = members.map(m => ({ ...m, strikes: strikesMap[m.id] || [] })).filter(m => m.strikes.length > 0)
-  const membersClean = members.filter(m => !strikesMap[m.id]?.length)
+  async function handleLift() {
+    if (!lifting?.reason.trim()) return
+    setSaving(true)
+    try { await onLiftStrike(lifting.strikeId, lifting.reason.trim()); setLifting(null) }
+    finally { setSaving(false) }
+  }
+
+  // "Tiene faltas" = tiene ACTIVAS. Las vencidas y las levantadas siguen en el
+  // historial de la persona (se ven al expandir) pero no la sacan del grupo limpio:
+  // que dejen de pesar es el punto de que venzan.
+  const withActive = members
+    .map(m => ({ ...m, strikes: strikesMap[m.id] || [] }))
+    .map(m => ({ ...m, activeStrikes: m.strikes.filter(s => s.active) }))
+    .filter(m => m.activeStrikes.length > 0)
+  const activeIds = new Set(withActive.map(m => m.id))
+  const membersWithStrikes = withActive
+  const membersClean = members.filter(m => !activeIds.has(m.id))
 
   return (
     <div className="space-y-5">
@@ -157,25 +185,61 @@ export default function ThreeStrikes({ members, strikesMap, onAddStrike, onRemov
               <span className="text-sm font-medium text-gray-800 dark:text-gray-200">{m.name}</span>
               <RoleBadge role={m.teamRole} userId={m.id} />
               <span className="flex-1" />
-              <StrikesDots count={m.strikes.length} />
+              <StrikesDots count={m.activeStrikes.length} />
               <span className="text-gray-400 text-xs ml-2">{expanded === m.id ? '▲' : '▼'}</span>
             </button>
             {expanded === m.id && (
               <div className="border-t border-gray-100 dark:border-gray-700 divide-y divide-gray-100 dark:divide-gray-700">
                 {m.strikes.map(s => (
-                  <div key={s.id} className="flex items-start gap-3 px-4 py-3">
-                    <span className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0 mt-0.5 ${STRIKES_RULES[s.strikeNumber - 1].dot}`}>
-                      {s.strikeNumber}
+                  <div key={s.id} className={`flex items-start gap-3 px-4 py-3 ${s.active ? '' : 'opacity-60'}`}>
+                    <span className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0 mt-0.5 ${
+                      s.active ? STRIKES_RULES[Math.min(s.strikeNumber, 3) - 1].dot : 'bg-gray-400 dark:bg-gray-600'}`}>
+                      {s.active ? s.strikeNumber : '–'}
                     </span>
                     <div className="flex-1 min-w-0">
                       <p className="text-xs text-gray-500 dark:text-gray-400 mb-0.5">
                         {new Date(s.createdAt).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' })}
                         {s.createdBy && ` · Registrado por ${s.createdBy.name}`}
+                        {s.active && s.expiresAt && ` · Vence el ${new Date(s.expiresAt).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' })}`}
                       </p>
                       <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">{s.reason}</p>
+                      {s.agreement && (
+                        <p className="text-xs text-gray-600 dark:text-gray-400 mt-1.5 pl-2.5 border-l-2 border-gray-200 dark:border-gray-600">
+                          <span className="font-medium">Acuerdo:</span> {s.agreement}
+                        </p>
+                      )}
+                      {!s.active && (
+                        <p className="text-xs font-medium mt-1.5 text-gray-500 dark:text-gray-400">
+                          {s.inactiveReason === 'lifted'
+                            ? <>Levantada{s.liftedBy ? ` por ${s.liftedBy.name}` : ''}{s.liftReason ? ` · ${s.liftReason}` : ''}</>
+                            : 'Vencida: ya no cuenta'}
+                        </p>
+                      )}
+                      {lifting?.strikeId === s.id && (
+                        <div className="mt-2">
+                          <textarea value={lifting.reason} onChange={e => setLifting(l => ({ ...l, reason: e.target.value }))}
+                            rows={2} maxLength={1000} autoFocus
+                            placeholder="¿Por qué se levanta? Queda en el historial."
+                            className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none" />
+                          <div className="flex gap-2 mt-1.5">
+                            <button onClick={handleLift} disabled={!lifting.reason.trim() || saving}
+                              className="px-3 py-1.5 text-xs font-medium bg-primary-600 hover:bg-primary-700 disabled:opacity-50 text-white rounded-lg transition-colors">
+                              {saving ? 'Guardando…' : 'Levantar falta'}
+                            </button>
+                            <button onClick={() => setLifting(null)} className="px-2 text-xs text-gray-500 hover:underline">Cancelar</button>
+                          </div>
+                        </div>
+                      )}
                     </div>
-                    <button onClick={() => setConfirmDel({ strikeId: s.id })}
-                      className="p-1 text-gray-400 hover:text-red-500 transition-colors shrink-0" title="Eliminar falta"><Icon as={X} size={16} /></button>
+                    <div className="flex items-center gap-1 shrink-0">
+                      {s.active && onLiftStrike && lifting?.strikeId !== s.id && (
+                        <button onClick={() => setLifting({ strikeId: s.id, reason: '' })}
+                          className="px-2 py-1 text-xs font-medium text-gray-500 dark:text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
+                          title="Dejarla sin efecto, con motivo">Levantar</button>
+                      )}
+                      <button onClick={() => setConfirmDel({ strikeId: s.id })}
+                        className="p-1 text-gray-400 hover:text-red-500 transition-colors" title="Eliminar falta"><Icon as={X} size={16} /></button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -196,7 +260,7 @@ export default function ThreeStrikes({ members, strikesMap, onAddStrike, onRemov
       {showAddModal && <AddStrikeModal members={members} strikesMap={strikesMap} onSave={handleAdd} onClose={() => setShowAddModal(false)} saving={saving} />}
       {confirmDel && (
         <ConfirmModal
-          message="¿Eliminás esta falta? Los números de las faltas restantes se reordenarán."
+          message="¿Eliminás esta falta? Se borra del historial y no se puede deshacer. Si la falta existió pero ya se resolvió, usá «Levantar»."
           onConfirm={() => handleRemove(confirmDel.strikeId)}
           onCancel={() => setConfirmDel(null)}
         />

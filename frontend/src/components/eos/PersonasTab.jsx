@@ -40,8 +40,8 @@ export default function PersonasTab() {
     })
   }
 
-  async function handleAddStrike(userId, reason) {
-    const res = await api.post('/eos/strikes', { userId, reason })
+  async function handleAddStrike(userId, reason, agreement) {
+    const res = await api.post('/eos/strikes', { userId, reason, agreement })
     const strike = res.data
     setData(prev => {
       const strikesMap = { ...prev.strikesMap }
@@ -50,15 +50,18 @@ export default function PersonasTab() {
     })
   }
 
+  // Levantar devuelve la fila completa, pero el número de las demás puede haber
+  // cambiado (se deriva de las activas): se recarga en vez de renumerar a mano.
+  async function handleLiftStrike(strikeId, reason) {
+    await api.patch(`/eos/strikes/${strikeId}/lift`, { reason })
+    const { data: fresh } = await api.get('/eos/personas')
+    setData(prev => ({ ...prev, strikesMap: fresh.strikesMap }))
+  }
+
   async function handleRemoveStrike(strikeId) {
     await api.delete(`/eos/strikes/${strikeId}`)
-    setData(prev => {
-      const strikesMap = {}
-      for (const [uid, strikes] of Object.entries(prev.strikesMap)) {
-        strikesMap[uid] = strikes.filter(s => s.id !== strikeId).map((s, i) => ({ ...s, strikeNumber: i + 1 }))
-      }
-      return { ...prev, strikesMap }
-    })
+    const { data: fresh } = await api.get('/eos/personas')
+    setData(prev => ({ ...prev, strikesMap: fresh.strikesMap }))
   }
 
   async function handleCreateNode(nodeData) {
@@ -102,7 +105,8 @@ export default function PersonasTab() {
         title="Regla de las 3 Faltas"
         desc="Protocolo para acompañar y, cuando es necesario, separar a quienes no viven los valores medulares."
       >
-        <ThreeStrikes members={members} strikesMap={strikesMap} onAddStrike={handleAddStrike} onRemoveStrike={handleRemoveStrike} />
+        <ThreeStrikes members={members} strikesMap={strikesMap} onAddStrike={handleAddStrike}
+          onRemoveStrike={handleRemoveStrike} onLiftStrike={handleLiftStrike} />
       </SectionCard>
 
       <SectionCard

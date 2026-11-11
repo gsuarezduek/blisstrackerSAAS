@@ -8,6 +8,7 @@ import useLegajoFields from '../../hooks/useLegajoFields'
 import useRoles from '../../hooks/useRoles'
 import { useWorkspace } from '../../context/WorkspaceContext'
 import { fieldValue, displayValue, isEmpty, isLegajoComplete, requiredFields } from '../../components/legajo/legajoUtils'
+import { FieldInput } from '../../components/legajo/LegajoFormFields'
 import { Card, CardHeader, TextButton, Avatar, EmptyNote } from '../project-detail/ui'
 import { ProductividadSection } from '../../components/profile/AdminUserPanel'
 import { LoginDaysModal } from './legajos'
@@ -355,7 +356,12 @@ export function PersonFile({ user, lastLogin, leave, onBack, onUsersChanged, pro
         <AttendanceTab user={user} summary={summary} summaryState={summaryState} onRetry={loadSummary} onChanged={loadSummary} />
       )}
       {tab === 'ausencias' && <AbsencesTab summary={summary} requests={requests} onRetry={loadRequests} />}
-      {tab === 'datos' && <PersonalDataTab user={user} fields={legajoFields} missing={missing} />}
+      {tab === 'datos' && (
+        <div className="space-y-4">
+          <LegajoQuickPanel user={user} fields={legajoFields} onSaved={onUsersChanged} />
+          <PersonalDataTab user={user} fields={legajoFields} missing={missing} />
+        </div>
+      )}
       {tab === 'productividad' && productivityEnabled && (
         <Card className="p-4 sm:p-5"><ProductividadSection userId={user.id} /></Card>
       )}
@@ -639,6 +645,144 @@ function AbsencesTab({ summary, requests, onRetry }) {
 
 // ── Datos personales ──
 
+// ─── Legajo rápido ────────────────────────────────────────────────────────────
+// El caso real de RRHH: el dato llegó por mail o por WhatsApp y alguien lo tiene
+// que cargar. Hasta acá el legajo era estrictamente autoservicio, así que la
+// única salida era pedírselo a la persona y esperar.
+//
+// Dos caminos, y los dos desde la misma tarjeta: completar lo que se tiene a mano
+// (`PATCH /admin/rrhh/legajo/:userId`) o pedirle a la persona lo que falta
+// (`POST .../request`, que le manda notificación + mail con un link a Mi Perfil
+// con esos campos arriba). Los campos de salud no se pueden escribir desde acá
+// (`field.selfOnly`, ver lib/legajoCatalog.js): solo pedirse.
+function LegajoQuickPanel({ user, fields, onSaved }) {
+  const [values, setValues] = useState({})
+  const [saving, setSaving] = useState(false)
+  const [asking, setAsking] = useState(false)
+  const [msg, setMsg] = useState(null)        // { text, tone }
+  const [note, setNote] = useState('')
+  const [askOpen, setAskOpen] = useState(false)
+
+  // Al cambiar de persona se descarta lo tipeado: sería gravísimo guardar en el
+  // legajo de alguien un dato escrito para otro.
+  useEffect(() => { setValues({}); setMsg(null); setNote(''); setAskOpen(false) }, [user.id])
+
+  // Lo que falta acá es TODO campo habilitado sin cargar, no solo los obligatorios
+  // (`missingLegajoFields`, que es lo que define "legajo incompleto" en el resto de
+  // la UI): el panel sirve para terminar de llenar la ficha, no solo para pasar el
+  // mínimo. Los obligatorios van primero, que es lo que de verdad frena.
+  const enabled = useMemo(
+    () => fields.filter(f => f.enabled !== false).sort((a, b) => (b.required ? 1 : 0) - (a.required ? 1 : 0) || a.order - b.order),
+    [fields],
+  )
+  const missing = useMemo(() => enabled.filter(f => isEmpty(fieldValue(user, f))), [enabled, user])
+
+  const editable = missing.filter(f => !f.selfOnly)
+  const selfOnly = missing.filter(f => f.selfOnly)
+  const total = enabled.length
+  const filled = total - missing.length
+  const pct = total > 0 ? Math.round((filled / total) * 100) : 100
+
+  const touched = Object.entries(values).filter(([, v]) => !isEmpty(v))
+
+  async function save() {
+    if (touched.length === 0) return
+    setSaving(true); setMsg(null)
+    try {
+      await api.patch(`/admin/rrhh/legajo/${user.id}`, { values: Object.fromEntries(touched) })
+      setValues({})
+      setMsg({ text: `Guardado. Le avisamos a ${user.name.split(' ')[0]}.`, tone: 'ok' })
+      onSaved?.()
+    } catch (e) {
+      setMsg({ text: e.response?.data?.error || 'No pudimos guardar. Probá de nuevo.', tone: 'error' })
+    } finally { setSaving(false) }
+  }
+
+  async function ask() {
+    setAsking(true); setMsg(null)
+    try {
+      const { data } = await api.post(`/admin/rrhh/legajo/${user.id}/request`, {
+        fieldKeys: missing.map(f => f.key), note,
+      })
+      setAskOpen(false); setNote('')
+      setMsg({ text: `Le pedimos ${data.asked.length === 1 ? 'el dato' : 'los datos'} por mail y por la campana.`, tone: 'ok' })
+    } catch (e) {
+      setMsg({ text: e.response?.data?.error || 'No pudimos enviar el pedido.', tone: 'error' })
+    } finally { setAsking(false) }
+  }
+
+  if (missing.length === 0) return null
+
+  return (
+    <Card className="border-amber-200 dark:border-amber-800/60">
+      <CardHeader title="Legajo rápido" count={`${filled} de ${total} datos`} />
+      <div className="px-4 pb-4">
+        <div className="h-1.5 w-full rounded-full bg-gray-100 dark:bg-gray-700 overflow-hidden mb-4">
+          <div className="h-full rounded-full bg-amber-500 transition-all" style={{ width: `${pct}%` }} />
+        </div>
+
+        {editable.length > 0 && (
+          <>
+            <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">Falta completar</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {editable.map(f => (
+                <div key={f.key}>
+                  <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">
+                    {f.label}{f.required && <span className="text-amber-600 dark:text-amber-400" title="Obligatorio"> *</span>}
+                  </label>
+                  <FieldInput field={f} value={values[f.key]} onChange={(k, v) => setValues(s => ({ ...s, [k]: v }))} />
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+
+        {selfOnly.length > 0 && (
+          <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
+            {selfOnly.map(f => f.label).join(' y ')} {selfOnly.length === 1 ? 'lo carga' : 'los carga'} solo {user.name.split(' ')[0]}: {selfOnly.length === 1 ? 'es un dato' : 'son datos'} de salud. Pedíselo{selfOnly.length === 1 ? '' : 's'} con el botón de abajo.
+          </p>
+        )}
+
+        {msg && (
+          <p role="status" className={`mt-3 text-sm rounded-lg px-3 py-2 ${
+            msg.tone === 'error'
+              ? 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400'
+              : 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400'}`}>{msg.text}</p>
+        )}
+
+        {askOpen && (
+          <div className="mt-3 rounded-xl border border-gray-200 dark:border-gray-700 p-3">
+            <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Mensaje para {user.name.split(' ')[0]} (opcional)</label>
+            <textarea value={note} onChange={e => setNote(e.target.value)} rows={2} maxLength={500}
+              placeholder="Lo necesitamos para cargarte en la obra social…"
+              className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary-500" />
+          </div>
+        )}
+
+        <div className="flex flex-wrap gap-2 mt-4">
+          {editable.length > 0 && (
+            <button type="button" onClick={save} disabled={saving || touched.length === 0}
+              className="bg-primary-600 hover:bg-primary-700 disabled:opacity-50 text-white text-sm font-semibold rounded-lg px-4 py-2 transition-colors">
+              {saving ? 'Guardando…' : 'Guardar y seguir'}
+            </button>
+          )}
+          <button type="button" onClick={() => (askOpen ? ask() : setAskOpen(true))} disabled={asking}
+            className="border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 text-sm font-semibold rounded-lg px-4 py-2 transition-colors">
+            {asking ? 'Enviando…' : askOpen ? 'Enviar pedido' : 'Pedírselo a la persona'}
+          </button>
+          {askOpen && !asking && (
+            <button type="button" onClick={() => { setAskOpen(false); setNote('') }}
+              className="text-sm text-gray-500 dark:text-gray-400 hover:underline px-2">Cancelar</button>
+          )}
+        </div>
+        <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">
+          «Pedírselo» le manda un mail y una notificación con un link a Mi Perfil que muestra solo lo que falta.
+        </p>
+      </div>
+    </Card>
+  )
+}
+
 function PersonalDataTab({ user, fields, missing }) {
   const missingKeys = new Set(missing.map(f => f.key))
   const rows = fields
@@ -663,7 +807,7 @@ function PersonalDataTab({ user, fields, missing }) {
           ))}
         </dl>
       )}
-      <p className="px-4 pb-4 text-xs text-gray-400 dark:text-gray-500">Cada persona carga y actualiza sus datos desde Mi Perfil. Los campos se configuran en Administración → Legajo.</p>
+      <p className="px-4 pb-4 text-xs text-gray-400 dark:text-gray-500">Cada persona actualiza sus datos desde Mi Perfil; desde acá se pueden completar los que falten (los de salud, no: esos solo se piden). Los campos se configuran en Administración → Legajo.</p>
     </Card>
   )
 }

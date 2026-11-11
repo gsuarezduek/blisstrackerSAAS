@@ -186,6 +186,13 @@ PATCH  /api/admin/rrhh/vacation-days/:id
 PATCH  /api/admin/rrhh/logins/:loginId          # editar hora/fecha de un ingreso (UserLogin)
 DELETE /api/admin/rrhh/logins/:loginId          # eliminar un ingreso
 GET    /api/admin/rrhh/metric-history           # ?metric=activeMembers|tenure|projectsPerPerson|avgLoginTime|punctuality&year=YYYY — historial mensual (12 meses)
+PATCH  /api/admin/rrhh/legajo/:userId           # completar datos del legajo de otra persona (los `selfOnly` de salud se rechazan con 400 FIELD_SELF_ONLY)
+POST   /api/admin/rrhh/legajo/:userId/request   # pedírselos: notificación LEGAJO_REQUESTED + email con link a /profile?legajo=
+GET    /api/admin/rrhh/one-on-ones              # ?userId=&limit= — 1on1 del workspace (no dependen del flag eos)
+POST   /api/admin/rrhh/one-on-ones              # { userId, date?, notes?, strikeId?, agreements? }
+PATCH  /api/admin/rrhh/one-on-ones/:id          # `agreements` reemplaza la lista completa
+DELETE /api/admin/rrhh/one-on-ones/:id
+PATCH  /api/admin/rrhh/one-on-ones/:id/agreements/:agreementId   # tildar un acuerdo
 GET    /api/admin/rrhh/attendance               # ?month=YYYY-MM — asistencia del mes por persona (presencia, licencias, ausencias, tardanzas, hora promedio de llegada, horas disponibles) + resumen. Reusa getAttendanceStats de Productividad; alimenta RRHH → Tiempo y asistencia
 
 GET    /api/notifications
@@ -219,8 +226,10 @@ GET    /api/eos                                   # datos del workspace EOS
 PATCH  /api/eos                                  # actualizar datos EOS
 GET    /api/eos/personas
 PATCH  /api/eos/people-analyzer                  # upsert rating GWC de un miembro
-POST   /api/eos/strikes
-DELETE /api/eos/strikes/:id
+POST   /api/eos/strikes                        # { userId, reason, agreement? } — expiresAt sale de Workspace.strikeExpiryMonths
+PATCH  /api/eos/strikes/:id                    # corregir el motivo / cargar el acuerdo
+PATCH  /api/eos/strikes/:id/lift               # levantarla con motivo (no la borra; deja de contar)
+DELETE /api/eos/strikes/:id                    # borrar de verdad: la cargada por error
 POST   /api/eos/accountability                   # crear nodo del Accountability Chart
 PATCH  /api/eos/accountability/:id
 DELETE /api/eos/accountability/:id

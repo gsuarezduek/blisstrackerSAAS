@@ -222,7 +222,57 @@ async function sendLateNotificationEmail(email, name, workspaceName, template, w
   }
 }
 
+/**
+ * Le pide a una persona que complete los datos que le faltan en el legajo.
+ * Es el camino de IDA del legajo — el que ya existía (LEGAJO_UPDATED) va al revés:
+ * la persona completa y se avisa a los admins.
+ *
+ * El link lleva a Mi Perfil con `?legajo=` y las claves pedidas, para que vea
+ * arriba solo esos campos en vez de un formulario de 15 que tiene que recorrer
+ * buscando cuáles le faltan.
+ *
+ * @param {string}   userEmail
+ * @param {string}   userName
+ * @param {string}   workspaceName
+ * @param {string}   workspaceSlug
+ * @param {object[]} fields        [{ key, label }] los campos que faltan
+ * @param {string}   askedByName   quién lo pide
+ * @param {string}   note          mensaje opcional de quien pide
+ * @param {number}   workspaceId
+ */
+async function sendLegajoRequestEmail(userEmail, userName, workspaceName, workspaceSlug, fields, askedByName, note, workspaceId) {
+  const from = await getEmailFrom(workspaceId)
+  const appDomain = process.env.APP_DOMAIN || 'blisstracker.app'
+  const url = `https://${workspaceSlug}.${appDomain}/profile?legajo=${encodeURIComponent(fields.map(f => f.key).join(','))}`
+  const subject = `Te faltan ${fields.length} ${fields.length === 1 ? 'dato' : 'datos'} en tu legajo`
+  try {
+    const { error } = await resend.emails.send({
+      from,
+      to: userEmail,
+      subject,
+      html: emailShell(`
+        <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;padding:28px 32px;margin-top:8px;">
+          <h2 style="color:#1e293b;margin:0 0 12px;font-size:20px;">Completá tu legajo</h2>
+          <p style="color:#475569;margin:0 0 20px;">
+            Hola ${escHtml(userName)}: ${escHtml(askedByName)} necesita ${fields.length === 1 ? 'este dato' : 'estos datos'} para tu legajo en <strong>${escHtml(workspaceName)}</strong>.
+          </p>
+          ${note ? `<p style="color:#475569;margin:0 0 20px;padding:12px 16px;background:#f8fafc;border-left:3px solid #cbd5e1;border-radius:4px;font-size:14px;">${escHtml(note)}</p>` : ''}
+          <ul style="color:#1e293b;font-size:14px;margin:0 0 24px;padding-left:20px;">
+            ${fields.map(f => `<li style="padding:3px 0;">${escHtml(f.label)}</li>`).join('')}
+          </ul>
+          <a href="${url}" style="display:inline-block;background:#F7931A;color:#ffffff;text-decoration:none;font-weight:600;font-size:14px;padding:11px 22px;border-radius:8px;">Completar ahora</a>
+          <p style="color:#94a3b8;font-size:13px;margin:20px 0 0;">El link te lleva a Mi Perfil con esos campos arriba. Son los únicos que faltan.</p>
+        </div>
+      `),
+    })
+    if (error) throw new Error(error.message)
+    await logEmail({ workspaceId, to: userEmail, subject, type: 'legajoRequest', status: 'sent' })
+  } catch (err) {
+    await logEmail({ workspaceId, to: userEmail, subject, type: 'legajoRequest', status: 'failed', errorMsg: err.message })
+  }
+}
+
 module.exports = {
   sendVacationRequestEmail, sendVacationReviewEmail, sendLateNotificationEmail,
-  sendBenefitRequestEmail, sendBenefitReviewEmail,
+  sendBenefitRequestEmail, sendBenefitReviewEmail, sendLegajoRequestEmail,
 }

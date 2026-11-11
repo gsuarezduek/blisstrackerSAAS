@@ -24,7 +24,7 @@ const FILTERS = [
   { key: 'TASK_MENTION', icon: AtSign, title: 'Asignaciones y menciones',  match: n => n.type === 'TASK_MENTION' || n.type === 'LEAD_ASSIGNED' || n.type === 'CHAT_MENTION' || n.type === 'CONTENT_MENTION' || n.type === 'WHATSAPP_MESSAGE' || n.type === 'CALENDAR_INVITE' },
   { key: 'TASK_COMMENT', icon: MessageSquare, title: 'Comentarios',               match: n => n.type === 'TASK_COMMENT' },
   { key: 'FOLLOWED',     icon: Eye, title: 'Seguidas y delegadas',      match: n => isFollowedCompleted(n) || n.type === 'STARTED' || n.type === 'TASK_DELETED' },
-  { key: 'OTHER',        icon: Bell, title: 'Otras',                     match: n => ['VACATION_REQUEST', 'ADDED_TO_PROJECT', 'VACATION_REVIEWED', 'GAME_LAUNCHED', 'BENEFIT_REQUEST', 'BENEFIT_REVIEWED', 'CALENDAR_RESPONSE', 'LEGAJO_UPDATED', 'LEAD_CREATED'].includes(n.type) },
+  { key: 'OTHER',        icon: Bell, title: 'Otras',                     match: n => ['VACATION_REQUEST', 'ADDED_TO_PROJECT', 'VACATION_REVIEWED', 'GAME_LAUNCHED', 'BENEFIT_REQUEST', 'BENEFIT_REVIEWED', 'CALENDAR_RESPONSE', 'LEGAJO_UPDATED', 'LEGAJO_REQUESTED', 'LEAD_CREATED'].includes(n.type) },
   { key: 'COMPLETED',    icon: Check, title: 'Completadas',               match: n => n.type === 'COMPLETED' && !isFollowedCompleted(n), muted: true },
 ]
 
@@ -301,6 +301,8 @@ export default function NotificationBell() {
                     ? '/admin/rrhh'
                     : n.type === 'BENEFIT_REQUEST'
                       ? '/admin/rrhh'
+                      : n.type === 'LEGAJO_REQUESTED'
+                        ? '/profile?legajo=missing'
                       : n.type === 'LEGAJO_UPDATED'
                         ? `/admin/rrhh?tab=personas${n.actor?.id ? `&userId=${n.actor.id}` : ''}`
                       : (n.type === 'VACATION_REVIEWED' || n.type === 'BENEFIT_REVIEWED')

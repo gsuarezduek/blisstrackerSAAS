@@ -8,7 +8,7 @@
 
 const inputCls = 'w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 dark:placeholder-gray-500 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent'
 
-function FieldInput({ field, value, onChange }) {
+export function FieldInput({ field, value, onChange }) {
   const v = value ?? ''
   switch (field.type) {
     case 'textarea':

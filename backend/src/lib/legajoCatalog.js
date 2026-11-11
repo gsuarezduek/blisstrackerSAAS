@@ -26,6 +26,19 @@ const EDUCATION_OPTIONS = [
 ]
 const BLOOD_OPTIONS = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'].map(v => ({ value: v, label: v }))
 
+// Campos que SOLO carga la persona, desde Mi Perfil. El resto del legajo lo puede
+// completar un admin desde RRHH (el caso real: "me lo mandó por mail, lo cargo yo"),
+// pero un diagnóstico o un grupo sanguíneo tipeado por un tercero es otra cosa: que
+// figuren en el legajo es útil, que los escriba alguien más no. Desde RRHH esos dos
+// solo se pueden PEDIR. Es una lista de builtins a propósito — un campo custom lo
+// define el workspace y no tenemos cómo saber si es sensible, así que nunca es selfOnly.
+const SELF_ONLY_KEYS = new Set(['medicalConditions', 'bloodType'])
+
+// ¿Puede alguien que NO es la persona escribir este campo?
+function isAdminEditableField(key) {
+  return !SELF_ONLY_KEYS.has(key)
+}
+
 // Campos default. `key === column` para todos los builtin. `order` es global (no por grupo).
 const DEFAULT_LEGAJO_FIELDS = [
   { key: 'phone',             label: 'Celular',                          type: 'text',     group: 'Contacto',             column: 'phone' },
@@ -43,7 +56,7 @@ const DEFAULT_LEGAJO_FIELDS = [
   { key: 'bloodType',         label: 'Grupo sanguíneo',                  type: 'select',   group: 'Salud',                column: 'bloodType', options: BLOOD_OPTIONS },
   { key: 'healthInsurance',   label: 'Obra social',                      type: 'text',     group: 'Salud',                column: 'healthInsurance' },
   { key: 'medicalConditions', label: 'Enfermedades, patologías o alergias', type: 'textarea', group: 'Salud',           column: 'medicalConditions' },
-].map((f, i) => ({ ...f, builtin: true, required: false, enabled: true, order: i }))
+].map((f, i) => ({ ...f, builtin: true, required: false, enabled: true, order: i, selfOnly: SELF_ONLY_KEYS.has(f.key) }))
 
 const BUILTIN_KEYS = new Set(DEFAULT_LEGAJO_FIELDS.map(f => f.key))
 const BUILTIN_BY_KEY = Object.fromEntries(DEFAULT_LEGAJO_FIELDS.map(f => [f.key, f]))
@@ -59,6 +72,7 @@ function normalizeField(raw, order) {
     const base = BUILTIN_BY_KEY[key]
     return {
       ...base,
+      selfOnly: SELF_ONLY_KEYS.has(key),
       label: typeof raw.label === 'string' && raw.label.trim() ? raw.label.trim() : base.label,
       group: typeof raw.group === 'string' && raw.group.trim() ? raw.group.trim() : base.group,
       required: !!raw.required,
@@ -77,6 +91,7 @@ function normalizeField(raw, order) {
     required: !!raw.required,
     enabled: raw.enabled !== false,
     builtin: false,
+    selfOnly: false,
     order,
   }
   if (type === 'select') {
@@ -156,6 +171,8 @@ module.exports = {
   FIELD_TYPES,
   DEFAULT_LEGAJO_FIELDS,
   BUILTIN_KEYS,
+  SELF_ONLY_KEYS,
+  isAdminEditableField,
   resolveLegajoFields,
   sanitizeLegajoFieldsInput,
   coerceCustomValue,

@@ -15,10 +15,10 @@ export const RRHH_SECTIONS = [
     { id: 'solicitudes', label: 'Solicitudes' },
     { id: 'saldos',      label: 'Saldos' },
   ] },
-  // El Analizador vive en /api/eos/*, que pide el flag `eos` Y admin/owner: un rol
-  // con acceso a RRHH pero sin EOS vería la pestaña y recibiría 403, así que la
-  // sección se arma recién cuando las dos condiciones se cumplen.
-  { id: 'desempeno',  label: 'Desempeño', requiresPeopleAnalyzer: true },
+  // Desempeño existe siempre: sus 1on1 son de RRHH y andan sin EOS. Las otras dos
+  // vistas (People Analyzer y Faltas) sí piden el flag `eos` + admin/owner, pero
+  // eso se resuelve adentro de la sección — ver `rrhh/desempeno.jsx`.
+  { id: 'desempeno',  label: 'Desempeño' },
   { id: 'productividad', label: 'Productividad', requiresProductivity: true },
 ]
 
@@ -42,10 +42,8 @@ export const LEGACY_TABS = {
 // `calendario` era la vista de Ausencias que hoy es la principal de Tiempo.
 export const LEGACY_VIEWS = { vacaciones: 'saldos', beneficios: 'saldos', calendario: 'quien-esta' }
 
-export function rrhhSections({ productivityEnabled = true, peopleAnalyzerEnabled = false } = {}) {
-  return RRHH_SECTIONS.filter(s =>
-    (!s.requiresProductivity || productivityEnabled) &&
-    (!s.requiresPeopleAnalyzer || peopleAnalyzerEnabled))
+export function rrhhSections({ productivityEnabled = true } = {}) {
+  return RRHH_SECTIONS.filter(s => !s.requiresProductivity || productivityEnabled)
 }
 
 // Resuelve los params de la URL a { tab, view } válidos. `changed` indica que

@@ -36,11 +36,11 @@ describe('rrhhNav', () => {
     expect(resolveRrhhNav({ tab: 'personas', view: 'x' })).toMatchObject({ view: null, changed: true })
   })
 
-  it('Desempeño sólo existe con EOS habilitado y rol admin', () => {
-    expect(rrhhSections({}).map(s => s.id)).not.toContain('desempeno')
-    expect(rrhhSections({ peopleAnalyzerEnabled: true }).map(s => s.id)).toContain('desempeno')
-    expect(resolveRrhhNav({ tab: 'desempeno' }, {})).toMatchObject({ tab: 'hoy', changed: true })
-    expect(resolveRrhhNav({ tab: 'desempeno' }, { peopleAnalyzerEnabled: true })).toMatchObject({ tab: 'desempeno', changed: false })
+  // Desempeño existe siempre: sus 1on1 son de RRHH y no dependen de EOS. Que el
+  // People Analyzer y las Faltas pidan el flag se resuelve dentro de la sección.
+  it('Desempeño existe sin depender de EOS', () => {
+    expect(rrhhSections({}).map(s => s.id)).toContain('desempeno')
+    expect(resolveRrhhNav({ tab: 'desempeno' }, {})).toMatchObject({ tab: 'desempeno', changed: false })
   })
 
   it('oculta Productividad si el workspace la apagó', () => {

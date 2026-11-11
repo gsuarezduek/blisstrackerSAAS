@@ -338,6 +338,30 @@ export default function ModulesTab({ loaded }) {
                 </div>
               )}
 
+              {/* RRHH habilitado → vencimiento de las faltas (Desempeño) */}
+              {feat.key === 'rrhh' && !feat.disabled && globalSettings && (
+                <div className="mt-3 ml-12 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/30 p-3">
+                  <p className="text-xs font-medium text-gray-800 dark:text-gray-200">Vencimiento de las faltas</p>
+                  <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
+                    Una falta registrada en Desempeño deja de contar pasado este tiempo. Cambiarlo no afecta a las ya registradas: cada una guarda su propio vencimiento.
+                  </p>
+                  <div className="mt-3 flex items-center gap-2 flex-wrap text-xs text-gray-700 dark:text-gray-300">
+                    <span>Una falta deja de contar a los</span>
+                    <select
+                      value={globalSettings.strikeExpiryMonths ?? 12}
+                      onChange={e => handleGlobalSetting({ strikeExpiryMonths: Number(e.target.value) })}
+                      className="border border-gray-200 dark:border-gray-600 rounded-lg px-2 py-1 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-primary-400"
+                    >
+                      <option value={6}>6 meses</option>
+                      <option value={12}>12 meses</option>
+                      <option value={18}>18 meses</option>
+                      <option value={24}>24 meses</option>
+                      <option value={0}>nunca (solo se levantan a mano)</option>
+                    </select>
+                  </div>
+                </div>
+              )}
+
               {/* Marketing habilitado → pestañas visibles + automatizaciones/avisos */}
               {feat.key === 'marketing' && !feat.disabled && globalSettings && (
                 <div className="mt-3 ml-12 space-y-4">

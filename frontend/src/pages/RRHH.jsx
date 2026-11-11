@@ -40,26 +40,24 @@ export default function RRHH() {
   const [pending, setPending] = useState(EMPTY_PENDING)
   const { enabled: eosEnabled, loading: eosLoading } = useFeatureFlag('eos')
 
-  // El Analizador de Personas es de EOS: pide el flag Y admin/owner (/api/eos/* es
-  // workspaceAdminOnly). Mientras el flag no se resolvió, la sección no se arma —
-  // si no, aparecería y desaparecería sola al cargar.
-  const peopleAnalyzerEnabled = !eosLoading && eosEnabled && user?.isAdmin === true
-  const navOpts = { productivityEnabled, peopleAnalyzerEnabled }
+  // El People Analyzer y las Faltas son de EOS: piden el flag Y admin/owner
+  // (/api/eos/* es workspaceAdminOnly). Los 1on1 no — son de RRHH y andan sin EOS.
+  // Por eso esto ya no gatea la sección Desempeño entera, solo sus dos primeras
+  // vistas; la sección existe siempre (quien está acá ya pasó el guard de RRHH).
+  const eosAvailable = !eosLoading && eosEnabled && user?.isAdmin === true
+  const navOpts = { productivityEnabled }
   const sections = rrhhSections(navOpts)
   const nav = resolveRrhhNav({ tab: searchParams.get('tab'), view: searchParams.get('view') }, navOpts)
   const { tab, view } = nav
 
   // URL legacy o inválida → la canónica, sin sumar una entrada al historial.
-  // Mientras el flag de EOS no resolvió, "desempeno" todavía no es una sección
-  // válida: reescribir ahí borraría un link directo a Desempeño antes de saber
-  // si existe.
   useEffect(() => {
-    if (eosLoading || !nav.changed) return
+    if (!nav.changed) return
     const next = new URLSearchParams(searchParams)
     if (tab === DEFAULT_TAB) next.delete('tab'); else next.set('tab', tab)
     if (view) next.set('view', view); else next.delete('view')
     setSearchParams(next, { replace: true })
-  }, [eosLoading, nav.changed, tab, view]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [nav.changed, tab, view]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function goTo(nextTab, nextView = null, extra = {}) {
     const next = new URLSearchParams()
@@ -199,7 +197,7 @@ export default function RRHH() {
         {tab === 'hoy' && !usersLoaded && <LoadingSpinner className="py-16" />}
         {tab === 'hoy' && usersLoaded && (
           <TabHoy users={users} lastLoginsMap={lastLoginsMap} dashStats={dashStats} peopleScore={peopleScore}
-            peopleAnalyzerEnabled={peopleAnalyzerEnabled}
+            peopleAnalyzerEnabled={eosAvailable}
             pending={pending} onDecided={handleDecided} onNavigate={goTo} />
         )}
         {tab === 'personas' && (
@@ -213,7 +211,7 @@ export default function RRHH() {
           <TabSolicitudes users={activeUsers} onUsersChanged={() => { loadUsers(); loadDashStats() }} onRequestsChanged={loadPending} />
         )}
         {tab === 'tiempo' && view === 'saldos' && <TabSaldos users={activeUsers} onUsersChanged={loadUsers} />}
-        {tab === 'desempeno' && peopleAnalyzerEnabled && <TabDesempeno />}
+        {tab === 'desempeno' && <TabDesempeno eosAvailable={eosAvailable} members={activeUsers} />}
         {tab === 'productividad' && productivityEnabled && <ProductivityTab />}
       </main>
     </div>

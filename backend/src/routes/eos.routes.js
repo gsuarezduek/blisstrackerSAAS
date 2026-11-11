@@ -2,7 +2,7 @@ const router = require('express').Router()
 const { getEOS, updateEOS } = require('../controllers/eos.controller')
 const {
   getPersonas, getPersonasHistory, getPersonasHistoryMonth, upsertRating,
-  addStrike, removeStrike,
+  addStrike, updateStrike, liftStrike, removeStrike,
   createNode, updateNode, deleteNode,
 } = require('../controllers/eosPeople.controller')
 const {
@@ -45,8 +45,10 @@ router.get('/personas/history/:month',  getPersonasHistoryMonth)
 router.patch('/people-analyzer',        upsertRating)
 
 // Personas — 3 Faltas
-router.post('/strikes',        addStrike)
-router.delete('/strikes/:id',  removeStrike)
+router.post('/strikes',          addStrike)
+router.patch('/strikes/:id',     updateStrike)   // corregir el motivo / cargar el acuerdo
+router.patch('/strikes/:id/lift', liftStrike)    // levantarla dejando por qué (no la borra)
+router.delete('/strikes/:id',    removeStrike)   // borrar de verdad: la cargada por error
 
 // Personas — Organigrama
 router.post('/accountability',        createNode)

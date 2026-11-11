@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import Navbar from '../components/Navbar'
 import AvatarLightbox from '../components/AvatarLightbox'
 import LoadingSpinner from '../components/LoadingSpinner'
@@ -6,13 +6,15 @@ import api from '../api/client'
 import { useAuth } from '../context/AuthContext'
 import { useWorkspace } from '../context/WorkspaceContext'
 import useLegajoFields from '../hooks/useLegajoFields'
-import LegajoFormFields from '../components/legajo/LegajoFormFields'
+import LegajoFormFields, { FieldInput } from '../components/legajo/LegajoFormFields'
 import RoleBadge from '../components/RoleBadge'
 import PasswordInput from '../components/PasswordInput'
 import MfaSection from '../components/profile/MfaSection'
 import { avatarUrl } from '../utils/avatarUrl'
 import { useFeatureFlag } from '../hooks/useFeatureFlag'
 import { LEAVE_TYPES, BENEFIT_BANKS } from './rrhh/shared'
+import { useSearchParams } from 'react-router-dom'
+import { fieldValue, isEmpty, requiredFields } from '../components/legajo/legajoUtils'
 import { REQUEST_STATUS } from './rrhh/licencias'
 
 function Field({ label, children }) {
@@ -221,9 +223,21 @@ function BenefitRequestModal({ bank, onClose, onCreated }) {
 export default function MyProfile() {
   const { user, updateUser } = useAuth()
   const { enabled: rrhhEnabled } = useFeatureFlag('rrhh')
+  const [searchParams] = useSearchParams()
 
   const { fields: legajoFields } = useLegajoFields()
   const [profile, setProfile] = useState(null)
+  // `?legajo=` llega desde el pedido de RRHH: una lista de claves (el mail) o
+  // `missing` (la campana). En los dos casos se muestran arriba SOLO los que
+  // siguen vacíos — entre el pedido y el click puede haber completado alguno, y
+  // destacar un campo ya cargado sería ruido.
+  const askedLegajo = useMemo(() => {
+    const raw = searchParams.get('legajo')
+    if (!raw || !profile || legajoFields.length === 0) return []
+    const wanted = raw === 'missing' ? null : new Set(raw.split(',').map(k => k.trim()).filter(Boolean))
+    const pool = wanted ? legajoFields.filter(f => wanted.has(f.key)) : requiredFields(legajoFields)
+    return pool.filter(f => f.enabled !== false && isEmpty(fieldValue(profile, f)))
+  }, [searchParams, profile, legajoFields])
   const [values, setValues] = useState({})   // { [field.key]: value } — builtin + custom
   const [saving, setSaving] = useState(false)
   const [saveMsg, setSaveMsg] = useState('')
@@ -1050,6 +1064,34 @@ export default function MyProfile() {
             </p>
           )}
         </div>
+
+        {/* Lo que RRHH te pidió completar (deep-link ?legajo=) */}
+        {askedLegajo.length > 0 && (
+          <div id="legajo-pedido" className="bg-amber-50 dark:bg-amber-900/15 rounded-2xl border border-amber-200 dark:border-amber-800/60 p-6">
+            <h2 className="text-base font-semibold text-amber-900 dark:text-amber-200 mb-1">
+              {askedLegajo.length === 1 ? 'Falta un dato en tu legajo' : `Faltan ${askedLegajo.length} datos en tu legajo`}
+            </h2>
+            <p className="text-xs text-amber-700/80 dark:text-amber-300/70 mb-5">
+              Completalos acá y guardá. Son los únicos que faltan; el formulario completo está más abajo.
+            </p>
+            <form onSubmit={handleSavePersonal} className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {askedLegajo.map(f => (
+                  <div key={f.key}>
+                    <label className="block text-xs font-medium text-amber-900 dark:text-amber-200 mb-1">{f.label}</label>
+                    <FieldInput field={f} value={values[f.key]} onChange={setValue} />
+                  </div>
+                ))}
+              </div>
+              <div className="flex justify-end">
+                <button type="submit" disabled={saving}
+                  className="bg-primary-600 hover:bg-primary-700 disabled:opacity-60 text-white text-sm font-semibold rounded-lg px-5 py-2 transition-colors">
+                  {saving ? 'Guardando...' : 'Guardar y listo'}
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
 
         {/* Personal data */}
         <div className="bg-white dark:bg-gray-800 rounded-2xl border dark:border-gray-700 p-6">

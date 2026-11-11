@@ -69,6 +69,7 @@ model Workspace {
   lateNotifyTemplate              String? // Cuerpo del email de tardanza (placeholders [Nombre] y [workspace]); null = texto por defecto
   legajoEnabled                   Boolean         @default(true) // Muestra la tarjeta/hint de legajos en RRHH. OFF = no se nudge-ea completar el legajo
   legajoFields                    Json            @default("[]") // Config del formulario de legajo (campos default + custom). [] = usa el catálogo default
+  strikeExpiryMonths              Int             @default(12) // Meses hasta que un strike deja de estar activo. 0 = no vencen por tiempo (solo se levantan a mano)
   // Acumulación automática de vacaciones: regla única global del workspace ("+N días cada M meses"),
   // anclada al aniversario de ingreso de cada persona (WorkspaceMember.joinedAt). No retroactiva:
   // vacationAccrualActivatedAt marca desde cuándo empieza a contar (ver vacationAccrual.service.js).
@@ -179,6 +180,7 @@ model Workspace {
   peopleAnalyzerRatings      PeopleAnalyzerRating[]
   peopleAnalyzerSnapshots    PeopleAnalyzerSnapshot[]
   eosStrikes                 EOSStrike[]
+  oneOnOnes                  OneOnOne[]
   accountabilityNodes        AccountabilityNode[]
   scorecardMetrics           ScorecardMetric[]
   scorecardEntries           ScorecardEntry[]
@@ -458,6 +460,10 @@ model User {
   analyzerRatings                   PeopleAnalyzerRating[]      @relation("AnalyzedPerson")
   eosStrikesReceived                EOSStrike[]                 @relation("StrikedPerson")
   eosStrikesGiven                   EOSStrike[]                 @relation("StrikeCreator")
+  eosStrikesLifted                  EOSStrike[]                 @relation("StrikeLifter")
+  oneOnOnesReceived                 OneOnOne[]                  @relation("OneOnOnePerson")
+  oneOnOnesLed                      OneOnOne[]                  @relation("OneOnOneLeader")
+  oneOnOnesCreated                  OneOnOne[]                  @relation("OneOnOneCreator")
   accountabilitySeats               AccountabilityNode[]        @relation("SeatHolder")
   ownedMetrics                      ScorecardMetric[]           @relation("MetricOwner")
   ownedIssues                       EOSIssue[]                  @relation("IssueOwner")
@@ -1296,6 +1302,7 @@ enum NotificationType {
   CALENDAR_INVITE
   CALENDAR_RESPONSE
   LEGAJO_UPDATED
+  LEGAJO_REQUESTED
 }
 
 model Notification {
@@ -3506,17 +3513,71 @@ model EOSStrike {
   id           Int      @id @default(autoincrement())
   workspaceId  Int
   userId       Int
-  strikeNumber Int // 1, 2 o 3 (asignado automáticamente)
+  strikeNumber Int // posición entre los ACTIVOS de esa persona (se recalcula al vencer/levantar uno)
   reason       String
+  agreement    String? // a qué se comprometió la persona; es lo que se revisa en el próximo 1on1
   createdById  Int
   createdAt    DateTime @default(now())
+  // Un strike deja de estar activo de dos maneras: vence solo (expiresAt, derivado
+  // de Workspace.strikeExpiryMonths al crearlo — null = no vence) o alguien lo
+  // levanta antes dejando el motivo. Nunca se borra: el historial es el punto.
+  expiresAt    DateTime?
+  liftedAt     DateTime?
+  liftedById   Int?
+  liftReason   String?
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   user      User      @relation("StrikedPerson", fields: [userId], references: [id], onDelete: Cascade)
   createdBy User      @relation("StrikeCreator", fields: [createdById], references: [id])
+  liftedBy  User?     @relation("StrikeLifter", fields: [liftedById], references: [id], onDelete: SetNull)
+  oneOnOnes OneOnOne[]
 
   @@index([workspaceId])
   @@index([userId])
+}
+
+// ─── 1on1 ─────────────────────────────────────────────────────────────────────
+// La conversación de seguimiento entre quien lidera y la persona. Modelo propio y
+// no una reunión más: `ProjectMeeting` necesita un proyecto y factura tiempo al
+// cliente, y `EOSMeeting` es semanal y de todo el equipo. Un 1on1 no se cobra, es
+// de a dos, y lo que importa no es cuánto duró sino a qué se llegó.
+model OneOnOne {
+  id          Int      @id @default(autoincrement())
+  workspaceId Int
+  userId      Int // de quién es el 1on1
+  leaderId    Int? // quién lo tuvo
+  date        String // "YYYY-MM-DD" en la tz del workspace, mismo criterio que WorkDay.date
+  notes       String?
+  strikeId    Int? // si salió de un strike, para revisar ese acuerdo
+  createdById Int?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @default(now()) @updatedAt
+
+  workspace  Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user       User                @relation("OneOnOnePerson", fields: [userId], references: [id], onDelete: Cascade)
+  leader     User?               @relation("OneOnOneLeader", fields: [leaderId], references: [id], onDelete: SetNull)
+  createdBy  User?               @relation("OneOnOneCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  strike     EOSStrike?          @relation(fields: [strikeId], references: [id], onDelete: SetNull)
+  agreements OneOnOneAgreement[]
+
+  @@index([workspaceId, date])
+  @@index([userId])
+}
+
+// Los acuerdos del 1on1. Tabla y no un campo de texto porque lo que se revisa en
+// el siguiente 1on1 es si se cumplieron, uno por uno.
+model OneOnOneAgreement {
+  id         Int       @id @default(autoincrement())
+  oneOnOneId Int
+  text       String
+  done       Boolean   @default(false)
+  doneAt     DateTime?
+  order      Int       @default(0)
+  createdAt  DateTime  @default(now())
+
+  oneOnOne OneOnOne @relation(fields: [oneOnOneId], references: [id], onDelete: Cascade)
+
+  @@index([oneOnOneId])
 }
 
 model AccountabilityNode {

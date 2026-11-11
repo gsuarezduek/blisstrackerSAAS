@@ -30,6 +30,7 @@ async function getGlobalSettings(req, res, next) {
       marketingDigestEnabled: workspace.marketingDigestEnabled ?? true,
       seoAlertsEnabled: workspace.seoAlertsEnabled ?? true,
       lateToleranceMins: workspace.lateToleranceMins ?? 0,
+      strikeExpiryMonths: workspace.strikeExpiryMonths ?? 12,
       lateNotifyEnabled: workspace.lateNotifyEnabled ?? false,
       lateNotifyThreshold: workspace.lateNotifyThreshold ?? 3,
       lateNotifyTemplate: workspace.lateNotifyTemplate || DEFAULT_LATE_TEMPLATE,
@@ -119,7 +120,7 @@ async function getStorageUsage(req, res, next) {
 
 async function saveGlobalSettings(req, res, next) {
   try {
-    const { timezone, linksEnabled, situationEnabled, hoursEnabled, filesEnabled, attendanceTrackingEnabled, productivityEnabled, productivityDigestEnabled, adsAdvisorAutoEnabled, rrssAdvisorAutoEnabled, marketingDisabledSections, marketingDigestEnabled, seoAlertsEnabled, lateToleranceMins, lateNotifyEnabled, lateNotifyThreshold, lateNotifyTemplate, vacationAccrualEnabled, vacationAccrualDays, vacationAccrualIntervalMonths, emailFrom, aiWeeklyTokenLimit } = req.body
+    const { timezone, linksEnabled, situationEnabled, hoursEnabled, filesEnabled, attendanceTrackingEnabled, productivityEnabled, productivityDigestEnabled, adsAdvisorAutoEnabled, rrssAdvisorAutoEnabled, marketingDisabledSections, marketingDigestEnabled, seoAlertsEnabled, lateToleranceMins, lateNotifyEnabled, lateNotifyThreshold, lateNotifyTemplate, vacationAccrualEnabled, vacationAccrualDays, vacationAccrualIntervalMonths, strikeExpiryMonths, emailFrom, aiWeeklyTokenLimit } = req.body
     const workspaceData = {}
     const projectData = {}
 
@@ -151,6 +152,17 @@ async function saveGlobalSettings(req, res, next) {
         return res.status(400).json({ error: 'La tolerancia debe ser un entero entre 0 y 120 minutos' })
       }
       workspaceData.lateToleranceMins = t
+    }
+    // Meses hasta que una falta deja de contar. 0 = no vencen (solo se levantan a
+    // mano). Cambiarlo NO reescribe los strikes ya registrados: cada uno guarda su
+    // propio `expiresAt` al crearse, así que la política nueva aplica de acá en
+    // más — mover la fecha de faltas viejas sería reescribir el historial.
+    if (strikeExpiryMonths !== undefined) {
+      const m = Number(strikeExpiryMonths)
+      if (!Number.isInteger(m) || m < 0 || m > 120) {
+        return res.status(400).json({ error: 'El vencimiento de las faltas debe ser un entero entre 0 y 120 meses' })
+      }
+      workspaceData.strikeExpiryMonths = m
     }
     if (lateNotifyEnabled !== undefined) workspaceData.lateNotifyEnabled = Boolean(lateNotifyEnabled)
     if (lateNotifyThreshold !== undefined) {

@@ -2,6 +2,7 @@ const prisma = require('../lib/prisma')
 const { safeArr, parseCoreValues } = require('../lib/peopleScore')
 const { captureCurrentMonth } = require('../services/peopleAnalyzerSnapshot.service')
 const { prevMonthsArr, monthLabel } = require('../lib/monthUtils')
+const { MAX_ACTIVE_STRIKES, strikeExpiresAt, activeStrikeWhere, shapeStrikes } = require('../lib/strikes')
 
 // ─── GET /api/eos/personas ────────────────────────────────────────────────────
 // Devuelve todo lo necesario para el tab Personas en una sola llamada.
@@ -24,7 +25,10 @@ async function getPersonas(req, res, next) {
       // Strikes
       prisma.eOSStrike.findMany({
         where:   { workspaceId },
-        include: { createdBy: { select: { id: true, name: true } } },
+        include: {
+          createdBy: { select: { id: true, name: true } },
+          liftedBy:  { select: { id: true, name: true } },
+        },
         orderBy: { createdAt: 'asc' },
       }),
       // Nodos del organigrama
@@ -49,18 +53,14 @@ async function getPersonas(req, res, next) {
       ratingsMap[r.userId][r.valueKey] = r.rating
     }
 
-    // Strikes agrupados por userId
+    // Strikes agrupados por userId. El shape (y sobre todo QUÉ cuenta como activo
+    // y qué número le toca) sale de `lib/strikes.js`, no de la columna: un strike
+    // vencido o levantado sigue en la tabla pero ya no pesa. Se agrupa primero
+    // para que la numeración de cada persona sea independiente de las demás.
+    const byUser = {}
+    for (const s of strikes) (byUser[s.userId] ||= []).push(s)
     const strikesMap = {}
-    for (const s of strikes) {
-      if (!strikesMap[s.userId]) strikesMap[s.userId] = []
-      strikesMap[s.userId].push({
-        id:           s.id,
-        strikeNumber: s.strikeNumber,
-        reason:       s.reason,
-        createdAt:    s.createdAt,
-        createdBy:    s.createdBy,
-      })
-    }
+    for (const [uid, rows] of Object.entries(byUser)) strikesMap[uid] = shapeStrikes(rows)
 
     res.json({
       members: members.map(m => ({
@@ -202,7 +202,7 @@ async function addStrike(req, res, next) {
   try {
     const workspaceId = req.workspace.id
     const createdById = req.user.userId
-    const { userId, reason } = req.body
+    const { userId, reason, agreement } = req.body
 
     if (!userId || !reason?.trim()) {
       return res.status(400).json({ error: 'userId y reason son requeridos' })
@@ -213,34 +213,103 @@ async function addStrike(req, res, next) {
     })
     if (!member) return res.status(404).json({ error: 'Usuario no encontrado en el workspace' })
 
-    // Contar strikes actuales
-    const count = await prisma.eOSStrike.count({ where: { workspaceId, userId: Number(userId) } })
-    if (count >= 3) return res.status(400).json({ error: 'Esta persona ya tiene 3 faltas registradas' })
+    // El tope cuenta solo los ACTIVOS: uno vencido o levantado ya no pesa, que es
+    // justamente para qué sirve que venzan.
+    const activeCount = await prisma.eOSStrike.count({
+      where: { workspaceId, userId: Number(userId), ...activeStrikeWhere() },
+    })
+    if (activeCount >= MAX_ACTIVE_STRIKES) {
+      return res.status(400).json({ error: `Esta persona ya tiene ${MAX_ACTIVE_STRIKES} faltas activas` })
+    }
 
+    const now = new Date()
     const strike = await prisma.eOSStrike.create({
       data: {
         workspaceId,
         userId:       Number(userId),
-        strikeNumber: count + 1,
+        strikeNumber: activeCount + 1,
         reason:       reason.trim().slice(0, 1000),
+        agreement:    agreement?.trim() ? agreement.trim().slice(0, 1000) : null,
         createdById,
+        expiresAt:    strikeExpiresAt(now, req.workspace.strikeExpiryMonths),
       },
-      include: { createdBy: { select: { id: true, name: true } } },
+      include: {
+        createdBy: { select: { id: true, name: true } },
+        liftedBy:  { select: { id: true, name: true } },
+      },
     })
 
-    res.status(201).json({
-      id:           strike.id,
-      userId:       strike.userId,
-      strikeNumber: strike.strikeNumber,
-      reason:       strike.reason,
-      createdAt:    strike.createdAt,
-      createdBy:    strike.createdBy,
+    res.status(201).json(shapeStrikes([strike])[0])
+  } catch (err) { next(err) }
+}
+
+// ─── PATCH /api/eos/strikes/:id ──────────────────────────────────────────────
+// Corregir el motivo o cargar el acuerdo al que se llegó (que muchas veces se
+// define después de la conversación, no en el momento de registrar la falta).
+async function updateStrike(req, res, next) {
+  try {
+    const workspaceId = req.workspace.id
+    const id = Number(req.params.id)
+    const strike = await prisma.eOSStrike.findFirst({ where: { id, workspaceId } })
+    if (!strike) return res.status(404).json({ error: 'Falta no encontrada' })
+
+    const data = {}
+    if ('reason' in req.body) {
+      if (!req.body.reason?.trim()) return res.status(400).json({ error: 'El motivo no puede quedar vacío' })
+      data.reason = req.body.reason.trim().slice(0, 1000)
+    }
+    // '' borra el acuerdo; una clave ausente no lo toca.
+    if ('agreement' in req.body) {
+      data.agreement = req.body.agreement?.trim() ? req.body.agreement.trim().slice(0, 1000) : null
+    }
+    if (Object.keys(data).length === 0) return res.status(400).json({ error: 'Nada para actualizar' })
+
+    const updated = await prisma.eOSStrike.update({
+      where: { id },
+      data,
+      include: {
+        createdBy: { select: { id: true, name: true } },
+        liftedBy:  { select: { id: true, name: true } },
+      },
     })
+    res.json(shapeStrikes([updated])[0])
+  } catch (err) { next(err) }
+}
+
+// ─── PATCH /api/eos/strikes/:id/lift ─────────────────────────────────────────
+// Levantar una falta antes de que venza, dejando por qué. NO la borra: la
+// diferencia con DELETE es la que hay entre "esto se resolvió" y "esto nunca
+// debió registrarse". Lo primero es parte del historial de la persona y es,
+// justamente, lo que uno quiere poder mostrar.
+async function liftStrike(req, res, next) {
+  try {
+    const workspaceId = req.workspace.id
+    const id = Number(req.params.id)
+    const { reason } = req.body
+
+    const strike = await prisma.eOSStrike.findFirst({ where: { id, workspaceId } })
+    if (!strike) return res.status(404).json({ error: 'Falta no encontrada' })
+    if (strike.liftedAt) return res.status(409).json({ error: 'Esta falta ya estaba levantada' })
+    if (!reason?.trim()) return res.status(400).json({ error: 'Contá por qué se levanta la falta' })
+
+    const updated = await prisma.eOSStrike.update({
+      where: { id },
+      data: {
+        liftedAt:   new Date(),
+        liftedById: req.user.userId,
+        liftReason: reason.trim().slice(0, 1000),
+      },
+      include: {
+        createdBy: { select: { id: true, name: true } },
+        liftedBy:  { select: { id: true, name: true } },
+      },
+    })
+    res.json(shapeStrikes([updated])[0])
   } catch (err) { next(err) }
 }
 
 // ─── DELETE /api/eos/strikes/:id ─────────────────────────────────────────────
-
+// Borrar de verdad, para la falta cargada por error. Lo normal es levantarla.
 async function removeStrike(req, res, next) {
   try {
     const workspaceId = req.workspace.id
@@ -250,18 +319,9 @@ async function removeStrike(req, res, next) {
     if (!strike) return res.status(404).json({ error: 'Falta no encontrada' })
 
     await prisma.eOSStrike.delete({ where: { id } })
-
-    // Renumerar las faltas restantes del usuario para que queden consecutivas
-    const remaining = await prisma.eOSStrike.findMany({
-      where:   { workspaceId, userId: strike.userId },
-      orderBy: { createdAt: 'asc' },
-    })
-    for (let i = 0; i < remaining.length; i++) {
-      if (remaining[i].strikeNumber !== i + 1) {
-        await prisma.eOSStrike.update({ where: { id: remaining[i].id }, data: { strikeNumber: i + 1 } })
-      }
-    }
-
+    // Ya no hace falta renumerar: `strikeNumber` se deriva en lectura sobre los
+    // activos (ver lib/strikes.js), así que la columna de los que quedan no miente
+    // sobre nada que se muestre.
     res.json({ deleted: true })
   } catch (err) { next(err) }
 }
@@ -363,5 +423,5 @@ function formatNode(n) {
 
 module.exports = {
   getPersonas, getPersonasHistory, getPersonasHistoryMonth,
-  upsertRating, addStrike, removeStrike, createNode, updateNode, deleteNode,
+  upsertRating, addStrike, updateStrike, liftStrike, removeStrike, createNode, updateNode, deleteNode,
 }
