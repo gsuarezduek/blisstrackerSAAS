@@ -40,7 +40,10 @@ export default function useNavDestinations() {
   const { primary, modules, admin, allowed, ventasBase } = buildNavBlocks({
     user,
     workspace,
-    gamesVisible: false, // Juegos todavía no tiene ruta propia; nada que ofrecer acá.
+    // Para el buscador, Juegos SIEMPRE es un destino: la página tiene el histórico de
+    // juegos terminados, que existe aunque ahora mismo no haya ninguno activo (el ítem
+    // de la barra sí se esconde, para no hacer ruido).
+    gamesVisible: true,
     flags: {
       marketing: marketingEnabled, eos: eosEnabled, gamification: gamificationEnabled,
       ventas: ventasEnabled, contenido: contenidoEnabled, rrhh: rrhhEnabled,
@@ -60,6 +63,7 @@ export default function useNavDestinations() {
     // `.filter(d => d.to)` deja afuera lo que todavía no es una ruta (Chat, Juegos):
     // el día que tengan página propia aparecen acá solos.
     ...[...primary, ...modules, ...admin].filter(d => d.to).map(({ to, label, keywords }) => ({ to, label, keywords })),
+
 
     { to: '/profile', label: 'Mi Perfil' },
     { to: '/docs', label: 'Docs' },

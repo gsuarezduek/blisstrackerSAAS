@@ -21,6 +21,7 @@ router.use(requireFeatureFlag('gamification'))
 // ─── Cualquier miembro del workspace ──────────────────────────────────────────
 router.get('/catalog', gamesCrud.getCatalog)
 router.get('/active', scoring.getActive)
+router.get('/history', scoring.getHistory)      // los ya terminados, con su ganador
 router.get('/games/:id/leaderboard', scoring.getLeaderboard)
 router.post('/games/:id/vote', scoring.castVote)
 router.get('/games/:id/quiz', quiz.getQuiz)

@@ -17,9 +17,10 @@ import {
 // RRHH · Personas…), que solo le sirven al buscador y siguen en `useNavDestinations`.
 //
 // Convención de ítem: `{ key, to?, exact?, label, icon, keywords? }`.
-// - sin `to` = no es una ruta todavía (Chat y Juegos abren un panel flotante): el menú
-//   le engancha su `onClick` por `key` y el buscador simplemente lo saltea. El día que
-//   tengan página propia, basta con darles `to` acá y aparecen en los dos lados.
+// - sin `to` = no es una ruta todavía (hoy solo Chat, que abre un panel flotante): el
+//   menú le engancha su `onClick` por `key` y el buscador simplemente lo saltea. El día
+//   que tenga página propia, basta con darle `to` acá y aparece en los dos lados (es lo
+//   que se hizo con Juegos).
 // - `keywords` son los nombres por los que la gente busca algo que en el menú se llama
 //   distinto ("mis proyectos" → Proyectos).
 
@@ -57,7 +58,7 @@ export function buildNavBlocks({ user, workspace, flags = {}, gamesVisible = fal
     // y se llama "Horas por proyecto" — antes los dos se llamaban igual y el admin no
     // tenía forma de llegar al suyo.
     { key: 'reportes', to: '/reportes', label: 'Reportes', icon: ChartColumn, keywords: 'mis reportes mis horas registro' },
-    ...(gamesVisible ? [{ key: 'games', label: 'Juegos', icon: Trophy }] : []),
+    ...(gamesVisible ? [{ key: 'games', to: '/juegos', label: 'Juegos', icon: Trophy }] : []),
   ]
 
   // Orden fijo: no se reacomodan según qué otros módulos estén prendidos, así la

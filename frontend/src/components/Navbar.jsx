@@ -284,7 +284,7 @@ export default function Navbar() {
   // (Chat y Juegos abren su panel flotante con el mismo evento que el botón flotante).
   const EXTRAS = {
     chat:     { onClick: emit('bliss:open-chat'), badge: chatBadge },
-    games:    { onClick: emit('bliss:open-game'), badge: gamesBadge },
+    games:    { badge: gamesBadge },   // ya tiene ruta propia (/juegos)
     realtime: { live: true },
   }
   const withExtras = items => items.map(it => (EXTRAS[it.key] ? { ...it, ...EXTRAS[it.key] } : it))

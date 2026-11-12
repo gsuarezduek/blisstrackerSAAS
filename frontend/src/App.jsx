@@ -86,6 +86,7 @@ const RealTime         = lazyWithReload(() => import('./pages/RealTime'))
 const Reports          = lazyWithReload(() => import('./pages/Reports'))
 const Reportes         = lazyWithReload(() => import('./pages/Reportes'))
 const Proyectos        = lazyWithReload(() => import('./pages/Proyectos'))
+const Juegos           = lazyWithReload(() => import('./pages/Juegos'))
 const ProjectDetail    = lazyWithReload(() => import('./pages/ProjectDetail'))
 const ForgotPassword   = lazyWithReload(() => import('./pages/ForgotPassword'))
 const ResetPassword    = lazyWithReload(() => import('./pages/ResetPassword'))
@@ -245,6 +246,8 @@ export default function App() {
           <Route path="/marketing"  element={<PrivateRoute><Marketing /></PrivateRoute>} />
           <Route path="/contenido"  element={<PrivateRoute><Contenido /></PrivateRoute>} />
           <Route path="/calendario" element={<PrivateRoute><Calendario /></PrivateRoute>} />
+          {/* Juegos es para cualquier miembro; /admin/gamification sigue siendo el CRUD. */}
+          <Route path="/juegos"     element={<PrivateRoute><Juegos /></PrivateRoute>} />
           <Route path="/finanzas"   element={<FinanceRoute><Finanzas /></FinanceRoute>} />
           <Route path="/billing"    element={<PrivateRoute><Billing  /></PrivateRoute>} />
           <Route path="/reports"             element={<AdminRoute><Reports      /></AdminRoute>} />

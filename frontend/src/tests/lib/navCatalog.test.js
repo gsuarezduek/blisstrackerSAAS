@@ -121,13 +121,13 @@ describe('buildNavBlocks — bloque principal', () => {
     expect(keys(build(admin(), ALL_FLAGS, { gamesVisible: true }).primary)).toContain('games')
   })
 
-  it('Chat y Juegos no tienen ruta todavía: el buscador los saltea', () => {
+  it('Chat todavía no tiene ruta: el buscador lo saltea', () => {
     const { primary } = build(admin(), ALL_FLAGS, { gamesVisible: true })
     expect(primary.find(i => i.key === 'chat').to).toBeUndefined()
-    expect(primary.find(i => i.key === 'games').to).toBeUndefined()
-    // Y todo lo demás sí navega.
+    // Juegos ya tiene su página; todo lo demás también navega.
+    expect(primary.find(i => i.key === 'games').to).toBe('/juegos')
     const navegables = primary.filter(i => i.to)
-    expect(navegables.length).toBe(primary.length - 2)
+    expect(navegables.length).toBe(primary.length - 1)
   })
 
   it('cada ítem navegable tiene key y label, y no hay keys repetidas', () => {

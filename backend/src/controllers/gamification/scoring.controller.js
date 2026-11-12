@@ -112,10 +112,40 @@ async function getActive(req, res, next) {
 /** GET /api/gamification/games/:id/leaderboard (cualquier miembro) */
 async function getLeaderboard(req, res, next) {
   try {
-    const game = await prisma.game.findFirst({ where: { id: Number(req.params.id), workspaceId: req.workspace.id }, select: GAME_SELECT_TEAMS })
+    // Solo juegos activos o terminados: sin el filtro de `status`, cualquier miembro
+    // podía pedir el ranking de un borrador o de uno archivado, que para el equipo no
+    // existen (`getActive` sí los filtra; esto era el agujero del costado).
+    const game = await prisma.game.findFirst({
+      where: { id: Number(req.params.id), workspaceId: req.workspace.id, status: { in: ['active', 'finished'] } },
+      select: GAME_SELECT_TEAMS,
+    })
     if (!game) return res.status(404).json({ error: 'Juego no encontrado' })
     const leaderboard = maskLeaderboard(game, await computeLeaderboard(game))
     res.json({ game: shapeGame(game, { teams: game.teams }), leaderboard })
+  } catch (err) { next(err) }
+}
+
+/**
+ * GET /api/gamification/history (cualquier miembro) — los juegos ya terminados.
+ *
+ * `getActive` solo muestra los finalizados de los últimos 7 días: después desaparecen,
+ * y con ellos quién ganó. Esto es el muro de ganadores de la página /juegos.
+ *
+ * Deliberadamente NO llama a `computeLeaderboard`: es el cálculo caro (para los juegos
+ * de métrica pega contra los snapshots de Marketing) y el histórico no lo necesita —
+ * `winnerSubject` ya quedó persistido por `finishGame`. El ranking completo de un juego
+ * viejo está a un clic, en `GET /games/:id/leaderboard`.
+ */
+async function getHistory(req, res, next) {
+  try {
+    const take = Math.min(Number(req.query.take) || 20, 50)
+    const skip = Math.max(Number(req.query.skip) || 0, 0)
+    const where = { workspaceId: req.workspace.id, status: 'finished', finishedAt: { not: null } }
+    const [rows, total] = await Promise.all([
+      prisma.game.findMany({ where, select: GAME_SELECT_TEAMS, orderBy: { finishedAt: 'desc' }, take, skip }),
+      prisma.game.count({ where }),
+    ])
+    res.json({ total, games: rows.map(g => shapeGame(g, { teams: g.teams })) })
   } catch (err) { next(err) }
 }
 
@@ -153,4 +183,4 @@ async function castVote(req, res, next) {
   } catch (err) { next(err) }
 }
 
-module.exports = { setScores, getActive, getLeaderboard, castVote }
+module.exports = { setScores, getActive, getLeaderboard, castVote, getHistory }
