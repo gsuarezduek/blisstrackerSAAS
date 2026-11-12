@@ -2,7 +2,7 @@ const prisma = require('../../lib/prisma')
 const { logFinanceAudit } = require('../../lib/financeAudit')
 const { toDecimal } = require('../../lib/financeMoney')
 const { teamPaidAmount } = require('../../lib/financeExtras')
-const { parseDate } = require('./_shared')
+const { parseDate, openFinanceTasksWhere } = require('./_shared')
 const { isValidTaskStatus } = require('../../lib/financeCatalog')
 const { syncDashboardOnResponsibleChange } = require('../../lib/financeTaskDashboard')
 const { resolveModuleAccess, memberRoleNames } = require('../../lib/moduleAccess')
@@ -155,12 +155,8 @@ async function syncGeneratedTasks(workspaceId) {
 // (el resumen IA lee las mismas tareas que se le muestran al usuario).
 async function getOpenTasks(workspaceId) {
   await syncGeneratedTasks(workspaceId)
-  const today = todayUTCNoon()
   return prisma.financeTask.findMany({
-    where: {
-      workspaceId, deletedAt: null,
-      OR: [{ status: { in: ['open'] } }, { status: 'postponed', postponedUntil: { lte: today } }],
-    },
+    where: openFinanceTasksWhere(workspaceId),
     orderBy: [{ date: 'asc' }, { createdAt: 'asc' }],
     include: { doneBy: { select: { id: true, name: true } }, responsible: { select: { id: true, name: true } }, item: { select: { id: true, name: true } } },
   })

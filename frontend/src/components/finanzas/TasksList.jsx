@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Plus } from 'lucide-react'
 import { Icon } from '../ui/Icon'
 import api from '../../api/client'
+import { notifyNavCountsChanged } from '../../hooks/useNavCounts'
 import { useAuth } from '../../context/AuthContext'
 import { fmtMoney } from '../../utils/format'
 import { taskOriginLabel } from './financeCatalog'
@@ -103,11 +104,14 @@ export default function TasksList({ tasks, members, items, onChanged, onNavigate
   async function markDone(task) {
     await api.patch(`/finanzas/tasks/${task.id}`, { status: 'done' })
     onChanged()
+    // El punto de Finanzas en la barra cuenta estas tareas: que baje ahora.
+    notifyNavCountsChanged()
   }
   async function postpone(task, date) {
     await api.patch(`/finanzas/tasks/${task.id}`, { status: 'postponed', postponedUntil: date })
     setPostponing(null)
     onChanged()
+    notifyNavCountsChanged()
   }
   async function assign(task, responsibleId) {
     setAssignError(null)

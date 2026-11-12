@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import Navbar from '../components/Navbar'
 import api from '../api/client'
+import { notifyNavCountsChanged } from '../hooks/useNavCounts'
 import { useFeatureFlag } from '../hooks/useFeatureFlag'
 import { useAuth } from '../context/AuthContext'
 import { useWorkspace } from '../context/WorkspaceContext'
@@ -134,6 +135,9 @@ export default function RRHH() {
       benefits: item.kind === 'benefit' ? p.benefits.filter(r => r.id !== item.id) : p.benefits,
     }))
     if (status === 'approved') { loadUsers(); loadDashStats(); loadPending() }
+    // El punto de RRHH en la barra sale de la cola de pendientes: que baje ahora y no
+    // en el próximo refresco de fondo.
+    notifyNavCountsChanged()
   }
 
   const pendingCount = pending.loading ? 0 : pending.leaves.length + pending.benefits.length

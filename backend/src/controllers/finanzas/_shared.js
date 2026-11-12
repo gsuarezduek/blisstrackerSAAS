@@ -13,6 +13,22 @@ function todayUTCNoon() {
 }
 
 /**
+ * `where` de las tareas de Finanzas que están para resolver: abiertas, más las
+ * pospuestas cuya fecha ya pasó (no hace falta reabrirlas a mano). Compartido por
+ * `getOpenTasks` (tasks.controller.js) y por el contador de la barra lateral
+ * (nav.controller.js) — el criterio de "qué está pendiente" vive en un solo lugar.
+ *
+ * Ojo: esto es SOLO el filtro. `getOpenTasks` además corre `syncGeneratedTasks`
+ * antes de listar; el contador de la barra a propósito NO lo hace (ver nav.controller.js).
+ */
+function openFinanceTasksWhere(workspaceId) {
+  return {
+    workspaceId, deletedAt: null,
+    OR: [{ status: { in: ['open'] } }, { status: 'postponed', postponedUntil: { lte: todayUTCNoon() } }],
+  }
+}
+
+/**
  * Estado de UNA factura (3.5): pagada (cobrado ≥ monto) / parcial (> 0) /
  * vencida (sin pagar y venció) / pendiente. `collected` son los cobros
  * aplicados específicamente a ESA factura (accountApplication='invoice'); un
@@ -199,4 +215,4 @@ async function resolveAndApplyTaxes(tx, { workspaceId, accountId, taxIds, baseAm
   return createdLines
 }
 
-module.exports = { businessError, toDecimalInput, trimmedOrNull, normalizeCuit, assertNoTaxCycle, resolveAndApplyTaxes, parseDate, transfersAfterValuation, computeInvoiceStatus }
+module.exports = { businessError, toDecimalInput, trimmedOrNull, normalizeCuit, assertNoTaxCycle, resolveAndApplyTaxes, parseDate, transfersAfterValuation, computeInvoiceStatus, todayUTCNoon, openFinanceTasksWhere }

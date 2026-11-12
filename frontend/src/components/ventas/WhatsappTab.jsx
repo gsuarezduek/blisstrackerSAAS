@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import api from '../../api/client'
+import { notifyNavCountsChanged } from '../../hooks/useNavCounts'
 import { useAuth } from '../../context/AuthContext'
 import { connectSocket } from '../../lib/socket'
 import LoadingSpinner from '../LoadingSpinner'
@@ -105,6 +106,7 @@ export default function WhatsappTab({ onOpenLead }) {
       setHasMore(data.hasMore)
       await api.post(`/whatsapp/conversations/${id}/read`)
       loadConversations() // refresca el punto de no-leído en la lista
+      notifyNavCountsChanged() // y el número de la barra lateral y de la pestaña
     } finally {
       setLoadingMessages(false)
     }
@@ -181,6 +183,7 @@ export default function WhatsappTab({ onOpenLead }) {
       if (conversationId === activeIdRef.current) {
         setMessages(prev => (prev.some(m => m.id === message.id) ? prev : [...prev, message]))
         api.post(`/whatsapp/conversations/${conversationId}/read`).catch(() => {})
+        notifyNavCountsChanged()
       }
       loadConversations()
     }

@@ -198,7 +198,11 @@ GET    /api/admin/rrhh/attendance               # ?month=YYYY-MM — asistencia 
 GET    /api/notifications
 POST   /api/notifications/read-all
 
-# Push notifications (app mobile — ver mobile/CLAUDE.md)
+# Avisos de la barra lateral — un solo request para todos los módulos.
+# Una clave AUSENTE en `modules` = ese módulo no aplica para quien pregunta (ausente ≠ dot:false).
+GET    /api/nav/counts                            # { modules: { ventas:{subs:{whatsapp:{n}}}, rrhh:{dot}, contenido:{dot}, finanzas:{dot} }, at }
+
+# Push notifications (app mobile — CONGELADA, ver CLAUDE.md)
 POST   /api/devices/register                      # body: { token, platform } — registra/refresca el Expo Push Token del dispositivo
 DELETE /api/devices/register                      # body: { token } — deja de mandarle push (logout desde la app)
 

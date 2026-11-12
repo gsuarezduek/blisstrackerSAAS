@@ -414,4 +414,14 @@ async function createRequest(req, res, next) {
   } catch (err) { next(err) }
 }
 
-module.exports = { adjustVacationDays, getAdjustmentHistory, listRequests, reviewRequest, editRequest, getMyVacation, createRequest }
+/**
+ * Cuántas solicitudes de licencia esperan respuesta. La usa el contador de la barra
+ * lateral (nav.controller.js): la regla de "qué está pendiente" vive acá, con el
+ * resto del módulo, y no duplicada del lado del cliente — RRHH.jsx se traía las
+ * listas enteras solo para contarlas.
+ */
+function countPendingRequests(workspaceId) {
+  return prisma.vacationRequest.count({ where: { workspaceId, status: 'pending' } })
+}
+
+module.exports = { adjustVacationDays, getAdjustmentHistory, listRequests, reviewRequest, editRequest, getMyVacation, createRequest, countPendingRequests }

@@ -4,6 +4,8 @@ import Navbar from '../components/Navbar'
 import LoadingSpinner from '../components/LoadingSpinner'
 import { useAuth } from '../context/AuthContext'
 import { useFeatureFlag } from '../hooks/useFeatureFlag'
+import useNavCounts from '../hooks/useNavCounts'
+import Badge from '../components/ui/Badge'
 import api from '../api/client'
 import DashboardTab from '../components/ventas/DashboardTab'
 import PipelineTab from '../components/ventas/PipelineTab'
@@ -31,6 +33,10 @@ export default function Ventas() {
   // Flag propio (independiente de 'ventas') — solo agrega el tab si SuperAdmin
   // habilitó WhatsApp para este workspace, ver backend/src/config/featureFlags.js.
   const { enabled: whatsappEnabled } = useFeatureFlag('whatsapp')
+  // El mismo número que la barra lateral muestra en "Ventas" (mismo endpoint, misma
+  // caché): adentro del módulo tiene que decir cuál de las pestañas lo está causando.
+  const navCounts = useNavCounts()
+  const waCount = navCounts?.modules?.ventas?.subs?.whatsapp?.n ?? 0
   const [searchParams, setSearchParams] = useSearchParams()
 
   const TABS = [...BASE_TABS, ...(whatsappEnabled ? [WHATSAPP_TAB] : []), ...(user?.isAdmin ? [CONFIG_TAB] : [])]
@@ -107,13 +113,18 @@ export default function Ventas() {
           <div className="hidden sm:flex flex-wrap gap-1 bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-xl p-1 w-fit">
             {TABS.map(t => (
               <button key={t.id} onClick={() => setTab(t.id)}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${tab === t.id ? 'bg-primary-600 text-white' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700'}`}>
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors inline-flex items-center gap-1.5 ${tab === t.id ? 'bg-primary-600 text-white' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700'}`}>
                 {t.label}
+                {t.id === 'whatsapp' && waCount > 0 && <Badge n={waCount} />}
               </button>
             ))}
           </div>
           <select className="sm:hidden w-full px-3 py-2 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm font-medium" value={tab} onChange={e => setTab(e.target.value)}>
-            {TABS.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
+            {TABS.map(t => (
+              <option key={t.id} value={t.id}>
+                {t.id === 'whatsapp' && waCount > 0 ? `${t.label} (${waCount})` : t.label}
+              </option>
+            ))}
           </select>
         </div>
 

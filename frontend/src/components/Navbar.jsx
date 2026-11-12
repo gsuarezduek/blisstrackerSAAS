@@ -13,6 +13,7 @@ import useRoles from '../hooks/useRoles'
 import { useFeatureFlag } from '../hooks/useFeatureFlag'
 import useActiveGames from '../hooks/useActiveGames'
 import useStarredProjects from '../hooks/useStarredProjects'
+import useNavCounts from '../hooks/useNavCounts'
 import { buildNavBlocks } from '../lib/navCatalog'
 import FloatingDock from './FloatingDock'
 import NotificationBell from './NotificationBell'
@@ -23,6 +24,7 @@ import TrialBanner from './TrialBanner'
 import TokenBudgetBanner from './TokenBudgetBanner'
 import NotesBoard from './NotesBoard'
 import { Icon } from './ui/Icon'
+import Badge from './ui/Badge'
 import api from '../api/client'
 import { avatarUrl } from '../utils/avatarUrl'
 
@@ -65,14 +67,6 @@ function useClickOutside(ref, active, onOutside) {
 }
 
 // ─── Piezas visuales ─────────────────────────────────────────────────────────
-
-function Badge({ n }) {
-  return (
-    <span className="min-w-[18px] h-[18px] px-1.5 inline-flex items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold leading-none">
-      {n > 9 ? '9+' : n}
-    </span>
-  )
-}
 
 // Lo que va a la derecha del ítem: contador, punto en vivo, punto rojo o un texto corto.
 function Trailing({ item }) {
@@ -194,6 +188,7 @@ export default function Navbar() {
   const location = useLocation()
   const games    = useActiveGames()
   const starred  = useStarredProjects()
+  const counts   = useNavCounts()
 
   const [otherWorkspaces, setOtherWorkspaces] = useState([])
   const [switchLoading, setSwitchLoading]     = useState(null)
@@ -306,7 +301,19 @@ export default function Navbar() {
     alertTitle: 'Tiene tareas bloqueadas',
   }))
 
-  const moduleItems = nav.modules
+  // Avisos por módulo (GET /nav/counts). Número donde hay mensajes de alguien
+  // esperando respuesta — hoy solo WhatsApp, que vive dentro de Ventas —, punto donde
+  // hay algo para resolver: una cola de aprobaciones no es una conversación, y un
+  // número ahí da falsa precisión y presión por "llegar a cero".
+  // Una clave ausente en la respuesta = ese módulo no aplica para esta persona.
+  const moduleItems = nav.modules.map(it => {
+    const c = counts?.modules?.[it.key]
+    if (!c) return it
+    const n = c.subs?.whatsapp?.n ?? 0
+    if (n > 0) return { ...it, badge: { n } }
+    if (c.dot) return { ...it, badge: { dot: true } }
+    return it
+  })
   const adminItems  = nav.admin
 
   const workspaceItems = [

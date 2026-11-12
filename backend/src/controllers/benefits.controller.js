@@ -325,8 +325,13 @@ async function createRequest(req, res, next) {
   } catch (err) { next(err) }
 }
 
+/** Solicitudes de beneficios esperando respuesta — ver countPendingRequests en vacation.controller.js. */
+function countPendingRequests(workspaceId) {
+  return prisma.benefitBankRequest.count({ where: { workspaceId, status: 'pending' } })
+}
+
 module.exports = {
   BANKS,
   listBalances, adjustBalance, getAdjustmentHistory, listRequests, reviewRequest,
-  getMyBenefits, createRequest,
+  getMyBenefits, createRequest, countPendingRequests,
 }
