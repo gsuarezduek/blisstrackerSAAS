@@ -17,6 +17,8 @@ import useContentSocket from '../components/contenido/useContentSocket'
 import { useFeatureFlag } from '../hooks/useFeatureFlag'
 import { useAuth } from '../context/AuthContext'
 import api from '../api/client'
+import { useActiveProject } from '../context/ProjectContext'
+import ActiveProjectHint from '../components/ActiveProjectHint'
 import { OPEN_STATUSES } from '../components/contenido/contentCatalog'
 import { CalendarDays, Lock, X } from 'lucide-react'
 import { Icon } from '../components/ui/Icon'
@@ -48,6 +50,8 @@ export default function Contenido() {
   const [searchParams, setSearchParams] = useSearchParams()
   const [projects,  setProjects]  = useState([])
   const [projectId, setProjectId] = useState(searchParams.get('projectId') ?? '')
+  const { activeProject, setActiveProject, clearActiveProject } = useActiveProject()
+  const [inherited, setInherited] = useState(false)
   const [filters,   setFilters]   = useState({ status: '', network: '', ownerId: '', q: '' })
   const [summary,   setSummary]   = useState(null) // { byStatus, total, awaitingClient } — GET /summary
   const [requestingApproval, setRequestingApproval] = useState(false)
@@ -305,8 +309,31 @@ export default function Contenido() {
 
   function handleProjectChange(id) {
     setProjectId(id)
+    // Igual que en Marketing: elegir acá deja el proyecto fijado para las otras
+    // secciones, y elegir "ninguno" lo suelta.
+    if (id) {
+      const p = projects.find(x => String(x.id) === String(id))
+      if (p) setActiveProject(p)
+    } else {
+      clearActiveProject()
+    }
     patchParams({ projectId: id })
   }
+
+  // Adopta el proyecto fijado si la URL no trae uno. La URL siempre gana; se escribe
+  // en la URL al adoptarlo y a partir de ahí es la única fuente de verdad. Esta
+  // pantalla, sin proyecto, no muestra nada — así que heredar acá es lo que evita la
+  // pantalla vacía de "elegí un proyecto" cuando venías trabajando en uno.
+  const adopted = useRef(false)
+  useEffect(() => {
+    if (adopted.current || projectId || projects.length === 0) return
+    adopted.current = true
+    if (searchParams.get('projectId')) return
+    if (!activeProject?.id || activeProject.contenidoEnabled === false) return
+    if (!projects.some(p => String(p.id) === String(activeProject.id))) return
+    handleProjectChange(String(activeProject.id))
+    setInherited(true)
+  }, [projects]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function handleDelete(id) {
     if (String(pieceId) === String(id)) patchParams({ piece: '' })
@@ -458,6 +485,14 @@ export default function Contenido() {
             )}
           </div>
         </div>
+
+        {inherited && projectId && (
+          <ActiveProjectHint
+            projectName={projects.find(p => String(p.id) === String(projectId))?.name}
+            onDismiss={() => setInherited(false)}
+            onClear={() => { setInherited(false); handleProjectChange('') }}
+          />
+        )}
 
         {!moduleAllowed ? (
           <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-10 text-center">

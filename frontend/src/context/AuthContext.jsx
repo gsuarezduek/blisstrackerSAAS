@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect } from 'react'
 import api from '../api/client'
+import { clearAllActiveProjects } from './ProjectContext'
 import { handoffUrl } from '../utils/authHandoff'
 
 const AuthContext = createContext(null)
@@ -114,6 +115,7 @@ export function AuthProvider({ children }) {
     api.post('/auth/logout').catch(() => {})
     localStorage.removeItem('token')
     localStorage.removeItem('workspaceSlug')
+    clearAllActiveProjects()
     setUser(null)
   }
 

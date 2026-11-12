@@ -5,6 +5,7 @@ import { AuthProvider, useAuth } from './context/AuthContext'
 import { ThemeProvider } from './context/ThemeContext'
 import { WorkspaceProvider } from './context/WorkspaceContext'
 import { ChatProvider } from './context/ChatContext'
+import { ProjectProvider } from './context/ProjectContext'
 import { VoiceCallProvider } from './context/VoiceCallContext'
 import React from 'react'
 import LoadingSpinner from './components/LoadingSpinner'
@@ -194,6 +195,7 @@ export default function App() {
     <ThemeProvider>
     <WorkspaceProvider>
     <AuthProvider>
+    <ProjectProvider>
     <ChatProvider>
     <VoiceCallProvider>
       <BrowserRouter future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
@@ -260,6 +262,7 @@ export default function App() {
       </BrowserRouter>
     </VoiceCallProvider>
     </ChatProvider>
+    </ProjectProvider>
     </AuthProvider>
     </WorkspaceProvider>
     </ThemeProvider>

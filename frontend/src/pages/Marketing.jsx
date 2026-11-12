@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useSearchParams, Link } from 'react-router-dom'
 import Navbar from '../components/Navbar'
 import LoadingSpinner from '../components/LoadingSpinner'
@@ -30,6 +30,8 @@ import SocialIcon from '../components/marketing/SocialIcon'
 import { useFeatureFlag } from '../hooks/useFeatureFlag'
 import { useAuth } from '../context/AuthContext'
 import { useWorkspace } from '../context/WorkspaceContext'
+import { useActiveProject } from '../context/ProjectContext'
+import ActiveProjectHint from '../components/ActiveProjectHint'
 import api from '../api/client'
 import { Construction, Lock, X } from 'lucide-react'
 import { Icon } from '../components/ui/Icon'
@@ -56,6 +58,9 @@ export default function Marketing() {
   const [searchParams, setSearchParams] = useSearchParams()
   const [projects,   setProjects]   = useState([])
   const [projectId,  setProjectId]  = useState(searchParams.get('projectId') ?? '')
+  const { activeProject, setActiveProject, clearActiveProject } = useActiveProject()
+  // "Esta selección la heredaste" — se avisa una sola vez, cuando pasa.
+  const [inherited, setInherited] = useState(false)
 
   useEffect(() => {
     // Solo las cuentas que usan Marketing (ver concepto "Marketing y Contenido por
@@ -142,6 +147,14 @@ export default function Marketing() {
 
   function handleProjectChange(id) {
     setProjectId(id)
+    // Elegir un proyecto acá también lo deja fijado para las otras secciones; elegir
+    // "Todos" lo suelta (acabás de decir que no querés filtrar, respetalo después).
+    if (id) {
+      const p = projects.find(x => String(x.id) === String(id))
+      if (p) setActiveProject(p)
+    } else {
+      clearActiveProject()
+    }
     setSearchParams(prev => {
       const p = Object.fromEntries(prev.entries())
       if (id) p.projectId = id
@@ -149,6 +162,25 @@ export default function Marketing() {
       return p
     }, { replace: true })
   }
+
+  // Adopta el proyecto fijado cuando la URL no trae uno propio. La URL SIEMPRE gana:
+  // un link con ?projectId= explícito ignora el contexto. Se escribe en la URL en el
+  // mismo momento de adoptarlo, así desde ahí en adelante la única fuente de verdad
+  // vuelve a ser la URL y todo lo que ya existe (navigateTo, el efecto de saneo, los
+  // deep-links) sigue funcionando igual. El ref lo limita a una vez por montaje: esta
+  // pantalla tiene una cadena de efectos que reescriben la URL (tab/sub/view) y dos
+  // escrituras compitiendo se pisarían.
+  const adopted = useRef(false)
+  useEffect(() => {
+    if (adopted.current || projectId || projects.length === 0) return
+    adopted.current = true
+    if (searchParams.get('projectId')) return
+    // Un proyecto con Marketing apagado no existe en esta sección.
+    if (!activeProject?.id || activeProject.marketingEnabled === false) return
+    if (!projects.some(p => String(p.id) === String(activeProject.id))) return
+    handleProjectChange(String(activeProject.id))
+    setInherited(true)
+  }, [projects]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Navega a una sub-pestaña puntual (usado por "Prioridades" para llevar cada
   // hallazgo/conexión a su pestaña de origen), conservando el proyecto. Pasa por
@@ -242,6 +274,14 @@ export default function Marketing() {
             )}
           </div>
         </div>
+
+        {inherited && projectId && (
+          <ActiveProjectHint
+            projectName={projects.find(p => String(p.id) === String(projectId))?.name}
+            onDismiss={() => setInherited(false)}
+            onClear={() => { setInherited(false); handleProjectChange('') }}
+          />
+        )}
 
         {!moduleAllowed ? (
           <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-10 text-center">

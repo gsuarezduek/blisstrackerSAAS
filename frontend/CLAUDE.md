@@ -27,6 +27,19 @@ VITE_GOOGLE_CLIENT_ID=xxxx.apps.googleusercontent.com
 
 **Menú "⋯" compartido (`components/ui/OverflowMenu.jsx`):** el dropdown de acciones secundarias — `items` es `[{ label, onClick, danger? }]`. Se dibuja en un **portal** con `position: fixed` calculada desde el botón (se abre hacia arriba si no entra abajo) para que no lo recorte ni un contenedor con `overflow-hidden` ni el borde de la ventana, y se cierra con click afuera / Escape / scroll / resize. Nació dentro de `TaskCard.jsx` para el Dashboard y **se movió a `ui/` cuando la vista de lista de la Nube pasó a ser su tercer consumidor** (junto a `TaskCard` y `AgentTasksPanel`): importarlo desde `TaskCard` habría hecho que la Nube dependa de un componente del Dashboard. Al adoptarlo, `ItemCard` tiró su propio dropdown `absolute`.
 
+### El proyecto fijado (`context/ProjectContext.jsx`)
+El proyecto en el que alguien viene trabajando viaja entre secciones, para no tener que volver a elegirlo en cada una. Lo **fija** entrar a la ficha de un proyecto (`ProjectDetail.jsx`) o elegirlo en el selector de Marketing/Contenido; lo **suelta** elegir "Todos", el ✕ del aviso, el logout (`clearAllActiveProjects` desde `AuthContext`), cerrar la pestaña o el TTL.
+
+**Vive en `sessionStorage` (clave por workspace, `bliss_active_project_<slug>`) + TTL de 8 h, y eso es la decisión central**: el riesgo de esta feature es abrir Marketing el lunes y ver datos filtrados por un proyecto elegido el jueves sin acordarse. Con `sessionStorage` eso es imposible — el estado muere con la pestaña y una pestaña nueva arranca limpia; el TTL cubre la pestaña que queda abierta días. `localStorage` sería exactamente ese bug (hay un test que afirma que nunca se le escribe).
+
+**Cómo lo adoptan las secciones:** los links de la barra quedan pelados (`/marketing`, `/contenido`) — la barra no debería saber el nombre del parámetro de cada módulo ni si ese proyecto tiene ese módulo prendido. Cada página, si la URL **no** trae `?projectId=`, lo adopta y **lo escribe en la URL con `{ replace: true }` en el mismo momento**: desde ahí la única fuente de verdad vuelve a ser la URL y todo lo que ya existía (`navigateTo`, el efecto de saneo, los deep-links) sigue andando igual. **La URL siempre gana**: un link con `?projectId=` explícito ignora el contexto. La adopción pasa una sola vez por montaje (un `useRef`), porque Marketing tiene una cadena de efectos que reescriben la URL y dos escrituras compitiendo se pisan.
+
+**Se anuncia cuando ocurre** (`components/ActiveProjectHint.jsx`): "Mostrando **Acme**, el proyecto en el que venís trabajando · Ver todos". Eso es lo que evita mirar datos filtrados sin saber por qué. El chip va en el encabezado de la sección y **no** en la barra lateral: la barra es cromo global, el proyecto aplica a 2 de ~15 destinos y en modo colapsado (64px) no entra.
+
+**Respeta los módulos apagados por proyecto** (`Project.marketingEnabled`/`contenidoEnabled`): el contexto guarda esos dos booleanos al fijarse y cada sección adopta solo si el suyo no es `false` — un proyecto sin Marketing no existe en esa sección. Segunda línea de defensa, ya existente: el efecto de saneo de ambas páginas cae a "todos"/vacío si el id no está en la lista cargada.
+
+**NO reemplaza al evento `bliss:project-context`** que emite `ProjectDetail`: ese significa "estoy mirando este proyecto ahora" y lo usa `GlobalShortcuts` para precargar el modal de nueva tarea. Si se unificaran, crear una tarea desde el Dashboard la asociaría a un proyecto del que ya te fuiste. Tests: `src/tests/context/projectContext.test.jsx`.
+
 ### Navegación — barra lateral (`Navbar.jsx` + `lib/navCatalog.js`)
 Desde `lg` la navegación es una **barra lateral** a la izquierda; en pantallas chicas es una barra superior con panel desplegable. Las dos salen del mismo componente y de los mismos arrays (fuente única: agregar un ítem lo suma en desktop y mobile).
 

@@ -3,6 +3,7 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import Navbar from '../components/Navbar'
 import LoadingSpinner from '../components/LoadingSpinner'
 import api from '../api/client'
+import { useActiveProject } from '../context/ProjectContext'
 import TaskCommentsModal from '../components/TaskCommentsModal'
 import ProjectBriefs from '../components/briefs/ProjectBriefs'
 import ProjectMeetings from '../components/meetings/ProjectMeetings'
@@ -40,6 +41,7 @@ function defaultArchiveTo() {
 
 export default function ProjectDetail() {
   const { id } = useParams()
+  const { setActiveProject } = useActiveProject()
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const { user: authUser } = useAuth()
@@ -144,6 +146,13 @@ export default function ProjectDetail() {
     if (!data?.project) return
     window.dispatchEvent(new CustomEvent('bliss:project-context', { detail: data.project }))
   }, [data])
+
+  // Y lo deja FIJADO: Marketing y Contenido lo adoptan cuando se entra a esas secciones
+  // sin un ?projectId= propio, así no hay que volver a elegirlo. A diferencia del evento
+  // de arriba, esto NO se limpia al salir de la ficha — esa permanencia es el punto.
+  useEffect(() => {
+    if (data?.project) setActiveProject(data.project)
+  }, [data, setActiveProject])
 
   useEffect(() => {
     return () => window.dispatchEvent(new CustomEvent('bliss:project-context', { detail: null }))
