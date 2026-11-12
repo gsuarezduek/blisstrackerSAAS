@@ -14,11 +14,13 @@ function dateLabel(iso) {
   })
 }
 
-// Buscador de mensajes dentro de un canal. v1 muestra el resultado tal cual acá mismo
-// (autor/fecha/contenido) — no "salta" al mensaje dentro del hilo completo, eso
-// requeriría poder cargar mensajes alrededor de uno puntual (pieza más grande, fuera
-// de alcance por ahora).
-export default function ChannelSearch({ channelId, onClose }) {
+// Buscador de mensajes dentro de un canal.
+//
+// Con `onJump`, tocar un resultado lleva hasta el mensaje dentro del hilo real — usa el
+// mismo `?around=` que ya tenía el salto desde un pin (cuando se escribió esto todavía
+// no existía esa rama, de ahí la limitación original). Sin `onJump` el resultado se
+// muestra tal cual acá, que es como sigue funcionando en el panel de mobile.
+export default function ChannelSearch({ channelId, onClose, onJump }) {
   const [query, setQuery] = useState('')
   const [results, setResults] = useState([])
   const [loading, setLoading] = useState(false)
@@ -77,8 +79,14 @@ export default function ChannelSearch({ channelId, onClose }) {
         {!loading && !searched && (
           <p className="text-xs text-gray-400 dark:text-gray-500 text-center py-6">Escribí al menos 2 caracteres para buscar</p>
         )}
-        {!loading && results.map(m => (
-          <div key={m.id} className="px-2 py-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700/60">
+        {!loading && results.map(m => {
+          const Row = onJump ? 'button' : 'div'
+          return (
+          <Row
+            key={m.id}
+            {...(onJump ? { type: 'button', onClick: () => onJump(m) } : {})}
+            className={`w-full text-left px-2 py-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700/60 ${onJump ? 'cursor-pointer' : ''}`}
+          >
             <div className="flex items-center gap-2 mb-0.5">
               {m.author ? (
                 <img src={avatarUrl(m.author.avatar)} alt={m.author.name} className="w-5 h-5 rounded-full object-cover border border-gray-200 dark:border-gray-600" />
@@ -91,8 +99,9 @@ export default function ChannelSearch({ channelId, onClose }) {
             <p className="text-sm text-gray-600 dark:text-gray-300 leading-snug pl-7 line-clamp-2">
               {m.content || (m.gifUrl ? 'GIF' : '')}
             </p>
-          </div>
-        ))}
+          </Row>
+          )
+        })}
       </div>
     </div>
   )

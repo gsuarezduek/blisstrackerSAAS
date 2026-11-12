@@ -17,10 +17,9 @@ import {
 // RRHH · Personas…), que solo le sirven al buscador y siguen en `useNavDestinations`.
 //
 // Convención de ítem: `{ key, to?, exact?, label, icon, keywords? }`.
-// - sin `to` = no es una ruta todavía (hoy solo Chat, que abre un panel flotante): el
-//   menú le engancha su `onClick` por `key` y el buscador simplemente lo saltea. El día
-//   que tenga página propia, basta con darle `to` acá y aparece en los dos lados (es lo
-//   que se hizo con Juegos).
+// - un ítem sin `to` no navega: el menú le engancha su `onClick` por `key` y el buscador
+//   lo saltea. Hoy no queda ninguno — Chat y Juegos, que eran paneles flotantes, ya
+//   tienen su página; alcanzó con darles `to` acá para que aparezcan en los dos lados.
 // - `keywords` son los nombres por los que la gente busca algo que en el menú se llama
 //   distinto ("mis proyectos" → Proyectos).
 
@@ -52,7 +51,7 @@ export function buildNavBlocks({ user, workspace, flags = {}, gamesVisible = fal
     { key: 'dashboard', to: '/', exact: true, label: 'Dashboard', icon: House },
     { key: 'projects',  to: '/proyectos', label: 'Proyectos', icon: FolderKanban, keywords: 'mis proyectos clientes cuentas' },
     ...(allowed.calendario ? [{ key: 'calendar', to: '/calendario', label: 'Calendario', icon: CalendarDays }] : []),
-    { key: 'chat', label: 'Chat', icon: MessageSquare },
+    { key: 'chat', to: '/chat', label: 'Chat', icon: MessageSquare },
     { key: 'realtime', to: '/realtime', label: 'Actividad', icon: Activity },
     // "Reportes" es el propio, para todo el mundo. El del equipo está en Administración
     // y se llama "Horas por proyecto" — antes los dos se llamaban igual y el admin no

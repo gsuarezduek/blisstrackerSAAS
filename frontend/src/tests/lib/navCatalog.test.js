@@ -121,13 +121,13 @@ describe('buildNavBlocks — bloque principal', () => {
     expect(keys(build(admin(), ALL_FLAGS, { gamesVisible: true }).primary)).toContain('games')
   })
 
-  it('Chat todavía no tiene ruta: el buscador lo saltea', () => {
+  it('Chat y Juegos ya tienen página: todo el bloque navega', () => {
+    // Eran paneles flotantes (sin `to`, el buscador los salteaba). Alcanzó con darles
+    // `to` en el catálogo para que aparezcan en el menú Y en el buscador.
     const { primary } = build(admin(), ALL_FLAGS, { gamesVisible: true })
-    expect(primary.find(i => i.key === 'chat').to).toBeUndefined()
-    // Juegos ya tiene su página; todo lo demás también navega.
+    expect(primary.find(i => i.key === 'chat').to).toBe('/chat')
     expect(primary.find(i => i.key === 'games').to).toBe('/juegos')
-    const navegables = primary.filter(i => i.to)
-    expect(navegables.length).toBe(primary.length - 1)
+    expect(primary.filter(i => i.to).length).toBe(primary.length)
   })
 
   it('cada ítem navegable tiene key y label, y no hay keys repetidas', () => {

@@ -325,7 +325,12 @@ export default function NotificationBell({ buttonClassName, panelClassName } = {
                   }
                   if (isChatMention) {
                     e.preventDefault()
-                    window.dispatchEvent(new CustomEvent('bliss:open-chat', { detail: { slug: n.channel?.slug || null } }))
+                    // `chatMessageId` ya venía en la notificación y no se usaba: con él,
+                    // en desktop la página abre el canal parado en el mensaje exacto
+                    // (el panel de mobile sigue abriendo el canal al final, como antes).
+                    window.dispatchEvent(new CustomEvent('bliss:open-chat', {
+                      detail: { slug: n.channel?.slug || null, messageId: n.chatMessageId || null },
+                    }))
                   }
                 }
 

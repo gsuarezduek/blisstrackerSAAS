@@ -2,7 +2,8 @@ const router = require('express').Router()
 const multer = require('multer')
 const {
   listChannels, createChannel, updateChannel, updateChannelPrivacy, deleteChannel,
-  listMessages, listPinned, searchMessages, sendMessage, sendMessageWithMedia, editMessage, deleteMessage, togglePin, toggleReaction,
+  listMessages, listPinned, searchMessages, listChannelFiles, listReplies,
+  sendMessage, sendMessageWithMedia, editMessage, deleteMessage, togglePin, toggleReaction,
   markRead, searchGifs, trendingGifs,
 } = require('../controllers/chat.controller')
 const { auth } = require('../middleware/auth')
@@ -48,10 +49,12 @@ router.delete('/channels/:id',    workspaceAdminOnly, deleteChannel)
 router.get('/channels/:id/messages',  listMessages)
 router.get('/channels/:id/pinned',    listPinned)
 router.get('/channels/:id/search',    searchMessages)
+router.get('/channels/:id/files',     listChannelFiles)   // lo compartido en el canal
 router.post('/channels/:id/messages', sendMessage)
 router.post('/channels/:id/messages/media', uploadFile, sendMessageWithMedia)
 router.post('/channels/:id/read',     markRead)
 
+router.get('/messages/:messageId/replies', listReplies)  // el hilo de un mensaje
 router.patch('/messages/:messageId',  editMessage)
 router.delete('/messages/:messageId', deleteMessage)
 router.patch('/messages/:messageId/pin', togglePin)

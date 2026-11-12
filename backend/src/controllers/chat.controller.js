@@ -327,6 +327,74 @@ async function searchMessages(req, res, next) {
   } catch (err) { next(err) }
 }
 
+/**
+ * GET /api/chat/messages/:messageId/replies — las respuestas a un mensaje.
+ *
+ * `replyToId` ya existía, pero solo se usaba para pintar la cita de una línea arriba de
+ * la respuesta: no había forma de ver "todas las respuestas a esto". La página de chat
+ * lo muestra como un hilo en su columna de contexto — dos listas de mensajes a la vez,
+ * que es lo que un panel de 400px no podía dar.
+ *
+ * El hilo es de UN nivel porque `replyToId` es de un nivel; no se cambia eso acá.
+ */
+async function listReplies(req, res, next) {
+  try {
+    const workspaceId = req.workspace.id
+    const messageId = Number(req.params.messageId)
+    if (!Number.isInteger(messageId)) return res.status(400).json({ error: 'Mensaje inválido' })
+
+    const root = await prisma.chatMessage.findFirst({ where: { id: messageId }, include: MESSAGE_INCLUDE })
+    if (!root) return res.status(404).json({ error: 'Mensaje no encontrado' })
+
+    const channel = await prisma.chatChannel.findFirst({ where: { id: root.channelId, workspaceId } })
+    if (!channel) return res.status(404).json({ error: 'Canal no encontrado' })
+    if (!await assertChannelAccess(req, res, channel)) return
+
+    const replies = await prisma.chatMessage.findMany({
+      where: { replyToId: messageId },
+      include: MESSAGE_INCLUDE,
+      orderBy: { id: 'asc' },
+    })
+    res.json({ root, replies })
+  } catch (err) { next(err) }
+}
+
+/**
+ * GET /api/chat/channels/:id/files — lo compartido en el canal (imágenes y archivos).
+ *
+ * `ChatAttachment` ya guardaba kind/mimeType/fileName/sizeBytes; lo que faltaba era
+ * poder verlos juntos sin scrollear la conversación entera. Se devuelve el mensaje de
+ * origen para poder saltar hasta él.
+ *
+ * Usa `ATTACHMENT_SELECT`, que deja afuera `objectKey`/`fileData` — los bytes y la
+ * ubicación en el bucket no salen nunca por la API.
+ */
+async function listChannelFiles(req, res, next) {
+  try {
+    const workspaceId = req.workspace.id
+    const channelId = Number(req.params.id)
+    const limit = Math.min(Number(req.query.limit) || 40, 100)
+    const before = Number(req.query.before) || null
+
+    const channel = await prisma.chatChannel.findFirst({ where: { id: channelId, workspaceId } })
+    if (!channel) return res.status(404).json({ error: 'Canal no encontrado' })
+    if (!await assertChannelAccess(req, res, channel)) return
+
+    const rows = await prisma.chatMessage.findMany({
+      where: {
+        channelId,
+        attachment: { isNot: null },
+        ...(before ? { id: { lt: before } } : {}),
+      },
+      include: MESSAGE_INCLUDE,
+      orderBy: { id: 'desc' },
+      take: limit + 1,
+    })
+    const hasMore = rows.length > limit
+    res.json({ messages: rows.slice(0, limit), hasMore })
+  } catch (err) { next(err) }
+}
+
 // Responder: solo válido si el mensaje citado es del MISMO canal — si no existe
 // (o es de otro canal/se borró justo ahora) se ignora en silencio, no rompe el envío.
 async function resolveReplyTarget(channelId, requestedReplyToId) {
@@ -726,6 +794,8 @@ async function trendingGifs(req, res, next) {
 }
 
 module.exports = {
+  listReplies,
+  listChannelFiles,
   listChannels,
   createChannel,
   updateChannel,

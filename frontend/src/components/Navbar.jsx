@@ -282,9 +282,10 @@ export default function Navbar() {
 
   // Lo que el catálogo no puede saber: badges en vivo y los ítems sin ruta propia
   // (Chat y Juegos abren su panel flotante con el mismo evento que el botón flotante).
+  // Chat y Juegos ya tienen página propia: acá solo se les suma el aviso.
   const EXTRAS = {
-    chat:     { onClick: emit('bliss:open-chat'), badge: chatBadge },
-    games:    { badge: gamesBadge },   // ya tiene ruta propia (/juegos)
+    chat:     { badge: chatBadge },
+    games:    { badge: gamesBadge },
     realtime: { live: true },
   }
   const withExtras = items => items.map(it => (EXTRAS[it.key] ? { ...it, ...EXTRAS[it.key] } : it))

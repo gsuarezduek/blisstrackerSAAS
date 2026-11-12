@@ -87,6 +87,7 @@ const Reports          = lazyWithReload(() => import('./pages/Reports'))
 const Reportes         = lazyWithReload(() => import('./pages/Reportes'))
 const Proyectos        = lazyWithReload(() => import('./pages/Proyectos'))
 const Juegos           = lazyWithReload(() => import('./pages/Juegos'))
+const Chat             = lazyWithReload(() => import('./pages/Chat'))
 const ProjectDetail    = lazyWithReload(() => import('./pages/ProjectDetail'))
 const ForgotPassword   = lazyWithReload(() => import('./pages/ForgotPassword'))
 const ResetPassword    = lazyWithReload(() => import('./pages/ResetPassword'))
@@ -248,6 +249,9 @@ export default function App() {
           <Route path="/calendario" element={<PrivateRoute><Calendario /></PrivateRoute>} />
           {/* Juegos es para cualquier miembro; /admin/gamification sigue siendo el CRUD. */}
           <Route path="/juegos"     element={<PrivateRoute><Juegos /></PrivateRoute>} />
+          {/* Dos rutas explícitas (no splat) para que useParams().slug quede limpio. */}
+          <Route path="/chat"       element={<PrivateRoute><Chat /></PrivateRoute>} />
+          <Route path="/chat/:slug" element={<PrivateRoute><Chat /></PrivateRoute>} />
           <Route path="/finanzas"   element={<FinanceRoute><Finanzas /></FinanceRoute>} />
           <Route path="/billing"    element={<PrivateRoute><Billing  /></PrivateRoute>} />
           <Route path="/reports"             element={<AdminRoute><Reports      /></AdminRoute>} />
