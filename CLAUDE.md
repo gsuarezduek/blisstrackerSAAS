@@ -20,7 +20,6 @@ Para que cada sesión de Claude Code cargue menos contexto de entrada, el detall
 |---|---|
 | `backend/CLAUDE.md` | Arquitectura backend (Express/Prisma/middleware/servicios compartidos) + env vars de `backend/.env`. Se carga solo al trabajar en `backend/` |
 | `frontend/CLAUDE.md` | Arquitectura frontend (contexts/hooks/convenciones de UI/Navbar/atajos/buscador) + env vars de `frontend/.env.development`. Se carga solo al trabajar en `frontend/` |
-| `mobile/CLAUDE.md` | App React Native (Expo): arquitectura, auth sin subdominio, push/chat/biometría. Se carga solo al trabajar en `mobile/` |
 | `docs/claude/marketing.md` | GEO/SEO, RRSS (Instagram/TikTok/LinkedIn/Facebook/YouTube), Ads, Competidores, Informes mensuales, Objetivos de marketing, Domain Rating, SERP, servicios de scraping |
 | `docs/claude/ventas.md` | CRM: Empresas/Contactos/Leads, Propuestas (documento estructurado), Pipeline Kanban, Métricas/Forecast, Recordatorios |
 | `docs/claude/finanzas.md` | Finanzas: cuentas/saldos/ajustes, movimientos/impuestos/cheques, clientes (cuenta corriente, razón social) y facturación ARCA, Extras (cobros y pagos al equipo), Pendientes, rutas |
@@ -62,14 +61,8 @@ npm run test:run     # Vitest single run
 npm run test:coverage
 ```
 
-### Mobile (`cd mobile`)
-```bash
-npm start                                          # Metro bundler / Expo Dev Tools
-npm run ios                                        # simulador de iOS
-npm run android                                    # emulador de Android
-eas build --platform android --profile preview     # APK de prueba (requiere `npm install -g eas-cli` + login a una cuenta de Expo)
-```
-App React Native (Expo) para usuarios no-admin, en desarrollo — ver `mobile/CLAUDE.md` para arquitectura, auth sin subdominio, push/chat/biometría y el detalle de los perfiles de `eas.json`.
+### Mobile (`mobile/`) — CONGELADA (nov 2026)
+App React Native (Expo) para usuarios no-admin. **No se analiza ni se actualiza**: el código queda en el repo tal como está y no se trabaja en los próximos meses. `.claude/settings.json` lo hace cumplir con una regla `deny` sobre `mobile/**`; para retomarla, borrar esa regla. Lo que vive del lado del servidor (push notifications: `services/pushNotification.service.js`, modelo `DeviceToken`, `POST /api/devices/register`) sigue funcionando y **sí** se mantiene.
 
 ### Environment variables
 Variables específicas de cada lado: `backend/CLAUDE.md` (DB, JWT, Resend, Stripe, Google/Meta/TikTok/LinkedIn, Apify, R2, etc.) y `frontend/CLAUDE.md` (`VITE_API_URL`, `VITE_GOOGLE_CLIENT_ID`). Se cargan solo al trabajar en esa carpeta.
@@ -175,7 +168,7 @@ Only one task can be `IN_PROGRESS` per user at a time (enforced via `assertNoAct
 
 **Project access model (team = etiqueta, no barrera):** `ProjectMember` ya **no** es una barrera de acceso, sino la etiqueta del "equipo principal" (los que trabajan principalmente en el proyecto). Cualquier integrante del workspace puede **ver cualquier proyecto** y **crear/asignar tareas** en él sin pasar a ser miembro del equipo. Concretamente: `GET /api/projects` devuelve **todos** los proyectos activos del workspace (no solo los del usuario); las lecturas de proyecto (`getMembers`, `projectTasks`, `projectCompletedHistory`) están abiertas a cualquier miembro del workspace; `POST /api/tasks` solo valida que el destinatario sea un miembro **activo del workspace** (no del proyecto), y el colaborador puntual **no** se agrega al equipo. Las escrituras de ficha del proyecto `saveLinks` y `saveInfo` siguen siendo member-only; **`saveSituation` (Situación de la cuenta) está abierta a cualquier miembro del workspace** (el editor se muestra a todos, así que rechazar con 403 daba un error confuso). En `AddTaskModal.jsx` el selector "Asignar a" lista a todo el workspace agrupado en `<optgroup>` "Equipo del proyecto" / "Otros del workspace".
 
-**Starred projects (`/my-projects`):** `ProjectStar` (join `projectId` + `userId`) marca proyectos destacados **por usuario** (preferencia personal, análoga al starring de tareas pero booleana). `GET /api/projects` incluye `starred` por proyecto; `PATCH /api/projects/:id/star` togglea. `MyProjects.jsx` agrupa en 3 secciones en orden: **Proyectos destacados** (estrella, si hay) → **Mis proyectos** (donde soy del equipo) → **Otros proyectos del workspace**. Un destacado se saca de su grupo original y sube a Destacados. La estrella amarilla reemplazó al viejo punto verde/rojo; el estado "tiene bloqueadas" se indica ahora con un puntito rojo condicional + la pill roja existente. **Alta de proyecto desde Mis Proyectos:** botón "Nuevo proyecto" (solo admin/owner, mismo `workspaceAdminOnly` de `POST /api/projects`) abre `NewProjectModal.jsx` (nombre + servicios + equipo; quien lo crea queda en el equipo) y al crear navega a la ficha.
+**Starred projects (`/proyectos`):** `ProjectStar` (join `projectId` + `userId`) marca proyectos destacados **por usuario** (preferencia personal, análoga al starring de tareas pero booleana). `GET /api/projects` incluye `starred` por proyecto; `PATCH /api/projects/:id/star` togglea. `Proyectos.jsx` agrupa en 2 secciones: **Mis proyectos** (donde soy del equipo) → **Otros proyectos del workspace**, con un selector **Todos / Míos** (recordado en `localStorage` `bliss_projects_scope`; abre en Todos, porque el menú promete el directorio del workspace) y, para admin, los **archivados** plegados al pie (`GET /projects/all`, pedidos recién al abrirlos). **Ya no hay sección "Destacados"**: viven en la barra lateral (`hooks/useStarredProjects.js`), siempre a la vista, y acá sacaban al proyecto de su grupo real — uno mío y destacado desaparecía de "Mis proyectos". La estrella sigue en cada tarjeta y hay un orden "Destacados primero" para quien los quiera arriba. La estrella amarilla reemplazó al viejo punto verde/rojo; el estado "tiene bloqueadas" se indica ahora con un puntito rojo condicional + la pill roja existente. **Alta de proyecto desde Proyectos:** botón "Nuevo proyecto" (solo admin/owner, mismo `workspaceAdminOnly` de `POST /api/projects`) abre `NewProjectModal.jsx` (nombre + servicios + equipo; quien lo crea queda en el equipo) y al crear navega a la ficha.
 
 **Project info (websiteUrl + connections):** `Project.websiteUrl String?` used for GEO analysis. `Project.connections String @default("{}")` — JSON with keys `instagram`, `facebook`, `linkedin`, `twitter`, `tiktok`, `youtube`. Managed from the **Info** tab in `ProjectDetail.jsx` via `ProjectInfoTab.jsx`. Admins no longer manage URL/links from the Admin panel.
 
@@ -273,9 +266,9 @@ Hay además un quinto flag de preferencia personal, `notesBoardEnabled` (`@defau
 /reset-password   → ResetPassword.jsx
 /condiciones      → TermsPage.jsx        (pública) — Términos de servicio
 /privacidad       → TermsPage.jsx        (pública) — Política de privacidad
-/my-reports       → MyReports.jsx        (PrivateRoute)
-/my-projects      → MyProjects.jsx       (PrivateRoute)
-/my-projects/:id  → ProjectDetail.jsx    (PrivateRoute)
+/reportes       → Reportes.jsx        (PrivateRoute)
+/proyectos      → Proyectos.jsx       (PrivateRoute)
+/proyectos/:id  → ProjectDetail.jsx    (PrivateRoute)
 /profile          → MyProfile.jsx        (PrivateRoute)
 /preferences      → Preferences.jsx      (PrivateRoute)
 /realtime         → RealTime.jsx         (PrivateRoute)

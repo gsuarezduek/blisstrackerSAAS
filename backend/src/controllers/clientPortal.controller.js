@@ -672,7 +672,7 @@ async function notifyFirstPortalLogin(portal, contact) {
         prisma.workspace.findUnique({ where: { id: portal.workspaceId }, select: { slug: true } }),
       ])
       const domain = process.env.APP_DOMAIN || 'blisstracker.app'
-      const projectUrl = workspace ? `https://${workspace.slug}.${domain}/my-projects/${portal.projectId}` : null
+      const projectUrl = workspace ? `https://${workspace.slug}.${domain}/proyectos/${portal.projectId}` : null
       await sendPortalFirstLoginEmail(emails, {
         projectName: project?.name || 'Proyecto', contactName: contact.name, contactEmail: contact.email, projectUrl,
       }, portal.workspaceId)

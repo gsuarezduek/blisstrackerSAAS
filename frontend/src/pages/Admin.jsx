@@ -9,7 +9,7 @@ import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 
 const TABS = [
-  { id: 'projects',  label: 'Proyectos' },
+  { id: 'projects',  label: 'Proyectos (administrar)' },
   { id: 'team',      label: 'Equipo' },
   { id: 'services',  label: 'Servicios' },
   { id: 'roles',     label: 'Roles' },

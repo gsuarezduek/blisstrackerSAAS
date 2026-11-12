@@ -168,7 +168,7 @@ export default function UserProfile() {
               {projects.map(p => (
                 <Link
                   key={p.id}
-                  to={`/my-projects/${p.id}`}
+                  to={`/proyectos/${p.id}`}
                   className="text-sm px-3 py-1.5 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-primary-100 dark:hover:bg-primary-900/30 hover:text-primary-700 dark:hover:text-primary-400 transition-colors"
                 >
                   {p.name}

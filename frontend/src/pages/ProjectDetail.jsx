@@ -328,7 +328,7 @@ export default function ProjectDetail() {
           return (
             <div className="flex items-center justify-between mb-5">
               <button
-                onClick={() => navigate('/my-projects')}
+                onClick={() => navigate('/proyectos')}
                 className="flex items-center gap-1.5 text-sm text-gray-500 dark:text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
@@ -338,7 +338,7 @@ export default function ProjectDetail() {
               </button>
               {nextProject && (
                 <button
-                  onClick={() => navigate(`/my-projects/${encodeURIComponent(nextProject.name)}`)}
+                  onClick={() => navigate(`/proyectos/${encodeURIComponent(nextProject.name)}`)}
                   className="flex items-center gap-1.5 text-sm text-gray-500 dark:text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
                   title="Siguiente proyecto"
                 >

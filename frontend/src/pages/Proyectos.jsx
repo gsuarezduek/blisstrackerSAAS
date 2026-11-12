@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import Navbar from '../components/Navbar'
 import LoadingSpinner from '../components/LoadingSpinner'
 import api from '../api/client'
 import { useAuth } from '../context/AuthContext'
 import { AvatarStack } from './project-detail/ui'
-import { FolderOpen, Plus, Lock } from 'lucide-react'
+import { FolderOpen, Plus, Lock, ChevronDown } from 'lucide-react'
 import { Icon } from '../components/ui/Icon'
 import NewProjectModal from '../components/NewProjectModal'
 import { matchesSearch } from '../utils/textSearch'
@@ -113,6 +113,7 @@ const SORT_CHOICES = [
   { key: 'active',    label: 'Más activos' },
   { key: 'inactive',  label: 'Menos activos' },
   { key: 'blocked',   label: 'Bloqueadas primero' },
+  { key: 'starred',   label: 'Destacados primero' },
 ]
 
 // Select compacto de la barra de herramientas; resaltado cuando filtra algo.
@@ -172,6 +173,10 @@ function sortProjects(projects, sort) {
         if ((cb.BLOCKED ?? 0) !== (ca.BLOCKED ?? 0)) return (cb.BLOCKED ?? 0) - (ca.BLOCKED ?? 0)
         return a.name.localeCompare(b.name)
       }
+      case 'starred': {
+        if (!!b.starred !== !!a.starred) return b.starred ? 1 : -1
+        return a.name.localeCompare(b.name)
+      }
       case 'name_desc':
         return b.name.localeCompare(a.name)
       default: // 'name'
@@ -180,7 +185,9 @@ function sortProjects(projects, sort) {
   })
 }
 
-export default function MyProjects() {
+const LS_SCOPE = 'bliss_projects_scope'
+
+export default function Proyectos() {
   const { user } = useAuth()
   const navigate       = useNavigate()
   const [projects,     setProjects]     = useState([])
@@ -190,12 +197,25 @@ export default function MyProjects() {
   const [filterService, setFilterService] = useState('')
   const [filterPerson,  setFilterPerson]  = useState('')
   const [creating,      setCreating]      = useState(false)
+  // Esta pantalla es el directorio del workspace (el menú dice "Proyectos", no "Mis
+  // proyectos"), así que abre en "Todos"; quien trabaja siempre sobre los suyos lo
+  // deja en "Míos" y se le recuerda — es cómo mirar, no un dato del workspace.
+  const [scope, setScope] = useState(() => {
+    try { return localStorage.getItem(LS_SCOPE) === 'mine' ? 'mine' : 'all' } catch { return 'all' }
+  })
+  const [showArchived, setShowArchived] = useState(false)
+  const [archived,     setArchived]     = useState(null)   // null = todavía no se pidió
   const canCreate = !!user?.isAdmin
+
+  function changeScope(next) {
+    setScope(next)
+    try { localStorage.setItem(LS_SCOPE, next) } catch { /* modo privado */ }
+  }
 
   // Al crear, se abre la ficha del proyecto nuevo (ahí se completan sitio web, redes, portal…).
   function handleCreated(project) {
     setCreating(false)
-    navigate(`/my-projects/${encodeURIComponent(project.name)}`)
+    navigate(`/proyectos/${encodeURIComponent(project.name)}`)
   }
 
   useEffect(() => {
@@ -203,6 +223,15 @@ export default function MyProjects() {
       .then(r => setProjects(r.data))
       .finally(() => setLoading(false))
   }, [])
+
+  // Los archivados se piden recién al abrirlos, y solo para admin: `GET /projects/all`
+  // es `workspaceAdminOnly` y es el único que devuelve los inactivos.
+  useEffect(() => {
+    if (!showArchived || archived !== null || !user?.isAdmin) return
+    api.get('/projects/all')
+      .then(r => setArchived((r.data || []).filter(p => !p.active)))
+      .catch(() => setArchived([]))
+  }, [showArchived, archived, user?.isAdmin])
 
   // Destacar / quitar destacado (preferencia personal). Optimista + revierte si falla.
   function toggleStar(e, project) {
@@ -225,8 +254,12 @@ export default function MyProjects() {
     projects.flatMap(p => (p.members ?? []).map(pm => [pm.user.id, pm.user]))
   ).values()].sort((a, b) => a.name.localeCompare(b.name))
 
+  const myId = user?.id
+  const isMine = p => (p.members ?? []).some(pm => pm.user.id === myId)
+
   const filtered = sortProjects(
     projects.filter(p => {
+      if (scope === 'mine' && !isMine(p)) return false
       if (!matchesSearch(p.name, search)) return false
       if (filterService && !(p.services ?? []).some(ps => String(ps.service.id) === filterService)) return false
       if (filterPerson  && !(p.members  ?? []).some(pm => String(pm.user.id)    === filterPerson))  return false
@@ -235,15 +268,14 @@ export default function MyProjects() {
     sort
   )
 
-  // Tres grupos: Destacados (estrella, preferencia personal), Mis proyectos (donde
-  // soy del equipo) y Otros del workspace. ProjectMember es solo la etiqueta de
-  // equipo; ver y aportar tareas está abierto a todos. Un destacado se saca de su
-  // grupo original y sube a Destacados.
-  const myId = user?.id
-  const isMine = p => (p.members ?? []).some(pm => pm.user.id === myId)
-  const starredProjects = filtered.filter(p => p.starred)
-  const mineProjects    = filtered.filter(p => !p.starred && isMine(p))
-  const otherProjects   = filtered.filter(p => !p.starred && !isMine(p))
+  // Dos grupos: Mis proyectos (donde soy del equipo) y Otros del workspace.
+  // ProjectMember es solo la etiqueta de equipo; ver y aportar tareas está abierto a
+  // todos. **Ya no hay sección "Destacados"**: viven en la barra lateral, siempre a la
+  // vista, y acá sacaban al proyecto de su grupo real (uno mío y destacado desaparecía
+  // de "Mis proyectos"). La estrella sigue en cada tarjeta y hay un orden
+  // "Destacados primero" para quien los quiera arriba.
+  const mineProjects  = filtered.filter(isMine)
+  const otherProjects = scope === 'mine' ? [] : filtered.filter(p => !isMine(p))
 
   // Para "bloqueadas primero": resaltar el borde si tiene bloqueadas
   const hasBlocked = sort === 'blocked'
@@ -256,7 +288,7 @@ export default function MyProjects() {
       return (
         <div
           key={p.id}
-          onClick={() => navigate(`/my-projects/${encodeURIComponent(p.name)}`)}
+          onClick={() => navigate(`/proyectos/${encodeURIComponent(p.name)}`)}
           className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-5 flex flex-col gap-3 cursor-pointer hover:border-gray-300 dark:hover:border-gray-600 transition-colors opacity-70"
         >
           <div className="flex items-center gap-2 min-w-0">
@@ -281,7 +313,7 @@ export default function MyProjects() {
     return (
       <div
         key={p.id}
-        onClick={() => navigate(`/my-projects/${encodeURIComponent(p.name)}`)}
+        onClick={() => navigate(`/proyectos/${encodeURIComponent(p.name)}`)}
         className={`bg-white dark:bg-gray-800 rounded-2xl border p-5 flex flex-col gap-4 cursor-pointer hover:shadow-md transition-all ${
           hasBlocked && isBlocked
             ? 'border-red-300 dark:border-red-700 hover:border-red-400 dark:hover:border-red-600'
@@ -370,6 +402,14 @@ export default function MyProjects() {
             <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Proyectos</h1>
             <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">
               {projects.length} proyecto{projects.length !== 1 ? 's' : ''} en el workspace
+              {canCreate && (
+                <>
+                  {' · '}
+                  <Link to="/admin?tab=projects" className="text-primary-600 dark:text-primary-400 hover:underline">
+                    Administrar proyectos →
+                  </Link>
+                </>
+              )}
             </p>
           </div>
           {canCreate && (
@@ -417,6 +457,23 @@ export default function MyProjects() {
               )}
             </div>
             <div className="flex flex-wrap gap-2">
+              {/* El alcance va primero porque cambia QUÉ se lista; los demás filtran
+                  dentro de eso. "Todos" es el default: el menú promete el directorio. */}
+              <div className="inline-flex rounded-xl border border-gray-300 dark:border-gray-600 overflow-hidden">
+                {[{ k: 'all', label: 'Todos' }, { k: 'mine', label: 'Míos' }].map(o => (
+                  <button
+                    key={o.k}
+                    type="button"
+                    onClick={() => changeScope(o.k)}
+                    aria-pressed={scope === o.k}
+                    className={`px-3 py-2 text-sm transition-colors ${scope === o.k
+                      ? 'bg-primary-50 text-primary-700 font-semibold dark:bg-primary-900/20 dark:text-primary-400'
+                      : 'text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-700'}`}
+                  >
+                    {o.label}
+                  </button>
+                ))}
+              </div>
               {allServices.length > 0 && (
                 <ToolbarSelect value={filterService} onChange={setFilterService} active={!!filterService} label="Servicio">
                   <option value="">Servicio</option>
@@ -440,20 +497,6 @@ export default function MyProjects() {
           <p className="text-sm text-gray-400 text-center py-8">Sin resultados para los filtros aplicados</p>
         )}
 
-        {starredProjects.length > 0 && (
-          <section className="mb-8">
-            <h2 className="flex items-center gap-1.5 text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4 text-yellow-400">
-                <path fillRule="evenodd" d="M10.788 3.21c.448-1.077 1.976-1.077 2.424 0l2.082 5.007 5.404.433c1.164.093 1.636 1.545.749 2.305l-4.117 3.527 1.257 5.273c.271 1.136-.964 2.033-1.96 1.425L10 18.354 5.373 21.18c-.996.608-2.231-.29-1.96-1.425l1.257-5.273-4.117-3.527c-.887-.76-.415-2.212.749-2.305l5.404-.433 2.082-5.005z" clipRule="evenodd" />
-              </svg>
-              Proyectos destacados
-            </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-              {starredProjects.map(renderCard)}
-            </div>
-          </section>
-        )}
-
         {mineProjects.length > 0 && (
           <section className="mb-8">
             <h2 className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">
@@ -473,6 +516,48 @@ export default function MyProjects() {
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
               {otherProjects.map(renderCard)}
             </div>
+          </section>
+        )}
+
+        {/* Archivados: hasta ahora solo se veían desde Admin → Proyectos. Van al final,
+            plegados, porque la pregunta "¿dónde quedó aquel proyecto?" es real pero rara. */}
+        {!loading && canCreate && (
+          <section className="mt-10 border-t border-gray-200 dark:border-gray-700 pt-5">
+            <button
+              type="button"
+              onClick={() => setShowArchived(v => !v)}
+              className="flex items-center gap-1.5 text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
+              aria-expanded={showArchived}
+            >
+              Archivados
+              {archived !== null && (
+                <span className="text-xs bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500 rounded-full px-2 py-0.5 normal-case">
+                  {archived.length}
+                </span>
+              )}
+              <Icon as={ChevronDown} size={14} className={`transition-transform ${showArchived ? '' : '-rotate-90'}`} />
+            </button>
+            {showArchived && (
+              archived === null
+                ? <LoadingSpinner className="py-6" />
+                : archived.length === 0
+                  ? <p className="text-sm text-gray-400 mt-3">No hay proyectos archivados.</p>
+                  : (
+                    <ul className="mt-3 divide-y divide-gray-100 dark:divide-gray-700">
+                      {archived.map(p => (
+                        <li key={p.id}>
+                          <Link
+                            to={`/proyectos/${encodeURIComponent(p.name)}`}
+                            className="flex items-center justify-between gap-3 py-2.5 text-sm text-gray-500 dark:text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
+                          >
+                            <span className="truncate">{p.name}</span>
+                            <span className="text-xs text-gray-400 flex-shrink-0">Archivado</span>
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  )
+            )}
           </section>
         )}
       <NewProjectModal open={creating} onClose={() => setCreating(false)} onCreated={handleCreated} currentUserId={user?.id} />

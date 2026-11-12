@@ -462,7 +462,7 @@ function SummaryTab({ user, summary, summaryState, requests, lastLogin, missing,
             <ul className="px-4 pb-4 flex flex-wrap gap-1.5">
               {summary.projects.map(p => (
                 <li key={p.id}>
-                  <Link to={`/my-projects/${p.id}`}
+                  <Link to={`/proyectos/${p.id}`}
                     className="inline-block text-sm px-2.5 py-1 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600">
                     {p.name}
                   </Link>

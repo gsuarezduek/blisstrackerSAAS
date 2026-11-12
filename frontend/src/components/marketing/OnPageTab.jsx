@@ -204,7 +204,7 @@ export default function OnPageTab({ projectId, projects }) {
   if (noUrl) {
     return <SetupHintCard icon={Globe} label="Este proyecto no tiene una URL configurada"
       hint="Agregá la URL del sitio para correr la auditoría on-page."
-      to={`/my-projects/${selectedProject.id}?infoTab=info`} ctaLabel="Agregar URL en Info →" />
+      to={`/proyectos/${selectedProject.id}?infoTab=info`} ctaLabel="Agregar URL en Info →" />
   }
 
   const isRunning = running || active?.status === 'running' || active?.status === 'pending'

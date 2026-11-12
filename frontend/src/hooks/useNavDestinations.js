@@ -2,12 +2,12 @@ import { useAuth } from '../context/AuthContext'
 import { useWorkspace } from '../context/WorkspaceContext'
 import { useFeatureFlag } from './useFeatureFlag'
 import { NAV as MARKETING_NAV } from '../components/marketing/marketingNav'
+import { buildNavBlocks } from '../lib/navCatalog'
 
-// Destinos navegables por ruta para el Command Palette (Cmd/Ctrl+K). Reimplementa,
-// a propósito en un hook separado (no compartido), el mismo criterio de gating por
-// feature flag + rol que ya usa Navbar.jsx (primaryItems/moduleItems/adminItems) —
-// se prefirió esta pequeña duplicación a refactorizar ese archivo central, de alto
-// tráfico y sin cobertura de tests, para un feature secundario.
+// Destinos navegables por ruta para el Command Palette (Cmd/Ctrl+K). El criterio de
+// gating por feature flag + rol NO vive acá: sale de `lib/navCatalog.js`, el mismo
+// catálogo que arma la barra lateral (antes estaba duplicado en los dos archivos, y
+// cada cambio de navegación había que acordarse de hacerlo dos veces).
 //
 // Además de las pantallas principales, cada módulo con sub-pestañas (RRHH, EOS,
 // Marketing, Ventas, Contenido, Calendario, Admin) suma un destino por sub-pestaña con label
@@ -35,35 +35,31 @@ export default function useNavDestinations() {
 
   if (!user) return []
 
-  const ventasAllowed    = ventasEnabled && (isAdmin || user?.isSales)
-  const marketingAllowed = marketingEnabled && !!user?.moduleAccess?.marketing
-  const contenidoAllowed = contenidoEnabled && !!user?.moduleAccess?.contenido
-  const rrhhAllowed      = rrhhEnabled && !!user?.moduleAccess?.rrhh
-  const calendarioAllowed = calendarioEnabled && !!user?.moduleAccess?.calendario
-  const finanzasAllowed  = finanzasEnabled && (isAdmin || !!user?.moduleAccess?.finanzas)
-  const productivityEnabled = workspace?.productivityEnabled !== false
-  const ventasBase = isAdmin ? '/admin/ventas' : '/ventas'
+  // Los destinos principales salen del MISMO catálogo que arma la barra lateral, así
+  // el buscador no puede ofrecer una sección que el menú no muestra (ni al revés).
+  const { primary, modules, admin, allowed, ventasBase } = buildNavBlocks({
+    user,
+    workspace,
+    gamesVisible: false, // Juegos todavía no tiene ruta propia; nada que ofrecer acá.
+    flags: {
+      marketing: marketingEnabled, eos: eosEnabled, gamification: gamificationEnabled,
+      ventas: ventasEnabled, contenido: contenidoEnabled, rrhh: rrhhEnabled,
+      calendario: calendarioEnabled, finanzas: finanzasEnabled, whatsapp: whatsappEnabled,
+    },
+  })
+
+  const ventasAllowed     = allowed.ventas
+  const marketingAllowed  = allowed.marketing
+  const contenidoAllowed  = allowed.contenido
+  const rrhhAllowed       = allowed.rrhh
+  const calendarioAllowed = allowed.calendario
+  const finanzasAllowed   = allowed.finanzas
+  const productivityEnabled = allowed.productivity
 
   const destinations = [
-    { to: '/', label: 'Dashboard' },
-    { to: '/my-projects', label: 'Proyectos' },
-    { to: '/realtime', label: 'Actividad' },
-    ...(!isAdmin ? [{ to: '/my-reports', label: 'Reportes' }] : []),
-
-    ...(ventasAllowed ? [{ to: ventasBase, label: 'Ventas' }] : []),
-    ...(marketingAllowed ? [{ to: '/marketing', label: 'Marketing' }] : []),
-    ...(contenidoAllowed ? [{ to: '/contenido', label: 'Contenido' }] : []),
-    ...(rrhhAllowed ? [{ to: '/admin/rrhh', label: 'RRHH' }] : []),
-    ...(calendarioAllowed ? [{ to: '/calendario', label: 'Calendario' }] : []),
-    ...(finanzasAllowed ? [{ to: '/finanzas', label: 'Finanzas' }] : []),
-
-    // Administración — mismo gate isAdmin que el bloque Administración de Navbar.jsx (adminItems).
-    ...(isAdmin ? [
-      { to: '/reports', label: 'Reportes' },
-      ...(eosEnabled ? [{ to: '/admin/eos', label: 'EOS' }] : []),
-      ...(gamificationEnabled ? [{ to: '/admin/gamification', label: 'Gamification' }] : []),
-      { to: '/admin', label: 'Panel' },
-    ] : []),
+    // `.filter(d => d.to)` deja afuera lo que todavía no es una ruta (Chat, Juegos):
+    // el día que tengan página propia aparecen acá solos.
+    ...[...primary, ...modules, ...admin].filter(d => d.to).map(({ to, label, keywords }) => ({ to, label, keywords })),
 
     { to: '/profile', label: 'Mi Perfil' },
     { to: '/docs', label: 'Docs' },
@@ -160,7 +156,7 @@ export default function useNavDestinations() {
 
   if (isAdmin) {
     const tabs = [
-      { id: 'projects', label: 'Proyectos' },
+      { id: 'projects', label: 'Proyectos (administrar)' },
       { id: 'team',     label: 'Equipo' },
       { id: 'services', label: 'Servicios' },
       { id: 'roles',    label: 'Roles' },

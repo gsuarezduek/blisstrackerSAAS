@@ -13,7 +13,9 @@ function makeRes() {
 // ── auth ──────────────────────────────────────────────────────────────────────
 
 describe('auth middleware', () => {
-  it('llama next() y setea req.user con un token válido', () => {
+  // `auth` es async desde que valida la frescura de la sesión (sessionRevoked), así
+  // que next() se llama en un microtask posterior: sin await, el assert corre antes.
+  it('llama next() y setea req.user con un token válido', async () => {
     const payload = { userId: 1, workspaceId: 1, role: 'member', isSuperAdmin: false, name: 'Ana', email: 'ana@test.com' }
     const token = jwt.sign(payload, SECRET)
 
@@ -21,7 +23,7 @@ describe('auth middleware', () => {
     const res  = makeRes()
     const next = jest.fn()
 
-    auth(req, res, next)
+    await auth(req, res, next)
 
     expect(next).toHaveBeenCalledTimes(1)
     expect(req.user.userId).toBe(1)

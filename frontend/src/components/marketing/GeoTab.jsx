@@ -182,7 +182,7 @@ export default function GeoTab({ projectId, projects, onSelectProject }) {
           icon={Globe}
           label="Este proyecto no tiene una URL configurada"
           hint="Agregá la URL del sitio para correr la auditoría GEO y medir la visibilidad en buscadores con IA."
-          to={`/my-projects/${selectedProject.id}?infoTab=info`}
+          to={`/proyectos/${selectedProject.id}?infoTab=info`}
           ctaLabel="Agregar URL en Info →"
         />
       )}

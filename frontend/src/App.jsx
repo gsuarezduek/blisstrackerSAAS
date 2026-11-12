@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useParams, useLocation } from 'react-router-dom'
 import { isWorkspaceSubdomain } from './utils/domain'
 import { GoogleOAuthProvider } from '@react-oauth/google'
 import { AuthProvider, useAuth } from './context/AuthContext'
@@ -83,8 +83,8 @@ const Admin            = lazyWithReload(() => import('./pages/Admin'))
 const RRHH             = lazyWithReload(() => import('./pages/RRHH'))
 const RealTime         = lazyWithReload(() => import('./pages/RealTime'))
 const Reports          = lazyWithReload(() => import('./pages/Reports'))
-const MyReports        = lazyWithReload(() => import('./pages/MyReports'))
-const MyProjects       = lazyWithReload(() => import('./pages/MyProjects'))
+const Reportes         = lazyWithReload(() => import('./pages/Reportes'))
+const Proyectos        = lazyWithReload(() => import('./pages/Proyectos'))
 const ProjectDetail    = lazyWithReload(() => import('./pages/ProjectDetail'))
 const ForgotPassword   = lazyWithReload(() => import('./pages/ForgotPassword'))
 const ResetPassword    = lazyWithReload(() => import('./pages/ResetPassword'))
@@ -114,6 +114,14 @@ const SharedFolderPublic = lazyWithReload(() => import('./pages/SharedFolderPubl
 const SharedFilePublic   = lazyWithReload(() => import('./pages/SharedFilePublic'))
 const Blog              = lazyWithReload(() => import('./pages/Blog'))
 const BlogPost          = lazyWithReload(() => import('./pages/BlogPost'))
+
+// /my-projects/:id → /proyectos/:id, conservando el ?infoTab=, ?task=, ?fileId=… que
+// traen los deep-links de notificaciones, del buscador y de los mails.
+function RedirectProject() {
+  const { id } = useParams()
+  const { search, hash } = useLocation()
+  return <Navigate to={`/proyectos/${encodeURIComponent(id)}${search}${hash}`} replace />
+}
 
 function PrivateRoute({ children }) {
   const { user, loading, workspaceSuspended } = useAuth()
@@ -218,9 +226,15 @@ export default function App() {
           <Route path="/verify-email-change" element={<VerifyEmailChange />} />
           <Route path="/verify-email" element={<VerifyEmail />} />
           <Route path="/" element={<RootPage />} />
-          <Route path="/my-reports"  element={<PrivateRoute><MyReports  /></PrivateRoute>} />
-          <Route path="/my-projects" element={<PrivateRoute><MyProjects /></PrivateRoute>} />
-          <Route path="/my-projects/:id" element={<PrivateRoute><ProjectDetail /></PrivateRoute>} />
+          <Route path="/reportes"  element={<PrivateRoute><Reportes  /></PrivateRoute>} />
+          <Route path="/proyectos" element={<PrivateRoute><Proyectos /></PrivateRoute>} />
+          <Route path="/proyectos/:id" element={<PrivateRoute><ProjectDetail /></PrivateRoute>} />
+          {/* Rutas viejas: quedan para siempre. Circulan en mails ya enviados, en
+              notificaciones y en links de archivos compartidos; sin esto el catch-all
+              de abajo se los comería mandándolos al Dashboard, perdiendo el proyecto. */}
+          <Route path="/my-reports"      element={<Navigate to="/reportes" replace />} />
+          <Route path="/my-projects"     element={<Navigate to="/proyectos" replace />} />
+          <Route path="/my-projects/:id" element={<RedirectProject />} />
           <Route path="/profile"      element={<PrivateRoute><MyProfile    /></PrivateRoute>} />
           <Route path="/users/:id"    element={<PrivateRoute><UserProfile  /></PrivateRoute>} />
           <Route path="/preferences"  element={<PrivateRoute><Preferences  /></PrivateRoute>} />

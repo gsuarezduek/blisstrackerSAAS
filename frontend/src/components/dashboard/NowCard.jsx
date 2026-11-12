@@ -29,7 +29,7 @@ function Meta({ task, onOpenComments }) {
   const publishInfo = task.contentPiece?.scheduledDate ? fmtPublishDate(task.contentPiece.scheduledDate) : null
   return (
     <div className="flex items-center gap-x-3 gap-y-1 flex-wrap text-sm text-gray-500 dark:text-gray-400">
-      <Link to={`/my-projects/${task.project.id}`} className="font-medium text-gray-700 dark:text-gray-300 hover:text-primary-600">{task.project.name}</Link>
+      <Link to={`/proyectos/${task.project.id}`} className="font-medium text-gray-700 dark:text-gray-300 hover:text-primary-600">{task.project.name}</Link>
       {task.recurrenceId && <span className="inline-flex items-center gap-1"><Icon as={Repeat} size={14} />Recurrente</span>}
       {task.contentPiece && (
         <Link
@@ -75,7 +75,7 @@ export default function NowCard({ activeTask, suggestion, onUpdate, onOpenCommen
       }
       const { data } = await api.patch(`/tasks/${task.id}/${endpoint}`, body)
       if (data.meetingStarted) {
-        navigate(`/my-projects/${data.projectId}?infoTab=reuniones&meeting=${data.meetingId}`)
+        navigate(`/proyectos/${data.projectId}?infoTab=reuniones&meeting=${data.meetingId}`)
         return true
       }
       onUpdate(data)

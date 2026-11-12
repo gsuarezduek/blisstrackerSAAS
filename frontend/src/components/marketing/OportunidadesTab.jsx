@@ -190,7 +190,7 @@ export default function OportunidadesTab({ projectId, projects, onSelectProject 
     if (err.code === 'NO_SITE_URL') {
       return <SetupHintCard icon={Globe} label="Este proyecto no tiene una URL configurada"
         hint="Agregá la URL del sitio para calcular las oportunidades SEO desde Search Console."
-        to={selectedProject ? `/my-projects/${selectedProject.id}?infoTab=info` : undefined} ctaLabel="Agregar URL en Info →" />
+        to={selectedProject ? `/proyectos/${selectedProject.id}?infoTab=info` : undefined} ctaLabel="Agregar URL en Info →" />
     }
     return (
       <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-8 text-center">

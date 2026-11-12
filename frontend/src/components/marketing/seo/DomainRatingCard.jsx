@@ -50,7 +50,7 @@ export default function DomainRatingCard({ projectId }) {
       icon={Globe}
       label="Domain Rating no disponible"
       hint="Agregá la URL del sitio para medir el Domain Rating (autoridad del dominio según Ahrefs)."
-      to={`/my-projects/${projectId}?infoTab=info`}
+      to={`/proyectos/${projectId}?infoTab=info`}
       ctaLabel="Agregar URL en Info →"
     />
   )

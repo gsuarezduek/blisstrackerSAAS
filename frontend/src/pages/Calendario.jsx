@@ -505,7 +505,7 @@ export default function Calendario() {
           // ficha del proyecto — mismo deep-link que usan NowCard/TaskCard
           // para la tarea "reserva" (?infoTab=reuniones&meeting=).
           setDetailEvent(null)
-          navigate(`/my-projects/${event.projectId}?infoTab=reuniones&meeting=${meetingId}`)
+          navigate(`/proyectos/${event.projectId}?infoTab=reuniones&meeting=${meetingId}`)
         }}
       />
     </div>

@@ -125,7 +125,10 @@ export default function CommandPalette({ open, onClose }) {
     const q = normalizeText(query.trim())
     if (!q) return []
     return destinations
-      .map(d => ({ ...d, type: 'nav', score: scoreMatch(d.label, q) }))
+      // `keywords` son los nombres por los que la gente busca algo que en el menú se
+      // llama distinto (el que escribe "mis proyectos" tiene que llegar a "Proyectos").
+      // Mismo mecanismo que ya usan las acciones rápidas, abajo.
+      .map(d => ({ ...d, type: 'nav', score: scoreMatch(d.keywords ? `${d.label} ${d.keywords}` : d.label, q) }))
       .filter(d => d.score !== null)
       .sort((a, b) => a.score - b.score)
       .slice(0, 10)
@@ -144,7 +147,7 @@ export default function CommandPalette({ open, onClose }) {
       .slice(0, 6)
     const items = []
     top.forEach((p, i) => {
-      items.push({ id: `project-${p.id}`, type: 'project', label: p.name, to: `/my-projects/${p.id}` })
+      items.push({ id: `project-${p.id}`, type: 'project', label: p.name, to: `/proyectos/${p.id}` })
       if (i < 2) {
         if (canJumpToMarketing) {
           items.push({ id: `project-${p.id}-marketing`, type: 'project-link', label: p.name, module: 'Marketing', to: `/marketing?projectId=${p.id}` })
@@ -288,7 +291,7 @@ export default function CommandPalette({ open, onClose }) {
   }))
   const fileItems = (g.files || []).map(f => ({
     type: 'file', id: `file-${f.id}`, label: f.name, detail: f.project?.name || null,
-    to: `/my-projects/${f.projectId}?infoTab=archivos&fileId=${f.id}`, isFolder: f.type === 'folder',
+    to: `/proyectos/${f.projectId}?infoTab=archivos&fileId=${f.id}`, isFolder: f.type === 'folder',
   }))
 
   const results = [

@@ -87,7 +87,7 @@ describe('GET /api/marketing/connections', () => {
     const res = await get(`?projectId=${PROJECT_ID}`)
     expect(sourceOf(res.body, 'website')).toEqual({
       type: 'website', label: 'Sitio web', state: 'missing',
-      reconnectUrl: 'https://bliss.blisstracker.app/my-projects/10?infoTab=ajustes',
+      reconnectUrl: 'https://bliss.blisstracker.app/proyectos/10?infoTab=ajustes',
     })
   })
 

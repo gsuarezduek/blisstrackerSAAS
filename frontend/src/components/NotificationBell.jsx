@@ -314,7 +314,7 @@ export default function NotificationBell({ buttonClassName, panelClassName } = {
                           : n.contentPieceId
                             ? `/contenido?projectId=${n.projectId}&piece=${n.contentPieceId}`
                             : n.projectId
-                              ? `/my-projects/${n.projectId}${n.taskId ? `?task=${n.taskId}` : ''}`
+                              ? `/proyectos/${n.projectId}${n.taskId ? `?task=${n.taskId}` : ''}`
                               : null
 
                 const handleRowClick = (e) => {

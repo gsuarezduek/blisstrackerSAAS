@@ -94,7 +94,7 @@ function AgentTaskRow({ task, today, onChanged, onReturned, onOpenComments }) {
           {task.description}
         </p>
         <div className="flex items-center gap-x-2.5 gap-y-1 mt-1.5 flex-wrap text-xs text-gray-500 dark:text-gray-400">
-          <Link to={`/my-projects/${task.project.id}`} className="font-medium text-gray-600 dark:text-gray-300 hover:text-primary-600 dark:hover:text-primary-400">
+          <Link to={`/proyectos/${task.project.id}`} className="font-medium text-gray-600 dark:text-gray-300 hover:text-primary-600 dark:hover:text-primary-400">
             {task.project.name}
           </Link>
           <span>{task.agent ? agentName(task.agent, task.agentName) : 'Cualquiera de mis agentes'}</span>

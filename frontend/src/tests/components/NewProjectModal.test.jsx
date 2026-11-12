@@ -29,6 +29,12 @@ describe('NewProjectModal', () => {
     fireEvent.click(screen.getByRole('button', { name: /Ana/ }))
     fireEvent.click(screen.getByRole('button', { name: 'Crear proyecto' }))
     await waitFor(() => expect(onCreated).toHaveBeenCalledWith({ id: 99, name: 'Pastiza' }))
-    expect(api.post).toHaveBeenCalledWith('/projects', { name: 'Pastiza', serviceIds: [10], memberIds: [2] })
+    // El alta manda las secciones EXPLÍCITAS (no solo las que se tocaron), para que lo
+    // que se vio en el popup sea lo que queda — ver "Lo que se elige al crear" en
+    // CLAUDE.md. Briefs nace apagado (PROJECT_MODULE_OFF_BY_DEFAULT_ON_CREATE).
+    expect(api.post).toHaveBeenCalledWith('/projects', {
+      name: 'Pastiza', serviceIds: [10], memberIds: [2],
+      briefsEnabled: false, hoursEnabled: false, monthlyHours: null, isPrivate: false,
+    })
   })
 })

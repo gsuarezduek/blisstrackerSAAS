@@ -35,7 +35,7 @@ function workspaceBaseUrl(slug) {
 /** URL de la pantalla donde se conecta/reconecta esa fuente. */
 function reconnectUrl(source, { slug, projectId }) {
   const base = workspaceBaseUrl(slug)
-  if (source.project) return `${base}/my-projects/${projectId}?infoTab=${source.project.infoTab}`
+  if (source.project) return `${base}/proyectos/${projectId}?infoTab=${source.project.infoTab}`
   const params = new URLSearchParams({ tab: source.tab, sub: source.sub })
   if (source.view) params.set('view', source.view)
   params.set('projectId', String(projectId))

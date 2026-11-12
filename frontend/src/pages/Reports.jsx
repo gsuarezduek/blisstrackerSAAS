@@ -345,7 +345,7 @@ export default function Reports() {
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <Navbar />
       <main className="max-w-6xl mx-auto px-4 py-8">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-1">Reportes</h1>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-1">Horas por proyecto</h1>
         <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">Horas registradas por proyecto frente al 100% de las horas contratadas del mes.</p>
 
         <DateRangeFilter

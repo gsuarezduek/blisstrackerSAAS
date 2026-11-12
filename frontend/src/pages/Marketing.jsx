@@ -234,7 +234,7 @@ export default function Marketing() {
             </div>
             {projectId && (
               <Link
-                to={`/my-projects/${projectId}`}
+                to={`/proyectos/${projectId}`}
                 className="self-start text-xs font-medium text-primary-600 dark:text-primary-400 hover:underline inline-flex items-center gap-1"
               >
                 Ir al proyecto →

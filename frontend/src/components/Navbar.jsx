@@ -1,11 +1,9 @@
 import { useState, useRef, useEffect, useLayoutEffect } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import {
-  House, FolderKanban, CalendarDays, MessageSquare, Activity, ChartColumn, Trophy,
-  Handshake, Megaphone, LayoutGrid, Users, Wallet, Target, Settings2, Search, Plus,
-  ChevronsUpDown, ChevronDown, StickyNote, BookOpen, Moon, Sun, PanelLeftClose,
-  PanelLeftOpen, Ellipsis, User, Settings, CreditCard, Eye, Lock, Building2, LogOut,
-  Menu, X, Star, Check,
+  Search, Plus, ChevronsUpDown, ChevronDown, StickyNote, BookOpen, Moon, Sun,
+  PanelLeftClose, PanelLeftOpen, Ellipsis, User, Settings, CreditCard, Eye, Lock,
+  Building2, LogOut, Menu, X, Star, Check,
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { useWorkspace } from '../context/WorkspaceContext'
@@ -15,6 +13,7 @@ import useRoles from '../hooks/useRoles'
 import { useFeatureFlag } from '../hooks/useFeatureFlag'
 import useActiveGames from '../hooks/useActiveGames'
 import useStarredProjects from '../hooks/useStarredProjects'
+import { buildNavBlocks } from '../lib/navCatalog'
 import FloatingDock from './FloatingDock'
 import NotificationBell from './NotificationBell'
 import BlissLogo from './BlissLogo'
@@ -271,50 +270,44 @@ export default function Navbar() {
 
   // ── Ítems de navegación ────────────────────────────────────────────────────
 
-  // Lo de todos los días. Calendario vive acá (y no en Módulos) porque se usa a diario;
-  // Chat y Juegos abren su panel flotante con el mismo evento que el botón flotante.
-  const primaryItems = [
-    { key: 'dashboard', to: '/', exact: true, label: 'Dashboard', icon: House },
-    { key: 'projects',  to: '/my-projects', label: 'Proyectos', icon: FolderKanban },
-    ...(calendarioEnabled && user?.moduleAccess?.calendario
-      ? [{ key: 'calendar', to: '/calendario', label: 'Calendario', icon: CalendarDays }] : []),
-    { key: 'chat', onClick: emit('bliss:open-chat'), label: 'Chat', icon: MessageSquare, badge: chatBadge },
-    { key: 'realtime', to: '/realtime', label: 'Actividad', icon: Activity, live: true },
-    // Los admins tienen el Reportes del equipo en Administración.
-    ...(!isAdmin ? [{ key: 'my-reports', to: '/my-reports', label: 'Reportes', icon: ChartColumn }] : []),
-    ...(games.visible
-      ? [{ key: 'games', onClick: emit('bliss:open-game'), label: 'Juegos', icon: Trophy, badge: gamesBadge }] : []),
-  ]
+  // Qué secciones existen y quién las ve sale de `lib/navCatalog.js` — la misma
+  // función que alimenta el buscador (Cmd+K), para que no haya forma de que el menú y
+  // el buscador digan cosas distintas. Acá solo se le agrega lo que es de esta
+  // superficie: los avisos y lo que abre un panel en vez de navegar.
+  const nav = buildNavBlocks({
+    user,
+    workspace,
+    gamesVisible: games.visible,
+    flags: {
+      marketing: marketingEnabled, eos: eosEnabled, gamification: gamificationEnabled,
+      ventas: ventasEnabled, contenido: contenidoEnabled, rrhh: rrhhEnabled,
+      calendario: calendarioEnabled, finanzas: finanzasEnabled,
+    },
+  })
+
+  // Lo que el catálogo no puede saber: badges en vivo y los ítems sin ruta propia
+  // (Chat y Juegos abren su panel flotante con el mismo evento que el botón flotante).
+  const EXTRAS = {
+    chat:     { onClick: emit('bliss:open-chat'), badge: chatBadge },
+    games:    { onClick: emit('bliss:open-game'), badge: gamesBadge },
+    realtime: { live: true },
+  }
+  const withExtras = items => items.map(it => (EXTRAS[it.key] ? { ...it, ...EXTRAS[it.key] } : it))
+
+  const primaryItems = withExtras(nav.primary)
 
   // Proyectos destacados (ProjectStar, preferencia personal).
   const starredItems = starred.map(p => ({
     key: `star-${p.id}`,
-    to: `/my-projects/${encodeURIComponent(p.name)}`,
+    to: `/proyectos/${encodeURIComponent(p.name)}`,
     label: p.name,
     star: true,
     alert: p.hasBlocked,
     alertTitle: 'Tiene tareas bloqueadas',
   }))
 
-  // Módulos con acceso configurable por rol: feature flag + user.moduleAccess (los
-  // admins siempre pasan ese segundo chequeo). Orden fijo, no se reacomodan según qué
-  // otros estén prendidos. Ventas mantiene su criterio histórico (admin → /admin/ventas).
-  const moduleItems = [
-    ...(ventasEnabled && (isAdmin || user?.isSales)
-      ? [{ key: 'ventas', to: isAdmin ? '/admin/ventas' : '/ventas', label: 'Ventas', icon: Handshake }] : []),
-    ...(marketingEnabled && user?.moduleAccess?.marketing ? [{ key: 'marketing', to: '/marketing', label: 'Marketing', icon: Megaphone }] : []),
-    ...(contenidoEnabled && user?.moduleAccess?.contenido ? [{ key: 'contenido', to: '/contenido', label: 'Contenido', icon: LayoutGrid }] : []),
-    ...(rrhhEnabled && user?.moduleAccess?.rrhh ? [{ key: 'rrhh', to: '/admin/rrhh', label: 'RRHH', icon: Users }] : []),
-    ...(finanzasEnabled && user?.moduleAccess?.finanzas ? [{ key: 'finanzas', to: '/finanzas', label: 'Finanzas', icon: Wallet }] : []),
-  ]
-
-  // Estrictamente admin-only (EOS y Gamification no tienen acceso configurable por rol).
-  const adminItems = isAdmin ? [
-    { key: 'reports', to: '/reports', label: 'Reportes', icon: ChartColumn },
-    ...(eosEnabled ? [{ key: 'eos', to: '/admin/eos', label: 'EOS', icon: Target }] : []),
-    ...(gamificationEnabled ? [{ key: 'gamification', to: '/admin/gamification', label: 'Gamification', icon: Trophy }] : []),
-    { key: 'panel', to: '/admin', exact: true, label: 'Panel', icon: Settings2 },
-  ] : []
+  const moduleItems = nav.modules
+  const adminItems  = nav.admin
 
   const workspaceItems = [
     ...otherWorkspaces.map(ws => ({

@@ -120,7 +120,7 @@ function ConnectionChip({ c, projectId, onNavigate }) {
 
   // El sitio web se carga en la ficha del proyecto (Ajustes), no en Marketing.
   if (c.type === 'website') {
-    return <Link to={`/my-projects/${projectId}?infoTab=ajustes`} title={title} className={cls}>{content}</Link>
+    return <Link to={`/proyectos/${projectId}?infoTab=ajustes`} title={title} className={cls}>{content}</Link>
   }
   return (
     <button type="button" onClick={() => onNavigate?.(c.link)} title={title} className={cls}>

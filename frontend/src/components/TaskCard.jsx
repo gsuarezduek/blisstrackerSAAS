@@ -66,7 +66,7 @@ function TaskCard({ task, onUpdate, onDelete, activeTask, backlog, future, onAdd
       const data = await patch(endpoint)
       if (data.meetingStarted) {
         onDelete?.(task.id)
-        navigate(`/my-projects/${data.projectId}?infoTab=reuniones&meeting=${data.meetingId}`)
+        navigate(`/proyectos/${data.projectId}?infoTab=reuniones&meeting=${data.meetingId}`)
         return
       }
       onUpdate(data)
@@ -176,7 +176,7 @@ function TaskCard({ task, onUpdate, onDelete, activeTask, backlog, future, onAdd
         </p>
 
         <div className="flex items-center gap-x-2.5 gap-y-1 mt-1.5 flex-wrap text-xs text-gray-500 dark:text-gray-400">
-          <Link to={`/my-projects/${task.project.id}`} className="font-medium text-gray-600 dark:text-gray-300 hover:text-primary-600 dark:hover:text-primary-400">
+          <Link to={`/proyectos/${task.project.id}`} className="font-medium text-gray-600 dark:text-gray-300 hover:text-primary-600 dark:hover:text-primary-400">
             {task.project.name}
           </Link>
           {future && scheduledLabel && <span className="text-indigo-600 dark:text-indigo-300 capitalize">Aparece el {scheduledLabel}</span>}

@@ -233,9 +233,9 @@ team-tracker/
         │   ├── Register.jsx         # Crear nuevo workspace
         │   ├── Join.jsx             # Aceptar invitación
         │   ├── Dashboard.jsx
-        │   ├── MyProjects.jsx
+        │   ├── Proyectos.jsx
         │   ├── ProjectDetail.jsx    # Tab "Info" con websiteUrl + redes sociales
-        │   ├── MyReports.jsx
+        │   ├── Reportes.jsx
         │   ├── RealTime.jsx
         │   ├── Marketing.jsx        # Tabs GEO, Web (GA4+PageSpeed) y RRSS (Instagram, TikTok, Meta Ads)
         │   ├── OAuthResult.jsx      # Puente OAuth: postMessage al opener y cierra popup
@@ -329,9 +329,9 @@ Los arrays `links`, `adminSublinks` y `profileSections` en `Navbar.jsx` son la f
 | Pantalla | Ruta |
 |----------|------|
 | Dashboard | `/` |
-| Mis Proyectos | `/my-projects` |
-| Detalle de proyecto | `/my-projects/:id` |
-| Mis Reportes | `/my-reports` |
+| Mis Proyectos | `/proyectos` |
+| Detalle de proyecto | `/proyectos/:id` |
+| Mis Reportes | `/reportes` |
 | Actividad | `/realtime` |
 | Marketing | `/marketing` — requiere feature flag `marketing`. Tabs: GEO, Web, SEO, Keywords, Canibalización, Instagram, TikTok, Meta Ads, Google Ads, Salud, Informes |
 | Contenido | `/contenido` — requiere feature flag `contenido`. Calendario de contenido: vistas Calendario, Tabla y Kanban, con aprobación del cliente desde el portal |

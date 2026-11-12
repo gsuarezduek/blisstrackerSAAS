@@ -30,7 +30,7 @@ export function fmtDate(iso) {
 // tarea (linkify.jsx la vuelve clickeable). Al abrirlo, ProjectFiles resuelve
 // la carpeta contenedora y abre el archivo automáticamente (ver `locate`).
 export function fileDeepLink(projectId, item) {
-  return `${window.location.origin}/my-projects/${projectId}?infoTab=archivos&fileId=${item.id}`
+  return `${window.location.origin}/proyectos/${projectId}?infoTab=archivos&fileId=${item.id}`
 }
 
 export const SORT_OPTIONS = [

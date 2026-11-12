@@ -55,7 +55,7 @@ export default function AgentsWorkingStrip({ tasks, onOpenComments, onSeeAll }) 
             >
               {t.description}
             </button>
-            <Link to={`/my-projects/${t.project.id}`} className="hidden md:inline text-xs text-gray-500 dark:text-gray-400 hover:text-sky-700 dark:hover:text-sky-300 flex-shrink-0 max-w-[9rem] truncate">
+            <Link to={`/proyectos/${t.project.id}`} className="hidden md:inline text-xs text-gray-500 dark:text-gray-400 hover:text-sky-700 dark:hover:text-sky-300 flex-shrink-0 max-w-[9rem] truncate">
               {t.project.name}
             </Link>
             <span className="text-xs font-medium text-sky-700 dark:text-sky-300 flex-shrink-0">

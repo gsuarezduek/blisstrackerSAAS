@@ -277,33 +277,18 @@ Cada tarjeta de tarea muestra la cantidad de comentarios. Hacé click para abrir
         title: 'Atajos de teclado',
         audience: 'todos',
         module: null,
-        summary: 'Navegá y operá tareas sin el mouse. N para nueva tarea, Shift+letra para navegar y para acciones.',
-        body: `BlissTracker tiene atajos globales (en cualquier página dentro del workspace) y atajos de acciones (solo en el Dashboard).
-
-## Globales
+        summary: 'N para una tarea nueva, Cmd/Ctrl+K para ir a cualquier lado y ? para ver todos.',
+        body: `Los atajos funcionan en cualquier página dentro del workspace.
 
 - **N** — nueva tarea.
-- **Shift + D** — Dashboard
-- **Shift + Y** — Proyectos
-- **Shift + A** — Actividad (tiempo real)
-- **Shift + M** — Marketing
-- **Shift + R** — Reportes
-- **?** — ayuda con todos los atajos
-- **Esc** — cierra la ventana abierta
+- **Cmd/Ctrl + K** — el buscador: escribí el nombre de una sección, un proyecto, una persona, un canal o una tarea (también por su número) y andá directo.
+- **Cmd/Ctrl + B** — abre y cierra la pizarra de notas.
+- **?** — ayuda con todos los atajos.
+- **Esc** — cierra la ventana abierta.
 
-## Acciones de tarea (en el Dashboard)
+Los atajos de una sola letra no se disparan mientras estás escribiendo en un campo.
 
-Con una tarea **en progreso**:
-
-- **Shift + C** — completar
-- **Shift + P** — pausar
-- **Shift + B** — bloquear (te pide el motivo)
-
-Sin tarea en progreso:
-
-- **Shift + I** — inicia/retoma la primera tarea destacada disponible.
-
-Los atajos de una sola letra no se disparan mientras estás escribiendo en un campo.`,
+**Ya no hay atajos de navegación con Shift** (Shift+D, Shift+Y…) ni de acciones de tarea (Shift+C para completar, Shift+P para pausar…): en la práctica no se usaban. Para moverte está el buscador, y las acciones de cada tarea están en sus botones.`,
         tips: ['Tocá ? en cualquier momento para ver el catálogo completo.'],
         related: ['estados-de-tarea'],
       },
@@ -340,16 +325,18 @@ Lo que sí es solo para miembros del proyecto (o admins) es **editar la ficha**:
         title: 'Proyectos',
         audience: 'todos',
         module: null,
-        summary: 'Tu vista personal de proyectos, en 3 grupos: destacados, los tuyos y el resto del workspace.',
-        body: `La página **Proyectos** organiza todo en tres secciones, en orden:
+        summary: 'El directorio de proyectos del workspace: los tuyos y el resto, con un filtro para ver solo los tuyos.',
+        body: `La página **Proyectos** es el directorio completo del workspace. Arriba, el selector **Todos / Míos** decide qué se lista (se recuerda para la próxima vez), y abajo las tarjetas se agrupan en:
 
-1. **Proyectos destacados** — los que marcaste con la estrella (preferencia personal).
-2. **Mis proyectos** — donde sos parte del equipo.
-3. **Otros proyectos del workspace** — el resto, que también podés ver.
+1. **Mis proyectos** — donde sos parte del equipo.
+2. **Otros proyectos del workspace** — el resto, que también podés ver y en los que podés crear tareas.
 
-La estrella es por usuario: marcar un proyecto como destacado solo afecta tu vista. Un puntito rojo indica que el proyecto tiene tareas bloqueadas.`,
+**Los proyectos destacados viven en la barra lateral**, siempre a la vista: la estrella de cada tarjeta los agrega o los saca de ahí. Es una preferencia tuya — destacar un proyecto no le cambia nada a nadie más. Si preferís verlos arriba de todo también acá, elegí "Destacados primero" en el orden.
+
+Un puntito rojo indica que el proyecto tiene tareas bloqueadas. Si sos admin, al pie están los **archivados**.`,
         params: [
-          { name: 'destacado (estrella)', desc: 'Preferencia personal booleana. No afecta a otros usuarios.' },
+          { name: 'destacado (estrella)', desc: 'Preferencia personal booleana. No afecta a otros usuarios. Los destacados se listan en la barra lateral.' },
+          { name: 'Todos / Míos', desc: 'Qué proyectos se listan. Se recuerda en este navegador; abre en "Todos".' },
         ],
         related: ['modelo-acceso-proyectos', 'ficha-proyecto'],
       },
@@ -561,7 +548,7 @@ Ignorarlo es perder valor del sistema. Si no lo querés, podés apagar todo el s
         summary: 'Tu actividad y productividad personal. Los admins además tienen los reportes del equipo.',
         body: `**Reportes** muestra tu actividad: tareas completadas, tiempo trabajado y evolución.
 
-Si sos admin, el ítem Reportes de Administración es el del equipo completo (por proyecto y por persona). Este es el personal, el que ven quienes no son admin. La vista de Actividad en tiempo real sigue siendo aparte.`,
+**Reportes** es siempre el tuyo, seas admin o no. El del equipo se llama **Horas por proyecto** y está en Administración: muestra las horas registradas por proyecto frente a las contratadas del mes. La vista de Actividad en tiempo real sigue siendo aparte.`,
         related: ['insight-ia-reporte-semanal'],
       },
     ],

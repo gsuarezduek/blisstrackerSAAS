@@ -18,6 +18,11 @@
       "Bash(railway service list *)",
       "Bash(railway whoami *)",
       "Bash(railway status *)"
+    ],
+    "deny": [
+      "Read(./mobile/**)",
+      "Edit(./mobile/**)",
+      "Write(./mobile/**)"
     ]
   }
 }
