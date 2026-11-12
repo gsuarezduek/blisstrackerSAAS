@@ -1,5 +1,6 @@
 const prisma = require('../lib/prisma')
 const { hashToken } = require('../lib/mcpTokens')
+const { recordFailureAsync } = require('../services/mcpAuthFailure.service')
 
 // Autenticación de /api/mcp: NO es el JWT normal de sesión (ver middleware/auth.js).
 // Cada token (tabla McpToken, alta/baja vía Preferencias → Agentes IA o los scripts
@@ -33,19 +34,30 @@ async function migrateLegacyToken(token, tokenHash) {
 async function mcpAuth(req, res, next) {
   const header = req.headers.authorization
   if (!header || !header.startsWith('Bearer ')) {
+    recordFailureAsync(req, { reason: 'no_token' })
     return res.status(401).json({ error: 'No token provided' })
   }
 
   const token = header.slice(7)
   const tokenHash = hashToken(token)
+  // El error de la query se guarda aparte en vez de perderse en un `.catch(() => null)`:
+  // si no, una base caída se le reporta al agente (y al log) como "token inválido", que
+  // manda a revisar la credencial cuando el problema no está ahí.
+  let dbError = null
   let row = await prisma.mcpToken.findUnique({
     where: { tokenHash },
     include: { workspace: { select: { slug: true } } },
-  }).catch(() => null)
+  }).catch(err => { dbError = err; return null })
 
-  if (!row) row = await migrateLegacyToken(token, tokenHash).catch(() => null)
+  if (!row && !dbError) row = await migrateLegacyToken(token, tokenHash).catch(err => { dbError = err; return null })
 
-  if (!row || row.revokedAt) {
+  if (!row) {
+    recordFailureAsync(req, { reason: dbError ? 'db_error' : 'unknown_token', tokenHash, error: dbError })
+    return res.status(401).json({ error: 'Invalid token' })
+  }
+
+  if (row.revokedAt) {
+    recordFailureAsync(req, { reason: 'revoked', tokenHash, row })
     return res.status(401).json({ error: 'Invalid token' })
   }
 

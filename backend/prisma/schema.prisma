@@ -5147,6 +5147,9 @@ model McpToken {
   wakeEnabled       Boolean   @default(false)
   wakeLastAt        DateTime?
   wakeLastStatus    String?
+  // Último aviso por mail de "tu agente sigue intentando con un token revocado".
+  // Antiflood: el conector reintenta cada ~40s y sin esto sería un mail por intento.
+  revokedNoticeAt   DateTime?
 
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
@@ -5162,8 +5165,46 @@ model McpToken {
   whatsappMessages        WhatsappMessage[]       @relation("WhatsappMessageAgent")
   whatsappControls        WhatsappConversation[]  @relation("WhatsappConversationAgentControl")
   cannibalResolutions     CannibalResolution[]
+  authFailures            McpAuthFailure[]
 
   @@index([workspaceId])
+}
+
+// Intentos de autenticación de MCP que fueron rechazados (ver mcp/auth.js).
+//
+// Es una fila AGREGADA por valor rechazado, no una por intento: un conector mal
+// configurado reintenta el handshake cada ~40s y una fila por request llenaría la
+// tabla con miles de copias del mismo hecho. `attempts`/`firstAt`/`lastAt` responden
+// lo que importa ("desde cuándo y cuántas veces") en una sola fila.
+//
+// OJO con la identidad: sólo el rechazo por token REVOCADO tiene dueño (hay fila en
+// McpToken). Un token que no coincide con ningún hash llega anónimo — no hay userId
+// ni workspaceId que poner, y por eso no se puede avisar por mail ni mostrarlo en las
+// Preferencias de nadie. Ese caso vive en el log del servidor y en esta tabla.
+model McpAuthFailure {
+  id          Int      @id @default(autoincrement())
+  // Clave de agrupación: "h:<hashPrefix>" cuando vino un token, "n:<ip>" cuando no
+  // vino header. Es lo que hace que los reintentos del mismo origen sean UNA fila.
+  fingerprint String   @unique
+  reason      String // 'no_token' | 'unknown_token' | 'revoked'
+  // Primeros caracteres del sha256 del token recibido — NUNCA el token. No permite
+  // reconstruirlo y alcanza para distinguir "siempre manda el mismo valor equivocado"
+  // de "manda uno distinto cada vez", que son dos problemas diferentes.
+  hashPrefix  String?
+  // Los tres sólo se completan en el caso 'revoked'.
+  tokenId     Int?
+  workspaceId Int?
+  userId      Int?
+  ip          String?
+  userAgent   String?
+  attempts    Int      @default(1)
+  firstAt     DateTime @default(now())
+  lastAt      DateTime @default(now())
+
+  token McpToken? @relation(fields: [tokenId], references: [id], onDelete: SetNull)
+
+  @@index([tokenId])
+  @@index([lastAt])
 }
 
 // ─── FINANZAS ────────────────────────────────────────────────────────────────

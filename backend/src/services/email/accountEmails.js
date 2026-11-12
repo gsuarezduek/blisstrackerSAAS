@@ -1,4 +1,4 @@
-const { resend, getEmailFrom, emailShell, logEmail } = require('./_shared')
+const { resend, getEmailFrom, emailShell, logEmail, escHtml } = require('./_shared')
 
 async function sendPasswordReset(email, name, resetUrl, workspaceId) {
   const from = await getEmailFrom(workspaceId)
@@ -225,6 +225,51 @@ async function sendMfaRecoveryCodeUsedNotice(email, name, remaining, workspaceId
   })
 }
 
+/**
+ * Un conector sigue intentando entrar con un token que fue revocado. Se avisa al dueño
+ * del agente porque es el único rechazo de MCP que tiene dueño: un token que no coincide
+ * con ningún hash llega anónimo y no hay a quién escribirle (ver mcpAuthFailure.service).
+ */
+async function sendMcpTokenRevokedNotice(email, name, { label, attempts, workspaceId, slug }) {
+  const from = await getEmailFrom(workspaceId)
+  const domain = process.env.APP_DOMAIN || 'blisstracker.app'
+  const prefsUrl = slug ? `https://${slug}.${domain}/preferences` : `${process.env.FRONTEND_URL}/preferences`
+  const agente = escHtml(label || 'sin nombre')
+  const subject = `Tu agente "${label || 'sin nombre'}" no puede conectarse — BlissTracker`
+  try {
+    const { error } = await resend.emails.send({
+      from,
+      to: email,
+      subject,
+      html: emailShell(`
+        <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;padding:28px 32px;margin-top:8px;">
+          <h2 style="color:#1e293b;margin:0 0 12px;font-size:20px;">Tu agente no puede conectarse</h2>
+          <p style="color:#475569;margin:0 0 16px;">
+            Hola <strong>${escHtml(name)}</strong>, el agente <strong>${agente}</strong> intentó entrar a BlissTracker
+            ${attempts} ${attempts === 1 ? 'vez' : 'veces'} con un token que está <strong>revocado</strong>.
+            Mientras siga así, no va a poder registrar nada.
+          </p>
+          <p style="color:#475569;margin:0 0 20px;">
+            Generá un token nuevo desde <strong>Preferencias → Agentes IA</strong> y pegalo en la configuración
+            del conector. El token viejo no se puede recuperar: de cada uno guardamos sólo su huella, nunca el valor.
+          </p>
+          <div style="text-align:center;margin:0 0 20px;">
+            <a href="${prefsUrl}" style="display:inline-block;background:#4f46e5;color:#ffffff;text-decoration:none;font-weight:600;font-size:14px;padding:11px 22px;border-radius:10px;">Generar un token nuevo</a>
+          </div>
+          <p style="color:#94a3b8;font-size:14px;margin:0;">
+            Si lo revocaste a propósito y el agente ya no se usa, podés ignorar este aviso — te lo mandamos
+            una vez por día como mucho.
+          </p>
+        </div>
+      `),
+    })
+    if (error) throw new Error(error.message)
+    await logEmail({ workspaceId, to: email, subject, type: 'mcp_token', status: 'sent' })
+  } catch (err) {
+    await logEmail({ workspaceId, to: email, subject, type: 'mcp_token', status: 'failed', errorMsg: err.message })
+  }
+}
+
 module.exports = {
   sendPasswordReset,
   sendEmailChangeVerification,
@@ -235,4 +280,5 @@ module.exports = {
   sendMfaEnabledNotice,
   sendMfaDisabledNotice,
   sendMfaRecoveryCodeUsedNotice,
+  sendMcpTokenRevokedNotice,
 }

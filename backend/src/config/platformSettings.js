@@ -272,6 +272,16 @@ const PLATFORM_SETTINGS = [
     help:    'Después de cuántos días se borran los ConversionEvent (instrumentación del funnel signup→trial→paid). El funnel del panel SuperAdmin usa por defecto los últimos 30 días.',
   },
   {
+    key:     'mcpAuthFailureRetentionDays',
+    type:    'integer',
+    default: 90,
+    min:     7,
+    max:     3650,
+    group:   'operational',
+    label:   'Retención de intentos de MCP rechazados (días)',
+    help:    'Después de cuántos días se borran los McpAuthFailure a los que no les llega un intento nuevo (los 401 de /api/mcp: token revocado, token inexistente o sin header). Es una fila por valor rechazado con su contador, no una por intento, así que la tabla crece con la cantidad de conectores mal configurados y no con el tráfico.',
+  },
+  {
     key:     'accessLogRetentionDays',
     type:    'integer',
     default: 365,
@@ -599,6 +609,7 @@ const RETENTION_KEYS = [
   'followerLogRetentionDays',
   'conversionEventRetentionDays',
   'accessLogRetentionDays',
+  'mcpAuthFailureRetentionDays',
 ]
 
 module.exports = { PLATFORM_SETTINGS, SETTINGS_BY_KEY, RETENTION_KEYS }

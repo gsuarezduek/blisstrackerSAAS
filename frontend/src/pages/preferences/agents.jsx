@@ -30,6 +30,37 @@ function timeAgo(dateStr) {
   return fmtDate(dateStr)
 }
 
+// Avisa cuando un token no está entrando. Son dos situaciones distintas y la
+// diferencia es lo que hay que hacer:
+//   - revocado con intentos: el conector sigue apuntando a un token dado de baja.
+//   - activo que nunca entró: lo más común es que se haya pegado mal al copiarlo.
+// Un token que recibe rechazos por un valor que no coincide con ninguno NO aparece acá:
+// ese rechazo llega sin identidad y no cuelga de ninguna fila (ver mcp/auth.js).
+function TokenAlert({ token }) {
+  const failure = token.authFailures?.[0]
+
+  if (token.revokedAt && failure) {
+    return (
+      <p className="mt-1.5 text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 rounded-md px-2 py-1.5">
+        Un conector sigue intentando entrar con este token revocado:{' '}
+        <strong>{failure.attempts} {failure.attempts === 1 ? 'intento' : 'intentos'}</strong>, el último {timeAgo(failure.lastAt)}
+        {failure.ip ? ` desde ${failure.ip}` : ''}. Generá uno nuevo y pegalo en su configuración.
+      </p>
+    )
+  }
+
+  if (!token.revokedAt && !token.lastUsedAt) {
+    return (
+      <p className="mt-1.5 text-xs text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 rounded-md px-2 py-1.5">
+        Todavía no se conectó ninguna vez. Si ya lo configuraste, revisá que esté pegado completo
+        en el conector — un token incompleto se rechaza igual que uno inexistente.
+      </p>
+    )
+  }
+
+  return null
+}
+
 function CopyButton({ text }) {
   const [copied, setCopied] = useState(false)
   async function handleCopy() {
@@ -173,6 +204,7 @@ export default function AgentsTab() {
                       </select>
                     </label>
                   )}
+                  <TokenAlert token={t} />
                 </div>
                 <div className="flex items-center gap-2 flex-shrink-0">
                   {t.revokedAt ? (

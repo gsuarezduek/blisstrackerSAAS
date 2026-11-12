@@ -16,6 +16,15 @@ const TOKEN_SELECT = {
   id: true, label: true, createdAt: true, lastUsedAt: true, revokedAt: true, workReminderMins: true,
   webhookUrl: true, webhookSecret: true, webhookLastAt: true, webhookLastStatus: true,
   wakeEnabled: true, wakeLastAt: true, wakeLastStatus: true,
+  // Intentos rechazados que SÍ se pueden atribuir a este token (ver
+  // services/mcpAuthFailure.service.js): un conector que quedó apuntando a un token
+  // revocado. Los rechazos por un valor que no coincide con ningún hash son anónimos
+  // y no cuelgan de ninguna fila, así que no aparecen acá.
+  authFailures: {
+    select: { attempts: true, firstAt: true, lastAt: true, ip: true, userAgent: true },
+    orderBy: { lastAt: 'desc' },
+    take: 1,
+  },
 }
 
 // Opciones del recordatorio de "registrá en qué estás trabajando" (ver mcp/workReminder.js).

@@ -32,6 +32,7 @@ const RETENTION_KEYS = [
   'followerLogRetentionDays',
   'conversionEventRetentionDays',
   'accessLogRetentionDays',
+  'mcpAuthFailureRetentionDays',
 ]
 
 // Los 6 logs DIARIOS de seguidores comparten un solo retention (followerLogRetentionDays).
@@ -65,7 +66,7 @@ function hoursAgo(h) {
  * Cuenta cuántas filas se borrarían con los retention actuales (preview).
  * @param {string[]} tables — subset de ['notifications', 'aiTokenLog', 'userLogin',
  *   'dailyInsight', 'emailLog', 'socialImages', 'serpSnapshots', 'followerLogs',
- *   'conversionEvents', 'accessLogs', 'contentAssetsPending', 'contentPiecesTrash',
+ *   'conversionEvents', 'accessLogs', 'mcpAuthFailures', 'contentAssetsPending', 'contentPiecesTrash',
  *   'projectFilesPending', 'projectFilesTrash', 'chatAttachments']
  */
 async function previewWeeklyCleanup(tables = null) {
@@ -125,6 +126,13 @@ async function previewWeeklyCleanup(tables = null) {
   }
   if ((!tables || tables.includes('accessLogs')) && s.accessLogRetentionDays > 0) {
     result.accessLogs = await prisma.projectAccessLog.count({ where: revealLogsOlderThan(s) })
+  }
+  // Se corta por lastAt y no por firstAt: mientras el conector roto siga insistiendo, la
+  // fila sigue siendo el estado actual de un problema sin resolver, por vieja que sea.
+  if ((!tables || tables.includes('mcpAuthFailures')) && s.mcpAuthFailureRetentionDays > 0) {
+    result.mcpAuthFailures = await prisma.mcpAuthFailure.count({
+      where: { lastAt: { lt: daysAgo(s.mcpAuthFailureRetentionDays) } },
+    })
   }
   if (!tables || tables.includes('contentAssetsPending')) {
     // Retention en HORAS (no días, no entra en RETENTION_KEYS) — un upload
@@ -246,6 +254,12 @@ async function runWeeklyCleanup(tables = null) {
   if ((!tables || tables.includes('accessLogs')) && s.accessLogRetentionDays > 0) {
     const { count } = await prisma.projectAccessLog.deleteMany({ where: revealLogsOlderThan(s) })
     result.accessLogs = count
+  }
+  if ((!tables || tables.includes('mcpAuthFailures')) && s.mcpAuthFailureRetentionDays > 0) {
+    const { count } = await prisma.mcpAuthFailure.deleteMany({
+      where: { lastAt: { lt: daysAgo(s.mcpAuthFailureRetentionDays) } },
+    })
+    result.mcpAuthFailures = count
   }
   if (!tables || tables.includes('contentAssetsPending')) {
     const hours = await getSetting('contentAssetPendingRetentionHours')
