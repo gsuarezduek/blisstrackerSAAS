@@ -658,6 +658,7 @@ GET    /api/superadmin/whatsapp-usage                   # ?month=YYYY-MM — uso
 GET    /api/superadmin/workspaces
 GET    /api/superadmin/workspaces/:id
 PATCH  /api/superadmin/workspaces/:id/status
+PATCH  /api/superadmin/workspaces/:id/trial             # body: { until: 'YYYY-MM-DD' } — extiende/reabre el trial hasta el final de ese día (tz del workspace) y deja status=trialing; 409 con Stripe activa, suspendido/cancelado o exento
 PATCH  /api/superadmin/workspaces/:id/token-limit       # body: { monthlyTokenLimit }
 PATCH  /api/superadmin/workspaces/:id/storage-limit     # body: { storageLimitMb } — solo informativo/de alerta, NO bloquea subidas
 PATCH  /api/superadmin/workspaces/:id/storage-quotas    # body: { projectFilesMaxMb?, contentStorageMaxMb?, chatAttachmentMaxMb? } — override puntual por workspace de las cuotas que SÍ bloquean subidas (null = default global, 0 = ilimitado)

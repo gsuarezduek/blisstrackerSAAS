@@ -86,6 +86,8 @@ export function WorkspaceDetailModal({ workspace, onClose, onStatusChange, onDel
   const [storageLimit,      setStorageLimit]      = useState('')
   const [savingStorageLimit, setSavingStorageLimit] = useState(false)
   const [savingExempt,  setSavingExempt]  = useState(false)
+  const [trialUntil,    setTrialUntil]    = useState('')
+  const [savingTrial,   setSavingTrial]   = useState(false)
   // Cuotas por categoría (las que SÍ bloquean subidas) — string vacío = sin
   // override, usa el default global de la plataforma.
   const [quotaDrafts,  setQuotaDrafts]  = useState({ projectFilesMaxMb: '', contentStorageMaxMb: '', chatAttachmentMaxMb: '' })
@@ -174,8 +176,25 @@ export function WorkspaceDetailModal({ workspace, onClose, onStatusChange, onDel
     } finally { setSavingExempt(false) }
   }
 
+  async function handleExtendTrial() {
+    if (!trialUntil) return
+    setSavingTrial(true)
+    try {
+      const { data } = await api.patch(`/superadmin/workspaces/${workspace.id}/trial`, { until: trialUntil })
+      setDetail(prev => ({ ...prev, status: data.status, trialEndsAt: data.trialEndsAt }))
+      if (data.status !== workspace.status) onStatusChange(workspace.id, data.status)
+      setTrialUntil('')
+    } catch (err) {
+      alert(err.response?.data?.error || 'Error al extender el trial')
+    } finally { setSavingTrial(false) }
+  }
+
   async function handleStatusChange() {
     if (!newStatus || newStatus === workspace.status) return
+    // Activar a mano un workspace sin suscripción no se sostiene: el cron diario de
+    // free tier lo devuelve a past_due si supera el límite de usuarios gratis.
+    if (newStatus === 'active' && !detail?.billingExempt && !(detail?.subscription?.status === 'active')
+      && !confirm('Sin suscripción paga, el cron diario lo vuelve a "vencido" si supera el límite de usuarios del plan Gratis.\n\nPara darle tiempo, usá "Extender trial hasta" en el bloque Suscripción. ¿Activarlo igual?')) return
     setSaving(true)
     try {
       await api.patch(`/superadmin/workspaces/${workspace.id}/status`, { status: newStatus })
@@ -405,6 +424,45 @@ export function WorkspaceDetailModal({ workspace, onClose, onStatusChange, onDel
                     </>
                   )}
                 </div>
+
+                {/* Extender trial — el cron de free tier saltea los trials con fecha futura */}
+                {!detail.billingExempt && detail.status !== 'suspended' && detail.status !== 'cancelled'
+                  && !(detail.subscription?.status === 'active') && (
+                  <div className="pt-2 border-t border-gray-200 dark:border-gray-600 space-y-1.5">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <label htmlFor="trial-until" className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">
+                        {detail.status === 'trialing' ? 'Extender trial hasta' : 'Reabrir trial hasta'}
+                      </label>
+                      <input
+                        id="trial-until"
+                        type="date"
+                        value={trialUntil}
+                        min={new Date().toISOString().slice(0, 10)}
+                        onChange={e => setTrialUntil(e.target.value)}
+                        className="px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      />
+                      {[7, 14, 30].map(d => (
+                        <button key={d} type="button"
+                          onClick={() => {
+                            const base = detail.status === 'trialing' && detail.trialEndsAt && new Date(detail.trialEndsAt) > new Date()
+                              ? new Date(detail.trialEndsAt) : new Date()
+                            base.setDate(base.getDate() + d)
+                            setTrialUntil(base.toLocaleDateString('en-CA'))
+                          }}
+                          className="px-2 py-1 text-xs rounded-lg bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200">
+                          +{d}d
+                        </button>
+                      ))}
+                      <button onClick={handleExtendTrial} disabled={!trialUntil || savingTrial}
+                        className="px-3 py-1.5 bg-primary-600 hover:bg-primary-700 disabled:opacity-40 text-white text-xs font-medium rounded-lg transition-colors">
+                        {savingTrial ? '...' : 'Guardar'}
+                      </button>
+                    </div>
+                    <p className="text-xs text-gray-400 dark:text-gray-500">
+                      Acceso completo hasta el final de ese día (hora del workspace). Al vencer sigue la regla de siempre: plan Gratis o vencido según la cantidad de usuarios.
+                    </p>
+                  </div>
+                )}
 
                 {/* Info adicional del workspace */}
                 <div className="pt-2 border-t border-gray-200 dark:border-gray-600 grid grid-cols-2 gap-x-6 gap-y-1 text-xs text-gray-400 dark:text-gray-500">

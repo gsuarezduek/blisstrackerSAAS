@@ -255,6 +255,65 @@ async function updateWorkspaceStatus(req, res, next) {
 }
 
 /**
+ * PATCH /api/superadmin/workspaces/:id/trial
+ * Extender (o reabrir) el trial hasta una fecha. Body: { until: "YYYY-MM-DD" }
+ *
+ * Existe porque pasar a mano un trial vencido a "active" no se sostiene: el cron
+ * diario de free tier (billingTier.service, 03:00) re-evalúa también los `active`
+ * sin suscripción paga, y si superan `freeSeatLimit` los devuelve a `past_due` al
+ * día siguiente. Un trial con `trialEndsAt` futuro, en cambio, el cron lo saltea —
+ * es el único estado que da acceso completo sin pagar hasta una fecha cierta.
+ *
+ * El trial vence al FINAL de ese día en la timezone del workspace (mismo criterio de
+ * fechas de calendario que los mails del trial, `trialPosition`). Pone status en
+ * `trialing` aunque estuviera en past_due/active; no toca suspensiones/cancelaciones
+ * manuales ni workspaces con una suscripción de Stripe viva (mismo motivo que el
+ * guard de `updateWorkspaceStatus`).
+ */
+async function extendTrial(req, res, next) {
+  try {
+    const id = Number(req.params.id)
+    const { until } = req.body
+    if (typeof until !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(until)) {
+      return res.status(400).json({ error: 'until debe ser una fecha YYYY-MM-DD' })
+    }
+
+    const ws = await prisma.workspace.findUnique({
+      where:  { id },
+      select: { id: true, status: true, timezone: true, billingExempt: true },
+    })
+    if (!ws) return res.status(404).json({ error: 'Workspace no encontrado' })
+    if (ws.status === 'suspended' || ws.status === 'cancelled') {
+      return res.status(409).json({ error: `El workspace está ${ws.status === 'suspended' ? 'suspendido' : 'cancelado'}. Reactivalo antes de extender el trial.` })
+    }
+    if (ws.billingExempt) {
+      return res.status(409).json({ error: 'El workspace está exento de billing: no necesita trial.' })
+    }
+    const sub = await prisma.subscription.findUnique({ where: { workspaceId: id }, select: { stripeSubId: true, status: true } })
+    if (sub?.stripeSubId && sub.status === 'active') {
+      return res.status(409).json({ error: 'Este workspace tiene una suscripción de Stripe activa — no se puede volver a trial.' })
+    }
+
+    const { zonedTimeToUtc } = require('../../lib/timeMetrics')
+    const trialEndsAt = zonedTimeToUtc(until, ws.timezone || 'America/Argentina/Buenos_Aires', { h: 23, m: 59, s: 59, ms: 999 })
+    if (Number.isNaN(trialEndsAt.getTime())) {
+      return res.status(400).json({ error: 'Fecha inválida' })
+    }
+    if (trialEndsAt <= new Date()) {
+      return res.status(400).json({ error: 'La fecha tiene que ser futura.' })
+    }
+
+    const workspace = await prisma.workspace.update({
+      where:  { id },
+      data:   { status: 'trialing', trialEndsAt },
+      select: { id: true, status: true, trialEndsAt: true },
+    })
+    console.log(`[superadmin] staff#${req.user.userId} extendió el trial del workspace#${id} hasta ${until} (antes: ${ws.status})`)
+    res.json(workspace)
+  } catch (err) { next(err) }
+}
+
+/**
  * PATCH /api/superadmin/workspaces/:id/billing-exempt
  * Marcar/desmarcar un workspace como exento de billing.
  * Body: { billingExempt: boolean }
@@ -378,5 +437,5 @@ async function impersonate(req, res, next) {
 module.exports = {
   listWorkspaces, getWorkspace, updateWorkspaceStatus, updateTokenLimit,
   updateStorageLimit, updateStorageQuotas, updateWorkspaceBillingExempt,
-  deleteWorkspace, impersonate,
+  extendTrial, deleteWorkspace, impersonate,
 }
