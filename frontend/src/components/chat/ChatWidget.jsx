@@ -11,7 +11,6 @@ import ChannelSwitcher from './ChannelSwitcher'
 import ChannelFormModal from './ChannelFormModal'
 import ChannelSearch from './ChannelSearch'
 import ChatSoundToggle from './ChatSoundToggle'
-import FeedbackModal from '../FeedbackModal'
 import { Lock, LockOpen, Menu, Search, Settings, Volume2 } from 'lucide-react'
 import { Icon } from '../ui/Icon'
 
@@ -38,7 +37,6 @@ export default function ChatWidget() {
   const [activeSlug, setActiveSlug] = useState(null)
   const [switcherOpen, setSwitcherOpen] = useState(false)
   const [channelForm, setChannelForm] = useState(null) // null | true (crear) | channel (editar)
-  const [feedbackOpen, setFeedbackOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
   const switcherRef = useRef(null)
 
@@ -146,7 +144,6 @@ export default function ChatWidget() {
                   onSelect={handleSelectChannel}
                   isAdmin={!!user?.isAdmin}
                   onCreateChannel={() => setChannelForm(true)}
-                  onFeedback={() => setFeedbackOpen(true)}
                 />
               </>
             ) : (
@@ -177,7 +174,6 @@ export default function ChatWidget() {
                         onSelect={handleSelectChannel}
                         isAdmin={!!user?.isAdmin}
                         onCreateChannel={() => { setSwitcherOpen(false); setChannelForm(true) }}
-                        onFeedback={() => { setSwitcherOpen(false); setFeedbackOpen(true) }}
                       />
                     )}
                   </div>
@@ -240,8 +236,6 @@ export default function ChatWidget() {
           onDeleted={handleChannelDeleted}
         />
       )}
-
-      <FeedbackModal open={feedbackOpen} onClose={() => setFeedbackOpen(false)} />
     </>
   )
 }

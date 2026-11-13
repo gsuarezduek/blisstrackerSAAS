@@ -13,7 +13,6 @@ import ChannelSwitcher from '../components/chat/ChannelSwitcher'
 import ChannelFormModal from '../components/chat/ChannelFormModal'
 import ChannelSearch from '../components/chat/ChannelSearch'
 import ChatSoundToggle from '../components/chat/ChatSoundToggle'
-import FeedbackModal from '../components/FeedbackModal'
 import { Icon } from '../components/ui/Icon'
 import { Lock, LockOpen, Search, Settings, Volume2, MessagesSquare } from 'lucide-react'
 
@@ -42,7 +41,6 @@ export default function Chat() {
 
   const members = useMembers().members.filter(m => m.active)
   const [channelForm, setChannelForm] = useState(null)
-  const [feedbackOpen, setFeedbackOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
   const [thread, setThread] = useState(null)
 
@@ -153,7 +151,6 @@ export default function Chat() {
                 onSelect={openChannel}
                 isAdmin={!!user?.isAdmin}
                 onCreateChannel={() => setChannelForm(true)}
-                onFeedback={() => setFeedbackOpen(true)}
               />
             ) : (
               <LoadingSpinner size="sm" className="flex-1" />
@@ -175,7 +172,6 @@ export default function Chat() {
                     onSelect={openChannel}
                     isAdmin={!!user?.isAdmin}
                     onCreateChannel={() => setChannelForm(true)}
-                    onFeedback={() => setFeedbackOpen(true)}
                   />
                 </div>
                 <div className="hidden md:flex flex-1 items-center justify-center text-center px-6">
@@ -268,7 +264,6 @@ export default function Chat() {
           onDeleted={handleChannelDeleted}
         />
       )}
-      <FeedbackModal open={feedbackOpen} onClose={() => setFeedbackOpen(false)} />
     </div>
   )
 }

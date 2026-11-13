@@ -55,7 +55,7 @@ const byName = (a, b) => norm(a.name).localeCompare(norm(b.name), 'es', { sensit
 // ChatWidget en vez de posicionarse como popover. Mismo contenido/lógica, solo cambia
 // el contenedor exterior. Lo usa ChatWidget como vista inicial (sin canal elegido
 // todavía en la sesión) en vez de caer directo a #general.
-export default function ChannelSwitcher({ channels, activeChannelId, onSelect, isAdmin, onCreateChannel, onFeedback, fullscreen = false }) {
+export default function ChannelSwitcher({ channels, activeChannelId, onSelect, isAdmin, onCreateChannel, fullscreen = false }) {
   const [query, setQuery] = useState('')
   const [unreadOnly, setUnreadOnly] = useState(false)
   const { voicePresence } = useVoiceCall() || {}
@@ -166,22 +166,16 @@ export default function ChannelSwitcher({ channels, activeChannelId, onSelect, i
         })}
       </div>
 
-      <div className="flex-shrink-0 border-t border-gray-100 dark:border-gray-700">
-        {isAdmin && (
+      {isAdmin && (
+        <div className="flex-shrink-0 border-t border-gray-100 dark:border-gray-700">
           <button
             onClick={onCreateChannel}
             className="w-full flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-gray-400 dark:text-gray-500 hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
           >
             <span className="text-base leading-none">+</span> Crear canal
           </button>
-        )}
-        <button
-          onClick={onFeedback}
-          className="w-full flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-gray-400 dark:text-gray-500 hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
-        >
-          Feedback
-        </button>
-      </div>
+        </div>
+      )}
     </div>
   )
 }

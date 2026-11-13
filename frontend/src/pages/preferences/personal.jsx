@@ -11,6 +11,10 @@ export default function PersonalTab({ loaded, weeklyEmail, dailyInsight, notesBo
   const [togglingN, setTogglingN] = useState(false)
   const [sending,   setSending]   = useState(false)
   const [sendMsg,   setSendMsg]   = useState({ text: '', error: false })
+  const [fbType,    setFbType]    = useState('SUGGESTION')
+  const [fbMessage, setFbMessage] = useState('')
+  const [fbSending, setFbSending] = useState(false)
+  const [fbMsg,     setFbMsg]     = useState({ text: '', error: false })
 
   async function handleToggleWeekly() {
     const next = !weeklyEmail
@@ -59,6 +63,28 @@ export default function PersonalTab({ loaded, weeklyEmail, dailyInsight, notesBo
       setSendMsg({ text: err.response?.data?.error || 'Error al enviar el email.', error: true })
     } finally {
       setSending(false)
+    }
+  }
+
+  // Enviar feedback vivía en un botón al pie del selector de canales del Chat: elegir un
+  // canal y reportar un error no tienen nada que ver, y en la página a tres columnas
+  // quedaba colgado al pie. Acá es un formulario inline y no el modal de antes porque la
+  // página ya es una lista de secciones (y ese modal estaba anclado abajo a la derecha,
+  // donde vivía el botón flotante que dejó de existir).
+  async function handleSendFeedback(e) {
+    e.preventDefault()
+    if (!fbMessage.trim()) return
+    setFbSending(true)
+    setFbMsg({ text: '', error: false })
+    try {
+      await api.post('/feedback', { type: fbType, message: fbMessage })
+      setFbMessage('')
+      setFbType('SUGGESTION')
+      setFbMsg({ text: '¡Gracias! Tu mensaje ya está en camino al equipo de BlissTracker.', error: false })
+    } catch (err) {
+      setFbMsg({ text: err.response?.data?.error || 'No se pudo enviar el mensaje.', error: true })
+    } finally {
+      setFbSending(false)
     }
   }
 
@@ -190,6 +216,68 @@ export default function PersonalTab({ loaded, weeklyEmail, dailyInsight, notesBo
           </div>
           <Toggle on={notesBoard} onToggle={handleToggleNotesBoard} disabled={togglingN || !loaded} />
         </div>
+      </div>
+
+      {/* Sugerencias y errores */}
+      <div className="bg-white dark:bg-gray-800 rounded-2xl border dark:border-gray-700 p-6">
+        <h2 className="text-base font-semibold text-gray-900 dark:text-white mb-1">Sugerencias y errores</h2>
+        <p className="text-xs text-gray-400 dark:text-gray-500 mb-5">
+          Contanos qué te gustaría que la app haga distinto, o qué encontraste que no funciona. Lo recibe el equipo de BlissTracker.
+        </p>
+        <form onSubmit={handleSendFeedback} className="space-y-3">
+          <div className="flex gap-2">
+            {[
+              { id: 'SUGGESTION', label: 'Sugerencia', on: 'bg-primary-50 dark:bg-primary-900/30 border-primary-300 dark:border-primary-800 text-primary-700 dark:text-primary-400' },
+              { id: 'BUG',        label: 'Error',      on: 'bg-red-50 dark:bg-red-900/30 border-red-300 dark:border-red-800 text-red-700 dark:text-red-400' },
+            ].map(t => (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => setFbType(t.id)}
+                className={`px-4 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
+                  fbType === t.id
+                    ? t.on
+                    : 'bg-white dark:bg-gray-700 border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600'
+                }`}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+          <textarea
+            value={fbMessage}
+            onChange={e => setFbMessage(e.target.value)}
+            placeholder={fbType === 'BUG' ? 'Describí el error que encontraste: qué estabas haciendo y qué pasó...' : 'Escribí tu sugerencia...'}
+            rows={4}
+            className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-xl px-3 py-2.5 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary-500"
+          />
+          <div className="flex justify-end">
+            <button type="submit" disabled={fbSending || !fbMessage.trim()}
+              className="flex items-center gap-2 bg-primary-50 dark:bg-primary-900/30 hover:bg-primary-100 dark:hover:bg-primary-900/50 text-primary-600 dark:text-primary-400 border border-primary-200 dark:border-primary-800 text-sm font-medium rounded-xl px-4 py-2 transition-colors disabled:opacity-50">
+              {fbSending ? (
+                <>
+                  <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+                  </svg>
+                  Enviando...
+                </>
+              ) : (
+                <>
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
+                    <path d="M3.478 2.405a.75.75 0 00-.926.94l2.432 7.905H13.5a.75.75 0 010 1.5H4.984l-2.432 7.905a.75.75 0 00.926.94 60.519 60.519 0 0018.445-8.986.75.75 0 000-1.218A60.517 60.517 0 003.478 2.405z" />
+                  </svg>
+                  Enviar
+                </>
+              )}
+            </button>
+          </div>
+        </form>
+        {fbMsg.text && (
+          <p className={`mt-3 text-sm rounded-lg px-3 py-2 ${fbMsg.error ? 'bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400' : 'bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400'}`}>
+            {fbMsg.text}
+          </p>
+        )}
       </div>
     </>
   )
