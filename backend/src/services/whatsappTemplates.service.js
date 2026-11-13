@@ -1,4 +1,5 @@
 const prisma = require('../lib/prisma')
+const { markConversationRead } = require('../lib/whatsappRead')
 const { getProvider, decryptAccount } = require('../lib/whatsappProvider')
 const { emitTo } = require('../lib/socket')
 
@@ -132,13 +133,9 @@ async function sendTemplateToConversation({ workspaceId, conversation, account, 
   })
 
   await prisma.whatsappConversation.update({ where: { id: conversation.id }, data: { lastMessageAt: new Date() } })
-  if (senderUserId) {
-    await prisma.whatsappConversationRead.upsert({
-      where: { conversationId_userId: { conversationId: conversation.id, userId: senderUserId } },
-      update: { lastReadMessageId: message.id, lastReadAt: new Date() },
-      create: { workspaceId, conversationId: conversation.id, userId: senderUserId, lastReadMessageId: message.id },
-    })
-  }
+  // Una persona que reabre el chat lo vio (leído compartido, lib/whatsappRead.js).
+  // El motor de reglas (senderUserId null) no: nadie del equipo la miró.
+  if (senderUserId) await markConversationRead(conversation.id, message.id)
 
   emitTo(`workspace:${workspaceId}`, 'whatsapp:message', { conversationId: conversation.id, message })
   return { message, content }

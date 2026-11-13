@@ -4764,10 +4764,22 @@ model WhatsappConversation {
   // respuesta); la consume el cron de runDueBotReplies. null = nada pendiente.
   botReplyDueAt DateTime?
 
+  // Leído COMPARTIDO por todo el equipo (no por persona): hasta qué mensaje se
+  // vio la conversación. Lo mueven abrirla y responderla desde la app; nunca
+  // retrocede (lib/whatsappRead.js). Un agente de IA que responde no la marca
+  // leída. `markedUnreadAt` = alguien la marcó "no leída" a mano (como en
+  // WhatsApp): queda no leída aunque no haya mensajes nuevos, hasta que alguien
+  // la abra. El criterio de "no leída" vive en lib/whatsappRead.js.
+  lastReadMessageId Int?
+  lastReadAt        DateTime?
+  markedUnreadAt    DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   messages    WhatsappMessage[]
+  // Leído por persona: reemplazado por los campos compartidos de arriba. Ya no
+  // se lee ni se escribe; la tabla queda para poder volver atrás sin perder datos.
   reads       WhatsappConversationRead[]
   escalations WhatsappBotEscalation[]
 

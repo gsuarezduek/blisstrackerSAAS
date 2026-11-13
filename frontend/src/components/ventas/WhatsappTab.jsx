@@ -173,6 +173,36 @@ export default function WhatsappTab({ onOpenLead }) {
     loadConversations()
   }, [loadConversations])
 
+  // Leído/no leído COMPARTIDO por el equipo (como "Marcar como no leído" de
+  // WhatsApp). Marcar no leído la que tenés abierta la cierra: si quedara abierta,
+  // el próximo mensaje que entre la volvería a marcar leída sola.
+  const handleToggleRead = useCallback(async (conversation) => {
+    if (conversation.unread) {
+      await api.post(`/whatsapp/conversations/${conversation.id}/read`)
+    } else {
+      await api.post(`/whatsapp/conversations/${conversation.id}/unread`)
+      if (activeIdRef.current === conversation.id) {
+        setActiveId(null)
+        setActiveConversation(null)
+      }
+    }
+    loadConversations()
+    notifyNavCountsChanged()
+  }, [loadConversations])
+
+  // Volver a la pestaña con un chat abierto: lo que entró mientras estabas en
+  // otra pestaña recién ahora se vio (onMessage no lo marca si no se ve).
+  useEffect(() => {
+    function onVisible() {
+      if (document.visibilityState !== 'visible' || !activeIdRef.current) return
+      api.post(`/whatsapp/conversations/${activeIdRef.current}/read`)
+        .then(() => { loadConversations(); notifyNavCountsChanged() })
+        .catch(() => {})
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => document.removeEventListener('visibilitychange', onVisible)
+  }, [loadConversations])
+
   // Reabrir con plantilla (Fase 5 del plan) — único envío posible con la
   // ventana de 24hs vencida.
   const handleReopen = useCallback(async (templateId, variables) => {
@@ -192,11 +222,17 @@ export default function WhatsappTab({ onOpenLead }) {
     function onMessage({ conversationId, message }) {
       if (conversationId === activeIdRef.current) {
         setMessages(prev => (prev.some(m => m.id === message.id) ? prev : [...prev, message]))
-        api.post(`/whatsapp/conversations/${conversationId}/read`).catch(() => {})
-        notifyNavCountsChanged()
+        // El leído es de todo el equipo: un chat abierto en una pestaña que nadie
+        // está mirando no puede marcarles leído lo que entra (ver onVisible).
+        if (document.visibilityState === 'visible') {
+          api.post(`/whatsapp/conversations/${conversationId}/read`).catch(() => {})
+          notifyNavCountsChanged()
+        }
       }
       loadConversations()
     }
+    // Otra persona del equipo leyó o marcó como no leído un chat.
+    function onRead() { loadConversations() }
     function onStatus({ waMessageId, status }) {
       setMessages(prev => prev.map(m => (m.waMessageId === waMessageId ? { ...m, status } : m)))
     }
@@ -210,10 +246,12 @@ export default function WhatsappTab({ onOpenLead }) {
     socket.on('whatsapp:message', onMessage)
     socket.on('whatsapp:status', onStatus)
     socket.on('whatsapp:bot', onBot)
+    socket.on('whatsapp:read', onRead)
     return () => {
       socket.off('whatsapp:message', onMessage)
       socket.off('whatsapp:status', onStatus)
       socket.off('whatsapp:bot', onBot)
+      socket.off('whatsapp:read', onRead)
     }
   }, [account, loadConversations])
 
@@ -382,6 +420,7 @@ export default function WhatsappTab({ onOpenLead }) {
               onOpenLead={onOpenLead}
               onTogglePin={handleTogglePin}
               onToggleBlock={handleToggleBlock}
+              onToggleRead={handleToggleRead}
               search={search}
               viewingBlocked={viewingBlocked}
             />
@@ -411,6 +450,15 @@ export default function WhatsappTab({ onOpenLead }) {
                       workspaceBotEnabled={botConfig?.enabled}
                       onChanged={(botEnabled, agentControl, agentControlName) => setActiveConversation(c => ({ ...c, botEnabled, agentControl, agentControlName }))}
                     />
+                  )}
+                  {activeConversation && !activeConversation.isBlocked && (
+                    <button
+                      onClick={() => handleToggleRead({ id: activeConversation.id, unread: false })}
+                      title="Vuelve a aparecer como no leído para todo el equipo"
+                      className="shrink-0 text-xs px-2.5 py-1.5 rounded-lg font-medium bg-gray-50 dark:bg-gray-700/40 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700"
+                    >
+                      Marcar como no leído
+                    </button>
                   )}
                   {activeConversation && (
                     <button

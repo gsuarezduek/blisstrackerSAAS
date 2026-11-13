@@ -82,13 +82,17 @@ export default function useNavCounts() {
     if (!socketBound) {
       const socket = connectSocket()
       if (socket) {
-        socket.on('whatsapp:message', () => {
+        // `whatsapp:read`: el leído de WhatsApp es compartido por el equipo, así que
+        // cuando otra persona abre (o marca no leído) un chat, el número cambia acá.
+        const onWhatsappEvent = () => {
           // Si esta persona no tiene Ventas, el evento igual le llega (va al room del
           // workspace entero): no hay nada que refrescar.
           if (!cache?.data?.modules?.ventas) return
           clearTimeout(socketDebounce)
           socketDebounce = setTimeout(refresh, SOCKET_DEBOUNCE_MS)
-        })
+        }
+        socket.on('whatsapp:message', onWhatsappEvent)
+        socket.on('whatsapp:read', onWhatsappEvent)
         socketBound = true
       }
     }

@@ -49,30 +49,31 @@ async function flagOn(req, key) {
 }
 
 /**
- * Mensajes de WhatsApp entrantes sin leer, en una sola query.
+ * Conversaciones de WhatsApp sin leer, en una sola query. Cuenta CHATS, no mensajes
+ * (igual que WhatsApp), así el número de la barra coincide con el del filtro
+ * "No leídos" de la bandeja.
  *
- * `WhatsappConversation` no guarda `lastMessageId` (solo `lastMessageAt`), así que el
- * patrón de `listChannels` del chat — un `count` por fila — sería N+1 sobre todas las
- * conversaciones del workspace. Acá va un join contra `WhatsappConversationRead`, que
- * es el mismo mecanismo de no-leídos que usa el chat interno (`lastReadMessageId`).
- *
- * Dos diferencias a propósito con el `unread` booleano de `listConversations`:
- *  - `direction = 'in'`: si no, mandar un mensaje deja la conversación "no leída"
- *    hasta volver a abrirla, y lo que se cuenta acá es "me escribieron".
- *  - sin reacciones (`reactionEmoji`): mismo criterio que `awaitingReply`.
+ * El leído es compartido por el equipo (`WhatsappConversation.lastReadMessageId`),
+ * no por persona: si alguien ya lo vio, no le suma a nadie. El criterio es el de
+ * `lib/whatsappRead.js` (marcada a mano, o un mensaje DEL CONTACTO sin reacción
+ * posterior a lo visto) traducido a SQL: si se cambia uno, cambiar el otro.
  */
-async function countWhatsappUnread(workspaceId, userId) {
+async function countWhatsappUnread(workspaceId) {
   const rows = await prisma.$queryRaw`
     SELECT COUNT(*)::int AS n
-    FROM "WhatsappMessage" m
-    JOIN "WhatsappConversation" c ON c.id = m."conversationId"
-    LEFT JOIN "WhatsappConversationRead" r
-           ON r."conversationId" = c.id AND r."userId" = ${userId}
+    FROM "WhatsappConversation" c
     WHERE c."workspaceId" = ${workspaceId}
       AND c."isBlocked" = false
-      AND m.direction = 'in'
-      AND m."reactionEmoji" IS NULL
-      AND m.id > COALESCE(r."lastReadMessageId", 0)
+      AND (
+        c."markedUnreadAt" IS NOT NULL
+        OR EXISTS (
+          SELECT 1 FROM "WhatsappMessage" m
+          WHERE m."conversationId" = c.id
+            AND m.direction = 'in'
+            AND m."reactionEmoji" IS NULL
+            AND m.id > COALESCE(c."lastReadMessageId", 0)
+        )
+      )
   `
   return rows?.[0]?.n ?? 0
 }
@@ -120,7 +121,7 @@ async function getCounts(req, res, next) {
 
     const jobs = []
     if (whatsappFlag) {
-      jobs.push(countWhatsappUnread(workspaceId, userId).then(n => {
+      jobs.push(countWhatsappUnread(workspaceId).then(n => {
         modules.ventas = { subs: { whatsapp: { n } } }
       }))
     }

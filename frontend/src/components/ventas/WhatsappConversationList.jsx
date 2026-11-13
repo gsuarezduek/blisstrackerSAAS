@@ -1,4 +1,4 @@
-import { Ban, Pin } from 'lucide-react'
+import { Ban, CheckCheck, MessageSquareDot, Pin } from 'lucide-react'
 import { Icon } from '../ui/Icon'
 const MEDIA_PREVIEW = { image: 'Foto', sticker: 'Sticker', audio: 'Audio', video: 'Video', document: 'Documento' }
 
@@ -55,7 +55,7 @@ function timeLabel(iso) {
 
 // Una fila de conversación — extraída para reusarse en el grupo "Fijados" y
 // en el resto sin duplicar el JSX.
-function ConversationRow({ c, active, now, onSelect, onLinkContact, onOpenLead, onTogglePin, onToggleBlock }) {
+function ConversationRow({ c, active, now, onSelect, onLinkContact, onOpenLead, onTogglePin, onToggleBlock, onToggleRead }) {
   const title = c.contact?.name || c.contactName || c.phoneE164
   const pinned = Boolean(c.pinnedAt)
   const blocked = Boolean(c.isBlocked)
@@ -72,6 +72,15 @@ function ConversationRow({ c, active, now, onSelect, onLinkContact, onOpenLead, 
           {title}
         </span>
         <div className="flex items-center gap-1.5 flex-shrink-0">
+          {!blocked && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onToggleRead(c) }}
+              title={c.unread ? 'Marcar como leído (para todo el equipo)' : 'Marcar como no leído (para todo el equipo)'}
+              className="text-xs leading-none transition-all text-gray-400 opacity-40 hover:opacity-70"
+            >
+              <Icon as={c.unread ? CheckCheck : MessageSquareDot} size={15} />
+            </button>
+          )}
           {!blocked && (
             <button
               onClick={(e) => { e.stopPropagation(); onTogglePin(c) }}
@@ -141,7 +150,7 @@ function ConversationRow({ c, active, now, onSelect, onLinkContact, onOpenLead, 
 // — el matching automático por teléfono no cubre todos los casos). Si el
 // contacto está vinculado, además muestra su empresa y un atajo para abrir el
 // lead asociado (resuelto server-side en listConversations).
-export default function WhatsappConversationList({ conversations, activeId, onSelect, onLinkContact, onOpenLead, onTogglePin, onToggleBlock, search, viewingBlocked, filter = 'all', now = Date.now() }) {
+export default function WhatsappConversationList({ conversations, activeId, onSelect, onLinkContact, onOpenLead, onTogglePin, onToggleBlock, onToggleRead, search, viewingBlocked, filter = 'all', now = Date.now() }) {
   const activeFilter = CONVERSATION_FILTERS.find(f => f.key === filter) || CONVERSATION_FILTERS[0]
   if (conversations.length === 0) {
     return (
@@ -172,7 +181,7 @@ export default function WhatsappConversationList({ conversations, activeId, onSe
             Fijados
           </p>
           {pinned.map(c => (
-            <ConversationRow key={c.id} c={c} active={c.id === activeId} now={now} onSelect={onSelect} onLinkContact={onLinkContact} onOpenLead={onOpenLead} onTogglePin={onTogglePin} onToggleBlock={onToggleBlock} />
+            <ConversationRow key={c.id} c={c} active={c.id === activeId} now={now} onSelect={onSelect} onLinkContact={onLinkContact} onOpenLead={onOpenLead} onTogglePin={onTogglePin} onToggleBlock={onToggleBlock} onToggleRead={onToggleRead} />
           ))}
           <p className="px-4 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">
             Chats
@@ -180,7 +189,7 @@ export default function WhatsappConversationList({ conversations, activeId, onSe
         </>
       )}
       {rest.map(c => (
-        <ConversationRow key={c.id} c={c} active={c.id === activeId} now={now} onSelect={onSelect} onLinkContact={onLinkContact} onOpenLead={onOpenLead} onTogglePin={onTogglePin} onToggleBlock={onToggleBlock} />
+        <ConversationRow key={c.id} c={c} active={c.id === activeId} now={now} onSelect={onSelect} onLinkContact={onLinkContact} onOpenLead={onOpenLead} onTogglePin={onTogglePin} onToggleBlock={onToggleBlock} onToggleRead={onToggleRead} />
       ))}
     </div>
   )

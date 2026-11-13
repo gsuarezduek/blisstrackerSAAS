@@ -5,7 +5,6 @@ jest.mock('../../src/lib/prisma', () => ({
   whatsappAccount:          { findFirst: jest.fn() },
   whatsappMessage:          { create: jest.fn() },
   whatsappConversation:     { update: jest.fn() },
-  whatsappConversationRead: { upsert: jest.fn() },
   lead:                     { findFirst: jest.fn() },
   mcpToken:                 { findFirst: jest.fn() },
 }))
@@ -14,12 +13,14 @@ jest.mock('../../src/lib/whatsappProvider', () => ({
   decryptAccount: jest.fn(a => a),
 }))
 jest.mock('../../src/lib/socket', () => ({ emitTo: jest.fn() }))
+jest.mock('../../src/lib/whatsappRead', () => ({ markConversationRead: jest.fn(), isConversationUnread: jest.fn(), lastUnreadableMessageIds: jest.fn() }))
 jest.mock('../../src/controllers/whatsapp/_shared', () => ({ assertConversation: jest.fn() }))
 jest.mock('../../src/controllers/ventas/_shared', () => ({ logLeadEvent: jest.fn() }))
 
 const prisma = require('../../src/lib/prisma')
 const { getProvider } = require('../../src/lib/whatsappProvider')
 const { emitTo } = require('../../src/lib/socket')
+const { markConversationRead } = require('../../src/lib/whatsappRead')
 const { assertConversation } = require('../../src/controllers/whatsapp/_shared')
 const { logLeadEvent } = require('../../src/controllers/ventas/_shared')
 const { sendMessage, toggleConversationBot } = require('../../src/controllers/whatsapp/conversations.controller')
@@ -68,7 +69,7 @@ describe('sendMessage vía agente', () => {
     expect(prisma.whatsappConversation.update.mock.calls[0][0].data).toMatchObject({ botEnabled: false, agentControlId: AGENT.id, botReplyDueAt: null })
     expect(emitTo).toHaveBeenCalledWith('workspace:1', 'whatsapp:bot', { conversationId: 3, botEnabled: false, agentControl: AGENT, agentControlName: null })
     // No marca leída la conversación para el dueño
-    expect(prisma.whatsappConversationRead.upsert).not.toHaveBeenCalled()
+    expect(markConversationRead).not.toHaveBeenCalled()
     expect(logLeadEvent.mock.calls[0][0].content).toContain('vía su agente «Grok ventas»')
   })
 
@@ -87,7 +88,7 @@ describe('sendMessage vía agente', () => {
     expect(prisma.whatsappConversation.update.mock.calls[0][0].data).not.toHaveProperty('botEnabled')
     // Ya se contestó: se cancela la respuesta del bot en espera
     expect(prisma.whatsappConversation.update.mock.calls[0][0].data.botReplyDueAt).toBeNull()
-    expect(prisma.whatsappConversationRead.upsert).toHaveBeenCalled()
+    expect(markConversationRead).toHaveBeenCalledWith(3, expect.any(Number))
   })
 
   it('fuera de la ventana de 24hs devuelve 400 y no manda nada', async () => {

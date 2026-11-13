@@ -12,6 +12,7 @@ const { assertConversation } = require('./_shared')
 const { requestAgentId, requestAgentName, assertOwnAgent } = require('../tasks/_shared')
 const { formatAgentName } = require('../../lib/agentTasks')
 const { buildTextSearchFilters } = require('../../lib/textSearch')
+const { isConversationUnread, lastUnreadableMessageIds, markConversationRead } = require('../../lib/whatsappRead')
 
 const MESSAGE_PAGE_SIZE = 50
 const SESSION_WINDOW_MS = 24 * 60 * 60 * 1000
@@ -107,18 +108,19 @@ async function listConversations(req, res, next) {
       include: {
         contact: { select: { id: true, name: true, companyId: true, company: { select: { name: true } } } },
         messages: { orderBy: { id: 'desc' }, take: 1, include: { media: { select: { kind: true } } } },
-        reads: { where: { userId: req.user.userId }, take: 1 },
         pinnedBy: { select: { id: true, name: true } },
         agentControl: AGENT_SELECT,
       },
     })
 
     const contactIds = [...new Set(conversations.map(c => c.contactId).filter(Boolean))]
-    const leadByContact = await resolveLeadByContact(req.workspace.id, contactIds)
+    const [leadByContact, lastUnreadable] = await Promise.all([
+      resolveLeadByContact(req.workspace.id, contactIds),
+      lastUnreadableMessageIds(conversations.map(c => c.id)),
+    ])
 
     const result = conversations.map((c) => {
       const lastMessage = c.messages[0] ?? null
-      const lastRead = c.reads[0]?.lastReadMessageId ?? 0
       return {
         id: c.id,
         phoneE164: c.phoneE164,
@@ -148,7 +150,10 @@ async function listConversations(req, res, next) {
               reactionEmoji: lastMessage.reactionEmoji || null,
             }
           : null,
-        unread: Boolean(lastMessage && lastMessage.id > lastRead),
+        // Compartido por el equipo, mismo criterio que el número de la barra
+        // lateral (lib/whatsappRead.js).
+        unread: isConversationUnread(c, lastUnreadable.get(c.id)),
+        markedUnread: Boolean(c.markedUnreadAt),
       }
     })
 
@@ -276,13 +281,9 @@ async function sendMessage(req, res, next) {
         ...(agentId ? { botEnabled: false, agentControlId: agentId, agentControlName: message.senderAgentName } : {}),
       },
     })
-    if (!agentId) {
-      await prisma.whatsappConversationRead.upsert({
-        where: { conversationId_userId: { conversationId: conversation.id, userId: req.user.userId } },
-        update: { lastReadMessageId: message.id, lastReadAt: new Date() },
-        create: { workspaceId: req.workspace.id, conversationId: conversation.id, userId: req.user.userId, lastReadMessageId: message.id },
-      })
-    }
+    // Responder es haberla visto, para todo el equipo. Un agente no: que el
+    // agente haya respondido no significa que una persona la haya leído.
+    if (!agentId) await markConversationRead(conversation.id, message.id)
 
     emitTo(`workspace:${req.workspace.id}`, 'whatsapp:message', { conversationId: conversation.id, message })
     if (agentId) {
@@ -415,11 +416,7 @@ async function sendMedia(req, res, next) {
     })
 
     await prisma.whatsappConversation.update({ where: { id: conversation.id }, data: { lastMessageAt: new Date(), botReplyDueAt: null } })
-    await prisma.whatsappConversationRead.upsert({
-      where: { conversationId_userId: { conversationId: conversation.id, userId: req.user.userId } },
-      update: { lastReadMessageId: message.id, lastReadAt: new Date() },
-      create: { workspaceId: req.workspace.id, conversationId: conversation.id, userId: req.user.userId, lastReadMessageId: message.id },
-    })
+    await markConversationRead(conversation.id, message.id)
 
     emitTo(`workspace:${req.workspace.id}`, 'whatsapp:message', { conversationId: conversation.id, message })
 
@@ -564,18 +561,32 @@ async function assignConversation(req, res, next) {
   } catch (err) { next(err) }
 }
 
-/** POST /api/whatsapp/conversations/:id/read */
+/**
+ * POST /api/whatsapp/conversations/:id/read
+ * Leído COMPARTIDO: abrirla la marca vista para todo el equipo (y le saca la
+ * marca manual de "no leída"). Avisa por socket para que la lista y el número
+ * de la barra lateral de los demás se actualicen sin esperar el polling.
+ */
 async function markRead(req, res, next) {
   try {
     const conversation = await assertConversation(req)
-    const last = await prisma.whatsappMessage.findFirst({ where: { conversationId: conversation.id }, orderBy: { id: 'desc' } })
+    const last = await prisma.whatsappMessage.findFirst({ where: { conversationId: conversation.id }, orderBy: { id: 'desc' }, select: { id: true } })
+    await markConversationRead(conversation.id, last?.id ?? null)
+    emitTo(`workspace:${req.workspace.id}`, 'whatsapp:read', { conversationId: conversation.id, unread: false })
+    res.json({ ok: true })
+  } catch (err) { next(err) }
+}
 
-    await prisma.whatsappConversationRead.upsert({
-      where: { conversationId_userId: { conversationId: conversation.id, userId: req.user.userId } },
-      update: { lastReadMessageId: last?.id ?? null, lastReadAt: new Date() },
-      create: { workspaceId: req.workspace.id, conversationId: conversation.id, userId: req.user.userId, lastReadMessageId: last?.id ?? null },
-    })
-
+/**
+ * POST /api/whatsapp/conversations/:id/unread
+ * "Marcar como no leído", como en WhatsApp: queda no leída para todo el equipo
+ * aunque no haya mensajes nuevos, hasta que alguien la vuelva a abrir.
+ */
+async function markUnread(req, res, next) {
+  try {
+    const conversation = await assertConversation(req)
+    await prisma.whatsappConversation.update({ where: { id: conversation.id }, data: { markedUnreadAt: new Date() } })
+    emitTo(`workspace:${req.workspace.id}`, 'whatsapp:read', { conversationId: conversation.id, unread: true })
     res.json({ ok: true })
   } catch (err) { next(err) }
 }
@@ -680,5 +691,5 @@ async function toggleBlock(req, res, next) {
 
 module.exports = {
   listConversations, getMessages, sendMessage, sendMedia, linkContact,
-  createContactFromConversation, assignConversation, markRead, toggleConversationBot, togglePin, toggleBlock,
+  createContactFromConversation, assignConversation, markRead, markUnread, toggleConversationBot, togglePin, toggleBlock,
 }

@@ -139,7 +139,10 @@ export default function WhatsappLeadCard({ leadId, lead, onChanged }) {
     function onMessage({ conversationId, message }) {
       if (conversationId !== conversationIdRef.current) return
       setMessages(prev => (prev.some(m => m.id === message.id) ? prev : [...prev, message]))
-      api.post(`/whatsapp/conversations/${conversationId}/read`).catch(() => {})
+      // El leído es de todo el equipo: si nadie mira esta pestaña, no se marca.
+      if (document.visibilityState === 'visible') {
+        api.post(`/whatsapp/conversations/${conversationId}/read`).catch(() => {})
+      }
     }
     function onStatus({ waMessageId, status }) {
       setMessages(prev => prev.map(m => (m.waMessageId === waMessageId ? { ...m, status } : m)))
