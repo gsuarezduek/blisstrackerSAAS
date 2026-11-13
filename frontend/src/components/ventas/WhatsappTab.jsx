@@ -5,7 +5,7 @@ import { useAuth } from '../../context/AuthContext'
 import { connectSocket } from '../../lib/socket'
 import LoadingSpinner from '../LoadingSpinner'
 import WhatsappConnectForm from './WhatsappConnectForm'
-import WhatsappConversationList from './WhatsappConversationList'
+import WhatsappConversationList, { CONVERSATION_FILTERS } from './WhatsappConversationList'
 import WhatsappLinkContactModal from './WhatsappLinkContactModal'
 import WhatsappMessageList from './WhatsappMessageList'
 import WhatsappMessageInput from './WhatsappMessageInput'
@@ -48,6 +48,16 @@ export default function WhatsappTab({ onOpenLead }) {
   const [hasMore, setHasMore] = useState(false)
   const [search, setSearch] = useState('')
   const [viewingBlocked, setViewingBlocked] = useState(false)
+  // Clave de CONVERSATION_FILTERS. Se filtra en el browser: listConversations
+  // ya devuelve todas las conversaciones con lo que cada filtro necesita.
+  const [filter, setFilter] = useState('all')
+  // "Por vencer" depende del reloj, no solo de los datos: sin este tick un chat
+  // no entraría al filtro (ni su cuenta regresiva bajaría) hasta el próximo refresco.
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 60 * 1000)
+    return () => clearInterval(t)
+  }, [])
 
   const activeIdRef = useRef(null)
   activeIdRef.current = activeId
@@ -207,6 +217,17 @@ export default function WhatsappTab({ onOpenLead }) {
     }
   }, [account, loadConversations])
 
+  // Abrir un chat lo marca leído y responderlo lo saca de "Sin responder": sin
+  // la excepción de la conversación activa, desaparecería del filtro mientras
+  // la estás usando (WhatsApp hace lo mismo: queda hasta que cambiás de chat).
+  const activeFilter = CONVERSATION_FILTERS.find(f => f.key === filter) || CONVERSATION_FILTERS[0]
+  const filterCounts = Object.fromEntries(
+    CONVERSATION_FILTERS.map(f => [f.key, conversations.filter(c => f.match(c, now)).length]),
+  )
+  const visibleConversations = viewingBlocked
+    ? conversations
+    : conversations.filter(c => activeFilter.match(c, now) || c.id === activeId)
+
   if (loadingAccount) return <LoadingSpinner size="sm" className="py-10" />
 
   if (!account) {
@@ -329,11 +350,32 @@ export default function WhatsappTab({ onOpenLead }) {
               {viewingBlocked ? '←' : <Icon as={Ban} size={15} />}
             </button>
           </div>
+          {!viewingBlocked && (
+            <div className="px-3 py-2 border-b border-gray-100 dark:border-gray-700 flex-shrink-0 flex items-center gap-1.5 flex-wrap">
+              {CONVERSATION_FILTERS.map(f => ({ ...f, count: f.key === 'all' ? 0 : filterCounts[f.key] })).map(f => (
+                <button
+                  key={f.key}
+                  title={f.title}
+                  onClick={() => setFilter(f.key)}
+                  className={`text-xs px-2.5 py-1 rounded-full font-medium inline-flex items-center gap-1 transition-colors ${
+                    filter === f.key
+                      ? 'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400'
+                      : 'bg-gray-100 dark:bg-gray-700/50 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
+                  }`}
+                >
+                  {f.label}
+                  {f.count > 0 && <span className="text-[10px] font-bold">{f.count}</span>}
+                </button>
+              ))}
+            </div>
+          )}
           {loadingConversations && conversations.length === 0 ? (
             <LoadingSpinner size="sm" className="flex-1 py-10" />
           ) : (
             <WhatsappConversationList
-              conversations={conversations}
+              conversations={visibleConversations}
+              filter={viewingBlocked ? 'all' : filter}
+              now={now}
               activeId={activeId}
               onSelect={openConversation}
               onLinkContact={setLinkingConversation}

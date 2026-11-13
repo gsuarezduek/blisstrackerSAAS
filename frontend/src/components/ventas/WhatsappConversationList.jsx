@@ -13,6 +13,36 @@ function previewText(lastMessage) {
   return prefix
 }
 
+// La ventana de 24hs de WhatsApp "por vencer": quedan menos de estas horas
+// para responder con texto libre. Pasado eso, retomar exige una plantilla paga.
+const CLOSING_SOON_MS = 3 * 60 * 60 * 1000
+
+function windowMsLeft(c, now) {
+  if (!c.sessionExpiresAt) return null
+  const left = new Date(c.sessionExpiresAt).getTime() - now
+  return left > 0 ? left : null
+}
+
+function isClosingSoon(c, now) {
+  const left = windowMsLeft(c, now)
+  return left !== null && left <= CLOSING_SOON_MS
+}
+
+// Filtros de la bandeja. Todos corren en el browser sobre lo que ya devuelve
+// listConversations (`unread` por persona, `awaitingReply`, `sessionExpiresAt`).
+// `empty` es el texto de la lista vacía con ese filtro activo.
+export const CONVERSATION_FILTERS = [
+  { key: 'all', label: 'Todos', match: () => true },
+  { key: 'unread', label: 'No leídos', match: c => c.unread, empty: 'No tenés chats sin leer.', searchSuffix: ' sin leer' },
+  { key: 'awaiting', label: 'Sin responder', match: c => c.awaitingReply, empty: 'No hay chats esperando respuesta.', searchSuffix: ' sin responder' },
+  { key: 'closing', label: 'Por vencer', match: (c, now) => isClosingSoon(c, now), empty: 'Ningún chat tiene la ventana de 24 h por vencer.', searchSuffix: ' con la ventana por vencer', title: 'Quedan menos de 3 h para responder sin plantilla' },
+]
+
+function closingLabel(ms) {
+  const mins = Math.max(1, Math.round(ms / 60000))
+  return mins < 60 ? `Vence en ${mins} min` : `Vence en ${Math.round(mins / 60)} h`
+}
+
 function timeLabel(iso) {
   if (!iso) return ''
   const d = new Date(iso)
@@ -25,10 +55,11 @@ function timeLabel(iso) {
 
 // Una fila de conversación — extraída para reusarse en el grupo "Fijados" y
 // en el resto sin duplicar el JSX.
-function ConversationRow({ c, active, onSelect, onLinkContact, onOpenLead, onTogglePin, onToggleBlock }) {
+function ConversationRow({ c, active, now, onSelect, onLinkContact, onOpenLead, onTogglePin, onToggleBlock }) {
   const title = c.contact?.name || c.contactName || c.phoneE164
   const pinned = Boolean(c.pinnedAt)
   const blocked = Boolean(c.isBlocked)
+  const closingMs = !blocked && isClosingSoon(c, now) ? windowMsLeft(c, now) : null
   return (
     <button
       onClick={() => onSelect(c.id)}
@@ -74,6 +105,14 @@ function ConversationRow({ c, active, onSelect, onLinkContact, onOpenLead, onTog
         {c.unread && <span className="w-2 h-2 rounded-full bg-primary-500 flex-shrink-0" />}
       </div>
       <div className="flex items-center gap-1.5 flex-wrap">
+        {closingMs !== null && (
+          <span
+            title="Pasado ese plazo, para retomar el chat hay que mandar una plantilla"
+            className="inline-block mt-1 text-[10px] px-1.5 py-0.5 rounded-full bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400"
+          >
+            {closingLabel(closingMs)}
+          </span>
+        )}
         {!c.contact && (
           <button
             onClick={(e) => { e.stopPropagation(); onLinkContact(c) }}
@@ -102,14 +141,17 @@ function ConversationRow({ c, active, onSelect, onLinkContact, onOpenLead, onTog
 // — el matching automático por teléfono no cubre todos los casos). Si el
 // contacto está vinculado, además muestra su empresa y un atajo para abrir el
 // lead asociado (resuelto server-side en listConversations).
-export default function WhatsappConversationList({ conversations, activeId, onSelect, onLinkContact, onOpenLead, onTogglePin, onToggleBlock, search, viewingBlocked }) {
+export default function WhatsappConversationList({ conversations, activeId, onSelect, onLinkContact, onOpenLead, onTogglePin, onToggleBlock, search, viewingBlocked, filter = 'all', now = Date.now() }) {
+  const activeFilter = CONVERSATION_FILTERS.find(f => f.key === filter) || CONVERSATION_FILTERS[0]
   if (conversations.length === 0) {
     return (
       <div className="flex-1 flex items-center justify-center p-6">
         <p className="text-sm text-gray-400 dark:text-gray-500 text-center">
           {search
-            ? `No encontramos chats que coincidan con "${search}".`
-            : viewingBlocked
+            ? `No encontramos chats${activeFilter.searchSuffix || ''} que coincidan con "${search}".`
+            : activeFilter.empty
+              ? activeFilter.empty
+              : viewingBlocked
               ? 'No hay conversaciones marcadas como spam.'
               : 'Todavía no llegó ningún mensaje. En cuanto un lead escriba al número conectado, aparece acá.'}
         </p>
@@ -130,7 +172,7 @@ export default function WhatsappConversationList({ conversations, activeId, onSe
             Fijados
           </p>
           {pinned.map(c => (
-            <ConversationRow key={c.id} c={c} active={c.id === activeId} onSelect={onSelect} onLinkContact={onLinkContact} onOpenLead={onOpenLead} onTogglePin={onTogglePin} onToggleBlock={onToggleBlock} />
+            <ConversationRow key={c.id} c={c} active={c.id === activeId} now={now} onSelect={onSelect} onLinkContact={onLinkContact} onOpenLead={onOpenLead} onTogglePin={onTogglePin} onToggleBlock={onToggleBlock} />
           ))}
           <p className="px-4 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">
             Chats
@@ -138,7 +180,7 @@ export default function WhatsappConversationList({ conversations, activeId, onSe
         </>
       )}
       {rest.map(c => (
-        <ConversationRow key={c.id} c={c} active={c.id === activeId} onSelect={onSelect} onLinkContact={onLinkContact} onOpenLead={onOpenLead} onTogglePin={onTogglePin} onToggleBlock={onToggleBlock} />
+        <ConversationRow key={c.id} c={c} active={c.id === activeId} now={now} onSelect={onSelect} onLinkContact={onLinkContact} onOpenLead={onOpenLead} onTogglePin={onTogglePin} onToggleBlock={onToggleBlock} />
       ))}
     </div>
   )
