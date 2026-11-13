@@ -202,6 +202,11 @@ POST   /api/notifications/read-all
 # Una clave AUSENTE en `modules` = ese módulo no aplica para quien pregunta (ausente ≠ dot:false).
 GET    /api/nav/counts                            # { modules: { ventas:{subs:{whatsapp:{n}}}, rrhh:{dot}, contenido:{dot}, finanzas:{dot} }, at }
 
+# Feedback — canal directo del usuario con el equipo que desarrolla BlissTracker
+# (Preferencias → Personales). Solo alta: se lee en /api/superadmin/feedback, NO
+# desde el workspace. El aviso sale a la casilla de plataforma con replyTo al autor.
+POST   /api/feedback                              # body: { type: 'SUGGESTION'|'BUG', message }
+
 # Push notifications (app mobile — CONGELADA, ver CLAUDE.md)
 POST   /api/devices/register                      # body: { token, platform } — registra/refresca el Expo Push Token del dispositivo
 DELETE /api/devices/register                      # body: { token } — deja de mandarle push (logout desde la app)
@@ -675,7 +680,7 @@ GET    /api/superadmin/settings/log                     # ?key=&limit= — audit
 GET    /api/superadmin/settings/cleanup-preview         # ?tables=notifications,emailLog — preview rows a borrar
 POST   /api/superadmin/settings/cleanup-now             # body: { tables?: [] } — aplica cleanup inmediato con los retention actuales
 POST   /api/superadmin/impersonate         # sesión de soporte atada a ese workspace; no administra la cuenta (perfil, 2FA, Google)
-GET    /api/superadmin/feedback
+GET    /api/superadmin/feedback                            # TODOS los workspaces: el canal directo de los usuarios con el equipo de BlissTracker
 PUT    /api/superadmin/feedback/:id/read
 GET    /api/superadmin/email-logs
 GET    /api/superadmin/feature-flags

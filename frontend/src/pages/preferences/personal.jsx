@@ -222,7 +222,7 @@ export default function PersonalTab({ loaded, weeklyEmail, dailyInsight, notesBo
       <div className="bg-white dark:bg-gray-800 rounded-2xl border dark:border-gray-700 p-6">
         <h2 className="text-base font-semibold text-gray-900 dark:text-white mb-1">Sugerencias y errores</h2>
         <p className="text-xs text-gray-400 dark:text-gray-500 mb-5">
-          Contanos qué te gustaría que la app haga distinto, o qué encontraste que no funciona. Lo recibe el equipo de BlissTracker.
+          Contanos qué te gustaría que la app haga distinto, o qué encontraste que no funciona. Va directo al equipo que desarrolla BlissTracker — no lo ve la administración de tu workspace — y te puede contestar al mail de tu cuenta.
         </p>
         <form onSubmit={handleSendFeedback} className="space-y-3">
           <div className="flex gap-2">

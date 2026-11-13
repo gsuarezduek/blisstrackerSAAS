@@ -1,13 +1,13 @@
 const router = require('express').Router()
-const { create, list, markRead } = require('../controllers/feedback.controller')
+const { create } = require('../controllers/feedback.controller')
 const { auth } = require('../middleware/auth')
-const { resolveWorkspace, workspaceAdminOnly } = require('../middleware/workspace')
+const { resolveWorkspace } = require('../middleware/workspace')
 
 router.use(auth)
 router.use(resolveWorkspace)
 
-router.post('/',           create)
-router.get('/',            workspaceAdminOnly, list)
-router.put('/:id/read',    workspaceAdminOnly, markRead)
+// Solo el alta. Leer y marcar leído viven en `/api/superadmin/feedback`: esto no
+// es un buzón del workspace — ver la cabecera del controller.
+router.post('/', create)
 
 module.exports = router
