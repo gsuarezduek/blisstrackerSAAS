@@ -26,6 +26,19 @@ const REVOKED_NOTICE_AFTER = 3
 // esto serían ~2000 mails diarios por agente roto.
 const NOTICE_COOLDOWN_MS = 24 * 60 * 60 * 1000
 
+// Cuántos de los primeros intentos de un origen se loguean, y cada cuántos después.
+// El estado completo vive en la fila (`attempts`/`lastAt`) y en la UI: el log es la señal
+// de que algo está pasando, no el registro. Sin esto un solo conector mal configurado
+// escribe cientos de líneas por día y tapa los errores de verdad.
+const LOG_FIRST = 3
+const LOG_EVERY = 50
+
+// Los primeros intentos son los informativos (cuándo arrancó el problema); después
+// alcanza con una confirmación periódica de que sigue vivo.
+function shouldLog(attempts) {
+  return attempts <= LOG_FIRST || attempts % LOG_EVERY === 0
+}
+
 // Nunca el token: los primeros caracteres de su sha256. No permite reconstruirlo y
 // alcanza para distinguir "siempre manda el mismo valor equivocado" (config vieja) de
 // "manda uno distinto cada vez" (algo lo está generando mal).
@@ -74,11 +87,15 @@ async function recordFailure(req, { reason, tokenHash, row, error }) {
     create: { fingerprint, reason, hashPrefix: prefix, ip, userAgent, ...identity },
   })
 
-  console.warn(
-    `[mcpAuth] rechazado (${reason}) · token ${prefix || '—'} · ip ${ip || '—'} · ` +
-    `ua ${userAgent || '—'} · intento #${rec.attempts}` +
-    (row ? ` · agente "${row.label || 'sin nombre'}" (#${row.id})` : '')
-  )
+  // console.log y no console.warn: en Railway todo lo que sale por stderr se clasifica
+  // como error, y un conector mal configurado pintaba de rojo el panel entero.
+  if (shouldLog(rec.attempts)) {
+    console.log(
+      `[mcpAuth] rechazado (${reason}) · token ${prefix || '—'} · ip ${ip || '—'} · ` +
+      `ua ${userAgent || '—'} · intento #${rec.attempts}` +
+      (row ? ` · agente "${row.label || 'sin nombre'}" (#${row.id})` : '')
+    )
+  }
 
   if (reason === 'revoked' && row) await maybeNotifyOwner(row, rec)
 }
@@ -110,4 +127,4 @@ function recordFailureAsync(req, info) {
   recordFailure(req, info).catch(err => console.error('[mcpAuth] no se pudo registrar el rechazo:', err.message))
 }
 
-module.exports = { recordFailure, recordFailureAsync, REVOKED_NOTICE_AFTER, NOTICE_COOLDOWN_MS }
+module.exports = { recordFailure, recordFailureAsync, REVOKED_NOTICE_AFTER, NOTICE_COOLDOWN_MS, LOG_FIRST, LOG_EVERY }

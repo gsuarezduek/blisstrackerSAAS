@@ -16,7 +16,7 @@ jest.mock('../../src/services/email/accountEmails', () => ({
 
 const prisma = require('../../src/lib/prisma')
 const { sendMcpTokenRevokedNotice } = require('../../src/services/email/accountEmails')
-const { recordFailure, REVOKED_NOTICE_AFTER } = require('../../src/services/mcpAuthFailure.service')
+const { recordFailure, REVOKED_NOTICE_AFTER, LOG_FIRST, LOG_EVERY } = require('../../src/services/mcpAuthFailure.service')
 
 const req = (over = {}) => ({ ip: '1.2.3.4', headers: { 'user-agent': 'undici' }, ...over })
 // sha256 de un token cualquiera: lo único que importa es que sea largo y estable.
@@ -31,6 +31,7 @@ function revokedRow(over = {}) {
 
 beforeEach(() => {
   jest.clearAllMocks()
+  jest.spyOn(console, 'log').mockImplementation(() => {})
   jest.spyOn(console, 'warn').mockImplementation(() => {})
   jest.spyOn(console, 'error').mockImplementation(() => {})
   prisma.mcpAuthFailure.upsert.mockResolvedValue({ attempts: 1 })
@@ -136,5 +137,55 @@ describe('a quién se le avisa', () => {
 
     expect(sendMcpTokenRevokedNotice).not.toHaveBeenCalled()
     expect(prisma.user.findUnique).not.toHaveBeenCalled()
+  })
+})
+
+describe('cuánto grita el log', () => {
+  // El estado completo vive en la fila; el log es la señal. Un conector mal configurado
+  // reintenta indefinidamente y sin tope pinta el panel de Railway de punta a punta.
+  it('loguea los primeros intentos, que son los que dicen cuándo arrancó', async () => {
+    for (let n = 1; n <= LOG_FIRST; n++) {
+      prisma.mcpAuthFailure.upsert.mockResolvedValue({ attempts: n })
+      await recordFailure(req(), { reason: 'unknown_token', tokenHash: HASH })
+    }
+    expect(console.log).toHaveBeenCalledTimes(LOG_FIRST)
+  })
+
+  it('se calla en el medio', async () => {
+    prisma.mcpAuthFailure.upsert.mockResolvedValue({ attempts: LOG_FIRST + 1 })
+    await recordFailure(req(), { reason: 'unknown_token', tokenHash: HASH })
+
+    expect(console.log).not.toHaveBeenCalled()
+  })
+
+  it('vuelve a confirmar cada tanto que el problema sigue vivo', async () => {
+    prisma.mcpAuthFailure.upsert.mockResolvedValue({ attempts: LOG_EVERY })
+    await recordFailure(req(), { reason: 'unknown_token', tokenHash: HASH })
+
+    expect(console.log).toHaveBeenCalledWith(expect.stringContaining(`intento #${LOG_EVERY}`))
+  })
+
+  it('no usa stderr: en Railway eso se clasifica como error y tapa los de verdad', async () => {
+    prisma.mcpAuthFailure.upsert.mockResolvedValue({ attempts: 1 })
+    await recordFailure(req(), { reason: 'unknown_token', tokenHash: HASH })
+
+    expect(console.warn).not.toHaveBeenCalled()
+    expect(console.error).not.toHaveBeenCalled()
+  })
+
+  it('pero una base caída SÍ es un error del servidor', async () => {
+    await recordFailure(req(), { reason: 'db_error', tokenHash: HASH, error: new Error('timeout') })
+
+    expect(console.error).toHaveBeenCalled()
+  })
+
+  // El throttle vale para el log, no para el aviso: el mail tiene su propio criterio
+  // (tercer intento + un día de cooldown) y no debe depender de si esa vez se logueó.
+  it('el throttle del log no se come el mail', async () => {
+    prisma.mcpAuthFailure.upsert.mockResolvedValue({ attempts: LOG_FIRST + 1 })
+    await recordFailure(req(), { reason: 'revoked', tokenHash: HASH, row: revokedRow() })
+
+    expect(console.log).not.toHaveBeenCalled()
+    expect(sendMcpTokenRevokedNotice).toHaveBeenCalled()
   })
 })
