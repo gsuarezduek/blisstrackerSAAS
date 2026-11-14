@@ -438,6 +438,8 @@ DELETE /api/marketing/projects/:id/integrations/:type       # desconectar integr
 
 # Marketing — Analytics GA4
 GET    /api/marketing/projects/:id/analytics                # ?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD
+GET    /api/marketing/projects/:id/analytics/monthly        # ?months=12 — serie mes a mes (visitas + eventos clave), 1 sola query a GA4
+POST   /api/marketing/projects/:id/analytics/ask            # body: { question } — pregunta libre a GA4 vía IA; devuelve { answer, steps }
 GET    /api/marketing/projects/:id/ads                      # datos de ads agregados (Meta + Google)
 GET    /api/marketing/projects/:id/ai-traffic               # tráfico desde fuentes AI (Perplexity, ChatGPT, etc.)
 GET    /api/marketing/projects/:id/health-score             # score compuesto: GEO + keywords + GA4 + PageSpeed
@@ -507,7 +509,7 @@ GET    /api/marketing/projects/:id/facebook/scrape-debug    # ?page=<url|slug> �
 GET    /api/marketing/projects/:id/snapshots                # ?month=YYYY-MM
 POST   /api/marketing/projects/:id/snapshots                # body: { month } — guarda snapshot GA4 del mes
 GET    /api/marketing/projects/:id/insights/:month          # análisis IA del mes (YYYY-MM)
-POST   /api/marketing/projects/:id/insights/:month          # genera análisis IA con Claude Haiku
+POST   /api/marketing/projects/:id/insights/:month          # genera análisis IA con Claude Haiku (mes en curso: refresca el snapshot y compara contra los mismos días del mes anterior)
 
 # Marketing — PageSpeed Insights
 POST   /api/marketing/projects/:id/pagespeed                # body: { strategy } — dispara análisis async, devuelve { resultId }

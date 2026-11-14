@@ -328,6 +328,10 @@ backend/
       auth.middleware.test.js
       assertNoActiveTask.test.js
       analyticsSnapshot.helpers.test.js   # monthBounds, prevMonth, delta helpers
+      analyticsPartialMonth.test.js       # el mes EN CURSO no se compara contra el mes anterior completo: días transcurridos en la tz del workspace, la ventana equivalente del mes anterior (13 días contra 13, recortada en febrero) y la proyección a fin de mes
+      analyticsInsightPeriod.test.js      # que el prompt del análisis IA de Web use ese criterio: refresca el snapshot antes de analizar, compara contra 1–13 de octubre (-7%) y nunca contra octubre completo (-58%), y no inventa comparación el 1° del mes ni con GA4 vencido
+      ga4QueryCatalog.test.js             # lista blanca de "Preguntale a tus datos": dimensión/métrica/filtro/orden fuera del catálogo se rechazan, la fecha sólo en los formatos de GA4, el orden por default (top N vs serie temporal) y el mapeo a runReport
+      analyticsAsk.test.js                # el loop IA ↔ GA4 de "Preguntale a tus datos": una consulta inválida del modelo no sale a Google (el error vuelve a él), el property lo pone el backend y no el modelo, las filas vuelven con nombre de columna, el tope de pasos y el token vencido que corta el loop
       pageSpeed.helpers.test.js           # URL normalization, scoreRating, parseAudit
       monthUtils.test.js                  # periodMonths, periodLabel (períodos calendario de objetivos)
       marketingObjectives.service.test.js # computeObjectives: flujo vs stock, posición invertida, orphaned, head-to-head competidor
@@ -382,6 +386,7 @@ frontend/
       webTabDates.test.js                 # getDateParams, formatDateLabel, currentMonthStr, prevMonthStr
     components/
       projectAccesos.test.jsx           # la fila de un acceso: quién lo cargó y quién lo editó, y que un acceso viejo sin autor no se lo invente
+      monthlyTrendChart.test.jsx        # gráfico de 12 meses de Web → Analytics: un mes sin dato es "s/d" y no una barra en cero, el tooltip con visitas/eventos/variación, el aviso del mes en curso, y el espejo del catálogo GA4 (formato de tasa/duración y valores crudos como "202611")
     hooks/
       useRoles.test.js
 ```

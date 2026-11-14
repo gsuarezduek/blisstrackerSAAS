@@ -1,6 +1,8 @@
 const { BetaAnalyticsDataClient } = require('@google-analytics/data')
 const { OAuth2Client }            = require('google-auth-library')
 const { getValidAccessToken }     = require('./tokenRefresh.service')
+const { prevMonthsArr }           = require('../lib/monthUtils')
+const { toRunReportBody }         = require('../lib/ga4QueryCatalog')
 
 // Caché simple en memoria: clave → { data, fetchedAt }
 const CACHE     = new Map()
@@ -373,15 +375,177 @@ async function fetchAiTrafficData(integration, startDate = '30daysAgo', endDate 
   return totals
 }
 
+
+// ─── Serie mensual (últimos N meses) ─────────────────────────────────────────
+
+/**
+ * Serie mes a mes de los últimos `months` meses: visitas (sesiones), usuarios y
+ * eventos clave. UNA sola llamada a GA4 con la dimensión `yearMonth` en vez de
+ * N llamadas de un mes cada una — y por eso no depende de que existan
+ * AnalyticsSnapshot: sirve también para los meses anteriores a que el proyecto
+ * se conectara a BlissTracker.
+ *
+ * Un mes que GA4 no devuelve queda en `null` (no en 0): "sin dato" y "cero
+ * visitas" no son lo mismo, y el gráfico los dibuja distinto. El mes en curso
+ * viene marcado `partial: true` — lleva sólo los días transcurridos y comparar
+ * su altura con un mes cerrado es la trampa de siempre.
+ *
+ * @param {object} integration
+ * @param {number} months  — cuántos meses incluir (el último es el mes en curso)
+ * @param {string} [today] — "YYYY-MM-DD" en la tz del workspace (default: hoy del server)
+ */
+async function fetchMonthlySeries(integration, months = 12, today = null) {
+  const cacheKey = `ga4mon:${integration.id}:${months}:${today ?? ''}`
+  const cached   = CACHE.get(cacheKey)
+  if (cached && Date.now() - cached.fetchedAt < CACHE_TTL) return cached.data
+
+  const todayStr    = today || new Date().toISOString().slice(0, 10)
+  const currentMonth = todayStr.slice(0, 7)
+  const monthList   = prevMonthsArr(currentMonth, Math.max(1, Math.min(months, 36)))
+  const startDate   = `${monthList[0]}-01`
+
+  const accessToken  = await getValidAccessToken(integration)
+  const oauth2Client = new OAuth2Client()
+  oauth2Client.setCredentials({ access_token: accessToken })
+  const analyticsClient = new BetaAnalyticsDataClient({ authClient: oauth2Client })
+
+  const raw = integration.propertyId
+  if (!raw) throw new Error('propertyId no configurado para esta integración')
+  const property = raw.startsWith('properties/') ? raw : `properties/${raw}`
+
+  const dateRanges = [{ startDate, endDate: todayStr }]
+  const dimensions = [{ name: 'yearMonth' }]
+  const orderBys   = [{ dimension: { dimensionName: 'yearMonth' }, desc: false }]
+
+  // `conversions` va en su propia query con catch: hay properties donde la métrica
+  // falla y no queremos perder la serie de visitas por eso (mismo criterio que
+  // fetchGA4Report con su desglose de conversiones).
+  const [baseRes, convRes] = await Promise.all([
+    analyticsClient.runReport({
+      property, dateRanges, dimensions, orderBys, limit: 40,
+      metrics: [{ name: 'sessions' }, { name: 'activeUsers' }, { name: 'screenPageViews' }],
+    }),
+    analyticsClient.runReport({
+      property, dateRanges, dimensions, orderBys, limit: 40,
+      metrics: [{ name: 'conversions' }],
+    }).catch(err => {
+      if (!isGA4PermissionDenied(err)) console.warn('[GA4] serie mensual de eventos clave falló (ignorado):', err.message)
+      return [{ rows: [] }]
+    }),
+  ])
+
+  // "202611" → "2026-11"
+  const toMonth = v => (v && v.length === 6 ? `${v.slice(0, 4)}-${v.slice(4)}` : null)
+  const byMonth = new Map()
+  for (const row of baseRes[0].rows ?? []) {
+    const month = toMonth(row.dimensionValues?.[0]?.value)
+    if (!month) continue
+    byMonth.set(month, {
+      sessions:    parseInt(row.metricValues?.[0]?.value, 10) || 0,
+      activeUsers: parseInt(row.metricValues?.[1]?.value, 10) || 0,
+      pageviews:   parseInt(row.metricValues?.[2]?.value, 10) || 0,
+      keyEvents:   null,
+    })
+  }
+  for (const row of convRes?.[0]?.rows ?? []) {
+    const month = toMonth(row.dimensionValues?.[0]?.value)
+    const entry = month && byMonth.get(month)
+    if (entry) entry.keyEvents = parseInt(row.metricValues?.[0]?.value, 10) || 0
+  }
+
+  const series = monthList.map(month => {
+    const d = byMonth.get(month)
+    return {
+      month,
+      sessions:    d ? d.sessions    : null,
+      activeUsers: d ? d.activeUsers : null,
+      pageviews:   d ? d.pageviews   : null,
+      keyEvents:   d ? d.keyEvents   : null,
+      partial:     month === currentMonth,
+    }
+  })
+
+  const result = { series, throughDate: todayStr, propertyId: property, fetchedAt: new Date().toISOString() }
+  CACHE.set(cacheKey, { data: result, fetchedAt: Date.now() })
+  return result
+}
+
+// ─── Consulta libre validada (Preguntale a tus datos) ────────────────────────
+
+/**
+ * Corre una consulta YA VALIDADA por `lib/ga4QueryCatalog`. El `property` sale
+ * siempre de la integración — nunca del input — así una consulta armada por la
+ * IA no puede apuntar a otra propiedad.
+ *
+ * @param {object} integration
+ * @param {object} query  — salida de validateGa4Query().query
+ * @returns {Promise<{ headers, rows, totals, rowCount }>}
+ */
+async function runCustomReport(integration, query) {
+  const cacheKey = `ga4q:${integration.id}:${JSON.stringify(query)}`
+  const cached   = CACHE.get(cacheKey)
+  if (cached && Date.now() - cached.fetchedAt < CACHE_TTL) return cached.data
+
+  const accessToken  = await getValidAccessToken(integration)
+  const oauth2Client = new OAuth2Client()
+  oauth2Client.setCredentials({ access_token: accessToken })
+  const analyticsClient = new BetaAnalyticsDataClient({ authClient: oauth2Client })
+
+  const raw = integration.propertyId
+  if (!raw) throw new Error('propertyId no configurado para esta integración')
+  const property = raw.startsWith('properties/') ? raw : `properties/${raw}`
+
+  const [response] = await analyticsClient.runReport({ property, ...toRunReportBody(query) })
+
+  const dimHeaders    = (response.dimensionHeaders ?? []).map(h => h.name)
+  const metricHeaders = (response.metricHeaders ?? []).map(h => h.name)
+  const rows = (response.rows ?? []).map(row => ({
+    dimensions: (row.dimensionValues ?? []).map(v => v.value),
+    metrics:    (row.metricValues ?? []).map(v => {
+      const n = parseFloat(v.value)
+      return Number.isFinite(n) ? n : 0
+    }),
+  }))
+  const totalRow = response.totals?.[0]
+  const totals = totalRow
+    ? (totalRow.metricValues ?? []).map(v => {
+        const n = parseFloat(v.value)
+        return Number.isFinite(n) ? n : 0
+      })
+    : null
+
+  const result = {
+    headers:  { dimensions: dimHeaders, metrics: metricHeaders },
+    rows,
+    totals,
+    rowCount: response.rowCount ?? rows.length,
+  }
+  CACHE.set(cacheKey, { data: result, fetchedAt: Date.now() })
+  return result
+}
+
 /**
  * Invalida la caché de un proyecto/período específico (útil tras reconectar).
  */
 function invalidateCache(integrationId) {
   for (const key of CACHE.keys()) {
-    if (key.startsWith(`ga4:${integrationId}:`) || key.startsWith(`ga4ai:${integrationId}:`)) {
+    if (
+      key.startsWith(`ga4:${integrationId}:`)    ||
+      key.startsWith(`ga4ai:${integrationId}:`)  ||
+      key.startsWith(`ga4mon:${integrationId}:`) ||
+      key.startsWith(`ga4q:${integrationId}:`)
+    ) {
       CACHE.delete(key)
     }
   }
 }
 
-module.exports = { fetchGA4Report, fetchAiTrafficData, invalidateCache, isGA4PermissionDenied }
+module.exports = {
+  fetchGA4Report,
+  fetchAiTrafficData,
+  fetchMonthlySeries,
+  runCustomReport,
+  computePreviousPeriod,
+  invalidateCache,
+  isGA4PermissionDenied,
+}

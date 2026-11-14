@@ -9,6 +9,8 @@ import ObjectiveProgressBars from './ObjectiveProgressBars'
 import useObjectiveProgress from './useObjectiveProgress'
 import CreateTaskModal from './web/CreateTaskModal'
 import { MetricCard, SectionTitle, AllEventsBlock, ConversionsBlock } from './web/WebAnalyticsBlocks'
+import MonthlyTrendChart from './web/MonthlyTrendChart'
+import AskAnalyticsPanel from './web/AskAnalyticsPanel'
 import { CrossProjectAnalyticsPanel } from './web/CrossProjectPanels'
 import {
   PRESET_RANGES, todayStr, getDateParams, formatDateLabel,
@@ -41,6 +43,12 @@ export default function WebAnalyticsTab({ projectId, onSelectProject }) {
 
   // Snapshot del mes anterior (para deltas)
   const [prevSnap,     setPrevSnap]     = useState(null)
+
+  // Serie mes a mes (últimos 12 meses). Pedido aparte y NO atado al período de
+  // arriba: la pregunta que responde ("¿cómo viene el año?") es otra, y volver a
+  // pedirlo cada vez que se cambia el rango gastaría llamadas a GA4 de más.
+  const [monthly,        setMonthly]        = useState(null)
+  const [monthlyLoading, setMonthlyLoading] = useState(false)
 
   // Insight IA
   const [insight,      setInsight]      = useState(null)
@@ -143,6 +151,23 @@ export default function WebAnalyticsTab({ projectId, onSelectProject }) {
     return () => controller.abort()
   }, [projectId, appliedRange, retryKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Serie mensual — sólo depende del proyecto (y de un reintento manual)
+  useEffect(() => {
+    if (!projectId) return
+    const controller = new AbortController()
+    setMonthly(null)
+    setMonthlyLoading(true)
+    api.get(`/marketing/projects/${projectId}/analytics/monthly?months=12`, { signal: controller.signal })
+      .then(r => setMonthly(r.data))
+      .catch(e => {
+        // Los estados de conexión (sin integración, token vencido, sin permiso) ya los
+        // reporta el fetch principal con su propio cartel: acá sólo se omite el gráfico.
+        if (e.name !== 'CanceledError' && e.code !== 'ERR_CANCELED') setMonthly(null)
+      })
+      .finally(() => setMonthlyLoading(false))
+    return () => controller.abort()
+  }, [projectId, retryKey])
+
   // Cuando hay analytics y el período es mensual: cargar snapshot anterior + insight
   useEffect(() => {
     if (!analytics || !projectId) return
@@ -232,6 +257,21 @@ export default function WebAnalyticsTab({ projectId, onSelectProject }) {
     bounceRate:  snapDelta(ov.bounceRate,             prevSnap.bounceRate),
     avgDuration: snapDelta(ov.averageSessionDuration, prevSnap.avgDuration),
   } : {}
+
+  // Qué período cubre REALMENTE el análisis IA guardado. Un análisis del mes en
+  // curso generado el día 5 y leído el día 20 cubre 5 días, no el mes: sin esto
+  // se lee como si fuera el mes entero.
+  const insightPeriod = insight?.content?.periodo ?? null
+  const insightStale  = insightPeriod?.parcial && insightPeriod.hasta < todayStr()
+
+  // Meses del gráfico que GA4 no devolvió. Si son los más viejos, el sospechoso
+  // habitual es la retención de datos de la propiedad (Google la limita a 2 meses
+  // por default) — vale más decirlo que dejar huecos sin explicación.
+  const monthlyGaps = (monthly?.series ?? []).filter(m => m.sessions == null).length
+  const oldestHasNoData = monthly?.series?.length ? monthly.series[0].sessions == null : false
+  // El gráfico necesita 2 meses medidos para decir algo (es el mismo mínimo que aplica
+  // el componente); sin eso la tarjeta sería un marco vacío con un título.
+  const monthlyUsable = (monthly?.series ?? []).filter(m => m.sessions != null).length >= 2
 
   return (
     <div className="space-y-5">
@@ -518,6 +558,36 @@ export default function WebAnalyticsTab({ projectId, onSelectProject }) {
           {/* Objetivos del proyecto (visitas / leads) */}
           <ObjectiveProgressBars objectives={webObjectives} title="Objetivos web" />
 
+          {/* Evolución mes a mes — últimos 12 meses */}
+          {(monthlyLoading || monthlyUsable) && (
+            <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-5">
+              <div className="flex items-start justify-between gap-3">
+                <SectionTitle>Últimos 12 meses</SectionTitle>
+                {monthlyUsable && (
+                  <span className="text-[11px] text-gray-400 flex-shrink-0">
+                    Pasá el mouse por un mes para ver los números
+                  </span>
+                )}
+              </div>
+              {monthlyLoading ? (
+                <div className="h-[230px] flex items-center justify-center">
+                  <LoadingSpinner size="sm" />
+                </div>
+              ) : (
+                <>
+                  <MonthlyTrendChart series={monthly.series} throughDate={monthly.throughDate} />
+                  {oldestHasNoData && monthlyGaps >= 2 && (
+                    <p className="text-[11px] text-gray-400 mt-2 leading-snug">
+                      Hay {monthlyGaps} meses sin datos. Si son los más viejos, revisá en Google Analytics
+                      {' '}<strong>Administrar → Retención de datos</strong>: con el valor por default (2 meses) Google
+                      no devuelve el histórico completo.
+                    </p>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+
           {/* Análisis IA — primero para períodos mensuales */}
           {isMonthly && (
             <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-5 space-y-4">
@@ -526,9 +596,18 @@ export default function WebAnalyticsTab({ projectId, onSelectProject }) {
                   <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">
                     Análisis IA · {dateLabel}
                   </h3>
-                  <p className="text-xs text-gray-400 mt-0.5">
-                    Guardá un snapshot del período y generá un análisis mensual con IA.
-                  </p>
+                  {insightPeriod ? (
+                    <p className="text-xs text-gray-400 mt-0.5">
+                      Analiza {insightPeriod.parcial
+                        ? `del ${Number(insightPeriod.desde.slice(8, 10))} al ${Number(insightPeriod.hasta.slice(8, 10))} (${insightPeriod.dias} de ${insightPeriod.diasDelMes} días)`
+                        : `${insightPeriod.etiqueta} completo`}
+                      {insightPeriod.comparado && ` · comparado contra ${insightPeriod.comparado.etiqueta}`}
+                    </p>
+                  ) : (
+                    <p className="text-xs text-gray-400 mt-0.5">
+                      Generá un análisis del período con IA. Si el mes está en curso, se compara contra los mismos días del mes anterior.
+                    </p>
+                  )}
                 </div>
                 <div className="flex items-center gap-2 flex-shrink-0">
                   <button
@@ -554,6 +633,15 @@ export default function WebAnalyticsTab({ projectId, onSelectProject }) {
 
               {insight && !insightLoading && (
                 <div className="space-y-4">
+                  {insightStale && (
+                    <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-xl px-3 py-2 flex items-start gap-2">
+                      <Icon as={CalendarDays} size={16} className="mt-0.5 flex-shrink-0 text-amber-500" />
+                      <p className="text-xs text-amber-700 dark:text-amber-300">
+                        Este análisis cubre hasta el {Number(insightPeriod.hasta.slice(8, 10))} y el mes siguió.
+                        Regeneralo para incluir los días nuevos.
+                      </p>
+                    </div>
+                  )}
                   <div>
                     <p className="text-base font-semibold text-gray-800 dark:text-gray-200 mb-1">
                       {insight.content?.titulo}
@@ -584,6 +672,22 @@ export default function WebAnalyticsTab({ projectId, onSelectProject }) {
                           </span>
                         ))}
                       </div>
+                    </div>
+                  )}
+
+                  {insightPeriod?.parcial && insightPeriod.proyeccion?.sessions != null && (
+                    <div className="bg-gray-50 dark:bg-gray-900/40 rounded-xl px-3 py-2.5">
+                      <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">
+                        Proyección a fin de mes
+                      </p>
+                      <p className="text-sm text-gray-700 dark:text-gray-300">
+                        A este ritmo, {insightPeriod.etiqueta} cerraría en <strong>{fmt(insightPeriod.proyeccion.sessions)}</strong> sesiones
+                        {insightPeriod.proyeccion.conversions != null && <> y <strong>{fmt(insightPeriod.proyeccion.conversions)}</strong> eventos clave</>}
+                        {insightPeriod.mesAnterior && <> · {insightPeriod.mesAnterior.etiqueta} cerró en {fmt(insightPeriod.mesAnterior.sessions)}</>}.
+                      </p>
+                      <p className="text-[11px] text-gray-400 mt-0.5">
+                        Proyección simple sobre los {insightPeriod.dias} días transcurridos — no considera estacionalidad.
+                      </p>
                     </div>
                   )}
 
@@ -620,11 +724,15 @@ export default function WebAnalyticsTab({ projectId, onSelectProject }) {
 
               {!insight && !insightLoading && (
                 <p className="text-xs text-gray-400">
-                  Guardá un snapshot del período actual y hacé click en "Analizar con IA" para obtener un resumen inteligente con comparaciones y recomendaciones.
+                  Hacé click en "Analizar con IA" para obtener un resumen con tendencias y recomendaciones. Del mes en curso
+                  se refrescan los datos hasta hoy y se compara contra los mismos días del mes anterior, no contra el mes completo.
                 </p>
               )}
             </div>
           )}
+
+          {/* Preguntale a tus datos */}
+          <AskAnalyticsPanel projectId={projectId} />
 
           {/* Total de eventos + Eventos clave */}
           <div className="grid sm:grid-cols-2 gap-4">

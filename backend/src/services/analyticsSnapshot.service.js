@@ -1,9 +1,10 @@
 const prisma    = require('../lib/prisma')
 const { MARKETING_PROJECT_WHERE } = require('../lib/projectModules')
-const { fetchGA4Report, fetchAiTrafficData, isGA4PermissionDenied } = require('./googleAnalytics.service')
+const { fetchGA4Report, fetchAiTrafficData, isGA4PermissionDenied, computePreviousPeriod } = require('./googleAnalytics.service')
 const { parseAIJson }    = require('../utils/parseAIJson')
 const { logTokens }      = require('../lib/logTokens')
-const { todayString }    = require('../utils/dates')
+const { todayString, dateStringInTz } = require('../utils/dates')
+const { MONTH_NAMES }    = require('../lib/monthUtils')
 
 const { anthropic, assertTokenBudget } = require('../lib/claude')
 
@@ -26,6 +27,61 @@ function monthBounds(month) {
 function delta(curr, prev) {
   if (prev == null || prev === 0) return null
   return Math.round(((curr - prev) / prev) * 100)
+}
+
+/**
+ * Avance de un mes contra "hoy" en la timezone del workspace.
+ *
+ * Existe porque el mes EN CURSO no es un mes: el 13 de noviembre, el snapshot de
+ * "2026-11" tiene 13 días de datos y el de octubre tiene 31. Compararlos de
+ * frente (lo que hacía el insight) daba siempre una caída inventada de ~60%.
+ * Todo lo que necesita saber de eso sale de acá.
+ *
+ * @param {string} month      — "YYYY-MM"
+ * @param {string} [timezone] — tz del workspace (default: Buenos Aires)
+ * @param {string} [todayStr] — inyectable en tests ("YYYY-MM-DD")
+ */
+function monthProgress(month, timezone, todayStr) {
+  const today        = todayStr || todayString(timezone)
+  const currentMonth = today.slice(0, 7)
+  const { startDate, endDate } = monthBounds(month)
+  const daysInMonth  = Number(endDate.slice(8, 10))
+
+  if (month < currentMonth) {
+    return { isPartial: false, isFuture: false, daysElapsed: daysInMonth, daysInMonth, from: startDate, to: endDate }
+  }
+  if (month > currentMonth) {
+    return { isPartial: false, isFuture: true, daysElapsed: 0, daysInMonth, from: startDate, to: endDate }
+  }
+  return {
+    isPartial:   true,
+    isFuture:    false,
+    daysElapsed: Number(today.slice(8, 10)),
+    daysInMonth,
+    from:        startDate,
+    to:          today,
+  }
+}
+
+/**
+ * Proyección simple a ritmo actual: lo que cerraría el mes si el resto de los
+ * días se parecieran a los que ya pasaron. Es la única comparación honesta
+ * contra un mes anterior COMPLETO — y por eso se rotula siempre como proyección
+ * (ignora estacionalidad y la mezcla de días de semana).
+ */
+function projectMonthValue(value, daysElapsed, daysInMonth) {
+  if (value == null || !daysElapsed || daysElapsed <= 0) return null
+  if (daysElapsed >= daysInMonth) return Math.round(value)
+  return Math.round((value / daysElapsed) * daysInMonth)
+}
+
+/** "1 al 13 de noviembre" / "octubre completo" — para el prompt y la UI. */
+function windowLabel(from, to) {
+  const [, m1, d1] = from.split('-').map(Number)
+  const [, m2, d2] = to.split('-').map(Number)
+  const name = n => MONTH_NAMES[n - 1].toLowerCase()
+  if (m1 === m2) return `${d1} al ${d2} de ${name(m1)}`
+  return `${d1} de ${name(m1)} al ${d2} de ${name(m2)}`
 }
 
 // ─── Guardar snapshot ─────────────────────────────────────────────────────────
@@ -78,9 +134,41 @@ async function saveMonthSnapshot(projectId, workspaceId, month) {
 
 // ─── Generar insight IA ───────────────────────────────────────────────────────
 
+/** Trae la ventana comparable del mes anterior desde GA4 y la deja con la forma del snapshot. */
+async function fetchBaselineWindow(integration, from, to) {
+  const data = await fetchGA4Report(integration, from, to)
+  return {
+    from,
+    to,
+    days:        Number(to.slice(8, 10)),
+    sessions:    Math.round(data.overview?.sessions        ?? 0),
+    activeUsers: Math.round(data.overview?.activeUsers     ?? 0),
+    newUsers:    Math.round(data.overview?.newUsers        ?? 0),
+    pageviews:   Math.round(data.overview?.screenPageViews ?? 0),
+    bounceRate:  data.overview?.bounceRate                 ?? 0,
+    avgDuration: data.overview?.averageSessionDuration     ?? 0,
+    conversions: data.conversions?.total                   ?? 0,
+  }
+}
+
 /**
- * Genera (o regenera) un insight IA para el mes dado, usando el snapshot actual
- * y el del mes anterior como contexto de comparación.
+ * Genera (o regenera) un insight IA para el mes dado.
+ *
+ * **El mes EN CURSO no se compara contra el mes anterior completo.** Es el bug que
+ * tenía esta función: el 13 de noviembre ponía en el prompt 13 días de noviembre
+ * y 31 de octubre como si fueran dos meses, y la IA reportaba una caída del ~60%
+ * que nunca ocurrió (las tarjetas de arriba de la pantalla ya estaban bien: GA4
+ * compara "mismos días ordinales" vía `computePreviousPeriod`). Para un mes en curso:
+ *
+ *   1. Se **refresca el snapshot** antes de analizar — lo mantiene un cron semanal,
+ *      así que podía estar días atrasado y el análisis ni siquiera cubría hasta hoy.
+ *   2. La base de comparación son **los mismos días del mes anterior** (1–13 oct),
+ *      traídos en vivo de GA4 con el MISMO criterio que usan las tarjetas.
+ *   3. El mes anterior completo entra sólo contra una **proyección a ritmo actual**,
+ *      rotulada como proyección.
+ *
+ * Un mes cerrado sigue el camino de siempre: snapshot vs snapshot, sin tocar GA4.
+ *
  * @param {number} projectId
  * @param {number} workspaceId
  * @param {string} month  — "2026-04"
@@ -90,69 +178,116 @@ async function generateInsight(projectId, workspaceId, month) {
   await assertTokenBudget(workspaceId) // 429 si el workspace agotó su presupuesto mensual de IA
   const pm = prevMonth(month)
 
-  const [current, previous, project] = await Promise.all([
+  const [snapshot, previous, project, workspace] = await Promise.all([
     prisma.analyticsSnapshot.findUnique({ where: { projectId_month: { projectId, month } } }),
     prisma.analyticsSnapshot.findUnique({ where: { projectId_month: { projectId, month: pm } } }),
     prisma.project.findUnique({ where: { id: projectId }, select: { name: true } }),
+    prisma.workspace.findUnique({ where: { id: workspaceId }, select: { timezone: true } }),
   ])
+
+  const tz       = workspace?.timezone
+  const progress = monthProgress(month, tz)
+
+  let current  = snapshot
+  let baseline = null   // mismos días del mes anterior (sólo mes en curso)
+
+  if (progress.isPartial) {
+    const integration = await prisma.projectIntegration.findUnique({
+      where:  { projectId_type: { projectId, type: 'google_analytics' } },
+      select: { id: true, status: true, propertyId: true, accessToken: true, refreshToken: true, expiresAt: true },
+    })
+    const ga4Ready = integration?.status === 'active' && !!integration.propertyId
+
+    if (ga4Ready) {
+      const refreshed = await saveMonthSnapshot(projectId, workspaceId, month)
+        .catch(err => { console.warn('[AnalyticsSnapshot] no se pudo refrescar el mes en curso:', err.message); return null })
+      if (refreshed) current = refreshed
+    }
+
+    if (!current) throw new Error('No hay snapshot guardado para este mes. Guardalo primero.')
+
+    // Hasta dónde llegan de verdad los datos: si el refresco falló, el snapshot puede
+    // ser de días atrás y decir "1 al 13" sería mentir sobre la ventana analizada.
+    const snapDate   = dateStringInTz(current.updatedAt, tz)
+    const throughDay = snapDate && snapDate >= progress.from && snapDate <= progress.to ? snapDate : progress.to
+    progress.to          = throughDay
+    progress.daysElapsed = Number(throughDay.slice(8, 10))
+
+    // Con 1 solo día no hay nada comparable (la pantalla también suprime el delta ese día).
+    if (ga4Ready && progress.daysElapsed >= 2) {
+      const prevWindow = computePreviousPeriod(progress.from, throughDay)
+      baseline = await fetchBaselineWindow(integration, prevWindow.startDate, prevWindow.endDate)
+        .catch(err => { console.warn('[AnalyticsSnapshot] no se pudo traer la ventana comparable:', err.message); return null })
+    }
+  }
 
   if (!current) throw new Error('No hay snapshot guardado para este mes. Guardalo primero.')
 
-  const [mY, mM] = month.split('-')
-  const monthLabel = new Date(Number(mY), Number(mM) - 1, 1)
-    .toLocaleString('es-AR', { month: 'long', year: 'numeric' })
-
-  const prevLabel = previous
-    ? (() => {
-        const [py, pm2] = pm.split('-')
-        return new Date(Number(py), Number(pm2) - 1, 1)
-          .toLocaleString('es-AR', { month: 'long', year: 'numeric' })
-      })()
-    : null
+  const monthName  = `${MONTH_NAMES[Number(month.slice(5, 7)) - 1]} ${month.slice(0, 4)}`
+  const prevName   = `${MONTH_NAMES[Number(pm.slice(5, 7)) - 1]} ${pm.slice(0, 4)}`
+  const curWindow  = progress.isPartial ? windowLabel(progress.from, progress.to) : `${monthName} completo`
 
   const fmtBounce = v => `${(v * 100).toFixed(1)}%`
   const fmtDur    = v => `${Math.round(v)}s`
 
-  const compBlock = previous
-    ? `Datos del mes anterior (${prevLabel}):
-- Sesiones: ${previous.sessions}
-- Usuarios activos: ${previous.activeUsers}
-- Nuevos usuarios: ${previous.newUsers}
-- Páginas vistas: ${previous.pageviews}
-- Tasa de rebote: ${fmtBounce(previous.bounceRate)}
-- Duración media: ${fmtDur(previous.avgDuration)}
-- Conversiones: ${previous.conversions}`
-    : 'No hay datos del mes anterior para comparar.'
+  // Contra qué se compara: la ventana equivalente si el mes está en curso, el mes
+  // anterior completo si ya cerró. NUNCA 13 días contra 31.
+  const comparison = progress.isPartial ? baseline : previous
+  const comparisonLabel = progress.isPartial
+    ? (baseline ? `${windowLabel(baseline.from, baseline.to)} (mismos ${baseline.days} días del mes anterior)` : null)
+    : (previous ? `${prevName} completo` : null)
 
-  const tendencias = [
-    { metrica: 'Sesiones',         delta: delta(current.sessions,    previous?.sessions),    positivo: delta(current.sessions, previous?.sessions) >= 0 },
-    { metrica: 'Usuarios activos', delta: delta(current.activeUsers, previous?.activeUsers), positivo: delta(current.activeUsers, previous?.activeUsers) >= 0 },
-    { metrica: 'Nuevos usuarios',  delta: delta(current.newUsers,    previous?.newUsers),    positivo: delta(current.newUsers, previous?.newUsers) >= 0 },
-    { metrica: 'Tasa de rebote',   delta: delta(current.bounceRate,  previous?.bounceRate),  positivo: delta(current.bounceRate, previous?.bounceRate) <= 0 },
-    { metrica: 'Conversiones',     delta: delta(current.conversions, previous?.conversions), positivo: delta(current.conversions, previous?.conversions) >= 0 },
-  ].filter(t => t.delta !== null)
+  const block = (title, d) => `${title}:
+- Sesiones: ${d.sessions}
+- Usuarios activos: ${d.activeUsers}
+- Nuevos usuarios: ${d.newUsers}
+- Páginas vistas: ${d.pageviews}
+- Tasa de rebote: ${fmtBounce(d.bounceRate)}
+- Duración media: ${fmtDur(d.avgDuration)}
+- Eventos clave (conversiones): ${d.conversions}`
 
-  const prompt = `Sos un analista de marketing digital. Analizá los datos de Google Analytics del proyecto "${project.name}" para ${monthLabel}.
+  const tendencias = comparison ? [
+    { metrica: 'Sesiones',         delta: delta(current.sessions,    comparison.sessions),    positivo: delta(current.sessions, comparison.sessions) >= 0 },
+    { metrica: 'Usuarios activos', delta: delta(current.activeUsers, comparison.activeUsers), positivo: delta(current.activeUsers, comparison.activeUsers) >= 0 },
+    { metrica: 'Nuevos usuarios',  delta: delta(current.newUsers,    comparison.newUsers),    positivo: delta(current.newUsers, comparison.newUsers) >= 0 },
+    { metrica: 'Tasa de rebote',   delta: delta(current.bounceRate,  comparison.bounceRate),  positivo: delta(current.bounceRate, comparison.bounceRate) <= 0 },
+    { metrica: 'Conversiones',     delta: delta(current.conversions, comparison.conversions), positivo: delta(current.conversions, comparison.conversions) >= 0 },
+  ].filter(t => t.delta !== null) : []
 
-Datos de ${monthLabel}:
-- Sesiones: ${current.sessions}
-- Usuarios activos: ${current.activeUsers}
-- Nuevos usuarios: ${current.newUsers}
-- Páginas vistas: ${current.pageviews}
-- Tasa de rebote: ${fmtBounce(current.bounceRate)}
-- Duración media de sesión: ${fmtDur(current.avgDuration)}
-- Conversiones: ${current.conversions}
+  // Proyección a fin de mes (sólo mes en curso): lo único comparable contra un mes cerrado.
+  const projection = progress.isPartial ? {
+    sessions:    projectMonthValue(current.sessions,    progress.daysElapsed, progress.daysInMonth),
+    activeUsers: projectMonthValue(current.activeUsers, progress.daysElapsed, progress.daysInMonth),
+    conversions: projectMonthValue(current.conversions, progress.daysElapsed, progress.daysInMonth),
+  } : null
+
+  const partialBlock = progress.isPartial ? `
+AVISO IMPORTANTE — EL MES ESTÁ EN CURSO:
+- Los datos de ${monthName} cubren sólo del ${curWindow} (${progress.daysElapsed} de ${progress.daysInMonth} días).
+- ${comparison
+    ? `La comparación de abajo es contra ${comparisonLabel}, o sea una ventana del MISMO largo. Las variaciones son válidas.`
+    : `NO hay una ventana comparable disponible, así que NO compares números todavía: devolvé "tendencias": [] y decilo en el resumen.`}
+- El último día puede estar incompleto (Google todavía procesa el día en curso): una baja de pocos puntos no es una tendencia.
+- ${previous
+    ? `Contra ${prevName} completo (${previous.sessions} sesiones, ${previous.conversions} eventos clave) comparás SÓLO la proyección: a este ritmo ${monthName} cerraría en ~${projection?.sessions ?? '?'} sesiones y ~${projection?.conversions ?? '?'} eventos clave. Es una proyección simple (no considera estacionalidad): usala con esa palabra.`
+    : `No hay datos de ${prevName} para comparar.`}
+- PROHIBIDO decir que el mes "cayó" o "bajó" comparando un mes incompleto contra un mes completo.
+` : ''
+
+  const prompt = `Sos un analista de marketing digital. Analizá los datos de Google Analytics del proyecto "${project.name}" para ${monthName}.
+${partialBlock}
+${block(`Datos de ${monthName} (${curWindow})`, current)}
 - Canales principales: ${current.topChannels}
 
-${compBlock}
+${comparison ? block(`Datos de referencia — ${comparisonLabel}`, comparison) : `No hay datos de referencia para comparar.`}
 
-${tendencias.length > 0 ? `Variaciones calculadas respecto al mes anterior:
+${tendencias.length > 0 ? `Variaciones calculadas (ventanas equivalentes):
 ${tendencias.map(t => `- ${t.metrica}: ${t.delta > 0 ? '+' : ''}${t.delta}% (${t.positivo ? 'positivo' : 'negativo'})`).join('\n')}` : ''}
 
 Respondé SOLO con un JSON válido, sin markdown ni explicaciones:
 {
   "titulo": "Título corto y descriptivo (máx 65 caracteres)",
-  "resumen": "2-3 oraciones sobre el estado general. Mencioná lo más importante.",
+  "resumen": "2-3 oraciones sobre el estado general. Mencioná lo más importante.${progress.isPartial ? ' Aclará que el mes está en curso y qué período cubre.' : ''}",
   "tendencias": [
     { "metrica": "nombre", "delta": número_o_null, "positivo": true/false }
   ],
@@ -161,7 +296,7 @@ Respondé SOLO con un JSON válido, sin markdown ni explicaciones:
   ]
 }
 
-Incluí las ${tendencias.length > 0 ? tendencias.length : '3-5'} tendencias principales y 2-3 recomendaciones accionables.`
+Incluí ${tendencias.length > 0 ? `las ${tendencias.length}` : 'las'} tendencias principales y 2-3 recomendaciones accionables.`
 
   const response = await anthropic.messages.create({
     model:      'claude-haiku-4-5-20251001',
@@ -175,6 +310,24 @@ Incluí las ${tendencias.length > 0 ? tendencias.length : '3-5'} tendencias prin
     .catch(err => console.error('[AnalyticsSnapshot] Error al registrar tokens de IA:', err.message))
 
   const parsed = parseAIJson(response.content[0].text)
+
+  // `periodo` viaja con el insight para que la pantalla pueda rotular QUÉ se analizó.
+  // Sin esto, un análisis del mes en curso generado el día 5 y leído el día 20 se lee
+  // como si fuera el mes entero.
+  parsed.periodo = {
+    mes:         month,
+    etiqueta:    monthName,
+    parcial:     progress.isPartial,
+    desde:       progress.from,
+    hasta:       progress.to,
+    dias:        progress.daysElapsed,
+    diasDelMes:  progress.daysInMonth,
+    comparado:   comparison
+      ? { desde: comparison.from ?? `${pm}-01`, hasta: comparison.to ?? monthBounds(pm).endDate, etiqueta: comparisonLabel }
+      : null,
+    proyeccion:  projection,
+    mesAnterior: previous ? { mes: pm, etiqueta: prevName, sessions: previous.sessions, conversions: previous.conversions } : null,
+  }
 
   const saved = await prisma.analyticsInsight.upsert({
     where:  { projectId_month: { projectId, month } },
@@ -273,6 +426,9 @@ async function refreshAllCurrentMonthSnapshots() {
 module.exports = {
   saveMonthSnapshot,
   generateInsight,
+  monthProgress,
+  projectMonthValue,
+  windowLabel,
   saveAllPreviousMonthSnapshots,
   saveCurrentMonthSnapshotSafe,
   refreshAllCurrentMonthSnapshots,

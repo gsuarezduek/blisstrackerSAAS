@@ -1,5 +1,9 @@
 const prisma = require('../lib/prisma')
-const { fetchGA4Report, fetchAiTrafficData, isGA4PermissionDenied } = require('../services/googleAnalytics.service')
+const {
+  fetchGA4Report, fetchAiTrafficData, fetchMonthlySeries, isGA4PermissionDenied,
+} = require('../services/googleAnalytics.service')
+const { askAnalytics } = require('../services/analyticsAsk.service')
+const { todayString }  = require('../utils/dates')
 
 // Acepta 'NdaysAgo', 'today', 'yesterday' o 'YYYY-MM-DD'
 const VALID_GA4_DATE = /^(\d{4}-\d{2}-\d{2}|\d+daysAgo|today|yesterday)$/
@@ -7,6 +11,54 @@ const VALID_GA4_DATE = /^(\d{4}-\d{2}-\d{2}|\d+daysAgo|today|yesterday)$/
 function parseDateParam(val, fallback) {
   if (val && VALID_GA4_DATE.test(val.trim())) return val.trim()
   return fallback
+}
+
+/**
+ * Resuelve proyecto + integración de GA4 en un solo lugar. Devuelve
+ * `{ error: {status, body} }` con el mismo vocabulario de códigos que ya lee el
+ * frontend (`NO_INTEGRATION` / `TOKEN_EXPIRED` / `NO_PROPERTY`), para no tener
+ * una tercera redacción de los mismos tres estados.
+ */
+async function resolveGa4(projectId, workspaceId) {
+  const project = await prisma.project.findFirst({
+    where:  { id: projectId, workspaceId },
+    select: { id: true, name: true, websiteUrl: true },
+  })
+  if (!project) return { error: { status: 404, body: { error: 'Proyecto no encontrado' } } }
+
+  const integration = await prisma.projectIntegration.findUnique({
+    where: { projectId_type: { projectId, type: 'google_analytics' } },
+  })
+  if (!integration) return { error: { status: 404, body: { error: 'Google Analytics no conectado', code: 'NO_INTEGRATION' } } }
+  if (integration.status === 'expired' || integration.status === 'error') {
+    return { error: { status: 400, body: { error: 'El token de Google Analytics expiró. Reconectá la integración.', code: 'TOKEN_EXPIRED' } } }
+  }
+  if (!integration.propertyId) {
+    return { error: { status: 400, body: { error: 'GA4 Property ID no configurado.', code: 'NO_PROPERTY' } } }
+  }
+  return { project, integration }
+}
+
+/** Mapeo de errores de GA4 a respuesta HTTP (token vencido, sin permiso, el resto). */
+async function respondGa4Error(err, projectId, res, label) {
+  if (err?.status === 429 || err?.code === 'TOKEN_BUDGET_EXCEEDED') {
+    return res.status(429).json({ error: 'El workspace agotó su presupuesto mensual de IA.', code: 'TOKEN_BUDGET_EXCEEDED' })
+  }
+  if (isGA4PermissionDenied(err)) {
+    return res.status(400).json({ error: 'La cuenta de Google conectada no tiene acceso a esta propiedad GA4.', code: 'PERMISSION_DENIED' })
+  }
+  if (err?.code === 'TOKEN_EXPIRED' || /invalid_grant|UNAUTHENTICATED|Token has been expired/.test(err?.message ?? '')) {
+    await prisma.projectIntegration.update({
+      where: { projectId_type: { projectId, type: 'google_analytics' } },
+      data:  { status: 'expired' },
+    }).catch(() => {})
+    return res.status(400).json({ error: 'El token de Google Analytics expiró. Reconectá la integración.', code: 'TOKEN_EXPIRED' })
+  }
+  console.error(`[${label}]`, err?.code ?? '', err?.message)
+  return res.status(502).json({
+    error: 'No se pudo obtener los datos de Google Analytics. Probá de nuevo o reconectá la integración.',
+    code:  'FETCH_ERROR',
+  })
 }
 
 /**
@@ -224,4 +276,65 @@ async function getAiTrafficData(req, res, next) {
   }
 }
 
-module.exports = { getAnalyticsData, getAdsData, getAiTrafficData }
+
+/**
+ * GET /api/marketing/projects/:id/analytics/monthly?months=12
+ *
+ * Serie mes a mes de visitas y eventos clave para el gráfico de evolución.
+ * Sale de UNA consulta a GA4 con la dimensión `yearMonth` (no de AnalyticsSnapshot):
+ * así cubre también los meses anteriores a que el proyecto se conectara acá.
+ * Un mes sin dato vuelve en `null` (no 0) y el mes en curso viene `partial: true`.
+ */
+async function getMonthlySeries(req, res) {
+  const projectId = Number(req.params.id)
+  const months    = Math.min(Math.max(Number(req.query.months) || 12, 2), 24)
+
+  const resolved = await resolveGa4(projectId, req.workspace.id)
+  if (resolved.error) return res.status(resolved.error.status).json(resolved.error.body)
+
+  try {
+    const today = todayString(req.workspace.timezone)
+    const data  = await fetchMonthlySeries(resolved.integration, months, today)
+    res.json({ ...data, months, projectName: resolved.project.name })
+  } catch (err) {
+    return respondGa4Error(err, projectId, res, 'analytics.getMonthlySeries')
+  }
+}
+
+/**
+ * POST /api/marketing/projects/:id/analytics/ask
+ * Body: { question: "¿cuántas visitas tuve desde Chile en el último año?" }
+ *
+ * Devuelve `{ answer, steps }`: la respuesta en castellano y las consultas reales
+ * que la respaldan (query + filas). El frontend muestra las dos cosas — una
+ * respuesta de IA sobre números sin la tabla al lado no es verificable.
+ */
+async function askAnalyticsQuestion(req, res) {
+  const projectId = Number(req.params.id)
+  const question  = String(req.body?.question ?? '').trim()
+
+  if (question.length < 5)   return res.status(400).json({ error: 'Escribí una pregunta un poco más larga.' })
+  if (question.length > 500) return res.status(400).json({ error: 'La pregunta es demasiado larga (máximo 500 caracteres).' })
+
+  const resolved = await resolveGa4(projectId, req.workspace.id)
+  if (resolved.error) return res.status(resolved.error.status).json(resolved.error.body)
+
+  try {
+    const result = await askAnalytics({
+      integration: resolved.integration,
+      project:     resolved.project,
+      question,
+      workspaceId: req.workspace.id,
+      userId:      req.user?.userId ?? null,
+      timezone:    req.workspace.timezone,
+    })
+    if (!result.answer) {
+      return res.status(502).json({ error: 'La IA no devolvió una respuesta. Probá reformulando la pregunta.', code: 'EMPTY_ANSWER' })
+    }
+    res.json({ question, ...result })
+  } catch (err) {
+    return respondGa4Error(err, projectId, res, 'analytics.askAnalyticsQuestion')
+  }
+}
+
+module.exports = { getAnalyticsData, getAdsData, getAiTrafficData, getMonthlySeries, askAnalyticsQuestion }

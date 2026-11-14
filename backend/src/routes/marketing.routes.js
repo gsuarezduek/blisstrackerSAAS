@@ -106,6 +106,9 @@ router.delete('/projects/:id/integrations/:type',             integrations.disco
 
 // Datos en tiempo real de integraciones
 router.get('/projects/:id/analytics',                      analytics.getAnalyticsData)
+// Antes que nada más bajo /analytics: serie mensual para el gráfico + pregunta libre a GA4
+router.get('/projects/:id/analytics/monthly',              analytics.getMonthlySeries)
+router.post('/projects/:id/analytics/ask',                 analytics.askAnalyticsQuestion)
 router.get('/projects/:id/ads',                            analytics.getAdsData)
 router.get('/projects/:id/ai-traffic',                     analytics.getAiTrafficData)
 router.get('/projects/:id/search-console',                 searchConsole.getSearchConsoleData)

@@ -11,6 +11,7 @@ export const SERVICE_LABELS = {
   insightMemory:   'Memoria de insights',
   geoAudit:        'Auditoría GEO',
   analyticsInsight:'Análisis Analytics',
+  analyticsAsk:    'Preguntas a Analytics',
   pageSpeed:       'PageSpeed',
 }
 
