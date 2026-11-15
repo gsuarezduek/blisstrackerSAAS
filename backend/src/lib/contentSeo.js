@@ -55,12 +55,32 @@ function normalizeKeyword(value) {
 }
 
 /**
- * Mapa keyword normalizada → quién la tiene asignada. Si dos piezas declaran la
- * misma keyword gana la PRIMERA de la lista (las piezas llegan ordenadas), y la
- * segunda se entera por la alerta de solapamiento — que es justamente el caso
- * que hay que ver, no uno a resolver en silencio pisando el mapa.
+ * Identidad de una keyword asignada: idioma + keyword normalizada. **El idioma
+ * es parte de la clave**, igual que en el análisis de canibalización
+ * (`CannibalResolution` guarda `query` + `language`), porque dos notas compiten
+ * sólo si van al MISMO resultado de búsqueda. La versión en español y la
+ * versión en inglés de la misma nota no se canibalizan: son dos SERPs
+ * distintos, y marcarlas como conflicto convertía cada grupo de traducciones en
+ * una alerta falsa — justo el escenario más común en un blog multi-idioma.
  *
- * @param {Array} pieces — [{ id, title, seoKeyword, seoKeywords: string[] }]
+ * Una nota sin idioma cargado va al bucket 'default' (el mismo nombre que usa
+ * `detectLanguage`): se compara contra las otras sin idioma y no contra las que
+ * sí lo tienen. Conservador a propósito — sin saber a qué mercado apunta no se
+ * puede afirmar que le esté robando el ranking a nadie.
+ */
+function keywordOwnerKey(language, keyword) {
+  const lang = CONTENT_LANGUAGE_KEYS.includes(language) ? language : 'default'
+  return `${lang}\u0000${normalizeKeyword(keyword)}`
+}
+
+/**
+ * Mapa (idioma + keyword normalizada) → quién la tiene asignada. Si dos piezas
+ * del MISMO idioma declaran la misma keyword gana la PRIMERA de la lista (las
+ * piezas llegan ordenadas), y la segunda se entera por la alerta de
+ * solapamiento — que es justamente el caso que hay que ver, no uno a resolver
+ * en silencio pisando el mapa.
+ *
+ * @param {Array} pieces — [{ id, title, language, seoKeyword, seoKeywords: string[] }]
  */
 function buildKeywordOwners(pieces = []) {
   const owners = new Map()
@@ -70,8 +90,9 @@ function buildKeywordOwners(pieces = []) {
       ...(Array.isArray(p.seoKeywords) ? p.seoKeywords.map(k => [k, false]) : []),
     ]
     for (const [kw, primary] of entries) {
-      const key = normalizeKeyword(kw)
-      if (!key || owners.has(key)) continue
+      if (!normalizeKeyword(kw)) continue
+      const key = keywordOwnerKey(p.language, kw)
+      if (owners.has(key)) continue
       owners.set(key, { pieceId: p.id, title: p.title, primary })
     }
   }
@@ -196,7 +217,7 @@ function lowCtrAlert(current) {
  * `resolvedQueries` son las queries que el equipo ya marcó como resueltas en
  * ese módulo: volver a alertarlas acá sería pedirle dos veces el mismo trabajo.
  */
-function keywordOverlapAlerts({ pieceId, ownKeywords = [], topQueries = [], keywordOwner, resolvedQueries }) {
+function keywordOverlapAlerts({ pieceId, language = null, ownKeywords = [], topQueries = [], keywordOwner, resolvedQueries }) {
   if (!keywordOwner || keywordOwner.size === 0) return []
 
   // La keyword propia primero: un choque declarado (dos piezas con la misma
@@ -209,15 +230,18 @@ function keywordOverlapAlerts({ pieceId, ownKeywords = [], topQueries = [], keyw
   const alerts = []
   const seen = new Set()
   for (const { query, impressions, declared } of candidates) {
-    const key = normalizeKeyword(query)
-    if (!key || seen.has(key)) continue
+    const bare = normalizeKeyword(query)
+    if (!bare || seen.has(bare)) continue
+    // Se busca al dueño EN EL IDIOMA DE ESTA NOTA: una consulta que trae a una
+    // nota en inglés sólo puede chocar con otra nota en inglés.
+    const key = keywordOwnerKey(language, query)
 
     const owner = keywordOwner.get(key)
     if (!owner || owner.pieceId === pieceId) continue
     if (resolvedQueries?.has(String(query).trim().toLowerCase())) continue
     if (!declared && (impressions ?? 0) < MIN_IMPRESSIONS_FOR_OVERLAP) continue
 
-    seen.add(key)
+    seen.add(bare)
     alerts.push({
       code: 'keyword_overlap',
       severity: owner.primary && !declared ? 'warning' : 'info',
@@ -239,15 +263,16 @@ const SEVERITY_ORDER = { critical: 0, warning: 1, info: 2 }
  * @param {object?}  previous  — mismos campos del período anterior, o null
  * @param {Array}    topQueries— [{ query, impressions, … }]
  * @param {string[]} ownKeywords
+ * @param {string?}  language  — idioma de la nota, para resolver el dueño de una keyword
  * @param {Map}      keywordOwner — ver buildKeywordOwners
  * @param {Set?}     resolvedQueries — queries ya resueltas en Canibalización
  */
-function computeAlerts({ pieceId, current, previous = null, topQueries = [], ownKeywords = [], keywordOwner, resolvedQueries } = {}) {
+function computeAlerts({ pieceId, language = null, current, previous = null, topQueries = [], ownKeywords = [], keywordOwner, resolvedQueries } = {}) {
   if (!current) return []
   const alerts = [
     losingTrafficAlert(current, previous),
     lowCtrAlert(current),
-    ...keywordOverlapAlerts({ pieceId, ownKeywords, topQueries, keywordOwner, resolvedQueries }),
+    ...keywordOverlapAlerts({ pieceId, language, ownKeywords, topQueries, keywordOwner, resolvedQueries }),
   ].filter(Boolean)
 
   return alerts.sort((a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity])

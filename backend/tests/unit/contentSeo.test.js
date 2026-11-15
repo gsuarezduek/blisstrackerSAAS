@@ -173,20 +173,21 @@ describe('contentSeo — alerta de CTR bajo', () => {
 
 describe('contentSeo — solapamiento de keywords', () => {
   const pieces = [
-    { id: 1, title: 'Alquiler de autos en Mendoza', seoKeyword: 'Alquiler de autos en Mendoza', seoKeywords: ['rent a car mendoza'] },
-    { id: 2, title: 'Autos para alquilar en Mendoza', seoKeyword: 'alquiler de autos mendoza', seoKeywords: [] },
+    { id: 1, title: 'Alquiler de autos en Mendoza', language: 'es', seoKeyword: 'Alquiler de autos en Mendoza', seoKeywords: ['rent a car mendoza'] },
+    { id: 2, title: 'Autos para alquilar en Mendoza', language: 'es', seoKeyword: 'alquiler de autos mendoza', seoKeywords: [] },
   ]
   const owners = buildKeywordOwners(pieces)
 
   it('empareja la keyword escrita a mano con la consulta de Google, tildes y mayúsculas aparte', () => {
     expect(normalizeKeyword('Alquiler de Autós  en Mendoza')).toBe('alquiler de autos en mendoza')
-    expect(owners.get('alquiler de autos en mendoza').pieceId).toBe(1)
-    expect(owners.get('rent a car mendoza').primary).toBe(false)
+    expect(owners.get('es\u0000alquiler de autos en mendoza').pieceId).toBe(1)
+    expect(owners.get('es\u0000rent a car mendoza').primary).toBe(false)
   })
 
   it('avisa cuando una nota aparece para la keyword de otra', () => {
     const alerts = computeAlerts({
       pieceId: 2,
+      language: 'es',
       current: win({ clicks: 5, impressions: 400, ctr: 0.012, position: 9 }),
       topQueries: [{ query: 'alquiler de autos en mendoza', impressions: 300 }],
       ownKeywords: ['alquiler de autos mendoza'],
@@ -201,6 +202,7 @@ describe('contentSeo — solapamiento de keywords', () => {
   it('no se avisa de solaparse consigo misma', () => {
     const alerts = computeAlerts({
       pieceId: 1,
+      language: 'es',
       current: win({ clicks: 90, impressions: 800, ctr: 0.11, position: 2 }),
       topQueries: [{ query: 'alquiler de autos en mendoza', impressions: 700 }],
       ownKeywords: ['alquiler de autos en mendoza'],
@@ -212,6 +214,7 @@ describe('contentSeo — solapamiento de keywords', () => {
   it('una consulta con 3 impresiones no es una disputa', () => {
     const alerts = computeAlerts({
       pieceId: 2,
+      language: 'es',
       current: win({ clicks: 1, impressions: 50, ctr: 0.02, position: 9 }),
       topQueries: [{ query: 'alquiler de autos en mendoza', impressions: 3 }],
       keywordOwner: owners,
@@ -221,11 +224,12 @@ describe('contentSeo — solapamiento de keywords', () => {
 
   it('dos notas con la MISMA keyword declarada se avisan sin esperar datos de Google', () => {
     const owners2 = buildKeywordOwners([
-      { id: 1, title: 'Nota vieja', seoKeyword: 'seguro de auto', seoKeywords: [] },
-      { id: 2, title: 'Nota nueva', seoKeyword: 'seguro de auto', seoKeywords: [] },
+      { id: 1, title: 'Nota vieja', language: 'es', seoKeyword: 'seguro de auto', seoKeywords: [] },
+      { id: 2, title: 'Nota nueva', language: 'es', seoKeyword: 'seguro de auto', seoKeywords: [] },
     ])
     const alerts = computeAlerts({
       pieceId: 2,
+      language: 'es',
       current: win(),
       ownKeywords: ['seguro de auto'],
       keywordOwner: owners2,
@@ -238,6 +242,7 @@ describe('contentSeo — solapamiento de keywords', () => {
   it('lo que ya se resolvió en Canibalización no se vuelve a pedir', () => {
     const alerts = computeAlerts({
       pieceId: 2,
+      language: 'es',
       current: win({ clicks: 5, impressions: 400, ctr: 0.012, position: 9 }),
       topQueries: [{ query: 'alquiler de autos en mendoza', impressions: 300 }],
       keywordOwner: owners,
@@ -246,9 +251,64 @@ describe('contentSeo — solapamiento de keywords', () => {
     expect(alerts.map(a => a.code)).not.toContain('keyword_overlap')
   })
 
+  it('dos traducciones de la MISMA nota con la misma keyword NO se canibalizan', () => {
+    // El escenario más común de un blog multi-idioma: la versión en español y
+    // la versión en inglés comparten la keyword. Son dos SERPs distintos, no
+    // compiten — y marcarlo convertía cada grupo de traducciones en una alerta
+    // falsa. Mismo criterio que CannibalResolution, que guarda query + idioma.
+    const owners2 = buildKeywordOwners([
+      { id: 1, title: 'Alquiler de autos', language: 'es', seoKeyword: 'car rental mendoza', seoKeywords: [] },
+      { id: 2, title: 'Car rental',        language: 'en', seoKeyword: 'car rental mendoza', seoKeywords: [] },
+    ])
+    const alerts = computeAlerts({
+      pieceId: 2,
+      language: 'en',
+      current: win({ clicks: 20, impressions: 500, ctr: 0.04, position: 6 }),
+      topQueries: [{ query: 'car rental mendoza', impressions: 400 }],
+      ownKeywords: ['car rental mendoza'],
+      keywordOwner: owners2,
+    })
+    expect(alerts.map(a => a.code)).not.toContain('keyword_overlap')
+  })
+
+  it('dos notas del MISMO idioma con la misma keyword sí se avisan', () => {
+    const owners2 = buildKeywordOwners([
+      { id: 1, title: 'Nota A', language: 'en', seoKeyword: 'car rental mendoza', seoKeywords: [] },
+      { id: 2, title: 'Nota B', language: 'en', seoKeyword: 'car rental mendoza', seoKeywords: [] },
+    ])
+    const alerts = computeAlerts({
+      pieceId: 2, language: 'en', current: win(),
+      ownKeywords: ['car rental mendoza'], keywordOwner: owners2,
+    })
+    expect(alerts.find(a => a.code === 'keyword_overlap').data.otherPieceId).toBe(1)
+  })
+
+  it('una nota sin idioma cargado no choca con una que sí lo tiene', () => {
+    const owners2 = buildKeywordOwners([
+      { id: 1, title: 'Con idioma', language: 'es', seoKeyword: 'seguro de auto', seoKeywords: [] },
+      { id: 2, title: 'Sin idioma', language: null, seoKeyword: 'seguro de auto', seoKeywords: [] },
+    ])
+    const sinIdioma = computeAlerts({
+      pieceId: 2, language: null, current: win(),
+      ownKeywords: ['seguro de auto'], keywordOwner: owners2,
+    })
+    expect(sinIdioma.map(a => a.code)).not.toContain('keyword_overlap')
+    // Y las dos sin idioma sí, porque ahí no hay nada que las distinga.
+    const owners3 = buildKeywordOwners([
+      { id: 1, title: 'A', language: null, seoKeyword: 'seguro de auto', seoKeywords: [] },
+      { id: 2, title: 'B', language: null, seoKeyword: 'seguro de auto', seoKeywords: [] },
+    ])
+    const ambas = computeAlerts({
+      pieceId: 2, language: null, current: win(),
+      ownKeywords: ['seguro de auto'], keywordOwner: owners3,
+    })
+    expect(ambas.find(a => a.code === 'keyword_overlap').data.otherPieceId).toBe(1)
+  })
+
   it('las alertas salen ordenadas por gravedad', () => {
     const alerts = computeAlerts({
       pieceId: 2,
+      language: 'es',
       current:  win({ clicks: 4, impressions: 1500, ctr: 0.0026, position: 4 }),
       previous: win({ clicks: 40, impressions: 1400, ctr: 0.028, position: 4 }),
       topQueries: [{ query: 'alquiler de autos en mendoza', impressions: 900 }],

@@ -170,7 +170,7 @@ async function syncProjectContentSeo({ projectId, workspaceId, force = false }) 
   try {
     const pieces = await prisma.contentPiece.findMany({
       where:  { projectId, workspaceId, deletedAt: null, publishedUrl: { not: null } },
-      select: { id: true, title: true, publishedUrl: true, seoKeyword: true, seoKeywords: true },
+      select: { id: true, title: true, publishedUrl: true, language: true, seoKeyword: true, seoKeywords: true },
       orderBy: { createdAt: 'asc' },
     })
 
@@ -225,6 +225,7 @@ async function syncProjectContentSeo({ projectId, workspaceId, force = false }) 
       // inventario, no una medición.
       const alerts = computeAlerts({
         pieceId: piece.id,
+        language: piece.language,
         current: metrics,
         previous: cur ? prev : null,
         topQueries,
