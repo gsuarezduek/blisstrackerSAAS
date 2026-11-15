@@ -371,9 +371,31 @@ describe('POST /import', () => {
     })
 
     const res = await req('post', `${BASE}/import`).send({ source: 'sitemap', filter: '/blog/', dryRun: true })
+    // Lo leído y lo descartado van separados: el total post-filtro no distingue
+    // "el sitio no tiene nada" de "el filtro no matcheó nada".
+    expect(res.body.read).toBe(2)
+    expect(res.body.filteredOut).toBe(1)
     expect(res.body.created).toEqual([
       expect.objectContaining({ url: 'https://mdz.com/blog/alquiler-de-autos', title: 'Alquiler de autos' }),
     ])
+  })
+
+  it('un filtro que no matchea nada informa lo leído, no "0 entradas del sitio"', async () => {
+    // El caso real: el sitio publica las notas en la RAÍZ y el filtro dice
+    // "/blog/". Antes la respuesta era indistinguible de un sitio vacío o de una
+    // API caída, y mandaba a revisar el sitio en vez del filtro.
+    mockBase()
+    prisma.contentPiece.findMany.mockResolvedValue([])
+    fetchPublicUrl.mockResolvedValue(wpResponse([
+      { id: 1, link: 'https://mdz.com/road-trip-mendoza-7-dias', title: { rendered: 'Road trip' }, date_gmt: '2026-11-09T13:00:00' },
+      { id: 2, link: 'https://mdz.com/en/car-rental-mendoza',    title: { rendered: 'Car rental' }, date_gmt: '2026-11-06T16:00:00' },
+    ]))
+
+    const res = await req('post', `${BASE}/import`).send({ source: 'wordpress', filter: '/blog/', dryRun: true })
+    expect(res.status).toBe(200)
+    expect(res.body.read).toBe(2)
+    expect(res.body.filteredOut).toBe(2)
+    expect(res.body.created).toHaveLength(0)
   })
 
   it('400 con mensaje accionable si el sitio no tiene la API de WordPress', async () => {

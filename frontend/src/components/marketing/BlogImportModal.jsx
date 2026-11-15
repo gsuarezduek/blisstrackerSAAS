@@ -16,7 +16,7 @@ const SOURCES = [
   {
     id: 'sitemap',
     label: 'Sitemap',
-    hint: 'Sirve con cualquier CMS, pero sólo trae URLs: el título sale del slug y el idioma, del prefijo de la ruta. Conviene filtrar por "/blog/" para no traer las páginas del sitio.',
+    hint: 'Sirve con cualquier CMS, pero sólo trae URLs: el título sale del slug y el idioma, del prefijo de la ruta. Trae también las páginas del sitio, así que acá el filtro sí suele hacer falta.',
   },
 ]
 
@@ -75,6 +75,7 @@ export default function BlogImportModal({ projectId, onClose, onImported }) {
                 Se crearon <strong>{result.created.length}</strong> {result.created.length === 1 ? 'nota' : 'notas'} como
                 publicadas, con su URL, fecha e idioma.
                 {result.skippedCount > 0 && ` ${result.skippedCount} se saltearon (ya estaban cargadas).`}
+                {result.filteredOut > 0 && ` ${result.filteredOut} de las ${result.read} entradas del sitio quedaron afuera por el filtro.`}
                 {result.linkedGroups > 0 && ` ${result.linkedGroups} quedaron vinculadas entre sus traducciones.`}
               </p>
               <p className="text-xs text-gray-400">
@@ -124,11 +125,14 @@ export default function BlogImportModal({ projectId, onClose, onImported }) {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className={LABEL}>Sólo URLs que contengan</label>
+                  <label className={LABEL}>
+                    Sólo URLs que contengan
+                    <span className="italic text-gray-400 font-normal"> (opcional)</span>
+                  </label>
                   <input
                     value={filter}
                     onChange={e => { setFilter(e.target.value); setPreview(null) }}
-                    placeholder="/blog/"
+                    placeholder="ej. /blog/"
                     className={INPUT}
                   />
                 </div>
@@ -146,6 +150,8 @@ export default function BlogImportModal({ projectId, onClose, onImported }) {
               <p className="text-xs text-gray-400 dark:text-gray-500 -mt-2">
                 Las notas en <code>/en/</code> o <code>/pt/</code> se detectan por la ruta; las que no llevan prefijo
                 son del idioma principal del sitio.
+                {' '}<strong className="font-medium">Dejá el filtro vacío si las notas se publican en la raíz</strong> —
+                es lo más común, y con WordPress casi nunca hace falta: ese camino ya trae sólo las notas, no las páginas.
               </p>
 
               {error && (
@@ -158,10 +164,18 @@ export default function BlogImportModal({ projectId, onClose, onImported }) {
                 <div className="rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
                   <div className="px-3 py-2 bg-gray-50 dark:bg-gray-900/40 text-xs text-gray-600 dark:text-gray-300">
                     {preview.created.length === 0
-                      ? 'No hay nada nuevo para importar.'
+                      ? (preview.filteredOut > 0 && preview.filteredOut === preview.read
+                          // El caso que más confundía: la fuente trajo notas y el
+                          // filtro las descartó todas. Antes esto decía "se leyeron
+                          // 0 entradas del sitio", que manda a revisar el sitio en
+                          // vez del filtro, que es lo que hay que cambiar.
+                          ? `Ninguna de las ${preview.read} entradas del sitio contiene «${filter.trim()}». Probá con otro filtro, o dejalo vacío.`
+                          : 'No hay nada nuevo para importar.')
                       : `Se van a crear ${preview.created.length} ${preview.created.length === 1 ? 'nota' : 'notas'}.`}
                     {preview.skippedCount > 0 && ` ${preview.skippedCount} ya estaban cargadas.`}
-                    {' '}Se leyeron {preview.total} entradas del sitio.
+                    {preview.created.length > 0 && ` Se leyeron ${preview.read} entradas del sitio.`}
+                    {preview.filteredOut > 0 && preview.filteredOut !== preview.read &&
+                      ` ${preview.filteredOut} quedaron afuera por el filtro «${filter.trim()}».`}
                   </div>
                   <div className="max-h-56 overflow-y-auto divide-y divide-gray-100 dark:divide-gray-700">
                     {preview.created.slice(0, 50).map(c => (

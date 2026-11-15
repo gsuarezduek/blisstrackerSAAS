@@ -1067,7 +1067,7 @@ El inventario lista las notas igual, pero para medirlas el proyecto necesita **G
         tips: [
           'Antes de proponer una nota nueva, buscá la keyword en el inventario: si ya hay una nota para eso, suele rendir más actualizarla que escribir otra que le compita.',
           'Search Console publica con 2 o 3 días de atraso: el período que ves termina unos días antes de hoy, a propósito.',
-          'Si importás desde el sitemap, filtrá por "/blog/" para no traerte también las páginas del sitio.',
+          'El filtro de URL es opcional y conviene dejarlo vacío salvo que el sitio publique las notas bajo una ruta propia: muchos las publican en la raíz. Desde el sitemap sí suele hacer falta, porque trae también las páginas del sitio.',
         ],
         related: ['marketing-avanzado', 'contenido-intro'],
       },

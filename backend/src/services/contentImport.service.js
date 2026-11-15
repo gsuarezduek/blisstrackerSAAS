@@ -130,7 +130,9 @@ async function fetchSitemapUrls(sitemapUrl) {
  * @param {string?} opts.filter  — sólo las URLs que contengan este texto (ej. "/blog/")
  * @param {string?} opts.defaultLanguage — idioma de las URLs sin prefijo de ruta
  * @param {boolean} opts.dryRun  — devuelve qué se importaría, sin crear nada
- * @returns {{ created:Array, skipped:Array, total:number, dryRun:boolean }}
+ * @returns {{ created:Array, skipped:Array, read:number, filteredOut:number, dryRun:boolean }}
+ *   `read` = entradas que trajo la fuente; `filteredOut` = las que descartó
+ *   `filter`. Separados a propósito: ver el comentario de `read` más abajo.
  */
 async function importPublishedPieces({
   projectId, workspaceId, userId, source, url, filter, defaultLanguage = null, dryRun = false,
@@ -162,9 +164,19 @@ async function importPublishedPieces({
     }))
   }
 
+  // Cuántas entradas trajo la FUENTE, antes de filtrar. Se informa aparte de lo
+  // que queda después: un filtro que no matchea nada daba "se leyeron 0
+  // entradas del sitio", indistinguible de un sitio vacío o de una API caída —
+  // y el caso real es el más común de todos (el sitio publica las notas en la
+  // raíz y el filtro dice "/blog/").
+  const read = entries.length
+  let filteredOut = 0
   if (filter) {
     const needle = String(filter).trim().toLowerCase()
-    if (needle) entries = entries.filter(e => e.url.toLowerCase().includes(needle))
+    if (needle) {
+      entries = entries.filter(e => e.url.toLowerCase().includes(needle))
+      filteredOut = read - entries.length
+    }
   }
 
   // Lo que ya está cargado no se vuelve a crear — una importación se corre más
@@ -214,7 +226,8 @@ async function importPublishedPieces({
   if (dryRun) {
     return {
       dryRun: true,
-      total: entries.length,
+      read,
+      filteredOut,
       created: toCreate.map(c => ({ url: c.url, title: c.title, language: c.language, publishedAt: c.publishedAt })),
       skipped,
       skippedCount,
@@ -262,7 +275,7 @@ async function importPublishedPieces({
 
   const linkedGroups = await linkWordpressTranslations(byWpId)
 
-  return { dryRun: false, total: entries.length, created, skipped, skippedCount, linkedGroups }
+  return { dryRun: false, read, filteredOut, created, skipped, skippedCount, linkedGroups }
 }
 
 /**
