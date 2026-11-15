@@ -3,6 +3,7 @@ const { canWrite } = require('../lib/projectAccess')
 const { requestAgentId, requestAgentName } = require('./tasks/_shared')
 const service = require('../services/backlinks.service')
 const verifier = require('../services/backlinkVerifier.service')
+const importer = require('../services/backlinkImport.service')
 
 /**
  * Preámbulo de todo handler: resuelve el proyecto dentro del workspace y, si la
@@ -232,4 +233,40 @@ async function getJob(req, res, next) {
   } catch (err) { next(err) }
 }
 
-module.exports = { list, create, update, remove, listChecks, getProfile, createReading, runVerify, listJobs, getJob, resolveCtx }
+/**
+ * POST /api/marketing/projects/:id/backlinks/import
+ *
+ * El CSV viaja como texto en el body JSON, no como multipart: el límite de 1 MB de
+ * express.json alcanza para un export filtrado y evita montar multer en el router
+ * de marketing. Si el archivo es más grande, el 413 ya avisa solo y el modal pide
+ * filtrar el export.
+ *
+ * `dryRun: true` devuelve exactamente lo que va a pasar sin escribir nada — el
+ * primero de los dos pasos, igual que el import del inventario del blog.
+ */
+async function importCsv(req, res, next) {
+  try {
+    const ctx = await resolveCtx(req, res, { write: true })
+    if (!ctx) return
+
+    const { csv, format = 'auto', target = 'own', dryRun = false } = req.body || {}
+    if (typeof csv !== 'string' || !csv.trim()) {
+      return res.status(400).json({ error: 'Pegá el contenido del CSV o subí el archivo.' })
+    }
+    if (target !== 'own') {
+      // Los prospectos de competencia llegan en la fase siguiente; rechazarlo
+      // explícito es mejor que importarlos como enlaces propios.
+      return res.status(400).json({ error: 'Por ahora sólo se pueden importar enlaces propios.', code: 'TARGET_NOT_SUPPORTED' })
+    }
+
+    const result = await importer.importBacklinks({ ...ctx, csv, format, target, dryRun: dryRun === true })
+    res.status(dryRun === true ? 200 : 201).json(result)
+  } catch (err) {
+    if (err.code === 'CSV_UNREADABLE') {
+      return res.status(400).json({ error: err.message, code: err.code, unmappedHeaders: err.unmappedHeaders })
+    }
+    next(err)
+  }
+}
+
+module.exports = { list, create, update, remove, listChecks, getProfile, createReading, runVerify, listJobs, getJob, importCsv, resolveCtx }

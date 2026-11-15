@@ -304,6 +304,7 @@ router.delete('/projects/:id/blog/notes/:pid/translations',  blogSeo.unlinkTrans
 //
 // OJO con el orden: las estáticas van ANTES de /:blId, o `profile` y `prospects`
 // caen en el handler de un id.
+router.post('/projects/:id/backlinks/import',           backlinks.importCsv)
 router.post('/projects/:id/backlinks/verify',           backlinks.runVerify)
 router.get('/projects/:id/backlinks/jobs',              backlinks.listJobs)
 router.get('/projects/:id/backlinks/jobs/:jobId',       backlinks.getJob)

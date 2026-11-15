@@ -5,6 +5,7 @@ import { Icon } from '../../ui/Icon'
 import BacklinksTable from './BacklinksTable'
 import BacklinkFormModal from './BacklinkFormModal'
 import BacklinkChecksModal from './BacklinkChecksModal'
+import BacklinkImportModal from './BacklinkImportModal'
 import PerfilPanel from './PerfilPanel'
 import useBacklinkJob from './useBacklinkJob'
 
@@ -24,6 +25,7 @@ export default function EnlacesTab({ projectId, projects, view = 'nuestros' }) {
   const [status,  setStatus]  = useState('')
   const [formLink, setFormLink] = useState(null)   // {} = alta, fila = edición
   const [checksLink, setChecksLink] = useState(null)
+  const [importing, setImporting] = useState(false)
 
   const selected = projects?.find(p => String(p.id) === String(projectId))
 
@@ -120,6 +122,10 @@ export default function EnlacesTab({ projectId, projects, view = 'nuestros' }) {
             className="px-3 py-2 text-sm font-medium rounded-xl border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors">
             {verify.busy ? 'Verificando…' : 'Verificar enlaces'}
           </button>
+          <button onClick={() => setImporting(true)}
+            className="px-3 py-2 text-sm font-medium rounded-xl border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+            Importar CSV
+          </button>
           <button onClick={() => setFormLink({})}
             className="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white text-sm font-medium rounded-xl transition-colors">
             + Agregar enlace
@@ -192,6 +198,9 @@ export default function EnlacesTab({ projectId, projects, view = 'nuestros' }) {
       )}
       {checksLink && (
         <BacklinkChecksModal projectId={projectId} link={checksLink} onClose={() => setChecksLink(null)} />
+      )}
+      {importing && (
+        <BacklinkImportModal projectId={projectId} onClose={() => setImporting(false)} onImported={loadLinks} />
       )}
     </div>
   )

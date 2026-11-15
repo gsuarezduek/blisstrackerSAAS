@@ -528,6 +528,7 @@ POST   /api/marketing/projects/:id/domain-rating/refresh    # refresca el Domain
 
 # Marketing — Enlaces (backlinks). Escritura: admin/owner o equipo del proyecto (canWrite).
 # OJO: las rutas estáticas van ANTES de /:blId en marketing.routes.js, o `profile` cae en el handler de un id.
+POST   /api/marketing/projects/:id/backlinks/import                # body: { csv, format: auto|ahrefs|semrush|gsc, dryRun } — el CSV va como TEXTO en el JSON (no multipart); con dryRun no escribe nada
 POST   /api/marketing/projects/:id/backlinks/verify                # dispara el verificador (async) → 201 { jobId }. 429 COOLDOWN (6h, con waitMinutes) · 409 ALREADY_RUNNING · 400 NO_LINKS/NO_SITE_URL
 GET    /api/marketing/projects/:id/backlinks/jobs                  # últimos 10 jobs (verify y classify)
 GET    /api/marketing/projects/:id/backlinks/jobs/:jobId           # polling: { status, errorMsg (progreso en vivo), checked, changed, lost }
