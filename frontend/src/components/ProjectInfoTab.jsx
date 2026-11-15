@@ -2,6 +2,7 @@ import { useState } from 'react'
 import api from '../api/client'
 import { useFeatureFlag } from '../hooks/useFeatureFlag'
 import { useGoogleIntegration } from '../hooks/useGoogleIntegration'
+import { clearOAuthResult, waitForOAuthResult } from '../lib/oauthResultBridge'
 import { X } from 'lucide-react'
 import { Icon } from './ui/Icon'
 
@@ -158,28 +159,12 @@ export default function ProjectInfoTab({ project, onSave }) {
     setSocialLoading(prev => ({ ...prev, [integ.key]: true }))
     try {
       const { data } = await api.get(integ.authPath(project.id))
-      localStorage.removeItem('__ga_oauth_result')
-      window.open(data.url, integ.popup, 'width=520,height=660,left=200,top=80')
+      clearOAuthResult()
+      const popup = window.open(data.url, integ.popup, 'width=520,height=660,left=200,top=80')
 
-      const TIMEOUT_MS = 5 * 60 * 1000
-      const startedAt  = Date.now()
-      const poll = setInterval(() => {
-        const stored = localStorage.getItem('__ga_oauth_result')
-        if (stored) {
-          clearInterval(poll)
-          localStorage.removeItem('__ga_oauth_result')
-          try {
-            const result = JSON.parse(stored)
-            setSocialLoading(prev => ({ ...prev, [integ.key]: false }))
-            if (result.success) reloadIntegrations()
-          } catch { /* ignorar */ }
-          return
-        }
-        if (Date.now() - startedAt > TIMEOUT_MS) {
-          clearInterval(poll)
-          setSocialLoading(prev => ({ ...prev, [integ.key]: false }))
-        }
-      }, 600)
+      const { status, result } = await waitForOAuthResult({ popup }).promise
+      setSocialLoading(prev => ({ ...prev, [integ.key]: false }))
+      if (status === 'result' && result.success) reloadIntegrations()
     } catch {
       setSocialLoading(prev => ({ ...prev, [integ.key]: false }))
     }

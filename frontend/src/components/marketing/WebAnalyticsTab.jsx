@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import api from '../../api/client'
+import { clearOAuthResult, waitForOAuthResult } from '../../lib/oauthResultBridge'
 import { CalendarDays, ChartColumn, Hash, Monitor, TriangleAlert } from 'lucide-react'
 import { Icon } from '../ui/Icon'
 import LoadingSpinner from '../LoadingSpinner'
@@ -64,28 +65,16 @@ export default function WebAnalyticsTab({ projectId, onSelectProject }) {
     setReconnecting(true)
     try {
       const res    = await api.get(`/marketing/integrations/google/auth-url?projectId=${projectId}&type=google_analytics`)
+      clearOAuthResult()
       const popup  = window.open(res.data.url, 'google_oauth', 'width=560,height=660,left=200,top=100')
 
-      const poll = setInterval(() => {
-        try {
-          const raw = localStorage.getItem('__ga_oauth_result')
-          if (!raw) return
-          const result = JSON.parse(raw)
-          if (Date.now() - result.ts > 60000) { localStorage.removeItem('__ga_oauth_result'); return }
-          localStorage.removeItem('__ga_oauth_result')
-          clearInterval(poll)
-          setReconnecting(false)
-          if (result.success) {
-            setErrorStatus(null)
-            setError('')
-            setRetryKey(k => k + 1)          // fuerza re-fetch de analytics
-          }
-          if (popup && !popup.closed) popup.close()
-        } catch { /* ignorar */ }
-      }, 600)
-
-      // Limpiar si no hubo resultado en 5 min
-      setTimeout(() => { clearInterval(poll); setReconnecting(false) }, 300_000)
+      const { status, result } = await waitForOAuthResult({ popup }).promise
+      setReconnecting(false)
+      if (status === 'result' && result.success) {
+        setErrorStatus(null)
+        setError('')
+        setRetryKey(k => k + 1)              // fuerza re-fetch de analytics
+      }
     } catch (err) {
       setReconnecting(false)
       alert(err.response?.data?.error || 'No se pudo iniciar la reconexión con Google')

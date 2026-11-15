@@ -1,10 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import api from '../api/client'
+import { clearOAuthResult, waitForOAuthResult } from '../lib/oauthResultBridge'
 
 const POPUP_NAME = 'google_oauth'
-const STORAGE_KEY = '__ga_oauth_result'
-const POLL_INTERVAL_MS = 600
-const POPUP_TIMEOUT_MS = 5 * 60 * 1000
 
 /**
  * Hook compartido para gestionar integraciones Google (GA4 / GSC / Ads) de un proyecto.
@@ -23,7 +21,7 @@ export function useGoogleIntegration(projectId, { enabled = true } = {}) {
   const [integrations, setIntegrations] = useState([])
   const [loading, setLoading] = useState({})
   const [propSaving, setPropSaving] = useState({})
-  const pollRef = useRef(null)
+  const waiting = useRef(null)
 
   const setOne = useCallback((type, val) => {
     setLoading(prev => ({ ...prev, [type]: val }))
@@ -46,7 +44,7 @@ export function useGoogleIntegration(projectId, { enabled = true } = {}) {
   }, [enabled, reload])
 
   useEffect(() => () => {
-    if (pollRef.current) clearInterval(pollRef.current)
+    if (waiting.current) waiting.current.cancel()
   }, [])
 
   const getIntegration = useCallback(
@@ -78,40 +76,21 @@ export function useGoogleIntegration(projectId, { enabled = true } = {}) {
         }
       }
 
-      localStorage.removeItem(STORAGE_KEY)
-      window.open(data.url, POPUP_NAME, 'width=520,height=660,left=200,top=80')
+      clearOAuthResult()
+      const popup = window.open(data.url, POPUP_NAME, 'width=520,height=660,left=200,top=80')
 
-      return new Promise(resolve => {
-        const startedAt = Date.now()
-        if (pollRef.current) clearInterval(pollRef.current)
-        pollRef.current = setInterval(() => {
-          const stored = localStorage.getItem(STORAGE_KEY)
-          if (stored) {
-            clearInterval(pollRef.current)
-            pollRef.current = null
-            localStorage.removeItem(STORAGE_KEY)
-            try {
-              const result = JSON.parse(stored)
-              setOne(type, false)
-              if (result.success) {
-                reload().then(() => resolve({ ok: true, reused: false }))
-              } else {
-                resolve({ ok: false, error: result.error })
-              }
-            } catch {
-              setOne(type, false)
-              resolve({ ok: false, error: 'invalid_result' })
-            }
-            return
-          }
-          if (Date.now() - startedAt > POPUP_TIMEOUT_MS) {
-            clearInterval(pollRef.current)
-            pollRef.current = null
-            setOne(type, false)
-            resolve({ ok: false, error: 'timeout' })
-          }
-        }, POLL_INTERVAL_MS)
-      })
+      if (waiting.current) waiting.current.cancel()
+      const wait = waitForOAuthResult({ popup })
+      waiting.current = wait
+      const { status, result } = await wait.promise
+      if (waiting.current === wait) waiting.current = null
+      if (status === 'cancelled') return { ok: false, error: 'cancelled' }
+
+      setOne(type, false)
+      if (status !== 'result')  return { ok: false, error: status }
+      if (!result.success)      return { ok: false, error: result.error }
+      await reload()
+      return { ok: true, reused: false }
     } catch (err) {
       setOne(type, false)
       return { ok: false, error: err.message }

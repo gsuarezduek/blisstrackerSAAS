@@ -154,7 +154,7 @@ export function OAuthMethod({ brand, getAuthUrl, onConnected, cta, closedMessage
     } finally { setFinalizing(false) }
   }
 
-  const { start, loading, error } = useOAuthPopup({
+  const { start, cancel, loading, error } = useOAuthPopup({
     getAuthUrl, integrationType: brand.integrationType, label: brand.label, onConnected, closedMessage,
     onPending: pendingAccounts ? handlePending : null,
   })
@@ -176,6 +176,16 @@ export function OAuthMethod({ brand, getAuthUrl, onConnected, cta, closedMessage
       {note && <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">{note}</p>}
       <FormError>{error}</FormError>
       <BrandButton brand={brand} onClick={start} loading={loading}>{cta ?? `Conectar con ${brand.label}`}</BrandButton>
+      {/* Con el handle del popup repudiado por COOP no hay forma de saber que lo
+          cerraron (ver lib/oauthResultBridge.js): sin esta salida el botón queda
+          en "Conectando…" hasta el timeout de 5 minutos. */}
+      {loading && (
+        <p className="text-xs text-gray-500 dark:text-gray-400 text-center">
+          Terminá de autorizar en la ventana que se abrió.{' '}
+          <button type="button" onClick={cancel}
+            className="underline underline-offset-2 hover:text-gray-700 dark:hover:text-gray-300">Cancelar</button>
+        </p>
+      )}
     </div>
   )
 }
