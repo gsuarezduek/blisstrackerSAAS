@@ -20,6 +20,7 @@ const ps    = require('../controllers/platformSettings.controller')
 const st    = require('../controllers/storage.controller')
 const land  = require('../controllers/landing.controller')
 const apt   = require('../controllers/apifyTokens.controller')
+const serp  = require('../controllers/superadmin/serpApiUsage.controller')
 const blog  = require('../controllers/blog.controller')
 const ic    = require('../controllers/superadmin/invitationCodes.controller')
 const mcpTok = require('../controllers/superadmin/mcpTokens.controller')
@@ -153,6 +154,11 @@ router.patch('/apify-tokens/:id/toggle', apt.toggleToken)
 router.delete('/apify-tokens/:id',       apt.deleteToken)
 router.get('/apify-usage',               apt.getUsageStats)
 router.get('/apify-accounts-usage',      apt.getAccountsUsage)
+
+// Cuota de SerpAPI (plan + búsquedas restantes, en vivo) y nuestro consumo del mes
+// atribuido por proyecto. No hay SerpUsageLog: se cuentan los artefactos que deja
+// cada búsqueda (SerpSnapshot, ContentGap, ContentBrief).
+router.get('/serpapi-usage',             serp.getSerpApiUsage)
 
 // Landing (hero/video + empresas que confían) — misma restricción de tamaño que avatares,
 // se reusa el wrapper uploadAvatar (mismo límite 2MB, mismo campo "image", mensaje genérico).

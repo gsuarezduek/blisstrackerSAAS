@@ -296,6 +296,137 @@ function TokensPanel({ tokens, loading, onChanged }) {
   )
 }
 
+// ─── SerpAPI: cuota de la cuenta + nuestro consumo del mes ────────────────────
+//
+// Las dos mitades hay que leerlas juntas. `account` es el número autoritativo
+// (el mismo que el dashboard de SerpAPI) pero no dice quién gastó; `consumption`
+// es nuestra atribución, derivada de los artefactos que deja cada búsqueda
+// (snapshots de keywords, Content Gap, Content Brief) porque no hay un log propio.
+function SerpApiPanel({ data, loading, onRefresh }) {
+  const acc = data?.account
+  const cons = data?.consumption
+  const left = acc?.totalSearchesLeft
+  const limit = acc?.searchesPerMonth
+  const pct = limit ? Math.round(((limit - (left ?? 0)) / limit) * 100) : null
+
+  // El cron de los lunes cuesta 1 búsqueda por keyword trackeada. Es la proyección
+  // que permite decidir ANTES de quedarse sin cuota a mitad de mes.
+  const weeksLeft = left != null && cons?.weeklyCronCost
+    ? Math.floor(left / cons.weeklyCronCost)
+    : null
+
+  const band = pct == null ? 'text-gray-400'
+    : pct >= 90 ? 'text-red-600 dark:text-red-400'
+    : pct >= 70 ? 'text-amber-600 dark:text-amber-400'
+    : 'text-emerald-600 dark:text-emerald-400'
+
+  return (
+    <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
+      <div className="px-5 py-3.5 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200">SerpAPI — cuota y consumo</h3>
+          <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
+            Alimenta las posiciones y features de Keywords, Content Gap y Content Brief. Consultado en vivo (caché 5 min).
+          </p>
+        </div>
+        <button onClick={onRefresh} disabled={loading}
+          className="px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-60 transition-colors">
+          {loading ? 'Actualizando…' : 'Actualizar'}
+        </button>
+      </div>
+
+      {loading && !data ? (
+        <div className="flex justify-center py-10"><LoadingSpinner size="md" /></div>
+      ) : !acc?.configured ? (
+        <p className="px-5 py-6 text-sm text-amber-600 dark:text-amber-400">
+          Este servidor no tiene <code>SERP_API_KEY</code>: las posiciones de keywords, el Content Gap y los datos de SERP del Content Brief no corren.
+        </p>
+      ) : acc.error ? (
+        <p className="px-5 py-6 text-sm text-red-600 dark:text-red-400">
+          {acc.error === 'UNAUTHORIZED'
+            ? 'SerpAPI rechazó la API key de este servidor.'
+            : `No se pudo consultar la cuenta de SerpAPI (${acc.errorDetail || 'error'}).`}
+        </p>
+      ) : (
+        <div className="p-5 space-y-4">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <Stat label="Plan" value={acc.plan || '—'} hint={acc.accountEmail} />
+            <Stat label="Búsquedas restantes" value={fmtTokens(left ?? 0)} valueClass={band}
+              hint={limit ? `de ${fmtTokens(limit)} por mes` : null} />
+            <Stat label="Usadas este mes" value={fmtTokens(acc.thisMonthUsage ?? 0)}
+              hint={pct != null ? `${pct}% del plan` : null} />
+            <Stat label="Costo del cron semanal" value={fmtTokens(cons?.weeklyCronCost ?? 0)}
+              hint={weeksLeft != null ? `alcanza ~${weeksLeft} semana(s) más` : 'sin keywords trackeadas'} />
+          </div>
+
+          {limit > 0 && (
+            <div>
+              <div className="w-full bg-gray-100 dark:bg-gray-700 rounded-full h-2">
+                <div className={`h-2 rounded-full ${pct >= 90 ? 'bg-red-500' : pct >= 70 ? 'bg-amber-400' : 'bg-emerald-500'}`}
+                  style={{ width: `${Math.min(pct ?? 0, 100)}%` }} />
+              </div>
+              {weeksLeft != null && weeksLeft < 2 && cons.weeklyCronCost > 0 && (
+                <p className="text-xs text-red-600 dark:text-red-400 mt-2">
+                  Con lo que queda no llega al próximo cierre de mes: el cron de los lunes necesita {fmtTokens(cons.weeklyCronCost)} búsquedas por corrida.
+                  Lo primero que se corta es Content Gap, que sin SerpAPI no funciona.
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Nuestra atribución: lo que la API de SerpAPI no responde */}
+          <div className="pt-1">
+            <div className="flex items-baseline justify-between gap-3 mb-2">
+              <h4 className="text-xs font-semibold text-gray-700 dark:text-gray-300">
+                Nuestro consumo de {cons?.month} — {fmtTokens(cons?.total ?? 0)} búsqueda(s)
+              </h4>
+              <span className="text-[11px] text-gray-400 dark:text-gray-500">
+                keywords {fmtTokens(cons?.bySource?.keywords ?? 0)} · gap {fmtTokens(cons?.bySource?.contentGap ?? 0)} · brief {fmtTokens(cons?.bySource?.contentBrief ?? 0)}
+              </span>
+            </div>
+
+            {!cons?.byProject?.length ? (
+              <p className="text-xs text-gray-400 dark:text-gray-500">Sin búsquedas atribuidas este mes.</p>
+            ) : (
+              <div className="divide-y divide-gray-100 dark:divide-gray-700">
+                {cons.byProject.slice(0, 10).map(r => (
+                  <div key={`${r.workspaceId}-${r.projectId}`} className="py-2 flex items-center gap-3 text-xs">
+                    <span className="flex-1 min-w-0 truncate text-gray-700 dark:text-gray-200">
+                      {r.projectName || `Proyecto #${r.projectId}`}
+                      <span className="text-gray-400 dark:text-gray-500"> · {r.workspaceName}</span>
+                    </span>
+                    <span className="shrink-0 text-gray-400 dark:text-gray-500 hidden sm:inline">
+                      {r.keywords > 0 && `${r.keywords} kw`}
+                      {r.contentGap > 0 && ` · ${r.contentGap} gap`}
+                      {r.contentBrief > 0 && ` · ${r.contentBrief} brief`}
+                    </span>
+                    <span className="shrink-0 w-10 text-right font-semibold text-gray-800 dark:text-gray-100">{fmtTokens(r.total)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-2">
+              Atribución derivada de los artefactos que deja cada búsqueda — no hay un log propio de SerpAPI, así que puede no coincidir
+              exactamente con lo que reporta la cuenta. Una diferencia grande significa consumo desde afuera de la app.
+            </p>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function Stat({ label, value, hint, valueClass = 'text-gray-900 dark:text-white' }) {
+  return (
+    <div className="bg-gray-50 dark:bg-gray-900/40 border border-gray-100 dark:border-gray-700 rounded-xl p-3">
+      <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-0.5">{label}</p>
+      <p className={`text-xl font-bold ${valueClass}`}>{value}</p>
+      {hint && <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-0.5 truncate" title={hint}>{hint}</p>}
+    </div>
+  )
+}
+
 export function SectionScraping() {
   const [tokens,         setTokens]         = useState([])
   const [tokensLoading,  setTokensLoading]  = useState(true)
@@ -305,6 +436,8 @@ export function SectionScraping() {
   const [usageLoading,   setUsageLoading]   = useState(true)
   const [period,         setPeriod]         = useState('all')
   const [expanded,       setExpanded]       = useState(null)
+  const [serp,           setSerp]           = useState(null)
+  const [serpLoading,    setSerpLoading]    = useState(true)
 
   const loadTokens = useCallback(async () => {
     setTokensLoading(true)
@@ -330,7 +463,15 @@ export function SectionScraping() {
     } finally { setUsageLoading(false) }
   }, [])
 
-  useEffect(() => { loadTokens(); loadAccounts() }, [loadTokens, loadAccounts])
+  const loadSerp = useCallback(async () => {
+    setSerpLoading(true)
+    try {
+      const { data } = await api.get('/superadmin/serpapi-usage')
+      setSerp(data)
+    } finally { setSerpLoading(false) }
+  }, [])
+
+  useEffect(() => { loadTokens(); loadAccounts(); loadSerp() }, [loadTokens, loadAccounts, loadSerp])
   useEffect(() => { loadUsage(period) }, [loadUsage, period])
 
   function handleTokensChanged() {
@@ -352,10 +493,11 @@ export function SectionScraping() {
       <div>
         <h2 className="text-lg font-bold text-gray-900 dark:text-white">Scraping</h2>
         <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
-          Consumo de Apify por workspace, proyecto y función, gasto real en USD por cuenta, y gestión de tokens/actores.
+          Cuota de SerpAPI, consumo de Apify por workspace, proyecto y función, gasto real en USD por cuenta, y gestión de tokens/actores.
         </p>
       </div>
 
+      <SerpApiPanel data={serp} loading={serpLoading} onRefresh={loadSerp} />
       <AccountsUsagePanel accounts={accounts} loading={accountsLoading} onRefresh={loadAccounts} />
       <TokensPanel tokens={tokens} loading={tokensLoading} onChanged={handleTokensChanged} />
 
