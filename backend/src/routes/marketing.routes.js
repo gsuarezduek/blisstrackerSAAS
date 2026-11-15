@@ -25,6 +25,7 @@ const facebook             = require('../controllers/facebook.controller')
 const metaAds           = require('../controllers/metaAds.controller')
 const googleAds         = require('../controllers/googleAds.controller')
 const chatgptAds        = require('../controllers/chatgptAds.controller')
+const backlinks         = require('../controllers/backlinks.controller')
 const monthlyReport = {
   ...require('../controllers/monthlyReport/reportCrud.controller'),
   ...require('../controllers/monthlyReport/reportGeneration.controller'),
@@ -296,6 +297,23 @@ router.get('/projects/:id/blog/notes/:pid',                  blogSeo.getNote)
 router.patch('/projects/:id/blog/notes/:pid',                blogSeo.updateNote)
 router.post('/projects/:id/blog/notes/:pid/translations',    blogSeo.linkTranslation)
 router.delete('/projects/:id/blog/notes/:pid/translations',  blogSeo.unlinkTranslation)
+
+// SEO — Enlaces (backlinks). El perfil entra por carga manual, por un agente vía
+// MCP o por un CSV de Ahrefs/Semrush/Search Console; el verificador propio es el
+// que después vigila si cada enlace sigue vivo.
+//
+// OJO con el orden: las estáticas van ANTES de /:blId, o `profile` y `prospects`
+// caen en el handler de un id.
+router.post('/projects/:id/backlinks/verify',           backlinks.runVerify)
+router.get('/projects/:id/backlinks/jobs',              backlinks.listJobs)
+router.get('/projects/:id/backlinks/jobs/:jobId',       backlinks.getJob)
+router.post('/projects/:id/backlinks/profile/readings', backlinks.createReading)
+router.get('/projects/:id/backlinks/profile',           backlinks.getProfile)
+router.get('/projects/:id/backlinks',                   backlinks.list)
+router.post('/projects/:id/backlinks',                  backlinks.create)
+router.get('/projects/:id/backlinks/:blId/checks',      backlinks.listChecks)
+router.patch('/projects/:id/backlinks/:blId',           backlinks.update)
+router.delete('/projects/:id/backlinks/:blId',          backlinks.remove)
 
 // Keywords Tracking — rutas estáticas ANTES de las dinámicas /:kwId
 router.get('/projects/:id/keywords/suggest',              keywords.suggestKeywords)

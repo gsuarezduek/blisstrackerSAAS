@@ -303,6 +303,7 @@ Hay además un quinto flag de preferencia personal, `notesBoardEnabled` (`@defau
 | `0 0 * * 6` (sábados 00:00) | ART | Actualiza perfil de memoria de insights por usuario |
 | `0 1 1 * *` (1° mes 01:00) | ART | **Cadena mensual de snapshots** (`MONTHLY_CHAIN`, secuencial): GEO → GA4 → GSC+DomainRating → PageSpeed → keywords → Instagram → TikTok → YouTube → LinkedIn → Facebook → Ads → competidores → métricas RRHH → **alertas SEO** (`checkAndSendAllSeoAlerts`, compara snapshots del mes cerrado vs anterior y avisa a admins/owners solo si hay alertas). Todos del mes anterior. Cada job aislado en su try/catch; un fallo no corta la cadena. |
 | `0 6 * * 1` (lunes 06:00) | ART | Actualiza rankings de keywords del mes actual (upsert semanal) |
+| `45 6 * * 1` (lunes 06:45) | ART | Verifica los backlinks cargados de cada proyecto: si el `<a href>` sigue puesto, con qué anchor y qué `rel` (100 por proyecto por corrida, round-robin por `lastCheckedAt`) |
 | `0 8 * * 1` (lunes 08:00) | ART | Aviso semanal de Productividad por mail a admins/owners (solo si hay personas en alerta) |
 | `0 8 * * *` (diario 08:00) | ART | Recordatorios de Ventas: email al responsable con próximas acciones para hoy/vencidas (solo workspaces con flag `ventas`, dedup diario) |
 | `5 8 * * *` (diario 08:05) | ART | Motor de reglas de WhatsApp: reabre conversaciones vencidas con plantillas según criterios configurados (solo workspaces con flags `ventas` **y** `whatsapp`) |

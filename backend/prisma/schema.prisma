@@ -272,6 +272,11 @@ model Workspace {
   financeTasks               FinanceTask[]
   financeWorkspaceNote       FinanceWorkspaceNote?
   financeAiSummary           FinanceAiSummary?
+  backlinks                  Backlink[]
+  backlinkProspects          BacklinkProspect[]
+  backlinkProfileReadings    BacklinkProfileReading[]
+  backlinkSnapshots          BacklinkSnapshot[]
+  backlinkJobs               BacklinkJob[]
   financeAuditLogs           FinanceAuditLog[]
 
   @@index([slug])
@@ -479,6 +484,12 @@ model User {
   platformSettingChanges            PlatformSettingLog[]        @relation("SettingChangedBy")
   accessRevealLogs                  ProjectAccessLog[]
   accessesCreated                   ProjectAccess[]             @relation("ProjectAccessCreatedBy")
+  backlinksCreated                  Backlink[]                  @relation("BacklinkCreatedBy")
+  backlinksUpdated                  Backlink[]                  @relation("BacklinkUpdatedBy")
+  backlinkProspectsOwned            BacklinkProspect[]          @relation("BacklinkProspectOwner")
+  backlinkProspectsCreated          BacklinkProspect[]          @relation("BacklinkProspectCreatedBy")
+  backlinkProspectsUpdated          BacklinkProspect[]          @relation("BacklinkProspectUpdatedBy")
+  backlinkReadingsCreated           BacklinkProfileReading[]    @relation("BacklinkReadingCreatedBy")
   accessesUpdated                   ProjectAccess[]             @relation("ProjectAccessUpdatedBy")
   ownedLeads                        Lead[]                      @relation("LeadOwner")
   createdLeads                      Lead[]                      @relation("LeadCreatedBy")
@@ -779,6 +790,11 @@ model Project {
   deletedTaskNotices       DeletedTaskNotice[]
   calendarEvents           CalendarEvent[]
   calendarEventRecurrences CalendarEventRecurrence[]
+  backlinks                Backlink[]
+  backlinkProspects        BacklinkProspect[]
+  backlinkProfileReadings  BacklinkProfileReading[]
+  backlinkSnapshots        BacklinkSnapshot[]
+  backlinkJobs             BacklinkJob[]
   financeItems             FinanceItem[]
 
   @@unique([workspaceId, name])
@@ -1122,6 +1138,7 @@ model Task {
   leadAction               LeadAction? // Próxima acción de Ventas vinculada (uno a uno); completar la tarea la resuelve y viceversa
   geoFindingTask           GeoFindingTask? // Recomendación del análisis GEO de la que esta tarea es el seguimiento (uno a uno); el estado se lee de task.status, no se duplica
   files                    TaskFile[] // Adjuntos — archivos de la Nube del proyecto (ProjectFile) linkeados a esta tarea
+  backlinkProspects        BacklinkProspect[] // la tarea de link building creada desde un prospecto
   // Pieza de Contenido de la que esta tarea es UN TRAMO (no @unique del lado de
   // ContentPiece: una pieza puede tener muchas Task a lo largo de su vida, una
   // por handoff de responsable — ver ContentPiece.tasks). Completar la tarea
@@ -5176,6 +5193,11 @@ model McpToken {
   situationEntriesUpdated ProjectSituationEntry[] @relation("SituationEntryUpdatedByAgent")
   whatsappMessages        WhatsappMessage[]       @relation("WhatsappMessageAgent")
   whatsappControls        WhatsappConversation[]  @relation("WhatsappConversationAgentControl")
+  backlinksCreated        Backlink[]              @relation("BacklinkCreatedByAgent")
+  backlinksUpdated        Backlink[]              @relation("BacklinkUpdatedByAgent")
+  backlinkProspectsCreated BacklinkProspect[]     @relation("BacklinkProspectCreatedByAgent")
+  backlinkProspectsUpdated BacklinkProspect[]     @relation("BacklinkProspectUpdatedByAgent")
+  backlinkReadingsCreated BacklinkProfileReading[] @relation("BacklinkReadingCreatedByAgent")
   cannibalResolutions     CannibalResolution[]
   authFailures            McpAuthFailure[]
 
@@ -5902,4 +5924,321 @@ model FinanceAuditLog {
 
   @@index([workspaceId, entityType, entityId, createdAt])
   @@index([workspaceId, createdAt])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Backlinks (Marketing → GEO/SEO → Enlaces)
+//
+// El endpoint free de Ahrefs solo da el Domain Rating (un número agregado), así
+// que el perfil de enlaces entra por donde ya está disponible: carga manual, un
+// agente por MCP que lo lee de Ahrefs/Semrush, o un CSV exportado de esas
+// herramientas y del reporte de Enlaces de Search Console (que existe solo en la
+// UI de Google, no en su API). Lo que sí hacemos nosotros y ninguna herramienta
+// paga hace bien: VIGILAR los enlaces conseguidos — Ahrefs los descubre, pero no
+// avisa cuando el que conseguiste en marzo se cayó en agosto.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Un enlace entrante hacia nosotros. La unidad es la PÁGINA que nos enlaza, no el
+// par (página, destino): un backlink es "este sitio nos menciona", y a qué URL
+// nuestra apunta lo resuelve el verificador y queda en el historial de chequeos.
+model Backlink {
+  id          Int    @id @default(autoincrement())
+  workspaceId Int
+  projectId   Int
+
+  // Identidad. `sourceUrl` normalizada con lib/backlinks.js#normalizeLinkUrl
+  // (mismo criterio de identidad que canibalización y el inventario del blog) y
+  // truncada a 1000 chars: en Postgres una entrada de índice btree de más de
+  // ~2.7 kB rompe el insert.
+  sourceUrl    String
+  sourceDomain String // host sin www, minúsculas — la clave del cruce con la competencia
+  targetUrl    String? // a qué URL NUESTRA apunta; null hasta que el verificador la lee
+
+  // Declarado al cargar (manual / CSV / agente). El verificador sobreescribe
+  // anchor/linkType/targetUrl cuando lee la página: leyó el HTML en vivo, mientras
+  // esto era una declaración. El valor anterior queda en el BacklinkCheck anterior.
+  anchor       String?
+  linkType     String  @default("unknown") // follow | nofollow | sponsored | ugc | unknown
+  placement    String? // editorial | directorio | guest_post | foro | prensa | perfil | otro
+  domainRating Float? // DR/DA del dominio que nos enlaza, tal como lo leyó el agente o el CSV
+  traffic      Int?
+  language     String?
+  notes        String?
+
+  // `firstSeenAt` lo trae el CSV y es lo que define "nuevo del mes" — por eso es
+  // nullable: una carga manual puede no saber desde cuándo existe el enlace.
+  firstSeenAt DateTime?
+
+  source      String  @default("manual") // manual | csv_ahrefs | csv_semrush | csv_gsc | agent | prospect
+  importBatch String? // uuid del lote: permite auditar o deshacer una importación entera
+
+  // `verifiable: false` para las filas del export de Search Console, que agrega por
+  // dominio y no trae la URL de origen: sin esto el verificador chequearía la home
+  // del sitio y daría "perdido" en casi todas.
+  verifiable Boolean @default(true)
+
+  // Estado de vida — lo escribe SOLO el verificador (services/backlinkVerifier).
+  status         String    @default("sin_verificar") // sin_verificar | activo | perdido | roto | redirigido | no_verificable
+  lastCheckedAt  DateTime?
+  lastStatusCode Int?
+  sourceNoindex  Boolean   @default(false) // la página que nos enlaza tiene meta robots noindex
+  // Histéresis: un chequeo fallido NO marca perdido. Un 503 de un martes no es un
+  // enlace perdido, y `lostLinks` va al informe del cliente.
+  checkFailures  Int       @default(0)
+  lostAt         DateTime? // se sella al CONFIRMAR la pérdida (2º fallo consecutivo)
+  // cheerio no ejecuta JS, así que un enlace inyectado por JS se lee como perdido.
+  // Una persona confirma el estado a mano y el verificador no lo vuelve a pisar.
+  statusLockedAt DateTime?
+
+  createdById        Int?
+  createdByAgentId   Int?
+  createdByAgentName String?
+  updatedById        Int?
+  updatedByAgentId   Int?
+  updatedByAgentName String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  workspace      Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project        Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdBy      User?     @relation("BacklinkCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy      User?     @relation("BacklinkUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  createdByAgent McpToken? @relation("BacklinkCreatedByAgent", fields: [createdByAgentId], references: [id], onDelete: SetNull)
+  updatedByAgent McpToken? @relation("BacklinkUpdatedByAgent", fields: [updatedByAgentId], references: [id], onDelete: SetNull)
+
+  checks    BacklinkCheck[]
+  prospects BacklinkProspect[]
+
+  // Es la idempotencia de la importación: re-importar el mismo export de Ahrefs
+  // tiene que crear 0 filas (el equivalente en DB del Set de URLs normalizadas de
+  // contentImport.service.js#importPublishedPieces).
+  @@unique([projectId, sourceUrl])
+  @@index([projectId, status])
+  @@index([projectId, sourceDomain])
+  @@index([projectId, firstSeenAt])
+  @@index([workspaceId])
+}
+
+// Historial de verificación, append-only (mismo criterio que DomainRatingReading:
+// sin @@unique, índice por createdAt). Un chequeo es la observación de un momento:
+// nunca se corrige, y dos del mismo día son dos hechos. Es lo que permite contestar
+// "¿cuándo desapareció el enlace y con qué anchor estaba?".
+//
+// El vocabulario de `status` tiene un valor MÁS que el del enlace: `bloqueado`
+// (403/429 de un sitio que rechaza bots) se registra pero NO mueve Backlink.status
+// ni suma a checkFailures — un medio que nos devuelve 403 no es un enlace perdido.
+model BacklinkCheck {
+  id         Int @id @default(autoincrement())
+  backlinkId Int
+  projectId  Int // denormalizado: contar o purgar los chequeos del proyecto sin join
+
+  status       String // activo | sin_link | roto | redirigido | bloqueado | error
+  httpStatus   Int?
+  found        Boolean @default(false) // había un <a href> hacia nuestro dominio
+  anchor       String?
+  rel          String? // valor crudo del atributo
+  linkType     String? // follow | nofollow | sponsored | ugc
+  targetUrl    String?
+  noindex      Boolean @default(false)
+  redirectedTo String?
+  errorMsg     String?
+  durationMs   Int?
+
+  createdAt DateTime @default(now())
+
+  backlink Backlink @relation(fields: [backlinkId], references: [id], onDelete: Cascade)
+
+  @@index([backlinkId, createdAt])
+  @@index([projectId, createdAt])
+}
+
+// Competencia Y oportunidades en un solo modelo: una "oportunidad" no es otra
+// entidad, es un prospecto con verdict='conseguible' y alreadyLinked=false, y la
+// vista es un filtro con otro orden. Dos tablas obligarían a copiar la fila al
+// promover, a mantener dos verdades del mismo dominio y a decidir en cuál vive el
+// histórico al conseguir el enlace.
+//
+// La unidad es el DOMINIO y no la URL: un export de backlinks de un competidor son
+// miles de filas de página, pero la decisión ("¿podemos conseguir un enlace de este
+// sitio?") se toma una sola vez por sitio.
+model BacklinkProspect {
+  id          Int    @id @default(autoincrement())
+  workspaceId Int
+  projectId   Int
+
+  domain             String // host sin www, minúsculas — LA identidad
+  competitors        String @default("[]") // JSON ["comp1.com","comp2.com"]: a quién enlaza (la evidencia)
+  linksToCompetitors Int    @default(0) // la señal de prioridad
+  exampleUrl         String? // una fila de muestra, para no perder el contexto
+  exampleAnchor      String?
+  domainRating       Float?
+  traffic            Int?
+  language           String?
+
+  // HECHO: sale del cruce automático de dominios contra nuestros Backlink activos.
+  alreadyLinked   Boolean   @default(false)
+  alreadyLinkedAt DateTime?
+
+  // OPINIÓN: de Claude en lote, o corregida a mano. Campo distinto del hecho a
+  // propósito — si compartieran uno, cada corrida del cruce destruiría la opinión, y
+  // al perder el enlace la fila volvería a "sin evaluar" habiendo estado evaluada.
+  // La API expone un `effectiveVerdict` que resuelve los dos en el estado único que
+  // ve el usuario ("ya lo tenemos" gana).
+  verdict       String  @default("sin_evaluar") // sin_evaluar | conseguible | no_conseguible | no_vale_la_pena
+  verdictSource String  @default("none") // none | ai | manual
+  verdictReason String?
+  verdictAt     DateTime?
+  // El candado del override: la clasificación IA lo lleva en el WHERE de su
+  // updateMany, así una corrección manual es inmune incluso DURANTE la corrida.
+  verdictLockedAt DateTime?
+
+  // Pipeline de link building — interno, NUNCA se publica al cliente.
+  pipelineStatus String  @default("sin_empezar") // sin_empezar | contactado | negociando | conseguido | descartado
+  pipelineNote   String?
+  ownerId        Int?
+  cost           Float? // si es guest post o prensa paga
+  dueDate        String? // "YYYY-MM-DD"
+  taskId         Int?
+  backlinkId     Int? // se llena al promover: el enlace que nació de este prospecto
+
+  source      String  @default("manual") // manual | csv_ahrefs | csv_semrush | agent
+  importBatch String?
+
+  createdById        Int?
+  createdByAgentId   Int?
+  createdByAgentName String?
+  updatedById        Int?
+  updatedByAgentId   Int?
+  updatedByAgentName String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  workspace      Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project        Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  owner          User?     @relation("BacklinkProspectOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  task           Task?     @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  backlink       Backlink? @relation(fields: [backlinkId], references: [id], onDelete: SetNull)
+  createdBy      User?     @relation("BacklinkProspectCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy      User?     @relation("BacklinkProspectUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  createdByAgent McpToken? @relation("BacklinkProspectCreatedByAgent", fields: [createdByAgentId], references: [id], onDelete: SetNull)
+  updatedByAgent McpToken? @relation("BacklinkProspectUpdatedByAgent", fields: [updatedByAgentId], references: [id], onDelete: SetNull)
+
+  @@unique([projectId, domain])
+  @@index([projectId, verdict])
+  @@index([projectId, pipelineStatus])
+  @@index([projectId, alreadyLinked])
+  @@index([workspaceId])
+}
+
+// La lectura del perfil externo, append-only (mismo criterio que
+// DomainRatingReading: es una lectura, no un estado).
+//
+// Los conteos propios SÍ se derivan con count/groupBy sobre Backlink, y la vista los
+// muestra en vivo. Lo que NO se puede recomputar es el dato externo: Ahrefs dice 412
+// dominios de referencia y nuestro inventario tiene 37 — ese número solo existe
+// porque alguien lo leyó, y LA BRECHA es la información (cuánto del perfil real
+// tenemos cargado). Los conteos propios se congelan al lado para que la fila se
+// explique sola años después, aunque alguien borre enlaces.
+model BacklinkProfileReading {
+  id          Int @id @default(autoincrement())
+  workspaceId Int
+  projectId   Int
+
+  // Lo nuestro, congelado al momento de la lectura
+  ownLinks       Int @default(0) // enlaces en estado activo
+  ownDomains     Int @default(0) // dominios de referencia distintos con ≥1 enlace activo
+  ownFollowLinks Int @default(0)
+  ownLostLinks   Int @default(0)
+
+  // Lo que dice la herramienta externa
+  reportedDomains Int?
+  reportedLinks   Int?
+  reportedSource  String? // ahrefs | semrush | gsc | otro
+  domainRating    Float? // copia de Project.domainRating al momento
+
+  source String  @default("manual") // manual | agent | verifier | cron
+  notes  String?
+
+  createdById        Int?
+  createdByAgentId   Int?
+  createdByAgentName String?
+  capturedAt         DateTime @default(now())
+
+  workspace      Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project        Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdBy      User?     @relation("BacklinkReadingCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdByAgent McpToken? @relation("BacklinkReadingCreatedByAgent", fields: [createdByAgentId], references: [id], onDelete: SetNull)
+
+  @@index([projectId, capturedAt])
+  @@index([workspaceId])
+}
+
+// El snapshot MENSUAL, que es lo que consume el informe del cliente. Dos razones
+// para que sea un modelo aparte de la lectura append-only de arriba:
+//
+//  1. buildSourceHistory (monthlyReport/history.js) hace
+//     `new Map(rows.map(r => [r.month, r]))` y NO tiene hook de orderBy: con una
+//     tabla append-only el Map se queda con una fila arbitraria del mes. Un modelo
+//     mensual con @@unique es además la forma de todas las otras secciones
+//     (SearchConsoleSnapshot, InstagramSnapshot, AdsSnapshot) y se reusa tal cual.
+//  2. `newLinks`/`lostLinks` de un mes cerrado no son recuperables: si en marzo
+//     alguien corrige el firstSeenAt de 20 filas, el "conseguimos 12 enlaces en
+//     enero" que ya se le mostró al cliente cambiaría retroactivamente.
+model BacklinkSnapshot {
+  id          Int    @id @default(autoincrement())
+  projectId   Int
+  workspaceId Int
+  month       String // "YYYY-MM"
+
+  referringDomains Int    @default(0)
+  activeLinks      Int    @default(0)
+  followLinks      Int    @default(0)
+  newLinks         Int    @default(0) // firstSeenAt dentro del mes
+  lostLinks        Int    @default(0) // lostAt dentro del mes
+  avgDomainRating  Float? // DR promedio de los dominios que nos enlazan (de los que lo sabemos)
+  // Se duplica acá aunque ya esté en SearchConsoleSnapshot.domainRating porque esa
+  // fila solo existe si el proyecto tiene Search Console conectado, y la sección
+  // "authority" no puede depender de GSC: el DR sale de Ahrefs, que solo necesita
+  // websiteUrl.
+  domainRating     Float? // DR del sitio PROPIO al cierre del mes
+  reportedDomains  Int? // último valor externo leído dentro del mes
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  project   Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, month])
+  @@index([workspaceId])
+}
+
+// Job async del verificador y de la clasificación IA. Un solo modelo con `kind` y no
+// dos: comparten la mecánica completa (status + progreso en vivo en errorMsg +
+// polling cada 3s) y la UI los muestra en el mismo lugar. Mismo patrón que
+// OnPageAudit/GeoAudit; precedente de job genérico: MarketingRefreshJob.
+model BacklinkJob {
+  id          Int    @id @default(autoincrement())
+  workspaceId Int
+  projectId   Int
+  kind        String // verify | classify
+
+  status   String  @default("pending") // pending | running | completed | failed
+  errorMsg String? // progreso en vivo mientras running, mensaje de error si failed
+
+  checked    Int? // enlaces verificados / prospectos clasificados
+  changed    Int? // cuántos cambiaron de estado o recibieron veredicto
+  lost       Int? // cuántos pasaron a perdido (solo verify)
+  tokensUsed Int?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project   Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, kind, createdAt])
+  @@index([workspaceId])
 }

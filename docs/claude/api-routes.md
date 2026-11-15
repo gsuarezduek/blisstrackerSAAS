@@ -526,6 +526,19 @@ POST   /api/marketing/projects/:id/seo/ai-insights          # generar análisis 
 GET    /api/marketing/projects/:id/domain-rating            # Domain Rating (Ahrefs) cacheado + historial (últimas 6 lecturas)
 POST   /api/marketing/projects/:id/domain-rating/refresh    # refresca el Domain Rating desde Ahrefs (endpoint free)
 
+# Marketing — Enlaces (backlinks). Escritura: admin/owner o equipo del proyecto (canWrite).
+# OJO: las rutas estáticas van ANTES de /:blId en marketing.routes.js, o `profile` cae en el handler de un id.
+POST   /api/marketing/projects/:id/backlinks/verify                # dispara el verificador (async) → 201 { jobId }. 429 COOLDOWN (6h, con waitMinutes) · 409 ALREADY_RUNNING · 400 NO_LINKS/NO_SITE_URL
+GET    /api/marketing/projects/:id/backlinks/jobs                  # últimos 10 jobs (verify y classify)
+GET    /api/marketing/projects/:id/backlinks/jobs/:jobId           # polling: { status, errorMsg (progreso en vivo), checked, changed, lost }
+GET    /api/marketing/projects/:id/backlinks                      # inventario (?status=&domain=&source=&q=&page=&limit=) → { items, total, counts, lastJob }
+POST   /api/marketing/projects/:id/backlinks                      # alta. Objeto → 201 la fila (409 ALREADY_EXISTS si ya estaba); array → { created, skipped } (un duplicado no frena el lote)
+PATCH  /api/marketing/projects/:id/backlinks/:blId                # editar. `status` lo sella como confirmado a mano (statusLockedAt); `unlockStatus:true` lo libera
+DELETE /api/marketing/projects/:id/backlinks/:blId                # borra el enlace y, en cascada, su historial de chequeos
+GET    /api/marketing/projects/:id/backlinks/:blId/checks         # historial de verificación, append-only (?limit=20)
+GET    /api/marketing/projects/:id/backlinks/profile              # { live, totalLinks, readings, snapshots, domainRating, drHistory, hasUrl }
+POST   /api/marketing/projects/:id/backlinks/profile/readings     # body: { reportedDomains?, reportedLinks?, reportedSource?, notes? } — los conteos propios los calcula el backend
+
 # Marketing — Keyword Tracking
 GET    /api/marketing/projects/:id/keywords                       # lista keywords trackeadas (?country=)
 POST   /api/marketing/projects/:id/keywords                       # body: { query } — agregar keyword
@@ -662,6 +675,7 @@ GET    /api/superadmin/billing                          # MRR, ARR, tabla de tod
 GET    /api/superadmin/payments                         # historial de pagos (Stripe invoices)
 GET    /api/superadmin/ai-tokens                        # uso de tokens IA por workspace/mes
 GET    /api/superadmin/whatsapp-usage                   # ?month=YYYY-MM — uso/costo estimado de WhatsApp por workspace (Fase 6)
+GET    /api/superadmin/serpapi-usage                    # SerpAPI: plan y búsquedas restantes (en vivo, caché 5 min, los errores NO se cachean) + nuestro consumo del mes atribuido por proyecto y el costo del cron semanal
 GET    /api/superadmin/workspaces
 GET    /api/superadmin/workspaces/:id
 PATCH  /api/superadmin/workspaces/:id/status

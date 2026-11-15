@@ -23,6 +23,12 @@ export const NAV = [
         { id: 'ai-visibility',  label: 'Visibilidad IA' },
       ] },
       { id: 'keywords',  label: 'Keywords y oportunidades' },
+      { id: 'enlaces',   label: 'Enlaces', views: [
+        { id: 'nuestros',      label: 'Nuestros enlaces' },
+        { id: 'competencia',   label: 'Competencia' },
+        { id: 'oportunidades', label: 'Oportunidades' },
+        { id: 'perfil',        label: 'Perfil de enlaces' },
+      ] },
       { id: 'contenido', label: 'Contenido SEO', views: [
         { id: 'brief', label: 'Content Brief' },
         { id: 'gap',   label: '🆚 Content Gap' },
@@ -72,7 +78,7 @@ export const NAV = [
 // visibles" en Preferencias → Módulos → Marketing.
 export const SECTION_DESCRIPTIONS = {
   hoy:        'Recomendaciones top del workspace: objetivos atrasados, hallazgos de SEO/GEO, performance, anuncios e informes pendientes.',
-  'geo-seo':  'Diagnóstico (GEO, SEO, On-Page, canibalización), keywords y contenido SEO (briefs, content gap e inventario del blog).',
+  'geo-seo':  'Diagnóstico (GEO, SEO, On-Page, canibalización), keywords, enlaces (backlinks) y contenido SEO (briefs, content gap e inventario del blog).',
   web:        'Analytics (GA4) y Performance (PageSpeed).',
   rrss:       'Instagram, TikTok, LinkedIn, Facebook, YouTube y Competidores.',
   anuncios:   'Meta Ads, Google Ads y ChatGPT Ads.',

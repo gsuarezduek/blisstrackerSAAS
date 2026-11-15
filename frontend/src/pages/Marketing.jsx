@@ -9,6 +9,7 @@ import GeoTab      from '../components/marketing/GeoTab'
 import WebTab      from '../components/marketing/WebTab'
 import SeoTab      from '../components/marketing/SeoTab'
 import KeywordsTab from '../components/marketing/KeywordsTab'
+import EnlacesTab from '../components/marketing/enlaces/EnlacesTab'
 import ContentBriefTab   from '../components/marketing/ContentBriefTab'
 import OnPageTab         from '../components/marketing/OnPageTab'
 import AiVisibilityTab   from '../components/marketing/AiVisibilityTab'
@@ -207,6 +208,7 @@ export default function Marketing() {
       return <GeoTab projectId={projectId} projects={projects} onSelectProject={handleProjectChange} />
     }
     if (tab === 'geo-seo' && sub === 'keywords')  return <KeywordsTab projectId={projectId} projects={projects} />
+    if (tab === 'geo-seo' && sub === 'enlaces')   return <EnlacesTab projectId={projectId} projects={projects} view={view} />
     if (tab === 'geo-seo' && sub === 'contenido') {
       if (view === 'gap') return <ContentGapTab projectId={projectId} projects={projects} />
       if (view === 'blog') return <BlogInventoryTab projectId={projectId} projects={projects} />

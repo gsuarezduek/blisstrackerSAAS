@@ -68,7 +68,8 @@ const DEFAULT_MAX_REDIRECTS = 5
  * @param {object} axiosOpts — se pasan a axios.get tal cual, salvo
  *   `maxRedirects` (se ignora: siempre se sigue a mano) y `validateStatus`
  *   (se aplica solo a la respuesta FINAL, no a los redirects intermedios).
- * @returns {Promise<import('axios').AxiosResponse>}
+ * @returns {Promise<import('axios').AxiosResponse>} con `finalUrl` agregada: la URL
+ *   del último salto, que axios no expone al seguir los redirects a mano.
  */
 async function fetchPublicUrl(urlString, axiosOpts = {}) {
   const { maxRedirects, validateStatus, ...rest } = axiosOpts
@@ -84,6 +85,11 @@ async function fetchPublicUrl(urlString, axiosOpts = {}) {
     if (validateStatus && !validateStatus(res.status)) {
       throw Object.assign(new Error(`Request failed with status code ${res.status}`), { response: res })
     }
+    // La URL del ÚLTIMO salto. Axios no la expone cuando los redirects se siguen a
+    // mano, y sin ella no se puede distinguir "esta página se mudó a otro sitio" de
+    // "esta página ya no nos enlaza" — que es la diferencia entre un enlace
+    // redirigido y uno perdido (ver services/backlinkVerifier.service.js).
+    res.finalUrl = url
     return res
   }
   throw new Error('Demasiados redirects')

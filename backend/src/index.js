@@ -87,6 +87,7 @@ const { updateAllMemories }             = require('./services/insightMemory.serv
 const { saveAllPreviousMonthSnapshots, refreshAllCurrentMonthSnapshots } = require('./services/analyticsSnapshot.service')
 const { runAllMonthlyPageSpeed }        = require('./services/pageSpeed.service')
 const { saveAllKeywordRankings, saveCurrentMonthKeywordRankings } = require('./services/keywordTracking.service')
+const { verifyAllProjects } = require('./services/backlinkVerifier.service')
 const { captureAllSerpSnapshots } = require('./services/serpApi.service')
 const { runAllMonthlyGeoAudits }           = require('./services/geoAudit.service')
 const { saveAllMonthlyInstagramSnapshots } = require('./services/instagramSnapshot.service')
@@ -149,6 +150,19 @@ cron.schedule('30 6 * * 1', () => runCron('serpSnapshot', 60 * 60 * 1000, async 
   console.log('[SerpAPI] Iniciando captura semanal de SERP snapshots...')
   try { await captureAllSerpSnapshots() }
   catch (err) { console.error('[SerpAPI] Error en cron semanal:', err.message) }
+}), { timezone: DEFAULT_TZ })
+
+// Cron: verificar los backlinks cargados — lunes 06:45 ART (después de SERP, que usa
+// las 06:30). SEMANAL y no diario a propósito: un backlink muere en escala de meses, y
+// diario serían 7x los requests a sitios de terceros por la misma información — con
+// nuestro UA identificable, ser un crawler educado importa. Cron propio y no sumado al
+// de keywords: ese tiene su lock y su upsert mensual, y un verificador lento retrasaría
+// los rankings. El tope es 100 enlaces por proyecto por corrida (round-robin por
+// `lastCheckedAt`), así un proyecto de 400 se cubre en 4 semanas.
+cron.schedule('45 6 * * 1', () => runCron('backlinkVerify', 60 * 60 * 1000, async () => {
+  console.log('[BacklinkVerifier] Iniciando verificación semanal de backlinks...')
+  try { await verifyAllProjects() }
+  catch (err) { console.error('[BacklinkVerifier] Error en cron semanal:', err.message) }
 }), { timezone: DEFAULT_TZ })
 
 // Cron: análisis automático de Ads Advisor (Meta/Google, IA) — lunes 09:00 ART. Corre
