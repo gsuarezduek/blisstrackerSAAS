@@ -114,10 +114,11 @@ describe('SerpAPI — atribución de nuestro consumo', () => {
     expect(consumption.byProject[0]).toMatchObject({ keywords: 5, contentGap: 3, total: 8 })
   })
 
-  it('informa lo que va a costar el próximo cron: 1 búsqueda por keyword trackeada', async () => {
-    // Es la proyección que permite decidir antes de quedarse sin cuota a mitad de mes.
+  it('informa lo que va a costar la próxima corrida del cron: 1 búsqueda por keyword trackeada', async () => {
+    // El cron es mensual (día 2), así que este número ES el gasto automático del mes:
+    // es la proyección que permite decidir antes de quedarse sin cuota.
     prisma.trackedKeyword.count.mockResolvedValue(47)
-    expect((await call()).consumption.weeklyCronCost).toBe(47)
+    expect((await call()).consumption.monthlyCronCost).toBe(47)
   })
 
   it('sin consumo devuelve la estructura vacía, no null', async () => {

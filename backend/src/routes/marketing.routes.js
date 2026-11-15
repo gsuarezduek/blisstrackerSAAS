@@ -26,6 +26,7 @@ const metaAds           = require('../controllers/metaAds.controller')
 const googleAds         = require('../controllers/googleAds.controller')
 const chatgptAds        = require('../controllers/chatgptAds.controller')
 const backlinks         = require('../controllers/backlinks.controller')
+const prospects         = require('../controllers/backlinkProspects.controller')
 const monthlyReport = {
   ...require('../controllers/monthlyReport/reportCrud.controller'),
   ...require('../controllers/monthlyReport/reportGeneration.controller'),
@@ -310,6 +311,14 @@ router.get('/projects/:id/backlinks/jobs',              backlinks.listJobs)
 router.get('/projects/:id/backlinks/jobs/:jobId',       backlinks.getJob)
 router.post('/projects/:id/backlinks/profile/readings', backlinks.createReading)
 router.get('/projects/:id/backlinks/profile',           backlinks.getProfile)
+
+// Competencia y oportunidades son el MISMO recurso: una oportunidad es un
+// prospecto `conseguible` que todavía no tenemos, y su vista es este endpoint con
+// otro filtro y otro orden.
+router.get('/projects/:id/backlinks/prospects',          prospects.list)
+router.post('/projects/:id/backlinks/prospects',         prospects.create)
+router.patch('/projects/:id/backlinks/prospects/:pid',   prospects.update)
+router.delete('/projects/:id/backlinks/prospects/:pid',  prospects.remove)
 router.get('/projects/:id/backlinks',                   backlinks.list)
 router.post('/projects/:id/backlinks',                  backlinks.create)
 router.get('/projects/:id/backlinks/:blId/checks',      backlinks.listChecks)

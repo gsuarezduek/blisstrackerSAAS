@@ -156,8 +156,9 @@ async function buildConsumption() {
     total: bySource.keywords + bySource.contentGap + bySource.contentBrief,
     bySource,
     byProject,
-    // 1 búsqueda por keyword trackeada, cada lunes.
-    weeklyCronCost: trackedTotal,
+    // 1 búsqueda por keyword trackeada, una vez por mes (cron `serpSnapshot`,
+    // día 2). Es el gasto automático completo: todo lo demás lo dispara alguien.
+    monthlyCronCost: trackedTotal,
   }
 }
 

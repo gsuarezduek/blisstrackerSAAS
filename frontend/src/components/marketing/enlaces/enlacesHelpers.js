@@ -85,3 +85,64 @@ export const ORIGIN_LABEL = {
   agent:       'Agente de IA',
   prospect:    'Oportunidad conseguida',
 }
+
+// ─── Competencia y oportunidades (BacklinkProspect) ───────────────────────────
+//
+// `ya_lo_tenemos` NO es un valor de la columna `verdict` del backend: es el HECHO
+// del cruce automático de dominios, que gana sobre la opinión. Vive en este mapa
+// porque es uno de los estados que el usuario ve, y la API lo entrega resuelto en
+// `effectiveVerdict`.
+export const VERDICT = {
+  ya_lo_tenemos: {
+    label: 'Ya lo tenemos',
+    chip:  'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800',
+    help:  'Ya tenemos un enlace de este dominio (puede ser de otra página del mismo sitio)',
+  },
+  conseguible: {
+    label: 'Conseguible',
+    chip:  'bg-sky-50 dark:bg-sky-900/20 text-sky-700 dark:text-sky-400 border-sky-200 dark:border-sky-800',
+    help:  'Se puede conseguir un enlace de este sitio',
+  },
+  no_conseguible: {
+    label: 'No conseguible',
+    chip:  'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-600',
+    help:  'No hay forma realista de conseguir un enlace de acá',
+  },
+  no_vale_la_pena: {
+    label: 'No vale la pena',
+    chip:  'bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800',
+    help:  'Se podría conseguir, pero no aporta lo suficiente',
+  },
+  sin_evaluar: {
+    label: 'Sin evaluar',
+    chip:  'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 border-gray-200 dark:border-gray-600',
+    help:  'Todavía nadie decidió qué hacer con este sitio',
+  },
+}
+
+export const verdictMeta = v => VERDICT[v] || VERDICT.sin_evaluar
+
+// Los veredictos que una persona puede ELEGIR. `ya_lo_tenemos` queda afuera a
+// propósito: es un hecho que escribe el cruce, no una opinión que se tipea.
+export const VERDICT_OPTIONS = [
+  { value: 'conseguible',     label: 'Conseguible' },
+  { value: 'no_conseguible',  label: 'No conseguible' },
+  { value: 'no_vale_la_pena', label: 'No vale la pena' },
+]
+
+export const PIPELINE = {
+  sin_empezar: { label: 'Sin empezar', chip: 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400' },
+  contactado:  { label: 'Contactado',  chip: 'bg-sky-50 dark:bg-sky-900/20 text-sky-700 dark:text-sky-400' },
+  negociando:  { label: 'Negociando',  chip: 'bg-violet-50 dark:bg-violet-900/20 text-violet-700 dark:text-violet-400' },
+  conseguido:  { label: 'Conseguido',  chip: 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400' },
+  descartado:  { label: 'Descartado',  chip: 'bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500' },
+}
+
+export const pipelineMeta = p => PIPELINE[p] || PIPELINE.sin_empezar
+
+/** De dónde salió la opinión, para no confundir lo que dijo la IA con lo que decidimos. */
+export const VERDICT_SOURCE_LABEL = {
+  ai:     'Propuesto por IA',
+  manual: 'Decidido a mano',
+  none:   'Sin evaluar',
+}

@@ -4,6 +4,7 @@ const { fetchPublicUrl } = require('../lib/safeUrl')
 const { MARKETING_PROJECT_WHERE } = require('../lib/projectModules')
 const { extractDomain } = require('./serpApi.service')
 const { checkVerdict, nextLinkState, linkTypeFromRel, normalizeLinkUrl } = require('../lib/backlinks')
+const { syncOwnershipQuietly } = require('./backlinkProspects.service')
 
 // Mismo UA que el crawler de GEO y On-Page: identificable a propósito, para que un
 // sitio que no quiera que lo visitemos pueda bloquearnos por nombre.
@@ -249,6 +250,13 @@ async function runVerification(jobId, workspaceId, projectId) {
       where: { id: jobId },
       data: { status: 'completed', checked, changed, lost, errorMsg: null },
     })
+
+    // La verificación es el único momento en que un enlace pasa a `perdido` solo,
+    // así que es también donde un dominio deja de ser nuestro y su prospecto vuelve
+    // a ser una oportunidad. Se corre sólo si algo cambió de estado: el cruce es
+    // idempotente, pero dos updateMany por corrida sin nada que actualizar no
+    // aportan nada. Nunca lanza, para no marcar `failed` un job que sí terminó.
+    if (changed > 0) await syncOwnershipQuietly({ projectId, workspaceId })
   } catch (err) {
     console.error('[backlinkVerifier] corrida fallida:', err)
     await prisma.backlinkJob.update({

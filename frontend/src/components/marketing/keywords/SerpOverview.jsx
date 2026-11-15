@@ -34,7 +34,7 @@ export default function SerpOverview({ projectId, keywords, onAddKeyword }) {
     <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
       <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700">
         <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">SERP Live — Resumen</h3>
-        <p className="text-xs text-gray-400 mt-0.5">Snapshots de los últimos 7 días · Actualización automática cada lunes</p>
+        <p className="text-xs text-gray-400 mt-0.5">Captura automática una vez por mes · Abrí una keyword para traer el SERP de hoy</p>
       </div>
       <table className="w-full">
         <thead>

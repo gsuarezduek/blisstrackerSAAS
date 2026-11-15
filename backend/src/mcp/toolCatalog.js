@@ -274,7 +274,7 @@ const tools = [
   },
   {
     name: 'marketing_keyword_serp_get',
-    description: 'Snapshot SERP más reciente de una keyword (posición, features, competidores, "People Also Ask", "Related Searches"). Si tiene más de 24hs, dispara una captura nueva automáticamente. Requiere SERP_API_KEY configurado en el servidor.',
+    description: 'Snapshot SERP más reciente de una keyword (posición, features, competidores, "People Also Ask", "Related Searches"). Si tiene más de 24hs, dispara una captura nueva automáticamente, que CONSUME una búsqueda de SerpAPI (cuota mensual limitada) — para ver varias keywords de una sin gastar nada, usá marketing_keyword_serp_batch. Requiere SERP_API_KEY configurado en el servidor.',
     inputSchema: { ...projectIdParam, kwId: z.number().int() },
     request: ({ projectId, kwId }) => ({ method: 'GET', path: `/marketing/projects/${projectId}/keywords/${kwId}/serp` }),
   },
@@ -286,7 +286,7 @@ const tools = [
   },
   {
     name: 'marketing_keyword_serp_batch',
-    description: 'Último snapshot SERP (posición, features, competidores) de TODAS las keywords trackeadas de un proyecto en una sola consulta (últimos 7 días).',
+    description: 'Último snapshot SERP (posición, features, competidores) de TODAS las keywords trackeadas de un proyecto en una sola consulta (ventana de 45 días, que es la cadencia del cron mensual). NO consume búsquedas de SerpAPI: sólo lee lo guardado.',
     inputSchema: { ...projectIdParam },
     request: ({ projectId }) => ({ method: 'GET', path: `/marketing/projects/${projectId}/keywords/serp-batch` }),
   },

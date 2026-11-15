@@ -184,6 +184,107 @@ function effectiveVerdict(prospect) {
   return prospect?.verdict || 'sin_evaluar'
 }
 
+/**
+ * El dominio de un prospecto, que es su IDENTIDAD (`@@unique [projectId, domain]`).
+ * Acepta lo que una persona escribe de verdad: "diario.com", "www.Diario.com/notas"
+ * o la URL completa pegada del navegador. Devuelve null si no se puede leer un host.
+ */
+function prospectDomain(raw) {
+  const { url } = normalizeLinkUrl(raw)
+  return url ? linkDomain(url) : null
+}
+
+/**
+ * Agrupa las filas de un export de competencia POR DOMINIO.
+ *
+ * Es la razón de que el prospecto sea un dominio y no una página: la decisión
+ * ("¿podemos conseguir un enlace de este sitio?") se toma una vez por sitio, y un
+ * export de Ahrefs de un competidor son miles de filas de página para esa única
+ * decisión.
+ *
+ * `links` es la cantidad de páginas de ese dominio que enlazan al competidor, que
+ * es la señal de prioridad. El DR y el tráfico se toman como el MÁXIMO visto y no
+ * como el de la primera fila: son atributos del dominio y no de la página, y
+ * distintas filas del mismo export pueden traerlos incompletos.
+ */
+function aggregateProspects(rows) {
+  const byDomain = new Map()
+
+  for (const row of rows || []) {
+    const domain = row?.sourceDomain
+    if (!domain) continue
+
+    let item = byDomain.get(domain)
+    if (!item) {
+      item = {
+        domain, links: 0,
+        exampleUrl: null, exampleAnchor: null,
+        domainRating: null, traffic: null, language: null,
+      }
+      byDomain.set(domain, item)
+    }
+
+    item.links += 1
+    // Como ejemplo sirve más una página concreta que la home: una fila de Search
+    // Console trae `https://dominio` sintético y no dice nada que no diga el dominio.
+    if (row.sourceUrl && (!item.exampleUrl || (isBareUrl(item.exampleUrl) && !isBareUrl(row.sourceUrl)))) {
+      item.exampleUrl = row.sourceUrl
+    }
+    if (!item.exampleAnchor && row.anchor) item.exampleAnchor = row.anchor
+    if (row.domainRating != null) item.domainRating = Math.max(item.domainRating ?? 0, row.domainRating)
+    if (row.traffic != null)      item.traffic      = Math.max(item.traffic ?? 0, row.traffic)
+    if (!item.language && row.language) item.language = row.language
+  }
+
+  // Más páginas enlazando = mejor señal, así el preview y la tabla muestran
+  // primero lo que vale la pena mirar.
+  return [...byDomain.values()].sort((a, b) => b.links - a.links || a.domain.localeCompare(b.domain))
+}
+
+function isBareUrl(url) {
+  return /^https?:\/\/[^/]+\/?$/i.test(String(url || ''))
+}
+
+/**
+ * La evidencia de un prospecto: a qué competidores enlaza y con cuántas páginas.
+ *
+ * Se guarda el desglose POR competidor y no un total suelto para que re-importar
+ * el mismo export sea idempotente: la entrada de ese competidor se REEMPLAZA en
+ * vez de sumarse. Con un contador plano, importar dos veces el archivo de un
+ * competidor duplicaba la señal de prioridad del dominio.
+ *
+ * `links: 0` o un dominio vacío borran la entrada — así se puede deshacer la
+ * atribución a un competidor sin tocar el resto.
+ */
+function mergeCompetitorEvidence(existing, entry) {
+  const list = parseCompetitors(existing)
+  if (!entry?.domain) return list
+
+  const domain = String(entry.domain).toLowerCase().replace(/^www\./, '')
+  const links = Number(entry.links) || 0
+  const rest = list.filter(c => c.domain !== domain)
+  if (links <= 0) return rest
+  return [...rest, { domain, links }].sort((a, b) => b.links - a.links || a.domain.localeCompare(b.domain))
+}
+
+/** Lee la columna `competitors`, que es JSON en texto. Nunca lanza. */
+function parseCompetitors(value) {
+  if (Array.isArray(value)) return value.filter(c => c?.domain).map(c => ({ domain: c.domain, links: Number(c.links) || 0 }))
+  try {
+    const parsed = JSON.parse(value || '[]')
+    if (!Array.isArray(parsed)) return []
+    return parsed
+      .map(c => (typeof c === 'string' ? { domain: c, links: 0 } : c))
+      .filter(c => c?.domain)
+      .map(c => ({ domain: String(c.domain), links: Number(c.links) || 0 }))
+  } catch { return [] }
+}
+
+/** El total derivado de la evidencia: nunca se escribe a mano en dos lugares. */
+function competitorLinkTotal(list) {
+  return parseCompetitors(list).reduce((sum, c) => sum + c.links, 0)
+}
+
 module.exports = {
   normalizeLinkUrl,
   linkDomain,
@@ -194,6 +295,11 @@ module.exports = {
   profileFromLinks,
   monthCounts,
   effectiveVerdict,
+  prospectDomain,
+  aggregateProspects,
+  mergeCompetitorEvidence,
+  parseCompetitors,
+  competitorLinkTotal,
   LINK_TYPES,
   LINK_STATUSES,
   CHECK_STATUSES,

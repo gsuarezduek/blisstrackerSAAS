@@ -145,16 +145,26 @@ cron.schedule('15 6 * * 1', () => runCron('analyticsWeekly', 60 * 60 * 1000, asy
   catch (err) { console.error('[AnalyticsSnapshot] Error en cron semanal:', err.message) }
 }), { timezone: DEFAULT_TZ })
 
-// Cron: capturar SERP snapshots — lunes 06:30 ART (después del cron de keywords GSC)
-cron.schedule('30 6 * * 1', () => runCron('serpSnapshot', 60 * 60 * 1000, async () => {
-  console.log('[SerpAPI] Iniciando captura semanal de SERP snapshots...')
+// Cron: capturar SERP snapshots — día 2 del mes, 06:30 ART. **MENSUAL y no semanal**: es
+// el único consumidor automático de SerpAPI y gasta una búsqueda por cada keyword trackeada
+// de cada proyecto en cada corrida, así que semanal multiplicaba por ~4,3 el gasto del mes
+// para responder la misma pregunta. El seguimiento de posición mes a mes ya lo lleva
+// `KeywordRanking` con datos de Search Console, que es gratis; lo que agrega este snapshot
+// es la foto de alrededor de esa posición (features del SERP, top-10 de competidores, People
+// Also Ask), y eso se mueve en escala de meses, no de semanas. Quien necesite el dato de hoy
+// lo tiene en el botón de la vista de Keywords, que captura on demand.
+// Día 2 y no 1: la cadena mensual arranca a la 01:00 del 1° con una lease de 6 h, así que a
+// la mañana del 1° todavía puede estar corriendo y las dos competirían por el mismo proceso.
+cron.schedule('30 6 2 * *', () => runCron('serpSnapshot', 60 * 60 * 1000, async () => {
+  console.log('[SerpAPI] Iniciando captura mensual de SERP snapshots...')
   try { await captureAllSerpSnapshots() }
-  catch (err) { console.error('[SerpAPI] Error en cron semanal:', err.message) }
+  catch (err) { console.error('[SerpAPI] Error en cron mensual:', err.message) }
 }), { timezone: DEFAULT_TZ })
 
-// Cron: verificar los backlinks cargados — lunes 06:45 ART (después de SERP, que usa
-// las 06:30). SEMANAL y no diario a propósito: un backlink muere en escala de meses, y
-// diario serían 7x los requests a sitios de terceros por la misma información — con
+// Cron: verificar los backlinks cargados — lunes 06:45 ART (último slot de la ventana
+// semanal de Marketing; el de las 06:30 lo liberó SERP al pasar a mensual). SEMANAL y no
+// diario a propósito: un backlink muere en escala de meses, y diario serían 7x los
+// requests a sitios de terceros por la misma información — con
 // nuestro UA identificable, ser un crawler educado importa. Cron propio y no sumado al
 // de keywords: ese tiene su lock y su upsert mensual, y un verificador lento retrasaría
 // los rankings. El tope es 100 enlaces por proyecto por corrida (round-robin por

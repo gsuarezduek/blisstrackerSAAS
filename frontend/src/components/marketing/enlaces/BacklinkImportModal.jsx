@@ -26,8 +26,14 @@ const SKIP_LABEL = {
  * sin escribir nada, y recién después se confirma. Mismo flujo que el import del
  * inventario del blog — ver un export con 400 filas entrar a ciegas es justo lo
  * que nadie quiere hacer dos veces.
+ *
+ * El `target` cambia qué significa el archivo, no sólo dónde se guarda: como
+ * enlaces propios, una fila es una página que hay que poder verificar; como
+ * competencia, las filas se AGRUPAN POR DOMINIO, porque la decisión de si podemos
+ * conseguir un enlace se toma una vez por sitio y un export trae miles de filas de
+ * página para esa única decisión.
  */
-export default function BacklinkImportModal({ projectId, onClose, onImported }) {
+export default function BacklinkImportModal({ projectId, target = 'own', onClose, onImported }) {
   const [csv,     setCsv]     = useState('')
   const [format,  setFormat]  = useState('auto')
   const [preview, setPreview] = useState(null)
@@ -35,8 +41,16 @@ export default function BacklinkImportModal({ projectId, onClose, onImported }) 
   const [busy,    setBusy]    = useState(false)
   const [error,   setError]   = useState(null)
   const [fileName, setFileName] = useState(null)
+  const [competitorDomain, setCompetitorDomain] = useState('')
+
+  const toProspects = target === 'prospects'
 
   const tooBig = new Blob([csv]).size > MAX_BYTES
+  // Cuántas filas va a tocar el import. Con destino competencia, un dominio que ya
+  // estaba NO es un no-op: se le suma la evidencia de este competidor, y bloquear
+  // el botón por `createdCount: 0` impediría justamente el caso más valioso (el
+  // medio que enlaza a dos competidores).
+  const willWrite = (preview?.createdCount ?? 0) + (toProspects ? (preview?.mergedCount ?? 0) : 0)
 
   function readFile(e) {
     const file = e.target.files?.[0]
@@ -55,7 +69,10 @@ export default function BacklinkImportModal({ projectId, onClose, onImported }) 
     setBusy(true)
     setError(null)
     try {
-      const { data } = await api.post(`/marketing/projects/${projectId}/backlinks/import`, { csv, format, dryRun })
+      const { data } = await api.post(`/marketing/projects/${projectId}/backlinks/import`, {
+        csv, format, target, dryRun,
+        competitorDomain: toProspects ? (competitorDomain || null) : null,
+      })
       if (dryRun) setPreview(data)
       else {
         setDone(data)
@@ -77,16 +94,32 @@ export default function BacklinkImportModal({ projectId, onClose, onImported }) 
         className="bg-white dark:bg-gray-800 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto p-5 space-y-4">
 
         <div>
-          <h3 className="text-base font-semibold text-gray-800 dark:text-gray-100">Importar enlaces desde un CSV</h3>
+          <h3 className="text-base font-semibold text-gray-800 dark:text-gray-100">
+            {toProspects ? 'Importar los backlinks de un competidor' : 'Importar enlaces desde un CSV'}
+          </h3>
           <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
-            Exportá los backlinks desde Ahrefs, Semrush o el reporte de Enlaces de Search Console y pegá el archivo acá.
+            {toProspects
+              ? 'Exportá los backlinks del competidor desde Ahrefs o Semrush. Las filas se agrupan por sitio: un dominio con 40 páginas enlazando es una sola decisión.'
+              : 'Exportá los backlinks desde Ahrefs, Semrush o el reporte de Enlaces de Search Console y pegá el archivo acá.'}
           </p>
         </div>
 
         {done ? (
-          <ImportResult result={done} onClose={onClose} />
+          <ImportResult result={done} toProspects={toProspects} onClose={onClose} />
         ) : (
           <>
+            {toProspects && (
+              <label className="block">
+                <span className="text-xs font-medium text-gray-600 dark:text-gray-300">¿De qué competidor es este export?</span>
+                <input value={competitorDomain} onChange={e => { setCompetitorDomain(e.target.value); setPreview(null) }}
+                  placeholder="competidor.com"
+                  className="mt-1 w-full px-3 py-2 text-sm bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-600 rounded-xl text-gray-800 dark:text-gray-100" />
+                <span className="text-[11px] text-gray-400 dark:text-gray-500">
+                  Sin esto los dominios entran igual, pero sin la evidencia de a quién enlazan. Re-importar el mismo
+                  archivo del mismo competidor no duplica nada.
+                </span>
+              </label>
+            )}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <label className="block">
                 <span className="text-xs font-medium text-gray-600 dark:text-gray-300">Formato</span>
@@ -118,7 +151,7 @@ export default function BacklinkImportModal({ projectId, onClose, onImported }) 
             )}
             {error && <p className="text-xs text-red-600 dark:text-red-400">{error}</p>}
 
-            {preview && <PreviewPanel preview={preview} />}
+            {preview && <PreviewPanel preview={preview} toProspects={toProspects} />}
 
             <div className="flex justify-end gap-2 pt-1">
               <button type="button" onClick={onClose}
@@ -129,10 +162,10 @@ export default function BacklinkImportModal({ projectId, onClose, onImported }) 
                 className="px-4 py-2 text-sm font-medium rounded-xl border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-60 transition-colors">
                 {busy && !preview ? 'Leyendo…' : 'Previsualizar'}
               </button>
-              <button type="button" onClick={() => run(false)} disabled={busy || !preview || !preview.createdCount}
+              <button type="button" onClick={() => run(false)} disabled={busy || !preview || !willWrite}
                 title={!preview ? 'Previsualizá primero para ver qué va a entrar' : ''}
                 className="px-4 py-2 bg-primary-600 hover:bg-primary-700 disabled:opacity-60 disabled:cursor-not-allowed text-white text-sm font-medium rounded-xl transition-colors">
-                {busy && preview ? 'Importando…' : preview ? `Importar ${preview.createdCount}` : 'Importar'}
+                {busy && preview ? 'Importando…' : preview ? `Importar ${willWrite}` : 'Importar'}
               </button>
             </div>
           </>
@@ -142,24 +175,38 @@ export default function BacklinkImportModal({ projectId, onClose, onImported }) 
   )
 }
 
-function PreviewPanel({ preview }) {
-  const { format, createdCount, read, skippedCount, skipped = [], created = [], unmappedHeaders = [] } = preview
+function PreviewPanel({ preview, toProspects }) {
+  const {
+    format, createdCount, mergedCount = 0, read, domains,
+    skippedCount, skipped = [], created = [], unmappedHeaders = [],
+  } = preview
   const notVerifiable = created.filter(r => !r.verifiable).length
 
   return (
     <div className="bg-gray-50 dark:bg-gray-900/40 border border-gray-200 dark:border-gray-700 rounded-xl p-4 space-y-3">
       <div className="flex items-baseline justify-between gap-3 flex-wrap">
         <p className="text-sm font-medium text-gray-800 dark:text-gray-100">
-          Entran {createdCount} de {read} fila(s)
+          {toProspects
+            // Las dos cifras son la información: "40 filas se volvieron 12 sitios"
+            // es lo que explica por qué el número no coincide con el del archivo.
+            ? <>{read} fila(s) → {domains} sitio(s): {createdCount} nuevo(s){mergedCount > 0 && <> y {mergedCount} que ya estaban</>}</>
+            : <>Entran {createdCount} de {read} fila(s)</>}
         </p>
         <span className="text-xs text-gray-400 dark:text-gray-500">
           Formato detectado: {FORMATS.find(f => f.value === format)?.label || format}
         </span>
       </div>
 
-      {createdCount === 0 && (
+      {createdCount === 0 && mergedCount === 0 && (
         <p className="text-xs text-amber-600 dark:text-amber-400">
           Ninguna fila nueva. {skippedCount > 0 && 'Puede que este archivo ya se haya importado antes.'}
+        </p>
+      )}
+
+      {toProspects && mergedCount > 0 && (
+        <p className="text-xs text-gray-500 dark:text-gray-400">
+          A los {mergedCount} que ya estaban se les suma la evidencia de este competidor. Su veredicto y su pipeline
+          no se tocan.
         </p>
       )}
 
@@ -172,7 +219,14 @@ function PreviewPanel({ preview }) {
 
       {created.length > 0 && (
         <div className="max-h-40 overflow-y-auto divide-y divide-gray-100 dark:divide-gray-700">
-          {created.map((r, i) => (
+          {created.map((r, i) => toProspects ? (
+            <div key={i} className="py-1.5 flex items-center gap-2 text-xs">
+              <span className="flex-1 min-w-0 truncate text-gray-700 dark:text-gray-200">{r.domain}</span>
+              {r.merge && <span className="shrink-0 text-[10px] text-gray-400 dark:text-gray-500">ya estaba</span>}
+              <span className="shrink-0 w-14 text-right text-gray-500 dark:text-gray-400">{r.links} enlace(s)</span>
+              <span className="shrink-0 w-8 text-right text-gray-500 dark:text-gray-400">{r.domainRating ?? '—'}</span>
+            </div>
+          ) : (
             <div key={i} className="py-1.5 flex items-center gap-2 text-xs">
               <span className="flex-1 min-w-0 truncate text-gray-700 dark:text-gray-200">{shortHost(r.sourceUrl)}</span>
               {r.anchor && <span className="hidden sm:inline truncate max-w-[12rem] text-gray-400 dark:text-gray-500">«{r.anchor}»</span>}
@@ -210,12 +264,14 @@ function PreviewPanel({ preview }) {
   )
 }
 
-function ImportResult({ result, onClose }) {
+function ImportResult({ result, toProspects, onClose }) {
   return (
     <div className="space-y-3">
       <div className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-xl p-4">
         <p className="text-sm font-medium text-emerald-800 dark:text-emerald-300">
-          Se importaron {result.createdCount} enlace(s).
+          {toProspects
+            ? <>Se cargaron {result.createdCount} sitio(s) nuevo(s){result.mergedCount > 0 && <> y se actualizaron {result.mergedCount}</>}.</>
+            : <>Se importaron {result.createdCount} enlace(s).</>}
         </p>
         {result.skippedCount > 0 && (
           <p className="text-xs text-emerald-700 dark:text-emerald-400 mt-1">
@@ -223,7 +279,9 @@ function ImportResult({ result, onClose }) {
           </p>
         )}
         <p className="text-xs text-emerald-700 dark:text-emerald-400 mt-1">
-          La verificación corre sola los lunes, o podés dispararla ahora con "Verificar enlaces".
+          {toProspects
+            ? 'Los que ya nos enlazan quedaron marcados "Ya lo tenemos" solos.'
+            : 'La verificación corre sola los lunes, o podés dispararla ahora con "Verificar enlaces".'}
         </p>
       </div>
       <div className="flex justify-end">

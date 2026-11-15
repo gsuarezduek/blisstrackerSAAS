@@ -13,6 +13,15 @@ const {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+// La ventana de "SERP Live" tiene que cubrir la cadencia del cron que llena la tabla
+// (`serpSnapshot`, día 2 de cada mes): con los 7 días que tenía cuando el cron era
+// semanal, la vista quedaba vacía tres semanas de cada cuatro. 45 días deja ver la
+// captura del mes anterior si la corrida de este mes se cortó por cuota, y a los
+// 46 vuelve a decir "sin datos" en vez de presentar una posición de hace meses como
+// si fuera la de hoy. La columna "Actualizado" muestra la fecha, así que el usuario
+// ve de cuándo es el dato.
+const SERP_BATCH_WINDOW_DAYS = 45
+
 function prevMonth(month) {
   const [y, m] = month.split('-').map(Number)
   const pm = m === 1 ? 12 : m - 1
@@ -551,8 +560,8 @@ async function getSerpBatch(req, res, next) {
     })
     if (!project) return res.status(404).json({ error: 'Proyecto no encontrado' })
 
-    // Snapshot más reciente por keyword (últimos 7 días)
-    const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+    // Snapshot más reciente por keyword dentro de la ventana
+    const since = new Date(Date.now() - SERP_BATCH_WINDOW_DAYS * 24 * 60 * 60 * 1000)
     const rows = await prisma.serpSnapshot.findMany({
       where: { projectId, workspaceId, capturedAt: { gte: since } },
       orderBy: { capturedAt: 'desc' },

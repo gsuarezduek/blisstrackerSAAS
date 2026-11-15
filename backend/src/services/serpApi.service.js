@@ -259,12 +259,16 @@ async function captureAndSaveSerpSnapshot(trackedKeywordId, projectId, workspace
   }
 }
 
-// ─── Cron: capturar todos los snapshots semanales ────────────────────────────
+// ─── Cron: capturar todos los snapshots mensuales ────────────────────────────
 
 /**
- * Ejecutado semanalmente: captura SERP snapshots para todos los proyectos
- * con al menos 1 keyword trackeada. 800ms de delay entre keywords para
- * respetar rate limits de SerpAPI.
+ * Ejecutado una vez por mes (día 2, 06:30 ART): captura SERP snapshots para todos
+ * los proyectos con al menos 1 keyword trackeada. 800ms de delay entre keywords
+ * para respetar rate limits de SerpAPI.
+ *
+ * Es el ÚNICO consumidor automático de SerpAPI, y gasta una búsqueda por keyword
+ * trackeada de cada proyecto en cada corrida: con 15 keywords son 15 búsquedas al
+ * mes. De ahí la cadencia mensual — ver el comentario del cron en `index.js`.
  */
 async function captureAllSerpSnapshots() {
   if (!process.env.SERP_API_KEY) {
@@ -297,7 +301,7 @@ async function captureAllSerpSnapshots() {
         // Sin cuota, las keywords que faltan fallan todas igual: cortar la corrida
         // en vez de gastar cientos de requests y llenar el log del mismo error.
         if (err.code === 'SERP_QUOTA_EXCEEDED' || err.code === 'SERP_UNAUTHORIZED') {
-          console.error(`[SerpAPI] Corte de la captura semanal: ${err.message}`)
+          console.error(`[SerpAPI] Corte de la captura mensual: ${err.message}`)
           quotaStop = true
           break
         }

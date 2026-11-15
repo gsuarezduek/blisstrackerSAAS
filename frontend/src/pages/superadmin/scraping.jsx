@@ -309,11 +309,13 @@ function SerpApiPanel({ data, loading, onRefresh }) {
   const limit = acc?.searchesPerMonth
   const pct = limit ? Math.round(((limit - (left ?? 0)) / limit) * 100) : null
 
-  // El cron de los lunes cuesta 1 búsqueda por keyword trackeada. Es la proyección
-  // que permite decidir ANTES de quedarse sin cuota a mitad de mes.
-  const weeksLeft = left != null && cons?.weeklyCronCost
-    ? Math.floor(left / cons.weeklyCronCost)
-    : null
+  // El cron mensual cuesta 1 búsqueda por keyword trackeada. Como corre una vez por
+  // mes, ese número ES el gasto automático del mes: lo que queda tiene que cubrirlo,
+  // y el resto de la cuota es para lo que dispare alguien (Content Gap, Content Brief,
+  // abrir el SERP de una keyword).
+  const cronCost  = cons?.monthlyCronCost ?? 0
+  const shortOfRun = left != null && cronCost > 0 && left < cronCost
+  const pctOfPlan = limit && cronCost ? Math.round((cronCost / limit) * 100) : null
 
   const band = pct == null ? 'text-gray-400'
     : pct >= 90 ? 'text-red-600 dark:text-red-400'
@@ -355,8 +357,10 @@ function SerpApiPanel({ data, loading, onRefresh }) {
               hint={limit ? `de ${fmtTokens(limit)} por mes` : null} />
             <Stat label="Usadas este mes" value={fmtTokens(acc.thisMonthUsage ?? 0)}
               hint={pct != null ? `${pct}% del plan` : null} />
-            <Stat label="Costo del cron semanal" value={fmtTokens(cons?.weeklyCronCost ?? 0)}
-              hint={weeksLeft != null ? `alcanza ~${weeksLeft} semana(s) más` : 'sin keywords trackeadas'} />
+            <Stat label="Costo del cron mensual" value={fmtTokens(cronCost)}
+              hint={cronCost === 0 ? 'sin keywords trackeadas'
+                : pctOfPlan != null ? `${pctOfPlan}% del plan, una vez por mes`
+                : 'una corrida por mes'} />
           </div>
 
           {limit > 0 && (
@@ -365,9 +369,9 @@ function SerpApiPanel({ data, loading, onRefresh }) {
                 <div className={`h-2 rounded-full ${pct >= 90 ? 'bg-red-500' : pct >= 70 ? 'bg-amber-400' : 'bg-emerald-500'}`}
                   style={{ width: `${Math.min(pct ?? 0, 100)}%` }} />
               </div>
-              {weeksLeft != null && weeksLeft < 2 && cons.weeklyCronCost > 0 && (
+              {shortOfRun && (
                 <p className="text-xs text-red-600 dark:text-red-400 mt-2">
-                  Con lo que queda no llega al próximo cierre de mes: el cron de los lunes necesita {fmtTokens(cons.weeklyCronCost)} búsquedas por corrida.
+                  Con lo que queda no alcanza para la próxima corrida del cron, que necesita {fmtTokens(cronCost)} búsquedas (una por keyword trackeada).
                   Lo primero que se corta es Content Gap, que sin SerpAPI no funciona.
                 </p>
               )}

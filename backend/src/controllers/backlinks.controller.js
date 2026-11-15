@@ -4,6 +4,7 @@ const { requestAgentId, requestAgentName } = require('./tasks/_shared')
 const service = require('../services/backlinks.service')
 const verifier = require('../services/backlinkVerifier.service')
 const importer = require('../services/backlinkImport.service')
+const prospects = require('../services/backlinkProspects.service')
 
 /**
  * Preámbulo de todo handler: resuelve el proyecto dentro del workspace y, si la
@@ -84,6 +85,10 @@ async function create(req, res, next) {
       }
     }
 
+    // Un enlace nuevo puede ser de un dominio que estaba cargado como prospecto de
+    // la competencia: el cruce lo marca "ya lo tenemos" sin tocar su veredicto.
+    if (created.length) await prospects.syncOwnershipQuietly(ctx)
+
     if (!Array.isArray(req.body)) {
       if (created.length) return res.status(201).json(created[0])
       const only = skipped[0]
@@ -111,6 +116,9 @@ async function update(req, res, next) {
 
     const updated = await service.updateBacklink({ ...ctx, backlinkId, data })
     if (!updated) return res.status(404).json({ error: 'Enlace no encontrado' })
+    // Confirmar a mano que un enlace se perdió nos quita el dominio, y el prospecto
+    // vuelve a ser una oportunidad: el cruce desmarca igual que marca.
+    if (data.status !== undefined) await prospects.syncOwnershipQuietly(ctx)
     res.json(updated)
   } catch (err) {
     if (err.code === 'P2002') return res.status(409).json({ error: 'Ya hay otro enlace cargado con esa URL', code: 'ALREADY_EXISTS' })
@@ -127,6 +135,7 @@ async function remove(req, res, next) {
     if (!Number.isInteger(backlinkId)) return res.status(400).json({ error: 'Enlace inválido' })
     const ok = await service.deleteBacklink({ ...ctx, backlinkId })
     if (!ok) return res.status(404).json({ error: 'Enlace no encontrado' })
+    await prospects.syncOwnershipQuietly(ctx)
     res.json({ ok: true })
   } catch (err) { next(err) }
 }
@@ -249,17 +258,21 @@ async function importCsv(req, res, next) {
     const ctx = await resolveCtx(req, res, { write: true })
     if (!ctx) return
 
-    const { csv, format = 'auto', target = 'own', dryRun = false } = req.body || {}
+    const { csv, format = 'auto', target = 'own', competitorDomain = null, dryRun = false } = req.body || {}
     if (typeof csv !== 'string' || !csv.trim()) {
       return res.status(400).json({ error: 'Pegá el contenido del CSV o subí el archivo.' })
     }
-    if (target !== 'own') {
-      // Los prospectos de competencia llegan en la fase siguiente; rechazarlo
-      // explícito es mejor que importarlos como enlaces propios.
-      return res.status(400).json({ error: 'Por ahora sólo se pueden importar enlaces propios.', code: 'TARGET_NOT_SUPPORTED' })
+    if (target !== 'own' && target !== 'prospects') {
+      return res.status(400).json({ error: 'Destino de importación inválido.', code: 'TARGET_INVALID' })
     }
 
-    const result = await importer.importBacklinks({ ...ctx, csv, format, target, dryRun: dryRun === true })
+    const result = await importer.importBacklinks({
+      ...ctx, csv, format, target, competitorDomain, dryRun: dryRun === true,
+    })
+    // Lo importado puede cubrir dominios que ya estaban del otro lado: un enlace
+    // nuestro que ya teníamos como prospecto, o un prospecto cuyo dominio ya nos
+    // enlaza. Las dos direcciones las resuelve el mismo cruce.
+    if (dryRun !== true) await prospects.syncOwnershipQuietly(ctx)
     res.status(dryRun === true ? 200 : 201).json(result)
   } catch (err) {
     if (err.code === 'CSV_UNREADABLE') {

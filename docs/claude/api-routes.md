@@ -528,7 +528,7 @@ POST   /api/marketing/projects/:id/domain-rating/refresh    # refresca el Domain
 
 # Marketing — Enlaces (backlinks). Escritura: admin/owner o equipo del proyecto (canWrite).
 # OJO: las rutas estáticas van ANTES de /:blId en marketing.routes.js, o `profile` cae en el handler de un id.
-POST   /api/marketing/projects/:id/backlinks/import                # body: { csv, format: auto|ahrefs|semrush|gsc, dryRun } — el CSV va como TEXTO en el JSON (no multipart); con dryRun no escribe nada
+POST   /api/marketing/projects/:id/backlinks/import                # body: { csv, format: auto|ahrefs|semrush|gsc, target: own|prospects, competitorDomain?, dryRun } — el CSV va como TEXTO en el JSON (no multipart); con dryRun no escribe nada. Con target=prospects las filas se AGRUPAN POR DOMINIO y la respuesta trae { domains, createdCount, mergedCount }
 POST   /api/marketing/projects/:id/backlinks/verify                # dispara el verificador (async) → 201 { jobId }. 429 COOLDOWN (6h, con waitMinutes) · 409 ALREADY_RUNNING · 400 NO_LINKS/NO_SITE_URL
 GET    /api/marketing/projects/:id/backlinks/jobs                  # últimos 10 jobs (verify y classify)
 GET    /api/marketing/projects/:id/backlinks/jobs/:jobId           # polling: { status, errorMsg (progreso en vivo), checked, changed, lost }
@@ -539,6 +539,13 @@ DELETE /api/marketing/projects/:id/backlinks/:blId                # borra el enl
 GET    /api/marketing/projects/:id/backlinks/:blId/checks         # historial de verificación, append-only (?limit=20)
 GET    /api/marketing/projects/:id/backlinks/profile              # { live, totalLinks, readings, snapshots, domainRating, drHistory, hasUrl }
 POST   /api/marketing/projects/:id/backlinks/profile/readings     # body: { reportedDomains?, reportedLinks?, reportedSource?, notes? } — los conteos propios los calcula el backend
+
+# Competencia y oportunidades — el MISMO recurso (BacklinkProspect), con la unidad en el DOMINIO.
+# Una oportunidad es un prospecto `conseguible` que todavía no tenemos: su vista es este endpoint con otro filtro.
+GET    /api/marketing/projects/:id/backlinks/prospects            # ?verdict=&pipeline=&alreadyLinked=&competitor=&q=&page=&limit= → { items (con effectiveVerdict, competitors parseado, verdictLocked), total, counts }. `verdict=ya_lo_tenemos` filtra por el booleano, no por la columna
+POST   /api/marketing/projects/:id/backlinks/prospects            # alta. Objeto → 201 la fila, o 200 si el dominio ya estaba y se le fusionó la evidencia; array → { created, merged, skipped }. `competitorDomain` va al lado del lote (body en el objeto, ?competitorDomain= en el array)
+PATCH  /api/marketing/projects/:id/backlinks/prospects/:pid       # `verdict` sella verdictLockedAt (la IA deja de pisarlo); `resetVerdict:true` lo libera. El `domain` NO se puede cambiar (400): es la identidad de la fila
+DELETE /api/marketing/projects/:id/backlinks/prospects/:pid
 
 # Marketing — Keyword Tracking
 GET    /api/marketing/projects/:id/keywords                       # lista keywords trackeadas (?country=)
