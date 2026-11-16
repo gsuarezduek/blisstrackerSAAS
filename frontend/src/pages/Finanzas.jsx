@@ -14,6 +14,7 @@ import MovementsTab from '../components/finanzas/MovementsTab'
 import BalancesTab from '../components/finanzas/BalancesTab'
 import SummaryTab from '../components/finanzas/SummaryTab'
 import CustomersTab from '../components/finanzas/CustomersTab'
+import InvoicesTab from '../components/finanzas/InvoicesTab'
 import PendingTab from '../components/finanzas/PendingTab'
 
 const TABS = [
@@ -22,6 +23,7 @@ const TABS = [
   { id: 'saldos',    label: 'Saldos' },
   { id: 'resumen',   label: 'Resumen' },
   { id: 'clientes',  label: 'Clientes' },
+  { id: 'facturas',  label: 'Facturas' },
   { id: 'pendientes', label: 'Pendientes' },
 ]
 const VALID = new Set(TABS.map(t => t.id))
@@ -162,6 +164,8 @@ export default function Finanzas() {
               <SummaryTab key={refreshKey} accounts={accounts} />
             ) : tab === 'clientes' ? (
               <CustomersTab accounts={accounts} categories={categories} items={items} taxes={taxes} issuers={issuers} financeIvaMode={financeIvaMode} refreshKey={refreshKey} onDataChange={loadShared} />
+            ) : tab === 'facturas' ? (
+              <InvoicesTab items={items} financeIvaMode={financeIvaMode} refreshKey={refreshKey} />
             ) : (
               <PendingTab items={items} accounts={accounts} categories={categories} taxes={taxes} issuers={issuers}
                 focusTaskId={searchParams.get('task') ? Number(searchParams.get('task')) : null}

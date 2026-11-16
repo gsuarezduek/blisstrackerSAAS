@@ -26,7 +26,9 @@ const INVOICE_FIELD_LABELS = {
 }
 
 const INVOICE_INCLUDE = {
-  item: { select: { id: true, name: true, email: true } },
+  // legalName/ivaCondition/address: la pestaña Facturas (todo el workspace) abre
+  // la nota de crédito/débito sin tener el detalle del cliente cargado.
+  item: { select: { id: true, name: true, email: true, legalName: true, ivaCondition: true, address: true } },
   issuer: { select: { id: true, name: true, taxCondition: true } },
   attachments: { where: { deletedAt: null, status: 'ready' }, orderBy: { createdAt: 'asc' } },
   collections: { where: { deletedAt: null }, select: { amount: true } },
@@ -76,15 +78,39 @@ async function assertWithinQuota(workspaceId, extraBytes) {
   return null
 }
 
-// GET /api/finanzas/invoices?itemId=&status=&year=&search= — sección 4.5b
+// "YYYY-MM-DD" estricto → límite del día en UTC. `issueDate` se guarda a las
+// 12:00 UTC (ver parseDate), así que comparar contra el día entero
+// [00:00, 23:59:59.999] incluye la factura sea cual sea la hora que tenga.
+function dayBound(value, end) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(value))) return undefined
+  const d = new Date(`${value}T${end ? '23:59:59.999' : '00:00:00.000'}Z`)
+  return isNaN(d.getTime()) ? undefined : d
+}
+
+// GET /api/finanzas/invoices?itemId=&status=&year=&from=&to=&issuerId=&search=
+// Sin `itemId` lista las de todo el workspace (pestaña Facturas). `from`/`to`
+// son días de emisión inclusive; `issuerId=none` = las informativas (sin emisor).
 async function listInvoices(req, res, next) {
   try {
     const workspaceId = req.workspace.id
-    const { itemId, status, year, search } = req.query
+    const { itemId, status, year, from, to, issuerId, search } = req.query
     const where = { workspaceId, deletedAt: null }
     if (itemId) where.itemId = Number(itemId)
     if (year) {
       where.issueDate = { gte: new Date(Date.UTC(Number(year), 0, 1)), lt: new Date(Date.UTC(Number(year) + 1, 0, 1)) }
+    }
+    if (from || to) {
+      const gte = from ? dayBound(from, false) : null
+      const lte = to ? dayBound(to, true) : null
+      if (gte === undefined || lte === undefined) return res.status(400).json({ error: 'Fecha inválida (formato YYYY-MM-DD).' })
+      if (gte && lte && gte > lte) return res.status(400).json({ error: 'La fecha "desde" es posterior a "hasta".' })
+      where.issueDate = { ...where.issueDate, ...(gte && { gte }), ...(lte && { lte }) }
+    }
+    if (issuerId === 'none') where.issuerId = null
+    else if (issuerId) {
+      const id = Number(issuerId)
+      if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: 'Emisor inválido.' })
+      where.issuerId = id
     }
     if (search && search.trim()) {
       where.AND = buildTextSearchFilters(search, ['number', 'concept'])

@@ -221,3 +221,29 @@ export const STATUS_BADGE = {
   green:  'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300',
   red:    'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300',
 }
+
+// Totales de una lista de facturas, por moneda (no se mezclan ARS y USD). Mismo
+// criterio que el "facturado" de un cliente (signedAmount en
+// customers.controller.js): la nota de crédito resta, la de débito suma, y un
+// comprobante RECHAZADO por ARCA no pesa — nunca existió legalmente. Se suma en
+// centavos para que cientos de montos con 2 decimales no acumulen error de float.
+export function invoiceTotals(invoices) {
+  const byCurrency = {}
+  let rejected = 0
+  for (const inv of invoices || []) {
+    if (inv.arcaStatus === 'rejected') { rejected++; continue }
+    const cur = inv.currency || 'ARS'
+    const t = byCurrency[cur] || (byCurrency[cur] = { invoiced: 0, credit: 0, debit: 0, count: 0 })
+    const cents = Math.round(Number(inv.amount) * 100)
+    if (inv.kind === 'credit_note') t.credit += cents
+    else if (inv.kind === 'debit_note') t.debit += cents
+    else t.invoiced += cents
+    t.count++
+  }
+  const currencies = Object.entries(byCurrency).map(([currency, t]) => ({
+    currency, count: t.count,
+    invoiced: t.invoiced / 100, credit: t.credit / 100, debit: t.debit / 100,
+    net: (t.invoiced + t.debit - t.credit) / 100,
+  }))
+  return { currencies, rejected }
+}

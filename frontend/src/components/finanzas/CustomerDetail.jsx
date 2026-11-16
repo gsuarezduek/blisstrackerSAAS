@@ -90,7 +90,7 @@ export default function CustomerDetail({ itemId, accounts, categoriesList, items
             {subtab === 'movimientos' ? (
               <CustomerLedgerPanel itemId={itemId} currency={currency} refreshKey={refreshKey} onCreditCheck={handleOpenCheck} />
             ) : (
-              <CustomerInvoicesPanel itemId={itemId} currency={currency} refreshKey={refreshKey} customer={customer} issuers={issuers} financeIvaMode={financeIvaMode} />
+              <CustomerInvoicesPanel itemId={itemId} refreshKey={refreshKey} customer={customer} issuers={issuers} financeIvaMode={financeIvaMode} />
             )}
           </div>
         </div>
