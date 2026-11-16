@@ -262,3 +262,124 @@ describe('shape de las tools de tareas', () => {
     }
   })
 })
+
+describe('ventas_lead_proposal_update', () => {
+  const tool = byName('ventas_lead_proposal_update')
+  const saved = {
+    id: 7,
+    plans: [
+      { label: 'Básico', price: 300000, currency: 'ARS', plusIva: true, services: [{ name: 'SEO', description: 'Posicionamiento' }] },
+      { label: 'Completo', price: 500000, currency: 'ARS', plusIva: true, services: [{ name: 'SEO', description: 'Posicionamiento' }, { name: 'Ads', description: null }] },
+    ],
+  }
+  const listing = { 'GET /ventas/leads/3/proposals': { status: 200, data: [saved] } }
+
+  it('cambiar un precio conserva los servicios de cada plan (antes los vaciaba)', async () => {
+    const { call, calls } = fakeCall(listing)
+    await tool.run({ leadId: 3, proposalId: 7, plans: [{ price: 450000 }, {}] }, call)
+
+    const patch = calls.find(c => c.method === 'PATCH')
+    expect(patch.path).toBe('/ventas/leads/3/proposals/7')
+    expect(patch.body.plans).toEqual([
+      { ...saved.plans[0], price: 450000 },
+      saved.plans[1],
+    ])
+  })
+
+  it('serviceNames reemplaza la lista y conserva la descripción de un servicio ya cargado', async () => {
+    const { call, calls } = fakeCall(listing)
+    await tool.run({ leadId: 3, proposalId: 7, plans: [{ serviceNames: ['SEO', 'Email'] }, {}] }, call)
+
+    expect(calls.find(c => c.method === 'PATCH').body.plans[0].services).toEqual([
+      { name: 'SEO', description: 'Posicionamiento' },
+      { name: 'Email', description: null },
+    ])
+  })
+
+  it('serviceIds se resuelve contra el catálogo, y uno desconocido corta antes del PATCH', async () => {
+    const { call, calls } = fakeCall({ ...listing, 'GET /services': { status: 200, data: [{ id: 1, name: 'Redes', description: 'Gestión' }] } })
+    const res = await tool.run({ leadId: 3, proposalId: 7, plans: [{ serviceIds: [1, 99] }, {}] }, call)
+
+    expect(res.status).toBe(400)
+    expect(res.data.error).toMatch(/99/)
+    expect(calls.some(c => c.method === 'PATCH')).toBe(false)
+  })
+
+  it('sin planes no lee nada: título, estado y firma van directo', async () => {
+    const { call, calls } = fakeCall()
+    await tool.run({ leadId: 3, proposalId: 7, status: 'confirmed', signatureId: 'sig-1' }, call)
+
+    expect(calls).toEqual([{ method: 'PATCH', path: '/ventas/leads/3/proposals/7', body: { status: 'confirmed', signatureId: 'sig-1' } }])
+  })
+
+  it('404 si la propuesta no es de ese lead', async () => {
+    const { call } = fakeCall(listing)
+    const res = await tool.run({ leadId: 3, proposalId: 8, plans: [{}] }, call)
+    expect(res.status).toBe(404)
+  })
+})
+
+describe('ventas_lead_proposal_block_update', () => {
+  const tool = byName('ventas_lead_proposal_block_update')
+  const doc = {
+    title: 'Propuesta',
+    blocks: [
+      { type: 'text', heading: 'El desafío', subheading: '', paragraphs: ['Uno', 'Dos'] },
+      { type: 'services', heading: 'Servicios', intro: '', items: [{ name: 'SEO', intro: 'Texto', bullets: [] }] },
+      { type: 'closing', heading: '', label: '', quote: '', text: 'Gracias' },
+    ],
+  }
+  const proposal = { id: 7, doc, plans: [{ label: 'Único', services: [{ name: 'SEO' }] }] }
+  const listing = { 'GET /ventas/leads/3/proposals': { status: 200, data: [proposal] } }
+
+  it('cambia solo los campos enviados y reenvía el resto del documento intacto', async () => {
+    const { call, calls } = fakeCall({ ...listing, 'PATCH /ventas/leads/3/proposals/7': { status: 200, data: { doc: { blocks: [] } } } })
+    const res = await tool.run({ leadId: 3, proposalId: 7, blockIndex: 0, block: { paragraphs: ['Uno', 'Dos corregido'] } }, call)
+
+    const sentDoc = calls.find(c => c.method === 'PATCH').body.doc
+    expect(sentDoc.title).toBe('Propuesta')
+    expect(sentDoc.blocks).toHaveLength(3)
+    expect(sentDoc.blocks[0]).toEqual(expect.objectContaining({ type: 'text', heading: 'El desafío', paragraphs: ['Uno', 'Dos corregido'] }))
+    expect(sentDoc.blocks[1]).toBe(doc.blocks[1])
+    expect(sentDoc.blocks[2]).toBe(doc.blocks[2])
+    expect(res.data.warnings).toEqual([])
+  })
+
+  it('avisa los campos que el tipo de bloque no tiene', async () => {
+    const { call } = fakeCall(listing)
+    const res = await tool.run({ leadId: 3, proposalId: 7, blockIndex: 0, block: { paragraph: 'mal escrito' } }, call)
+    expect(res.data.warnings.join(' ')).toMatch(/paragraph/)
+  })
+
+  it('avisa un servicio que no está en ningún plan, porque no se va a mostrar', async () => {
+    const { call } = fakeCall(listing)
+    const res = await tool.run({ leadId: 3, proposalId: 7, blockIndex: 1, block: { items: [{ name: 'Posicionamiento SEO', intro: 'x' }] } }, call)
+    expect(res.data.warnings.join(' ')).toMatch(/Posicionamiento SEO/)
+  })
+
+  it('rechaza un tipo de bloque inexistente sin escribir', async () => {
+    const { call, calls } = fakeCall(listing)
+    const res = await tool.run({ leadId: 3, proposalId: 7, blockIndex: 0, block: { type: 'video' } }, call)
+    expect(res.status).toBe(400)
+    expect(calls.some(c => c.method === 'PATCH')).toBe(false)
+  })
+
+  it('rechaza un índice fuera de rango y una propuesta vieja en HTML', async () => {
+    const out = await tool.run({ leadId: 3, proposalId: 7, blockIndex: 3, block: {} }, fakeCall(listing).call)
+    expect(out.status).toBe(400)
+    expect(out.data.error).toMatch(/3 bloques/)
+
+    const legacy = fakeCall({ 'GET /ventas/leads/3/proposals': { status: 200, data: [{ id: 7, doc: null, content: '<p>x</p>' }] } })
+    const res = await tool.run({ leadId: 3, proposalId: 7, blockIndex: 0, block: {} }, legacy.call)
+    expect(res.status).toBe(400)
+    expect(legacy.calls.some(c => c.method === 'PATCH')).toBe(false)
+  })
+})
+
+describe('ventas_signatures_list', () => {
+  it('devuelve solo las firmas, no la configuración del workspace', async () => {
+    const { call } = fakeCall({ 'GET /workspaces/current': { status: 200, data: { name: 'Bliss', brandColors: [], salesSignatures: [{ id: 's1', label: 'Gaby', name: 'Gabriel', role: 'CEO', phone: '123' }] } } })
+    const res = await byName('ventas_signatures_list').run({}, call)
+    expect(res.data).toEqual([{ id: 's1', label: 'Gaby', name: 'Gabriel', role: 'CEO', email: null }])
+  })
+})

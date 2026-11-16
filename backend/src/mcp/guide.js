@@ -174,6 +174,7 @@ Calendario de piezas de redes con aprobación del cliente.
 - \`ventas_lead_set_owner\` notifica al nuevo responsable. \`ventas_lead_action_add\` con \`dueAt\` también crea una tarea futura para el responsable.
 - \`ventas_lead_convert\` convierte el lead en un Proyecto real (lo marca ganado). Es una acción importante: confirmá antes.
 - Propuestas: \`ventas_lead_proposal_create\` las redacta con IA, pero **los precios los definís vos/el usuario, la IA nunca los inventa**. Pasar una propuesta a \`confirmed\` habilita su link público para el cliente.
+- Editar una propuesta ya generada (sin regenerarla): precios, servicios y firma con \`ventas_lead_proposal_update\` (los planes se emparejan por posición y lo que no mandes queda; mandá siempre todos los planes); el TEXTO, un bloque por vez con \`ventas_lead_proposal_block_update\` — leé antes \`ventas_lead_proposals_list\` y revisá los \`warnings\` de la respuesta. Los montos y la lista de servicios salen de los planes: nunca los escribas en el texto. La firma se elige con \`ventas_signatures_list\`.
 - **Consumen IA**: investigación (\`ventas_lead_research_run\`, async), informe de diagnóstico y propuestas (\`quality: "max"\` es más caro y lento).
 - Borrar una empresa borra en cascada sus contactos y leads. Un lead con propuestas confirmadas no se puede borrar.
 - WhatsApp tiene su propia sección (\`bliss_guide\` topic "whatsapp").`,

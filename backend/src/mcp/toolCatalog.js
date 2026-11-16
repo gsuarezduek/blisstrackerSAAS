@@ -1,4 +1,5 @@
 const { z } = require('zod')
+const { BLOCK_TYPES, normalizeBlock } = require('../lib/proposalDoc')
 
 // Catálogo declarativo de tools del MCP. Cada entrada mapea 1:1 a un endpoint
 // que ya existe en la API (ver docs/claude/api-routes.md) — acá no hay lógica
@@ -16,7 +17,7 @@ const LEAD_STATUS_ENUM = z.enum(['prospecto', 'contactado', 'reunion', 'propuest
 const LEAD_ORIGIN_ENUM = z.enum(['sitio_web', 'google_ads', 'meta_ads', 'linkedin', 'referido', 'cliente', 'whatsapp', 'evento', 'llamada', 'otro'])
 
 // Un plan de precio de una propuesta (ver docs/claude/ventas.md "Generador de
-// propuestas") — reusado en crear y editar propuesta.
+// propuestas") — para GENERAR una propuesta nueva.
 const planSchema = z.object({
   label: z.string().optional().describe('Nombre del plan, ej. "Básico"'),
   price: z.number().optional().describe('Precio mensual (exacto, no lo infiere la IA)'),
@@ -25,6 +26,104 @@ const planSchema = z.object({
   serviceIds: z.array(z.number().int()).optional().describe('IDs del catálogo de Servicios'),
   serviceNames: z.array(z.string()).optional().describe('Servicios libres (no del catálogo)'),
 })
+
+// Un plan para EDITAR una propuesta ya generada. Mismos campos, otra semántica:
+// cada campo ausente conserva lo guardado en ese plan (se emparejan por posición).
+// Existe porque el PATCH espera los planes completos — `services: [{name,
+// description}]` incluido — y mandarle el `planSchema` de arriba dejaba cada
+// plan sin servicios: "subí el Básico a 450.000" vaciaba la lista de servicios
+// y la tabla de inversión de la propuesta.
+const planUpdateSchema = z.object({
+  label: z.string().optional().describe('Nombre del plan'),
+  price: z.number().nullable().optional().describe('Precio mensual exacto (null = "A definir")'),
+  currency: z.string().optional(),
+  plusIva: z.boolean().optional().describe('Si el precio es + IVA'),
+  serviceIds: z.array(z.number().int()).optional().describe('Reemplaza los servicios del plan: IDs del catálogo (services_list)'),
+  serviceNames: z.array(z.string()).optional().describe('Reemplaza los servicios del plan: nombres (si coincide con uno ya cargado, conserva su descripción)'),
+})
+
+// Funde los planes que manda el agente sobre los guardados (por posición). Un
+// plan sin `serviceIds` ni `serviceNames` conserva sus servicios; con alguno de
+// los dos, la lista se reemplaza entera. Los planes que no se mandan se eliminan.
+function mergeProposalPlans(current, incoming, catalogById = new Map()) {
+  const saved = Array.isArray(current) ? current : []
+  const knownDescription = new Map(saved.flatMap(p => (p.services || []).map(s => [s.name, s.description ?? null])))
+  return incoming.map((p, i) => {
+    const base = saved[i] || {}
+    let services = Array.isArray(base.services) ? base.services : []
+    if (p.serviceIds !== undefined || p.serviceNames !== undefined) {
+      const fromCatalog = (p.serviceIds || []).map(id => catalogById.get(id)).filter(Boolean)
+        .map(r => ({ name: r.name, description: r.description || null }))
+      const free = (p.serviceNames || []).map(n => n.trim()).filter(Boolean)
+        .map(name => ({ name, description: knownDescription.get(name) ?? null }))
+      const seen = new Set()
+      services = [...fromCatalog, ...free].filter(s => (seen.has(s.name) ? false : (seen.add(s.name), true)))
+    }
+    return {
+      label: p.label ?? base.label,
+      price: p.price !== undefined ? p.price : (base.price ?? null),
+      currency: p.currency ?? base.currency,
+      plusIva: p.plusIva ?? base.plusIva === true,
+      services,
+    }
+  })
+}
+
+// Busca una propuesta de un lead (no hay GET de una sola: se lee la lista).
+async function findProposal(call, leadId, proposalId) {
+  const list = await call('GET', `/ventas/leads/${leadId}/proposals`)
+  if (list.status >= 400) return { error: list }
+  const proposal = Array.isArray(list.data) ? list.data.find(p => p.id === proposalId) : null
+  if (!proposal) return { error: { status: 404, data: { error: 'Propuesta no encontrada en ese lead' } } }
+  return { proposal }
+}
+
+// Estructura de cada bloque del documento de una propuesta — espejo legible de
+// NORMALIZERS en lib/proposalDoc.js (si se suma un bloque o un campo, actualizar
+// los dos). Todos los bloques llevan además `type` y `heading` (título, opcional).
+const PROPOSAL_BLOCK_FIELDS = `- text: subheading, paragraphs[] (hasta 8 párrafos)
+- callout: label, text — un destacado
+- before_after: fromLabel, from, toLabel, to, note — de dónde a dónde
+- cards: subheading, intro, variant ("plain"|"funnel"), columns (2-4), items[{tag, title, text}], outro
+- bars: intro, items[{label, value 0-100}], outro
+- pills: subheading, intro, items[] (textos cortos)
+- steps: intro, variant ("timeline"|"numbered"), items[{title, text}], outro
+- services: intro, items[{name, intro, bullets[]}] — el texto de cada servicio. La LISTA de servicios sale de los planes, no de acá: cada item se muestra solo si su \`name\` coincide con un servicio de un plan.
+- pricing: intro, note — la tabla y los montos salen de los planes (ventas_lead_proposal_update), nunca de acá.
+- closing: label, quote, text — cierre
+En los textos solo se interpreta **negrita**.`
+
+// Aplica la edición de un bloque: los campos que se mandan pisan los del bloque,
+// los que no se mandan quedan. Devuelve el bloque normalizado (lo mismo que va a
+// guardar el backend) + avisos de lo que la normalización tiró o recortó en
+// silencio — sin esto el agente no tiene forma de enterarse.
+function applyProposalBlockEdit(existing, patch, plans) {
+  const block = normalizeBlock({ ...existing, ...patch })
+  if (!block) {
+    return { error: `Tipo de bloque inválido: "${patch.type}". Válidos: ${BLOCK_TYPES.join(', ')}` }
+  }
+  const warnings = []
+  const ignored = Object.keys(patch).filter(k => !(k in block))
+  if (ignored.length) warnings.push(`Campos ignorados (un bloque "${block.type}" no los tiene): ${ignored.join(', ')}`)
+  for (const k of Object.keys(patch)) {
+    const sent = patch[k]
+    const kept = block[k]
+    if (typeof sent === 'string' && typeof kept === 'string' && kept.length < sent.trim().length) {
+      warnings.push(`"${k}" se recortó a ${kept.length} caracteres (tope del campo)`)
+    } else if (Array.isArray(sent) && Array.isArray(kept) && kept.length < sent.length) {
+      warnings.push(`"${k}" quedó con ${kept.length} de ${sent.length} elementos (tope del bloque o elementos vacíos)`)
+    }
+  }
+  if (block.type === 'services') {
+    const norm = s => String(s || '').trim().toLowerCase()
+    const planNames = new Set((plans || []).flatMap(p => (p.services || []).map(s => norm(s.name))))
+    const orphans = block.items.map(i => i.name).filter(n => !planNames.has(norm(n)))
+    if (planNames.size && orphans.length) {
+      warnings.push(`Estos servicios no están en ningún plan y NO se van a mostrar: ${orphans.join(', ')}. Para renombrar o sumar un servicio, cambialo en los planes (ventas_lead_proposal_update con serviceNames).`)
+    }
+  }
+  return { block, warnings }
+}
 
 // Versión corta de una TAREA para las tools que devuelven tareas. `taskInclude`
 // (controllers/tasks/_shared.js) trae `project: true` — la ficha ENTERA del proyecto,
@@ -1452,9 +1551,22 @@ const tools = [
   },
   {
     name: 'ventas_lead_proposals_list',
-    description: 'Lista las versiones de propuesta de un lead.',
+    description: 'Lista las versiones de propuesta de un lead (la más nueva primero). Cada una trae `plans` (planes con precio y servicios), `signatureId` y `doc`: el documento como lista de bloques (`doc.blocks`, el índice de cada uno es su `blockIndex` para ventas_lead_proposal_block_update). Las propuestas viejas traen `content` (HTML) y `doc` null.',
     inputSchema: { leadId: z.number().int() },
     request: ({ leadId }) => ({ method: 'GET', path: `/ventas/leads/${leadId}/proposals` }),
+  },
+  {
+    name: 'ventas_signatures_list',
+    description: 'Firmas comerciales configuradas en el workspace (la que cierra la propuesta, en el link público y el PDF): id, nombre, cargo. Para elegir el `signatureId` de una propuesta.',
+    inputSchema: {},
+    // `GET /workspaces/current` trae toda la configuración del workspace; el agente
+    // solo necesita las firmas.
+    run: async (_args, call) => {
+      const res = await call('GET', '/workspaces/current')
+      if (res.status >= 400) return res
+      const list = Array.isArray(res.data?.salesSignatures) ? res.data.salesSignatures : []
+      return { status: res.status, data: list.map(s => ({ id: s.id, label: s.label || null, name: s.name || null, role: s.role || null, email: s.email || null })) }
+    },
   },
   {
     name: 'ventas_lead_proposal_create',
@@ -1465,21 +1577,73 @@ const tools = [
       objectives: z.string().optional().describe('Objetivos del cliente para encuadrar la propuesta'),
       instructions: z.string().optional().describe('Indicaciones puntuales para esta generación'),
       title: z.string().optional(),
+      signatureId: z.string().optional().describe('Firma con la que cierra (ver ventas_signatures_list). Sin esto queda sin firma elegida.'),
       quality: z.enum(['standard', 'max']).optional().describe('standard=Sonnet 5 (default, ~35s), max=Opus 5 (~90s, más caro)'),
     },
     request: ({ leadId, ...body }) => ({ method: 'POST', path: `/ventas/leads/${leadId}/proposals`, body }),
   },
   {
     name: 'ventas_lead_proposal_update',
-    description: 'Edita una propuesta: título, status (draft/confirmed — confirmed habilita el link público), o los planes (precio/moneda/+IVA/servicios).',
+    description: 'Edita una propuesta: título, status (draft/confirmed — confirmed habilita el link público), firma, o los planes (precio/moneda/+IVA/servicios). Los planes se emparejan POR POSICIÓN con los guardados (mismo orden que devuelve ventas_lead_proposals_list): en cada plan, lo que no mandes queda como está — para cambiar solo un precio alcanza con `[{ price: 450000 }, {}]`. Mandá siempre TODOS los planes: los que falten se eliminan. Para el texto del documento usá ventas_lead_proposal_block_update.',
     inputSchema: {
       leadId: z.number().int(),
       proposalId: z.number().int(),
       title: z.string().optional(),
       status: z.enum(['draft', 'confirmed']).optional(),
-      plans: z.array(planSchema).optional(),
+      signatureId: z.string().nullable().optional().describe('Firma (ver ventas_signatures_list); null la quita'),
+      plans: z.array(planUpdateSchema).optional(),
     },
-    request: ({ leadId, proposalId, ...body }) => ({ method: 'PATCH', path: `/ventas/leads/${leadId}/proposals/${proposalId}`, body }),
+    run: async ({ leadId, proposalId, plans, ...rest }, call) => {
+      const body = { ...rest }
+      if (plans !== undefined) {
+        if (!plans.length) return { status: 400, data: { error: 'Una propuesta necesita al menos un plan' } }
+        const { proposal, error } = await findProposal(call, leadId, proposalId)
+        if (error) return error
+        const ids = [...new Set(plans.flatMap(p => p.serviceIds || []))]
+        let catalogById = new Map()
+        if (ids.length) {
+          const catalog = await call('GET', '/services')
+          if (catalog.status >= 400) return catalog
+          catalogById = new Map((catalog.data || []).map(s => [s.id, s]))
+          const unknown = ids.filter(id => !catalogById.has(id))
+          if (unknown.length) return { status: 400, data: { error: `serviceIds que no están en el catálogo: ${unknown.join(', ')} (ver services_list)` } }
+        }
+        body.plans = mergeProposalPlans(proposal.plans, plans, catalogById)
+      }
+      return call('PATCH', `/ventas/leads/${leadId}/proposals/${proposalId}`, { body })
+    },
+  },
+  {
+    name: 'ventas_lead_proposal_block_update',
+    description: `Edita UN bloque del documento de una propuesta, sin regenerarla con IA. Leé antes la propuesta con ventas_lead_proposals_list: \`blockIndex\` es la posición del bloque en \`doc.blocks\` (desde 0). Los campos que mandes en \`block\` reemplazan a los del bloque; los que no mandes quedan como están (un array —paragraphs, items— se reemplaza entero, no se agrega). Para corregir un párrafo mandá el array \`paragraphs\` completo con ese párrafo cambiado. La respuesta trae el bloque tal como quedó y \`warnings\` si algo se ignoró o recortó: revisalos. Solo propuestas con \`doc\` (las viejas en HTML se editan desde la app). Campos de cada tipo de bloque:\n${PROPOSAL_BLOCK_FIELDS}`,
+    inputSchema: {
+      leadId: z.number().int(),
+      proposalId: z.number().int(),
+      blockIndex: z.number().int().min(0).describe('Posición del bloque en doc.blocks (desde 0)'),
+      block: z.record(z.string(), z.any()).describe('Los campos a cambiar, ej. { "paragraphs": ["…", "…"] }. `type` solo si querés cambiar el tipo de bloque.'),
+    },
+    run: async ({ leadId, proposalId, blockIndex, block }, call) => {
+      const { proposal, error } = await findProposal(call, leadId, proposalId)
+      if (error) return error
+      const doc = proposal.doc
+      if (!doc || !Array.isArray(doc.blocks)) {
+        return { status: 400, data: { error: 'Esta propuesta es del formato viejo (HTML, sin bloques): se edita desde la app' } }
+      }
+      if (blockIndex >= doc.blocks.length) {
+        return { status: 400, data: { error: `La propuesta tiene ${doc.blocks.length} bloques (blockIndex 0 a ${doc.blocks.length - 1})` } }
+      }
+      const edit = applyProposalBlockEdit(doc.blocks[blockIndex], block, proposal.plans)
+      if (edit.error) return { status: 400, data: { error: edit.error } }
+      const blocks = doc.blocks.map((b, i) => (i === blockIndex ? edit.block : b))
+      const res = await call('PATCH', `/ventas/leads/${leadId}/proposals/${proposalId}`, { body: { doc: { ...doc, blocks } } })
+      if (res.status >= 400) return res
+      // Solo el bloque editado: devolver la propuesta entera le cuesta al agente
+      // todo el documento en tokens para confirmar un párrafo.
+      return {
+        status: res.status,
+        data: { proposalId, blockIndex, block: res.data?.doc?.blocks?.[blockIndex] ?? edit.block, warnings: edit.warnings },
+      }
+    },
   },
   {
     name: 'ventas_lead_proposal_delete',
