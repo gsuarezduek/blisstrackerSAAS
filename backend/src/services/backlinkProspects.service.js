@@ -1,7 +1,7 @@
 const prisma = require('../lib/prisma')
 const {
   prospectDomain, mergeCompetitorEvidence, parseCompetitors, competitorLinkTotal,
-  effectiveVerdict, VERDICTS, PIPELINE_STATUSES,
+  effectiveVerdict, normalizeLinkUrl, linkDomain, VERDICTS, PIPELINE_STATUSES,
 } = require('../lib/backlinks')
 
 // Un export de competencia agregado por dominio son decenas o cientos de sitios,
@@ -101,6 +101,18 @@ function buildProspectData(body, { isCreate = false } = {}) {
     data.pipelineStatus = body.pipelineStatus
   }
 
+  // La tarea que alguien creó desde esta oportunidad. Se valida contra el workspace
+  // en `updateProspect` y no acá: el FK solo garantiza que la tarea existe, no que
+  // sea de este workspace, y un id ajeno dejaría la fila apuntando a trabajo de otro.
+  if (body.taskId !== undefined) {
+    if (!body.taskId) data.taskId = null
+    else {
+      const id = Number(body.taskId)
+      if (!Number.isInteger(id) || id <= 0) return { error: 'Tarea inválida' }
+      data.taskId = id
+    }
+  }
+
   if (body.ownerId !== undefined) {
     if (!body.ownerId) data.ownerId = null
     else {
@@ -155,7 +167,7 @@ function authorData({ userId, agentId, agentName } = {}, { isCreate = false } = 
 
 async function listProspects({
   projectId, workspaceId, verdict, pipeline, alreadyLinked, competitor, q,
-  page = 1, limit = 50,
+  view = null, page = 1, limit = 50,
 }) {
   const where = { projectId, workspaceId }
 
@@ -167,6 +179,21 @@ async function listProspects({
     // Sin esto, "conseguible" mostraría también los que ya conseguimos: la fila
     // conserva su veredicto viejo y la UI la rotula "Ya lo tenemos".
     where.alreadyLinked = false
+  }
+
+  // La vista Oportunidades es el pipeline, y lo que muestra NO es "verdict =
+  // conseguible": es lo conseguible MÁS todo lo que alguien ya empezó a trabajar.
+  // Dos razones por las que el filtro de arriba no alcanza:
+  //  - Si alguien contacta un dominio sin esperar el veredicto de la IA, ese trabajo
+  //    no puede desaparecer del tablero.
+  //  - Al promover, el cruce pone `alreadyLinked: true`, así que con el filtro de
+  //    arriba la columna "Conseguido" quedaría SIEMPRE vacía: el pipeline perdería
+  //    justo la etapa que muestra el resultado.
+  // Va en AND y no sobre `where.OR` porque `q` también usa OR y se pisarían.
+  if (view === 'pipeline') {
+    delete where.verdict
+    delete where.alreadyLinked
+    where.AND = [{ OR: [{ verdict: 'conseguible' }, { pipelineStatus: { not: 'sin_empezar' } }] }]
   }
 
   if (pipeline && PIPELINE_STATUSES.includes(pipeline)) where.pipelineStatus = pipeline
@@ -186,7 +213,7 @@ async function listProspects({
   const take = Math.min(Math.max(Number(limit) || 50, 1), MAX_PAGE_SIZE)
   const skip = (Math.max(Number(page) || 1, 1) - 1) * take
 
-  const [items, total, byVerdict, ownedCount] = await Promise.all([
+  const [items, total, byVerdict, ownedCount, byPipeline] = await Promise.all([
     prisma.backlinkProspect.findMany({
       where, select: PROSPECT_SELECT, take, skip,
       // Primero lo que enlaza a más competidores: es la señal de prioridad, y lo
@@ -200,13 +227,17 @@ async function listProspects({
       by: ['verdict'], where: { projectId, workspaceId, alreadyLinked: false }, _count: { _all: true },
     }),
     prisma.backlinkProspect.count({ where: { projectId, workspaceId, alreadyLinked: true } }),
+    prisma.backlinkProspect.groupBy({ by: ['pipelineStatus'], where: { projectId, workspaceId }, _count: { _all: true } }),
   ])
 
   const counts = Object.fromEntries(VERDICTS.map(v => [v, 0]))
   for (const row of byVerdict) counts[row.verdict] = row._count._all
   counts.ya_lo_tenemos = ownedCount
 
-  return { items: items.map(shapeProspect), total, counts }
+  const pipelineCounts = Object.fromEntries(PIPELINE_STATUSES.map(st => [st, 0]))
+  for (const row of byPipeline) pipelineCounts[row.pipelineStatus] = row._count._all
+
+  return { items: items.map(shapeProspect), total, counts, pipelineCounts }
 }
 
 /**
@@ -293,6 +324,14 @@ async function updateProspect({ projectId, workspaceId, prospectId, author, data
     where: { id: prospectId, projectId, workspaceId }, select: { id: true },
   })
   if (!existing) return null
+
+  // Una tarea de OTRO workspace dejaría la fila apuntando a trabajo ajeno, y el
+  // FK solo garantiza que el id existe. Se verifica acá, que es donde ya hay
+  // workspace a mano.
+  if (data.taskId) {
+    const task = await prisma.task.findFirst({ where: { id: data.taskId, project: { workspaceId } }, select: { id: true } })
+    if (!task) return { error: 'Esa tarea no existe en este workspace' }
+  }
   const row = await prisma.backlinkProspect.update({
     where:  { id: prospectId },
     data:   { ...data, ...authorData(author) },
@@ -301,9 +340,102 @@ async function updateProspect({ projectId, workspaceId, prospectId, author, data
   return shapeProspect(row)
 }
 
+/** Una fila sola, ya shapeada. La usa `promote` para responder con el estado posterior al cruce. */
+async function getProspect({ projectId, workspaceId, prospectId }) {
+  const row = await prisma.backlinkProspect.findFirst({
+    where: { id: prospectId, projectId, workspaceId }, select: PROSPECT_SELECT,
+  })
+  return row ? shapeProspect(row) : null
+}
+
 async function deleteProspect({ projectId, workspaceId, prospectId }) {
   const { count } = await prisma.backlinkProspect.deleteMany({ where: { id: prospectId, projectId, workspaceId } })
   return count > 0
+}
+
+/**
+ * Promover una oportunidad: nace el `Backlink` y el prospecto queda conseguido.
+ *
+ * Es el momento en que el pipeline se cierra, y tiene tres decisiones que no son
+ * obvias:
+ *
+ * **1. `exampleUrl` NO sirve como `sourceUrl`.** Esa es la página donde el sitio
+ * enlaza al COMPETIDOR; el enlace que nosotros conseguimos está en otra. Usarla
+ * sería registrar un enlace que no existe, y el verificador lo marcaría perdido en
+ * el primer chequeo. Si no nos dan la URL real, el enlace nace con el dominio
+ * sintético y **`verifiable: false`** — el mismo criterio que las filas del reporte
+ * de Search Console, por el mismo motivo: sin la página concreta, el verificador
+ * chequearía la home y daría "perdido" en casi todas.
+ *
+ * **2. Si el enlace ya estaba cargado a mano, se VINCULA en vez de fallar.** El
+ * camino real es "lo conseguí, lo cargué en Nuestros enlaces, y después me acordé
+ * de cerrar la oportunidad". Un 409 por el UNIQUE ahí sería castigar el orden.
+ *
+ * **3. El `pipelineStatus` pasa a `conseguido` en la misma transacción**, para que
+ * no quede un enlace creado con la oportunidad todavía abierta si algo falla en el
+ * medio. El "ya lo tenemos" lo pone después el cruce, que es su única fuente.
+ */
+async function promoteProspect({ projectId, workspaceId, prospectId, author, link = {} }) {
+  const prospect = await prisma.backlinkProspect.findFirst({
+    where:  { id: prospectId, projectId, workspaceId },
+    select: { id: true, domain: true, domainRating: true, traffic: true, language: true, backlinkId: true },
+  })
+  if (!prospect) return { notFound: true }
+
+  // Ya se promovió antes: se devuelve el enlace que nació de acá en vez de crear un
+  // segundo. Si el enlace se borró, el FK quedó en SetNull y se puede volver a promover.
+  if (prospect.backlinkId) {
+    const existing = await prisma.backlink.findFirst({ where: { id: prospect.backlinkId, projectId }, select: { id: true, sourceUrl: true } })
+    if (existing) return { alreadyPromoted: true, backlink: existing }
+  }
+
+  const given = normalizeLinkUrl(link.sourceUrl).url
+  const sourceUrl = given || `https://${prospect.domain}`
+  const sourceDomain = linkDomain(sourceUrl) || prospect.domain
+
+  const data = {
+    sourceUrl, sourceDomain,
+    anchor:       textOrNull(link.anchor, 200),
+    linkType:     link.linkType || 'unknown',
+    placement:    link.placement || null,
+    // Lo que ya sabíamos del dominio viaja al enlace: es el mismo sitio.
+    domainRating: prospect.domainRating,
+    traffic:      prospect.traffic,
+    language:     prospect.language,
+    firstSeenAt:  new Date(),
+    verifiable:   !!given,
+    notes: given
+      ? textOrNull(link.notes, 1000)
+      : `Conseguido desde la oportunidad de ${prospect.domain}. Falta la URL de la página concreta para poder verificarlo.`,
+  }
+
+  const result = await prisma.$transaction(async tx => {
+    // El UNIQUE es (projectId, sourceUrl): si el enlace ya estaba cargado, se usa
+    // ese. `upsert` y no create+catch porque acá hay una transacción y un P2002
+    // adentro la abortaría entera.
+    const backlink = await tx.backlink.upsert({
+      where:  { projectId_sourceUrl: { projectId, sourceUrl } },
+      create: {
+        projectId, workspaceId, source: 'prospect', ...data,
+        ...authorData(author, { isCreate: true }),
+      },
+      // Al vincular uno que ya existía NO se pisa lo que tenga cargado: el anchor
+      // y el tipo que alguien escribió mirando la página valen más que lo que se
+      // declara al cerrar la oportunidad.
+      update: { ...authorData(author) },
+      select: { id: true, sourceUrl: true, sourceDomain: true, status: true, verifiable: true },
+    })
+
+    const updated = await tx.backlinkProspect.update({
+      where: { id: prospect.id },
+      data:  { backlinkId: backlink.id, pipelineStatus: 'conseguido', ...authorData(author) },
+      select: PROSPECT_SELECT,
+    })
+
+    return { backlink, prospect: updated }
+  })
+
+  return { backlink: result.backlink, prospect: shapeProspect(result.prospect) }
 }
 
 /**
@@ -378,6 +510,8 @@ async function syncOwnershipQuietly(ctx) {
 module.exports = {
   listProspects,
   createProspects,
+  promoteProspect,
+  getProspect,
   updateProspect,
   deleteProspect,
   syncProspectOwnership,

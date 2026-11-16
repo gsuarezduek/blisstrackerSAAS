@@ -9,8 +9,9 @@ import { Icon } from '../ui/Icon'
  * OnPageTab.jsx: crea una Task en el proyecto con una descripción prellenada
  * (prefijo del hallazgo/sección de origen) y asignación opcional.
  * Props: defaultDescription (string prellenado, ej. "Meta Ads - Pausar campaña X"),
- * projectId, projectName, onClose, onCreated? (llamado sin argumentos tras crear la
- * tarea con éxito — el modal no sabe qué hace el caller con eso, solo lo informa).
+ * projectId, projectName, onClose, onCreated? (llamado con la tarea creada tras
+ * crear con éxito — el modal no sabe qué hace el caller con eso, solo lo informa;
+ * los callers que no la necesitan simplemente ignoran el argumento).
  */
 export default function CreateTaskModal({ defaultDescription, projectId, projectName, onClose, onCreated }) {
   const { user } = useAuth()
@@ -36,8 +37,8 @@ export default function CreateTaskModal({ defaultDescription, projectId, project
     try {
       const body = { description: description.trim(), projectId: String(projectId) }
       if (assigneeId && assigneeId !== String(user?.id)) body.targetUserId = assigneeId
-      await api.post('/tasks', body)
-      onCreated?.()
+      const { data } = await api.post('/tasks', body)
+      onCreated?.(data)
       setDone(true)
       setTimeout(onClose, 1200)
     } catch {

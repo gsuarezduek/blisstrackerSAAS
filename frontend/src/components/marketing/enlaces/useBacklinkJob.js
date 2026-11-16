@@ -6,6 +6,23 @@ import api from '../../../api/client'
 const MAX_POLL_MS = 5 * 60 * 1000
 const POLL_MS = 3000
 
+// Los dos jobs comparten el polling pero no el endpoint que los arranca ni el
+// cuerpo: `force` saltea el cooldown de 6h del verificador, `rerun` le pide a la IA
+// rehacer su propia opinión anterior. Mapearlos acá es lo que evita que el
+// componente tenga que saber la ruta de cada uno.
+const START = {
+  verify: {
+    path:  'backlinks/verify',
+    body:  ({ force = false }) => ({ force }),
+    error: 'No se pudo iniciar la verificación.',
+  },
+  classify: {
+    path:  'backlinks/prospects/classify',
+    body:  ({ rerun = false }) => ({ rerun }),
+    error: 'No se pudo iniciar la clasificación.',
+  },
+}
+
 /**
  * Sigue un `BacklinkJob` (verify o classify) hasta que termina.
  *
@@ -66,16 +83,17 @@ export default function useBacklinkJob({ projectId, kind = 'verify', onFinish })
     return () => { alive = false; stop() }
   }, [projectId, kind, poll, stop])
 
-  const start = useCallback(async ({ force = false } = {}) => {
+  const start = useCallback(async (opts = {}) => {
     setError(null)
     setTimedOut(false)
+    const spec = START[kind] ?? START.verify
     try {
-      const { data } = await api.post(`/marketing/projects/${projectId}/backlinks/verify`, { force })
+      const { data } = await api.post(`/marketing/projects/${projectId}/${spec.path}`, spec.body(opts))
       setJob({ id: data.jobId, kind, status: 'pending', errorMsg: 'Iniciando…' })
       poll(data.jobId)
       return true
     } catch (err) {
-      setError(err.response?.data?.error ?? 'No se pudo iniciar la verificación.')
+      setError(err.response?.data?.error ?? spec.error)
       // Si ya había una corriendo, el backend devuelve su id: en vez de un error
       // muerto, se engancha el polling a la que existe.
       const running = err.response?.data?.jobId

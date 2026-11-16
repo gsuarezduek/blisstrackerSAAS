@@ -317,6 +317,8 @@ router.get('/projects/:id/backlinks/profile',           backlinks.getProfile)
 // otro filtro y otro orden.
 router.get('/projects/:id/backlinks/prospects',          prospects.list)
 router.post('/projects/:id/backlinks/prospects',         prospects.create)
+router.post('/projects/:id/backlinks/prospects/classify', prospects.classify)
+router.post('/projects/:id/backlinks/prospects/:pid/promote', prospects.promote)
 router.patch('/projects/:id/backlinks/prospects/:pid',   prospects.update)
 router.delete('/projects/:id/backlinks/prospects/:pid',  prospects.remove)
 router.get('/projects/:id/backlinks',                   backlinks.list)

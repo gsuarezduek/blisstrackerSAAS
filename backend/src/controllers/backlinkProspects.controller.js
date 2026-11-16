@@ -1,5 +1,6 @@
 const { resolveCtx } = require('./backlinks.controller')
 const service = require('../services/backlinkProspects.service')
+const classifier = require('../services/backlinkClassifier.service')
 const { prospectDomain } = require('../lib/backlinks')
 
 /**
@@ -17,9 +18,9 @@ async function list(req, res, next) {
   try {
     const ctx = await resolveCtx(req, res)
     if (!ctx) return
-    const { verdict, pipeline, alreadyLinked, competitor, q, page, limit } = req.query
+    const { verdict, pipeline, alreadyLinked, competitor, q, view, page, limit } = req.query
     res.json(await service.listProspects({
-      ...ctx, verdict, pipeline, alreadyLinked, competitor, q, page, limit,
+      ...ctx, verdict, pipeline, alreadyLinked, competitor, q, view, page, limit,
     }))
   } catch (err) { next(err) }
 }
@@ -93,7 +94,100 @@ async function update(req, res, next) {
 
     const updated = await service.updateProspect({ ...ctx, prospectId, data })
     if (!updated) return res.status(404).json({ error: 'Prospecto no encontrado' })
+    // El servicio valida contra el workspace lo que el schema no puede (que la
+    // tarea vinculada sea de acá), así que puede devolver un motivo en vez de la fila.
+    if (updated.error) return res.status(400).json({ error: updated.error })
     res.json(updated)
+  } catch (err) { next(err) }
+}
+
+/**
+ * POST /api/marketing/projects/:id/backlinks/prospects/classify
+ *
+ * Async igual que el verificador: crea el job, responde 201 con el id y el
+ * frontend poll-ea el mismo endpoint de jobs.
+ *
+ * **Consume tokens del workspace**, así que lo dispara siempre una persona o un
+ * agente: nunca entra al cron. No tiene cooldown por tiempo (el del verificador
+ * existe porque hace tráfico a sitios de terceros; acá lo que se gasta es
+ * presupuesto propio, que ya tiene su gate) — sólo se impide que corran dos a la
+ * vez sobre el mismo proyecto.
+ *
+ * `rerun: true` le pide rehacer SU PROPIA opinión anterior; lo corregido a mano
+ * queda afuera igual, porque el candado va en el where de los candidatos Y en el
+ * de la escritura.
+ */
+async function classify(req, res, next) {
+  try {
+    const ctx = await resolveCtx(req, res, { write: true })
+    if (!ctx) return
+
+    const result = await classifier.startClassification({
+      projectId:   ctx.projectId,
+      workspaceId: ctx.workspaceId,
+      rerun:       req.body?.rerun === true,
+    })
+
+    if (result.skipped) {
+      if (result.reason === 'running') {
+        return res.status(409).json({ error: 'Ya hay una clasificación corriendo.', code: 'ALREADY_RUNNING', jobId: result.jobId })
+      }
+      return res.status(400).json({
+        error: req.body?.rerun === true
+          ? 'No hay dominios para evaluar: los que quedan están corregidos a mano o ya los tenemos.'
+          : 'No hay dominios sin evaluar.',
+        code: 'NO_PROSPECTS',
+      })
+    }
+    res.status(201).json({ jobId: result.jobId, status: 'pending', pending: result.pending })
+  } catch (err) { next(err) }
+}
+
+/**
+ * POST /api/marketing/projects/:id/backlinks/prospects/:pid/promote
+ *
+ * Cierra la oportunidad: nace el `Backlink` y el prospecto queda `conseguido`.
+ *
+ * `sourceUrl` es la URL de la página que AHORA nos enlaza, y es lo único que vale
+ * la pena pedir: el `exampleUrl` del prospecto es la página donde ese sitio enlaza
+ * al COMPETIDOR, y usarla registraría un enlace que no existe. Sin ella el enlace
+ * nace `verifiable: false`, igual que las filas del reporte de Search Console.
+ */
+async function promote(req, res, next) {
+  try {
+    const ctx = await resolveCtx(req, res, { write: true })
+    if (!ctx) return
+    const prospectId = Number(req.params.pid)
+    if (!Number.isInteger(prospectId)) return res.status(400).json({ error: 'Prospecto inválido' })
+
+    const result = await service.promoteProspect({
+      ...ctx, prospectId,
+      link: {
+        sourceUrl: req.body?.sourceUrl,
+        anchor:    req.body?.anchor,
+        linkType:  req.body?.linkType,
+        placement: req.body?.placement,
+        notes:     req.body?.notes,
+      },
+    })
+    if (result.notFound) return res.status(404).json({ error: 'Prospecto no encontrado' })
+    if (result.alreadyPromoted) {
+      return res.status(409).json({
+        error: 'Esta oportunidad ya se marcó como conseguida.',
+        code:  'ALREADY_PROMOTED',
+        backlink: result.backlink,
+      })
+    }
+
+    // El "ya lo tenemos" NO se escribe acá: lo pone el cruce, que es su única
+    // fuente. Así el hecho sigue siendo derivado del inventario y no de este camino.
+    await service.syncOwnershipQuietly(ctx)
+
+    // La fila se relee DESPUÉS del cruce. La que salió de la transacción todavía
+    // dice `conseguible`, y responder eso le daría a un agente que lee la respuesta
+    // un estado que ya dejó de ser cierto.
+    const prospect = await service.getProspect({ ...ctx, prospectId })
+    res.status(201).json({ ...result, prospect: prospect ?? result.prospect })
   } catch (err) { next(err) }
 }
 
@@ -110,4 +204,4 @@ async function remove(req, res, next) {
   } catch (err) { next(err) }
 }
 
-module.exports = { list, create, update, remove }
+module.exports = { list, create, classify, promote, update, remove }

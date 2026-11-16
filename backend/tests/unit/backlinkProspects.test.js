@@ -1,11 +1,13 @@
 jest.mock('../../src/lib/prisma', () => ({
-  backlink:         { findMany: jest.fn() },
-  backlinkProspect: { count: jest.fn(), updateMany: jest.fn(), findMany: jest.fn() },
+  backlink:         { findMany: jest.fn(), findFirst: jest.fn(), upsert: jest.fn() },
+  backlinkProspect: { count: jest.fn(), updateMany: jest.fn(), findMany: jest.fn(), findFirst: jest.fn(), update: jest.fn() },
+  $transaction:     jest.fn(),
 }))
 
 const prisma = require('../../src/lib/prisma')
 const {
-  syncProspectOwnership, syncOwnershipQuietly, buildProspectData, shapeProspect, OWNED_STATUSES,
+  syncProspectOwnership, syncOwnershipQuietly, buildProspectData, shapeProspect,
+  promoteProspect, OWNED_STATUSES,
 } = require('../../src/services/backlinkProspects.service')
 
 const ctx = { projectId: 7, workspaceId: 1 }
@@ -179,5 +181,131 @@ describe('prospectos — la fila como la ve quien la lee', () => {
 
   it('marca la fila corregida a mano, para distinguirla de la que opinó la IA', () => {
     expect(shapeProspect({ competitors: '[]', verdictLockedAt: new Date() }).verdictLocked).toBe(true)
+  })
+})
+
+describe('promover una oportunidad — qué enlace nace', () => {
+  /** El prospecto y el `tx` de la transacción, con lo mínimo para que corra. */
+  function given(prospect = {}) {
+    prisma.backlinkProspect.findFirst.mockResolvedValue({
+      id: 5, domain: 'diario.com', domainRating: 62, traffic: 12500, language: null, backlinkId: null, ...prospect,
+    })
+    const tx = {
+      backlink:         { upsert: jest.fn(async a => ({ id: 9, ...a.create })) },
+      backlinkProspect: { update: jest.fn(async () => ({ competitors: '[]', pipelineStatus: 'conseguido', backlinkId: 9 })) },
+    }
+    prisma.$transaction.mockImplementation(fn => fn(tx))
+    return tx
+  }
+
+  const ctx = { projectId: 7, workspaceId: 1, author: {} }
+
+  it('sin la URL de la página, el enlace nace FUERA de la verificación automática', async () => {
+    // El verificador chequearía la home del sitio y daría "perdido" en casi todas:
+    // el mismo motivo por el que existe `verifiable: false` para las filas de GSC.
+    const tx = given()
+    await promoteProspect({ ...ctx, prospectId: 5, link: {} })
+    expect(tx.backlink.upsert.mock.calls[0][0].create).toMatchObject({
+      sourceUrl: 'https://diario.com', verifiable: false,
+    })
+  })
+
+  it('con la URL concreta, sí entra a la verificación', async () => {
+    const tx = given()
+    await promoteProspect({ ...ctx, prospectId: 5, link: { sourceUrl: 'https://diario.com/nos-mencionan' } })
+    expect(tx.backlink.upsert.mock.calls[0][0].create).toMatchObject({
+      sourceUrl: 'https://diario.com/nos-mencionan', verifiable: true,
+    })
+  })
+
+  it('NUNCA usa el exampleUrl del prospecto como origen del enlace', async () => {
+    // Esa es la página donde el sitio enlaza al COMPETIDOR. Usarla registraría un
+    // enlace que no existe, y el verificador lo marcaría perdido en el primer chequeo.
+    const tx = given({ exampleUrl: 'https://diario.com/nota-del-rival' })
+    await promoteProspect({ ...ctx, prospectId: 5, link: {} })
+    expect(tx.backlink.upsert.mock.calls[0][0].create.sourceUrl).not.toContain('nota-del-rival')
+  })
+
+  it('el enlace hereda lo que ya sabíamos del dominio', async () => {
+    const tx = given()
+    await promoteProspect({ ...ctx, prospectId: 5, link: {} })
+    expect(tx.backlink.upsert.mock.calls[0][0].create).toMatchObject({
+      domainRating: 62, traffic: 12500, source: 'prospect',
+    })
+  })
+
+  it('vincular un enlace que ya existía NO pisa su anchor ni su tipo', async () => {
+    // El camino real es "lo cargué a mano y después cerré la oportunidad": lo que
+    // alguien escribió mirando la página vale más que lo que se declara acá.
+    const tx = given()
+    await promoteProspect({ ...ctx, prospectId: 5, link: { sourceUrl: 'https://diario.com/x', anchor: 'otro' } })
+    const call = tx.backlink.upsert.mock.calls[0][0]
+    expect(Object.keys(call.update)).toEqual(expect.not.arrayContaining(['anchor', 'linkType', 'placement']))
+  })
+
+  it('cierra la oportunidad en la MISMA transacción que crea el enlace', async () => {
+    // Si no, un fallo en el medio dejaba un enlace creado con la oportunidad abierta.
+    const tx = given()
+    await promoteProspect({ ...ctx, prospectId: 5, link: {} })
+    expect(prisma.$transaction).toHaveBeenCalled()
+    expect(tx.backlinkProspect.update.mock.calls[0][0].data).toMatchObject({ pipelineStatus: 'conseguido', backlinkId: 9 })
+  })
+
+  it('NO escribe "ya lo tenemos": ese hecho lo pone sólo el cruce', async () => {
+    const tx = given()
+    await promoteProspect({ ...ctx, prospectId: 5, link: {} })
+    expect(Object.keys(tx.backlinkProspect.update.mock.calls[0][0].data))
+      .toEqual(expect.not.arrayContaining(['alreadyLinked', 'alreadyLinkedAt']))
+  })
+
+  it('promover dos veces devuelve el enlace que ya había, sin crear otro', async () => {
+    given({ backlinkId: 9 })
+    prisma.backlink.findFirst.mockResolvedValue({ id: 9, sourceUrl: 'https://diario.com/x' })
+    const out = await promoteProspect({ ...ctx, prospectId: 5, link: {} })
+    expect(out).toMatchObject({ alreadyPromoted: true, backlink: { id: 9 } })
+    expect(prisma.$transaction).not.toHaveBeenCalled()
+  })
+
+  it('si el enlace que había se borró, se puede volver a promover', async () => {
+    // El FK quedó en SetNull, así que la fila apunta a un id que ya no existe.
+    const tx = given({ backlinkId: 9 })
+    prisma.backlink.findFirst.mockResolvedValue(null)
+    await promoteProspect({ ...ctx, prospectId: 5, link: {} })
+    expect(tx.backlink.upsert).toHaveBeenCalled()
+  })
+
+  it('un prospecto de otro proyecto no se puede promover', async () => {
+    prisma.backlinkProspect.findFirst.mockResolvedValue(null)
+    expect(await promoteProspect({ ...ctx, prospectId: 5, link: {} })).toEqual({ notFound: true })
+  })
+})
+
+describe('el tablero de oportunidades — qué filas trae', () => {
+  it('la vista pipeline NO filtra por alreadyLinked', async () => {
+    // Con el filtro, promover hacía desaparecer la fila justo cuando mostraba el
+    // resultado: la etapa "Conseguido" quedaba siempre vacía.
+    const { listProspects } = require('../../src/services/backlinkProspects.service')
+    prisma.backlinkProspect.findMany.mockResolvedValue([])
+    prisma.backlinkProspect.count.mockResolvedValue(0)
+    prisma.backlinkProspect.groupBy = jest.fn().mockResolvedValue([])
+
+    await listProspects({ projectId: 7, workspaceId: 1, verdict: 'conseguible', view: 'pipeline' })
+    const where = prisma.backlinkProspect.findMany.mock.calls[0][0].where
+    expect(where.alreadyLinked).toBeUndefined()
+    expect(where.verdict).toBeUndefined()
+    // Lo conseguible MÁS lo que alguien ya empezó a trabajar.
+    expect(where.AND).toEqual([{ OR: [{ verdict: 'conseguible' }, { pipelineStatus: { not: 'sin_empezar' } }] }])
+  })
+
+  it('el filtro "conseguible" de Competencia sí excluye lo que ya tenemos', async () => {
+    const { listProspects } = require('../../src/services/backlinkProspects.service')
+    prisma.backlinkProspect.findMany.mockResolvedValue([])
+    prisma.backlinkProspect.count.mockResolvedValue(0)
+    prisma.backlinkProspect.groupBy = jest.fn().mockResolvedValue([])
+
+    await listProspects({ projectId: 7, workspaceId: 1, verdict: 'conseguible' })
+    expect(prisma.backlinkProspect.findMany.mock.calls[0][0].where).toMatchObject({
+      verdict: 'conseguible', alreadyLinked: false,
+    })
   })
 })
