@@ -142,7 +142,9 @@ async function buildWakeMessage(identity, agentName) {
 
   const lines = ['Te despertamos porque hay novedades tuyas en BlissTracker.', '']
   for (const t of inbox) {
-    const what = t.agentUpdateKind === 'comment' ? 'te comentaron' : 'te destrabaron la tarea'
+    const what = t.agentUpdateKind === 'comment' ? 'te comentaron'
+      : t.agentUpdateKind === 'completed' ? 'la cerró su dueño: ya está resuelta'
+      : 'te destrabaron la tarea'
     lines.push(`- Tarea #${t.id} «${t.description}»${t.project?.name ? ` (proyecto: ${t.project.name})` : ''}: ${what}. Estado actual: ${t.status}.`)
     for (const c of t.comments.slice().reverse()) {
       lines.push(`    · ${c.agentId ? 'vos (agente)' : c.user?.name || 'alguien'}: "${c.content}"`)
@@ -157,6 +159,7 @@ async function buildWakeMessage(identity, agentName) {
     '1. Llamá a `tasks_agent_updates` para ver el detalle y marcar las novedades como vistas.',
     '2. Si te destrabaron una tarea, retomala (`task_resume`) y seguí el trabajo hasta completarla (`task_complete`) o, si lo que te contestaron no alcanza, volvé a bloquearla (`task_block`) preguntando concretamente lo que falta.',
     '3. Si te comentaron una indicación, aplicala.',
+    '4. Si una tarea la cerró su dueño, no la vuelvas a trabajar ni la reabras: el trabajo terminó ahí. Leé el último comentario por si dejó una indicación para lo que sigue.',
     'Nadie va a leer tu respuesta final en un chat: lo que quieras dejar asentado va como comentario de la tarea (`task_comment`) o como archivo adjunto (`task_attach_file`).',
   )
   return lines.join('\n')

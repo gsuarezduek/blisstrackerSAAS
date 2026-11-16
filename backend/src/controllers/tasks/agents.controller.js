@@ -117,9 +117,12 @@ async function agentQueue(req, res, next) {
 //    declaró su nombre (agentName), solo las que creó con ese nombre (varios agentes
 //    pueden compartir un token); se excluyen las que ejecutó él mismo (ya lo sabe).
 //    Marcadas como vistas con Task.createdByAgentSeenAt.
-//  - `kind: 'unblocked' | 'comment'` — lo que la persona le dejó en SUS tareas de
-//    agente desde la app: la destrabó o le comentó algo (una indicación, una
-//    aprobación). Marcadas con Task.agentUpdateAt/agentUpdateKind, que se limpian al
+//  - `kind: 'unblocked' | 'comment' | 'completed'` — lo que la persona hizo en SUS
+//    tareas de agente desde la app: la destrabó, le comentó algo (una indicación, una
+//    aprobación) o la cerró ella misma — `'completed'` también llega por acá, con el
+//    mismo nombre que usa la otra fuente, porque para el agente la conclusión es la
+//    misma: esa tarea ya está resuelta y no la tiene que seguir trabajando.
+//    Marcadas con Task.agentUpdateAt/agentUpdateKind, que se limpian al
 //    devolverlas. Mismo scope que `agent-queue` (las suyas + las delegadas a
 //    "cualquiera de mis agentes"), sin filtrar por nombre declarado: es su lista de
 //    trabajo, y una tarea destrabada tiene que llegarle igual.
@@ -195,13 +198,20 @@ async function agentUpdates(req, res, next) {
         recentComments: recentComments(t),
       })),
       ...inbox.map(t => ({
-        kind: t.agentUpdateKind === 'comment' ? 'comment' : 'unblocked',
+        // 'unblocked' es el default: la marca nació con el desbloqueo y hay filas de
+        // entonces sin kind.
+        kind: ['comment', 'completed'].includes(t.agentUpdateKind) ? t.agentUpdateKind : 'unblocked',
         at: t.agentUpdateAt,
         taskId: t.id,
         description: t.description,
         project: t.project,
         status: t.status,
         owner: { id: t.user.id, name: t.user.name },
+        // Quién la cerró: en una tarea de agente solo su dueño puede completarla desde
+        // la app (`completeTask` responde 404 a cualquier otro), así que es `t.user`.
+        ...(t.agentUpdateKind === 'completed'
+          ? { completedAt: t.completedAt, completedBy: { id: t.user.id, name: t.user.name } }
+          : {}),
         recentComments: recentComments(t),
       })),
     ].sort((a, b) => new Date(a.at ?? 0) - new Date(b.at ?? 0))

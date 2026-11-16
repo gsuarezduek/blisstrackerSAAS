@@ -531,17 +531,34 @@ async function completeTask(req, res, next) {
     // hoy, no en la de ayer, así la cuenta el día en que efectivamente se terminó.
     const rehome = await rehomeToTodayData(prisma, existing, { workspaceId, tz: req.workspace.timezone })
 
+    // Cerrar la tarea de un agente ES la respuesta que estaba esperando (el caso típico:
+    // la dejó esperando una aprobación y se la damos completándola), así que tiene que
+    // dejar rastro igual que destrabarla o comentarla. Sin esto el gesto más natural era
+    // el único silencioso: la tarea quedaba cerrada, la pieza de Contenido avanzaba, y el
+    // agente nunca se enteraba — ni al volver —, así que seguía trabajando sobre algo ya
+    // resuelto. Completada por el agente mismo (vía MCP) no marca nada: ya lo sabe.
+    const closedByOwner = existing.isAgentTask && requestAgentId(req) === null
+
     const now    = new Date()
     const [task] = await prisma.$transaction([
       prisma.task.update({
         where:   { id: taskId, userId },
         // createdByAgentSeenAt: null → si la creó un agente, le queda la novedad en su
         // bandeja (GET /tasks/agent-updates), también si se completa de nuevo.
-        data:    { status: 'COMPLETED', completedAt: now, pausedAt: null, createdByAgentSeenAt: null, ...rehome, ...executorNameData(existing, req) },
+        data:    {
+          status: 'COMPLETED', completedAt: now, pausedAt: null, createdByAgentSeenAt: null,
+          ...(closedByOwner ? { agentUpdateAt: now, agentUpdateKind: 'completed' } : {}),
+          ...rehome, ...executorNameData(existing, req),
+        },
         include: taskInclude,
       }),
       prisma.taskSession.updateMany({ where: { taskId, endedAt: null }, data: { endedAt: now } }),
     ])
+
+    // Canales de salida hacia el agente (webhook / despertador), mismo criterio que el
+    // desbloqueo: la novedad ya quedó marcada arriba, que es lo que no puede fallar;
+    // esto es el empujón para no esperar a que alguien lo invoque.
+    if (closedByOwner) notifyAgentOfNewsInBackground({ event: 'task.completed', task, workspaceId })
 
     // Lo que completa un agente no genera aviso: es trabajo de su dueño, que ya lo ve
     // en la pestaña "Agentes" — un agente que cierra 20 tareas por día llenaría la campana.

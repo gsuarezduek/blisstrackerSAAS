@@ -55,6 +55,14 @@ function lineFor(task) {
     const reply = lastHumanComment(task)
     return `${head}: te comentaron${reply ? `: "${reply}"` : ''}.`
   }
+  // Cerrada por su dueño (la aprobó, o la resolvió él). Lo importante no es el dato
+  // sino la consecuencia: el trabajo terminó, y sin decirlo el agente retoma una tarea
+  // ya resuelta.
+  if (task.agentUpdateKind === 'completed') {
+    const reply = lastHumanComment(task)
+    return `${head}: la cerró ${task.user?.name || 'su dueño'} — ya está resuelta, no la sigas trabajando.`
+      + (reply ? ` Último comentario: "${reply}".` : '')
+  }
   // Sin `agentUpdateKind` = novedad de las que creó: alguien la completó.
   return `${head}: la completó ${task.user?.name || 'alguien'}.`
 }

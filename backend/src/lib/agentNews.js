@@ -16,7 +16,10 @@
 // Tareas que ESTE agente creó y que alguien completó sin que él lo sepa.
 // - `declaredName`: varios agentes pueden compartir un token (param `agentName` de las
 //   tools), así que solo las que creó con ese nombre.
-// - Se excluyen las que ejecutó él mismo: ya sabe que las terminó.
+// - Se excluyen las que ejecuta él mismo (`NOT`), por dos razones que apuntan al mismo
+//   lado: si las completó él ya lo sabe, y si las cerró su dueño la novedad le llega por
+//   `inboxNewsWhere` (`agentUpdateKind: 'completed'`), que cubre además las que el agente
+//   no creó. Sin el `NOT` esas aparecerían por las dos fuentes.
 function createdNewsWhere({ agentId, declaredName, workspaceId }) {
   return {
     createdByAgentId: agentId,
@@ -29,7 +32,10 @@ function createdNewsWhere({ agentId, declaredName, workspaceId }) {
 }
 
 // Lo que la persona le dejó en SUS tareas de agente desde la app: la destrabó
-// (`agentUpdateKind: 'unblocked'`) o le comentó algo (`'comment'`).
+// (`agentUpdateKind: 'unblocked'`), le comentó algo (`'comment'`) o la cerró ella misma
+// (`'completed'` — la aprobó, o la resolvió por su cuenta: el trabajo terminó acá).
+// Sin filtro de estado a propósito: una tarea ya COMPLETED tiene que seguir apareciendo
+// hasta que el agente pase a buscarla, que es justo el caso de `'completed'`.
 // Mismo scope que `agent-queue` (las suyas + las delegadas a "cualquiera de mis
 // agentes"), y **sin** filtrar por nombre declarado: es su lista de trabajo, y una
 // tarea destrabada tiene que llegarle igual.

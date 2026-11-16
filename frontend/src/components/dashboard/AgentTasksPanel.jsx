@@ -35,6 +35,22 @@ export function groupAgentTasks(tasks, today) {
   return g
 }
 
+// Le dejaste algo (la destrabaste, le comentaste, o la cerraste vos) y el agente todavía
+// no pasó a buscarlo: `Task.agentUpdateAt` se limpia cuando revisa sus novedades
+// (tasks_agent_updates). Se decide por el ESTADO y no por el kind, porque comentar
+// después de destrabar reemplaza la novedad y el aviso no tiene que desaparecer por eso.
+// 'completed' es la excepción: ahí la tarea está COMPLETED por definición, así que la
+// regla de estado la escondería justo cuando el cartel es lo único que dice que el cierre
+// le va a llegar.
+export function pendingNewsLabel(task) {
+  if (!task.agentUpdateAt) return null
+  if (task.agentUpdateKind === 'completed') return 'La cerraste vos: el agente se entera la próxima vez que lo uses.'
+  if (['IN_PROGRESS', 'COMPLETED'].includes(task.status)) return null
+  return task.agentUpdateKind === 'comment'
+    ? 'Tu comentario le llega la próxima vez que uses el agente.'
+    : 'Desbloqueada: la retoma la próxima vez que uses el agente.'
+}
+
 function AgentTaskRow({ task, today, onChanged, onReturned, onOpenComments }) {
   const [loading, setLoading] = useState(false)
   const [unblocking, setUnblocking] = useState(false)
@@ -66,15 +82,7 @@ function AgentTaskRow({ task, today, onChanged, onReturned, onOpenComments }) {
     ? { label: 'Desbloquear', onClick: () => setUnblocking(true) }
     : null
 
-  // Le dejaste algo (la destrabaste o le comentaste) y el agente todavía no pasó a
-  // buscarlo: `Task.agentUpdateAt` se limpia cuando revisa sus novedades
-  // (tasks_agent_updates). Por el estado, no por el kind: comentar después de destrabar
-  // reemplaza la novedad, y el aviso no tiene que desaparecer por eso.
-  const pendingNews = task.agentUpdateAt && !['IN_PROGRESS', 'COMPLETED'].includes(task.status)
-    ? (task.agentUpdateKind === 'comment'
-        ? 'Tu comentario le llega la próxima vez que uses el agente.'
-        : 'Desbloqueada: la retoma la próxima vez que uses el agente.')
-    : null
+  const pendingNews = pendingNewsLabel(task)
 
   const scheduledLabel = task.scheduledFor && task.scheduledFor > today && task.status !== 'COMPLETED'
     ? new Date(`${task.scheduledFor}T12:00:00`).toLocaleDateString('es-AR', { weekday: 'short', day: 'numeric', month: 'short' })

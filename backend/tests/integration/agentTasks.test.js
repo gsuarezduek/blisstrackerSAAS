@@ -461,6 +461,29 @@ describe('GET /api/tasks/agent-updates', () => {
     expect(res.body.updates).toEqual([expect.objectContaining({ kind: 'comment', taskId: 9 })])
   })
 
+  // La otra mitad del cierre silencioso: la marca no sirve si la bandeja la devuelve
+  // como un desbloqueo. El agente tiene que leer que la tarea YA ESTÁ cerrada, con quién
+  // la cerró y cuándo, para no retomarla.
+  it('una tarea que cerró su dueño llega como `completed`, con quién la cerró', async () => {
+    const closedAt = new Date('2026-10-23T18:00:00Z')
+    mockSources({ created: [], inbox: [makeTask({
+      id: 11, status: 'COMPLETED', isAgentTask: true, agentId: AGENT_ID,
+      completedAt: closedAt,
+      agentUpdateAt: closedAt, agentUpdateKind: 'completed',
+      user: { id: 1, name: 'Gastón' }, agent: null,
+      comments: [{ content: 'Aprobado, publicá', createdAt: closedAt, agentId: null, user: { name: 'Gastón' } }],
+    })] })
+
+    const res = await get()
+
+    expect(res.body.updates).toEqual([expect.objectContaining({
+      kind: 'completed', taskId: 11, status: 'COMPLETED',
+      completedBy: { id: 1, name: 'Gastón' },
+      completedAt: closedAt.toISOString(),
+      recentComments: [expect.objectContaining({ content: 'Aprobado, publicá', author: 'Gastón' })],
+    })])
+  })
+
   it('mezcla las dos fuentes en orden cronológico y las marca vistas cada una con su campo', async () => {
     mockSources({ inbox: [makeTask({
       id: 8, status: 'PAUSED', isAgentTask: true, agentId: AGENT_ID,
@@ -697,6 +720,55 @@ describe('avisos de tareas de agente', () => {
         message: 'Tu agente «Grok» bloqueó "Tarea de prueba": Falta el acceso a GA4',
       }),
     })
+  })
+
+  // El caso que faltaba cerrar: aprobar la tarea de un agente completándola era el
+  // único gesto silencioso — la tarea quedaba cerrada y el agente nunca se enteraba,
+  // ni volviendo, así que seguía trabajando sobre algo ya resuelto.
+  it('cerrar la tarea de un agente desde la app le queda como novedad y dispara los canales', async () => {
+    const closed = makeTask({ status: 'COMPLETED', isAgentTask: true, agentId: AGENT_ID })
+    prisma.task.findFirst.mockResolvedValueOnce(makeTask({ status: 'IN_PROGRESS', isAgentTask: true, agentId: AGENT_ID }))
+    prisma.task.update.mockResolvedValue(closed)
+
+    const res = await request(app)
+      .patch('/api/tasks/1/complete')
+      .set('Authorization', authHeader())
+      .set('X-Workspace', WORKSPACE_SLUG)
+
+    expect(res.status).toBe(200)
+    expect(prisma.task.update.mock.calls[0][0].data).toMatchObject({
+      status: 'COMPLETED', agentUpdateAt: expect.any(Date), agentUpdateKind: 'completed',
+    })
+    expect(notifyAgentOfNewsInBackground).toHaveBeenCalledWith(
+      expect.objectContaining({ event: 'task.completed', task: closed, workspaceId: WORKSPACE_ID }),
+    )
+  })
+
+  // Si la cerró él, ya lo sabe: avisarle sería un loop con su propio trabajo.
+  it('cerrada por el agente mismo (vía MCP) no marca novedad ni avisa', async () => {
+    prisma.task.findFirst.mockResolvedValueOnce(makeTask({ status: 'IN_PROGRESS', isAgentTask: true, agentId: AGENT_ID }))
+    prisma.task.update.mockResolvedValue(makeTask({ status: 'COMPLETED', isAgentTask: true, agentId: AGENT_ID }))
+
+    await request(app)
+      .patch('/api/tasks/1/complete')
+      .set('Authorization', authHeader({ mcpTokenId: AGENT_ID }))
+      .set('X-Workspace', WORKSPACE_SLUG)
+
+    expect(prisma.task.update.mock.calls[0][0].data).not.toHaveProperty('agentUpdateAt')
+    expect(notifyAgentOfNewsInBackground).not.toHaveBeenCalled()
+  })
+
+  it('una tarea humana no marca novedad de agente al completarse', async () => {
+    prisma.task.findFirst.mockResolvedValueOnce(makeTask({ status: 'IN_PROGRESS' }))
+    prisma.task.update.mockResolvedValue(makeTask({ status: 'COMPLETED' }))
+
+    await request(app)
+      .patch('/api/tasks/1/complete')
+      .set('Authorization', authHeader())
+      .set('X-Workspace', WORKSPACE_SLUG)
+
+    expect(prisma.task.update.mock.calls[0][0].data).not.toHaveProperty('agentUpdateAt')
+    expect(notifyAgentOfNewsInBackground).not.toHaveBeenCalled()
   })
 })
 

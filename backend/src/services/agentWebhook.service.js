@@ -32,6 +32,7 @@ function headline(event, task, agentLabel) {
   const desc = task.description?.length > 70 ? `${task.description.slice(0, 67)}...` : task.description
   if (event === 'task.unblocked') return `Te destrabaron "${desc}": quedó pausada, retomala.`
   if (event === 'task.comment') return `Te comentaron en "${desc}".`
+  if (event === 'task.completed') return `Cerraron "${desc}": ya está resuelta, no la sigas trabajando.`
   return `Novedad en "${desc}" para ${agentLabel}.`
 }
 
