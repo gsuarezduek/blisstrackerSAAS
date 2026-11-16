@@ -4,18 +4,21 @@
 
 ### Google Cloud APIs habilitadas
 
-Proyecto OAuth: el mismo que usa el login con Google (`GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`).
+Proyecto OAuth: el mismo que usa el login con Google (`GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`) — **Bliss Team Tracker**, ID `bliss-team-tracker`, número `306615256468` (el número es el prefijo del Client ID). Ojo: en la misma cuenta de Google Cloud hay otro proyecto ("Mail MDZ") que no tiene nada que ver con BlissTracker.
 
 | API | Uso actual | Autenticación |
 |-----|-----------|---------------|
 | **Google Analytics Data API** | Marketing → Informes: métricas GA4 por proyecto | OAuth (refresh token por proyecto) |
 | **Google Analytics Admin API** | Futuro: listar properties disponibles (evitar tipear Property ID a mano) | OAuth |
 | **Google Analytics API** | Legacy / fallback UA — habilitada por si acaso | OAuth |
-| **Google Search Console API** | Futuro: tab SEO — impresiones, clicks, posición | OAuth |
+| **Google Search Console API** | Marketing → GEO / SEO: impresiones, clicks, posición, snapshots mensuales e inventario del blog | OAuth (scope `webmasters.readonly`) |
 | **PageSpeed Insights API** | Marketing → Web: performance score, CWV, oportunidades y diagnósticos | API Key (`PAGESPEED_API_KEY`) |
 | **YouTube Data API v3** | Marketing → YouTube: suscriptores, vistas, videos nuevos (largos/shorts), engagement por proyecto | OAuth (scope `youtube.readonly`, type `google_youtube`) |
 | **YouTube Analytics API** | Futuro (v2): watch time, retención, demografía, suscriptores ganados/perdidos exactos del mes | OAuth |
-| **Business Profile Performance API** | Futuro: métricas de Google My Business | OAuth |
+| **Business Profile Performance API** | Futuro (Marketing → GEO / SEO, "SEO local"): llamadas, indicaciones, clics al sitio/chat, vistas Maps/Búsqueda × dispositivo, términos de búsqueda mensuales | OAuth (scope `business.manage`) — **cuota 0 hasta que Google apruebe el allowlist** |
+| **My Business Account Management API** | Futuro: listar las cuentas de Business Profile del usuario que conecta | OAuth (`business.manage`) — cuota 0 hasta el allowlist |
+| **My Business Business Information API** | Futuro: listar las fichas (locations) para elegir cuál conectar + nombre/dirección/categoría | OAuth (`business.manage`) — cuota 0 hasta el allowlist |
+| **Google My Business API (v4)** | Futuro: reseñas (calificación, cantidad, nuevas, respondidas) | OAuth (`business.manage`) — **todavía no se puede habilitar**: se libera con el allowlist |
 | **Google Calendar API** | Calendario: empuja (push) las reuniones agendadas al Google Calendar personal del organizador | OAuth (scope `calendar.events`, conexión **por persona**, no por proyecto — ver `GoogleCalendarConnection`) |
 
 **Redirect URIs registradas en Cloud Console (Google):**
@@ -46,7 +49,11 @@ Proyecto OAuth: el mismo que usa el login con Google (`GOOGLE_CLIENT_ID` / `GOOG
 - `https://www.googleapis.com/auth/analytics.readonly` — **verificado/aprobado**
 - `https://www.googleapis.com/auth/adwords` — **verificación enviada (pendiente de aprobación)**. Alcanza con **Basic Access** del developer token; ya **no** se requiere Standard Access.
 - `https://www.googleapis.com/auth/youtube.readonly` — **scope SENSIBLE, pendiente de habilitar/verificar**. Para activar YouTube hay que: (1) habilitar **YouTube Data API v3** en el proyecto de Google Cloud, (2) agregar este scope al consent screen y enviarlo a verificación (mismo trámite que `analytics.readonly`). Mientras no esté verificado, funciona con la cuenta del desarrollador / hasta ~100 usuarios de prueba. El callback es el mismo de Google (`/api/marketing/integrations/google/callback`).
-- `https://www.googleapis.com/auth/calendar.events` — **scope SENSIBLE, pendiente de habilitar/verificar** (mismo trámite que `youtube.readonly`). Habilita **Google Calendar API** + agregar el scope al consent screen + enviarlo a verificación. Mientras no esté verificado, la conexión de Calendario solo funciona con la cuenta del desarrollador o testers agregados a mano. Callback **propio**, distinto del resto (`/api/calendar/google/callback`) porque esta es la primera integración de Google **por persona** en vez de por proyecto — ver concepto "Calendario".
+- `https://www.googleapis.com/auth/webmasters.readonly` — Search Console (GSC). Ya está en el consent screen y en uso.
+- `https://www.googleapis.com/auth/calendar.events` — **scope SENSIBLE, pendiente de habilitar/verificar** (mismo trámite que `youtube.readonly`). Habilita **Google Calendar API** + agregar el scope al consent screen + enviarlo a verificación. Mientras no esté verificado, la conexión de Calendario solo funciona con la cuenta del desarrollador o testers agregados a mano. Callback **propio**, distinto del resto (`/api/calendar/google/callback`) porque esta es la primera integración de Google **por persona** en vez de por proyecto — ver concepto "Calendario". **Estado al 2026-11-10:** el scope y su justificación ya están cargados en "Acceso a los datos", pero el envío está **trabado por falta del video de demostración** (la consola deshabilita "Confirmar" hasta que se cargue el link de YouTube).
+- `https://www.googleapis.com/auth/business.manage` — Google Business Profile (APIs de la tabla de arriba). **Agregado al consent screen el 2026-11-10.** La consola lo clasifica como **no sensible**, así que no necesitaría verificación ni video propio. No existe variante de solo lectura: se usa solo para leer. Lo que bloquea su uso es el **allowlist de Google** (caso de soporte `3-4456000041835`, pedido el 2026-11-10, 7–10 días hábiles); hasta que lo aprueben, las cuotas de las APIs están en 0.
+
+**Verificación de marca** (Información de la marca: home `https://blisstracker.app`, política `https://blisstracker.app/privacidad`, condiciones `https://blisstracker.app/condiciones`): **completa y publicada** (2026-11-10).
 
 **Dos apps de Meta distintas, mismo backend:** Instagram Business Login + Facebook Pages usan una app (`META_APP_ID`/`META_APP_SECRET`); Meta Ads usa **otra app separada** (`META_ADS_APP_ID`/`META_ADS_APP_SECRET`) — `integrations.meta.controller.js` (`getMetaAdsAuthUrl`/`handleMetaAdsCallback`) y `metaAds.service.js` (`getValidFbToken`, refresh de token) son los únicos que leen las variables `META_ADS_*`. Hay que registrar el redirect URI de Meta Ads (`/api/marketing/integrations/meta-ads/callback`) en ESA app, no en la de Instagram.
 
