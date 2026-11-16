@@ -5,6 +5,7 @@ import { currentMonthKey, shiftMonth, monthLabel } from './financeMonths'
 import { movementDateParams } from './MovementsFilterBar'
 import { invoiceTotals } from './financeCatalog'
 import InvoicesTable from './InvoicesTable'
+import LibroIvaModal from './LibroIvaModal'
 
 const input = 'border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500'
 const label = 'block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1'
@@ -31,6 +32,7 @@ export default function InvoicesTab({ items, financeIvaMode, refreshKey }) {
   // existiendo y hay que poder filtrarlas (Finanzas.jsx solo carga los activos,
   // que son los que sirven para emitir).
   const [allIssuers, setAllIssuers] = useState([])
+  const [showLibroIva, setShowLibroIva] = useState(false)
 
   useEffect(() => {
     api.get('/finanzas/issuers').then(res => setAllIssuers(res.data)).catch(() => setAllIssuers([]))
@@ -158,6 +160,7 @@ export default function InvoicesTab({ items, financeIvaMode, refreshKey }) {
             ))}
           </div>
           <div className="text-right text-xs text-gray-400">
+            <button onClick={() => setShowLibroIva(true)} className="mb-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg px-3 py-1.5 text-xs font-medium">Exportar Libro IVA Digital</button>
             {invoices && <p>{invoices.length} comprobante{invoices.length === 1 ? '' : 's'}</p>}
             {totals.rejected > 0 && <p className="mt-0.5">{totals.rejected} rechazado{totals.rejected === 1 ? '' : 's'} por ARCA, no suma{totals.rejected === 1 ? '' : 'n'}</p>}
           </div>
@@ -171,6 +174,18 @@ export default function InvoicesTab({ items, financeIvaMode, refreshKey }) {
           <InvoicesTable invoices={invoices} onReload={load} showCustomer issuers={activeIssuers} financeIvaMode={financeIvaMode} />
         )}
       </div>
+
+      {showLibroIva && (
+        <LibroIvaModal
+          issuers={allIssuers}
+          // Arranca en lo que se está mirando: el emisor filtrado y, si el período es un mes
+          // cerrado, ese mes. El mes en curso no (es el default de la pestaña y el libro se
+          // presenta una vez cerrado el período): ahí el modal cae al mes anterior.
+          defaultIssuerId={/^\d+$/.test(filters.issuerId) ? filters.issuerId : undefined}
+          defaultMonth={/^\d{4}-\d{2}$/.test(filters.period) && filters.period !== thisMonth ? filters.period : undefined}
+          onClose={() => setShowLibroIva(false)}
+        />
+      )}
     </div>
   )
 }

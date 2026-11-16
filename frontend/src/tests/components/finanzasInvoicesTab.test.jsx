@@ -6,7 +6,7 @@ vi.mock('../../api/client', () => ({ default: { get: (...a) => get(...a), post: 
 
 import InvoicesTab from '../../components/finanzas/InvoicesTab'
 import { invoiceTotals } from '../../components/finanzas/financeCatalog'
-import { currentMonthKey, monthRange } from '../../components/finanzas/financeMonths'
+import { currentMonthKey, monthRange, shiftMonth } from '../../components/finanzas/financeMonths'
 
 function inv(overrides = {}) {
   return {
@@ -93,5 +93,45 @@ describe('Pestaña Facturas', () => {
     fireEvent.change(screen.getByLabelText('Desde'), { target: { value: '2026-01-01' } })
     fireEvent.change(screen.getByLabelText('Hasta'), { target: { value: '2026-03-31' } })
     await waitFor(() => expect(lastParams()).toEqual(expect.objectContaining({ from: '2026-01-01', to: '2026-03-31' })))
+  })
+})
+
+describe('Exportar Libro IVA Digital', () => {
+  const issuers = [
+    { id: 3, name: 'Bliss SRL', active: true, taxCondition: 'responsable_inscripto', cuit: '30-71234567-8' },
+    { id: 5, name: 'Fulano Monotributo', active: true, taxCondition: 'monotributo', cuit: '20-11111111-1' },
+  ]
+  const summary = {
+    issuer: { id: 3, name: 'Bliss SRL', cuit: '30-71234567-8', environment: 'production' },
+    month: '2026-10',
+    counts: { total: 3, invoice: 2, creditNote: 1, debitNote: 0, alicuotaLines: 3 },
+    amounts: { total: '1089.00', netTaxed: '900.00', vat: '189.00' },
+    warnings: [{ code: 'pending', message: '1 comprobante sin resultado definitivo de ARCA quedó afuera.', invoices: [{ id: 9, number: null, client: 'LCE' }] }],
+  }
+
+  beforeEach(() => {
+    get.mockReset()
+    get.mockImplementation(url => Promise.resolve({
+      data: url === '/finanzas/issuers' ? issuers : url === '/finanzas/invoices/libro-iva' ? summary : [],
+    }))
+  })
+
+  it('solo ofrece emisores responsables inscriptos, arranca en el mes anterior y muestra lo que queda afuera', async () => {
+    const LibroIvaModal = (await import('../../components/finanzas/LibroIvaModal')).default
+    render(<LibroIvaModal issuers={issuers} onClose={() => {}} />)
+    const select = screen.getByLabelText('Emisor')
+    expect([...select.querySelectorAll('option')].map(o => o.textContent)).toEqual(['Elegí un emisor', 'Bliss SRL'])
+    // Un solo emisor elegible: queda elegido solo y pide el resumen del mes anterior.
+    await waitFor(() => expect(get).toHaveBeenCalledWith('/finanzas/invoices/libro-iva', { params: { issuerId: '3', month: shiftMonth(currentMonthKey(), -1) } }))
+    expect(await screen.findByText(/sin resultado definitivo/)).toBeInTheDocument()
+    expect(screen.getByText(/3 comprobantes/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Descargar/ })).not.toBeDisabled()
+  })
+
+  it('sin emisores inscriptos explica por qué no hay libro', async () => {
+    const LibroIvaModal = (await import('../../components/finanzas/LibroIvaModal')).default
+    render(<LibroIvaModal issuers={[issuers[1]]} onClose={() => {}} />)
+    expect(screen.getByText(/no lleva libro/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Descargar/ })).toBeDisabled()
   })
 })
