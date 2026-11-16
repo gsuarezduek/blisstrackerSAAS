@@ -2,7 +2,7 @@ const axios = require('axios')
 const ical = require('node-ical')
 const prisma = require('../lib/prisma')
 const { decrypt } = require('../lib/encryption')
-const { assertPublicUrl } = require('../lib/safeUrl')
+const { fetchPublicUrl } = require('../lib/safeUrl')
 const { getValidAccessToken } = require('./googleCalendarToken.service')
 const { addDaysYMD } = require('./recurrence.service')
 const { todayString, DEFAULT_TZ } = require('../utils/dates')
@@ -98,14 +98,19 @@ async function fetchGoogleEvents(cal, { from, to, tz }) {
 // ─── Fuente: una URL iCal pegada a mano ──────────────────────────────────────
 
 async function fetchIcsText(rawUrl) {
-  // assertPublicUrl corre acá y no solo al guardar la URL: un DNS puede cambiar de
+  // La validación corre acá y no solo al guardar la URL: un DNS puede cambiar de
   // IP en el medio (SSRF por rebinding) — mismo criterio que el webhook de agentes.
-  await assertPublicUrl(rawUrl)
-  const res = await axios.get(rawUrl, {
+  // fetchPublicUrl y NO axios con `maxRedirects`: axios sigue los redirects sin
+  // revalidarlos, así que un host público podía responder 302 hacia la red interna
+  // (metadata de la nube) y el contenido volvía al usuario. Cada salto pasa por
+  // assertPublicUrl antes de pedirse.
+  const res = await fetchPublicUrl(rawUrl, {
     responseType: 'text',
     timeout: ICS_TIMEOUT_MS,
     maxContentLength: ICS_MAX_BYTES,
     maxRedirects: 3,
+    // Como axios por defecto: un 4xx/5xx es error, no un "calendario vacío".
+    validateStatus: s => s >= 200 && s < 300,
     transformResponse: [d => d],
     headers: { Accept: 'text/calendar, text/plain, */*' },
   })

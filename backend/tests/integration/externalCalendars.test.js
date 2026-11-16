@@ -21,7 +21,17 @@ jest.mock('../../src/lib/prisma', () => ({
   $transaction: jest.fn(ops => Promise.all(ops)),
 }))
 jest.mock('axios')
-jest.mock('../../src/lib/safeUrl', () => ({ assertPublicUrl: jest.fn().mockResolvedValue(undefined) }))
+// fetchPublicUrl de mentira: valida con el assertPublicUrl mockeado y pide con el
+// axios mockeado. Que cada SALTO de un redirect se revalide lo cubre la versión real
+// en tests/unit/safeUrl.test.js; acá alcanza con que el servicio pase por ella.
+jest.mock('../../src/lib/safeUrl', () => {
+  const assertPublicUrl = jest.fn().mockResolvedValue(undefined)
+  const fetchPublicUrl = jest.fn(async (url, opts) => {
+    await assertPublicUrl(url)
+    return require('axios').get(url, opts)
+  })
+  return { assertPublicUrl, fetchPublicUrl }
+})
 jest.mock('../../src/services/googleCalendarToken.service', () => ({
   getValidAccessToken: jest.fn().mockResolvedValue('access-token'),
 }))
