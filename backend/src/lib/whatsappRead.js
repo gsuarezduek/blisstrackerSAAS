@@ -31,7 +31,7 @@ async function lastUnreadableMessageIds(conversationIds) {
 }
 
 // Marca vista la conversación hasta `messageId` (null = no tiene mensajes) y le
-// saca la marca manual de "no leída". El puntero nunca retrocede: si dos personas
+// saca la marca manual de "no leída" (y apaga los avisos de ese chat). El puntero nunca retrocede: si dos personas
 // la abren a la vez, gana el mensaje más nuevo.
 async function markConversationRead(conversationId, messageId) {
   const ops = []
@@ -44,6 +44,13 @@ async function markConversationRead(conversationId, messageId) {
   ops.push(prisma.whatsappConversation.updateMany({
     where: { id: conversationId, markedUnreadAt: { not: null } },
     data: { markedUnreadAt: null },
+  }))
+  // Los avisos de la campana de este chat (services/whatsappNotify.service.js) se
+  // apagan para todos: el leído es compartido, si alguien ya lo vio no hace falta
+  // que el resto lo vaya a revisar.
+  ops.push(prisma.notification.updateMany({
+    where: { whatsappConversationId: conversationId, type: 'WHATSAPP_MESSAGE', read: false },
+    data: { read: true },
   }))
   await prisma.$transaction(ops)
 }

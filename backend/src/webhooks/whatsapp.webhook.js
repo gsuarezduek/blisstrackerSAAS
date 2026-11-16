@@ -5,6 +5,7 @@ const { ACTIVE_LEAD_STATUS_KEYS } = require('../lib/salesCatalog')
 const { logLeadEvent } = require('../controllers/ventas/_shared')
 const { downloadInboundMedia } = require('../services/whatsappMedia.service')
 const { handleInboundForBot } = require('../services/whatsappBot.service')
+const { notifyWhatsappConversation } = require('../services/whatsappNotify.service')
 const { normalizePhone } = require('../lib/phone')
 
 /**
@@ -125,7 +126,7 @@ async function handleInboundMessage(account, event) {
   // explícito para no depender de que nadie haya tocado ese campo después.
   if (conversation.isBlocked) return
 
-  if (contact) await notifyLeadOfMessage({ workspaceId: account.workspaceId, contact, conversation, event })
+  await notifyInboundMessage({ workspaceId: account.workspaceId, contact, conversation, event })
 
   // Bot (Fase 4 del plan) — una reacción no es una consulta que responder
   // (generaría respuestas raras tipo "¡gracias por tu 👍!" sin que el
@@ -144,56 +145,52 @@ async function handleInboundMessage(account, event) {
 }
 
 /**
- * Si el contacto que escribió es el principal de un lead activo: deja una
- * entrada liviana en su timeline (LeadActivity — el timeline apunta, el panel
- * de WhatsApp del lead muestra el contenido completo) y avisa al responsable
- * (conversation.assignedToId, o el ownerId del lead si nadie reasignó la
- * conversación puntual — Fase 2 del plan). Como un contacto es principal de a
- * lo sumo 1 lead activo (ver assertContactAvailable en
- * controllers/ventas/_shared.js), la búsqueda no es ambigua. Best-effort:
- * nunca debe romper el procesamiento del mensaje entrante.
+ * Avisa del mensaje entrante y, si el contacto es el principal de un lead activo,
+ * deja una entrada liviana en su timeline (LeadActivity — el timeline apunta, el
+ * panel de WhatsApp del lead muestra el contenido completo). Como un contacto es
+ * principal de a lo sumo 1 lead activo (ver assertContactAvailable en
+ * controllers/ventas/_shared.js), la búsqueda no es ambigua.
+ *
+ * El aviso de la campana ya NO depende del lead: un chat sin lead (el caso típico
+ * de lo que atiende el bot) avisa a todo el equipo de Ventas — ver
+ * services/whatsappNotify.service.js. Una reacción solo le avisa al responsable,
+ * si lo hay: no deja el chat "no leído" (lib/whatsappRead.js), así que no
+ * justifica avisarle a todos. Best-effort: nunca debe romper el procesamiento
+ * del mensaje entrante.
  */
-async function notifyLeadOfMessage({ workspaceId, contact, conversation, event }) {
+async function notifyInboundMessage({ workspaceId, contact, conversation, event }) {
   try {
-    const lead = await prisma.lead.findFirst({
-      where: { workspaceId, primaryContactId: contact.id, status: { in: ACTIVE_LEAD_STATUS_KEYS } },
-      select: { id: true, ownerId: true },
-    })
-    if (!lead) return
+    const lead = contact
+      ? await prisma.lead.findFirst({
+          where: { workspaceId, primaryContactId: contact.id, status: { in: ACTIVE_LEAD_STATUS_KEYS } },
+          select: { id: true, ownerId: true },
+        })
+      : null
 
-    const contactLabel = contact.name || event.contactName || conversation.phoneE164
+    const contactLabel = contact?.name || event.contactName || conversation.contactName || conversation.phoneE164
     const isReaction = event.type === 'reaction'
-    const logContent = isReaction
-      ? `registró una reacción de ${contactLabel} por WhatsApp: ${event.reactionEmoji}`
-      : `registró un mensaje de WhatsApp de ${contactLabel}: "${(event.text || '[mensaje]').slice(0, 120)}"`
 
-    // userId: null → el timeline lo muestra con prefijo "Sistema" (nadie del
-    // equipo actuó acá), por eso el texto sigue en minúscula como el resto de
-    // los eventos ("Sistema registró...", igual que "Fulano creó el lead").
-    await logLeadEvent({
-      workspaceId, leadId: lead.id, userId: null, type: 'whatsapp_message',
-      content: logContent,
-    })
+    if (lead) {
+      const logContent = isReaction
+        ? `registró una reacción de ${contactLabel} por WhatsApp: ${event.reactionEmoji}`
+        : `registró un mensaje de WhatsApp de ${contactLabel}: "${(event.text || '[mensaje]').slice(0, 120)}"`
+      // userId: null → el timeline lo muestra con prefijo "Sistema" (nadie del
+      // equipo actuó acá), por eso el texto sigue en minúscula como el resto de
+      // los eventos ("Sistema registró...", igual que "Fulano creó el lead").
+      await logLeadEvent({
+        workspaceId, leadId: lead.id, userId: null, type: 'whatsapp_message',
+        content: logContent,
+      })
+    }
 
-    const targetUserId = conversation.assignedToId || lead.ownerId
-    if (!targetUserId) return
     // Sin actorId: quien escribió es el contacto (no un User) — mismo criterio
     // que CONTENT_APPROVED, mensaje autocontenido con el nombre incluido.
-    const notifMessage = isReaction
+    const message = isReaction
       ? `${contactLabel} reaccionó con ${event.reactionEmoji} a tu mensaje por WhatsApp`
-      : `${contactLabel} te escribió por WhatsApp: "${(event.text || '[mensaje]').slice(0, 120)}"`
-    await prisma.notification.create({
-      data: {
-        userId: targetUserId,
-        workspaceId,
-        leadId: lead.id,
-        type: 'WHATSAPP_MESSAGE',
-        message: notifMessage,
-      },
-    })
-    emitTo(`user:${targetUserId}`, 'notification:new', { type: 'WHATSAPP_MESSAGE', leadId: lead.id })
+      : `${contactLabel} te escribió por WhatsApp: "${(event.text || event.mediaCaption || '[mensaje]').slice(0, 120)}"`
+    await notifyWhatsappConversation({ workspaceId, conversation, lead, message, ownerOnly: isReaction })
   } catch (err) {
-    console.error('[WhatsApp Webhook] Error notificando al lead:', err.message)
+    console.error('[WhatsApp Webhook] Error notificando el mensaje:', err.message)
   }
 }
 
@@ -203,7 +200,7 @@ async function notifyLeadOfMessage({ workspaceId, contact, conversation, event }
  * — sin esto, ese mensaje nunca llegaba al webhook y no aparecía acá (ver
  * smb_message_echoes en chakra.js). A diferencia de un mensaje entrante,
  * `event.to` es el CONTACTO (el negocio es quien manda). No dispara
- * notifyLeadOfMessage (nadie del equipo necesita que le avisen de algo que el
+ * notifyInboundMessage (nadie del equipo necesita que le avisen de algo que el
  * propio equipo mandó) ni al bot (no es un mensaje que requiera respuesta).
  */
 async function handleOutboundEcho(account, event) {

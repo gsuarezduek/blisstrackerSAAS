@@ -74,7 +74,7 @@ async function listLeads(req, res, next) {
       orderBy: { updatedAt: 'desc' },
       include: LEAD_LIST_INCLUDE,
     })
-    const withWhatsapp = await attachWhatsappStatus(leads, workspaceId, req.user.userId)
+    const withWhatsapp = await attachWhatsappStatus(leads, workspaceId)
     res.json(await attachLastActivity(withWhatsapp, workspaceId))
   } catch (err) { next(err) }
 }

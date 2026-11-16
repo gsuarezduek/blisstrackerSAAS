@@ -1323,40 +1323,46 @@ enum NotificationType {
 }
 
 model Notification {
-  id              Int              @id @default(autoincrement())
-  userId          Int
-  user            User             @relation("NotificationRecipient", fields: [userId], references: [id])
+  id                     Int                   @id @default(autoincrement())
+  userId                 Int
+  user                   User                  @relation("NotificationRecipient", fields: [userId], references: [id])
   // Nullable: el actor de CONTENT_APPROVED / CONTENT_CHANGES_REQUESTED es un
   // contacto del cliente (ClientPortalContact), no un User. En esos casos el
   // `message` es autocontenido e incluye el nombre de quien actuó.
-  actorId         Int?
-  actor           User?            @relation("NotificationActor", fields: [actorId], references: [id])
-  workspaceId     Int
-  workspace       Workspace        @relation(fields: [workspaceId], references: [id])
-  taskId          Int?
-  task            Task?            @relation(fields: [taskId], references: [id])
-  projectId       Int?
-  project         Project?         @relation(fields: [projectId], references: [id])
-  leadId          Int?
-  lead            Lead?            @relation(fields: [leadId], references: [id], onDelete: SetNull)
-  gameId          Int?
-  game            Game?            @relation(fields: [gameId], references: [id], onDelete: SetNull)
-  channelId       Int?
-  channel         ChatChannel?     @relation(fields: [channelId], references: [id], onDelete: SetNull)
-  chatMessageId   Int?
-  chatMessage     ChatMessage?     @relation(fields: [chatMessageId], references: [id], onDelete: SetNull)
-  contentPieceId  Int?
-  contentPiece    ContentPiece?    @relation(fields: [contentPieceId], references: [id], onDelete: SetNull)
-  calendarEventId Int?
-  calendarEvent   CalendarEvent?   @relation(fields: [calendarEventId], references: [id], onDelete: SetNull)
-  type            NotificationType @default(COMPLETED)
-  message         String
-  read            Boolean          @default(false)
-  createdAt       DateTime         @default(now())
+  actorId                Int?
+  actor                  User?                 @relation("NotificationActor", fields: [actorId], references: [id])
+  workspaceId            Int
+  workspace              Workspace             @relation(fields: [workspaceId], references: [id])
+  taskId                 Int?
+  task                   Task?                 @relation(fields: [taskId], references: [id])
+  projectId              Int?
+  project                Project?              @relation(fields: [projectId], references: [id])
+  leadId                 Int?
+  lead                   Lead?                 @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  gameId                 Int?
+  game                   Game?                 @relation(fields: [gameId], references: [id], onDelete: SetNull)
+  channelId              Int?
+  channel                ChatChannel?          @relation(fields: [channelId], references: [id], onDelete: SetNull)
+  chatMessageId          Int?
+  chatMessage            ChatMessage?          @relation(fields: [chatMessageId], references: [id], onDelete: SetNull)
+  contentPieceId         Int?
+  contentPiece           ContentPiece?         @relation(fields: [contentPieceId], references: [id], onDelete: SetNull)
+  calendarEventId        Int?
+  calendarEvent          CalendarEvent?        @relation(fields: [calendarEventId], references: [id], onDelete: SetNull)
+  // WHATSAPP_MESSAGE: el chat del aviso. Hay UN aviso sin leer por chat y por persona
+  // (se actualiza con cada mensaje nuevo) y se marca leído cuando alguien abre el chat
+  // — ver services/whatsappNotify.service.js.
+  whatsappConversationId Int?
+  whatsappConversation   WhatsappConversation? @relation(fields: [whatsappConversationId], references: [id], onDelete: SetNull)
+  type                   NotificationType      @default(COMPLETED)
+  message                String
+  read                   Boolean               @default(false)
+  createdAt              DateTime              @default(now())
 
   @@index([userId])
   @@index([userId, read])
   @@index([workspaceId])
+  @@index([whatsappConversationId])
 }
 
 // ─── AI: INSIGHTS, MEMORY, TOKENS ────────────────────────────────────────────
@@ -3527,14 +3533,14 @@ model PeopleAnalyzerSnapshot {
 }
 
 model EOSStrike {
-  id           Int      @id @default(autoincrement())
+  id           Int       @id @default(autoincrement())
   workspaceId  Int
   userId       Int
   strikeNumber Int // posición entre los ACTIVOS de esa persona (se recalcula al vencer/levantar uno)
   reason       String
   agreement    String? // a qué se comprometió la persona; es lo que se revisa en el próximo 1on1
   createdById  Int
-  createdAt    DateTime @default(now())
+  createdAt    DateTime  @default(now())
   // Un strike deja de estar activo de dos maneras: vence solo (expiresAt, derivado
   // de Workspace.strikeExpiryMonths al crearlo — null = no vence) o alguien lo
   // levanta antes dejando el motivo. Nunca se borra: el historial es el punto.
@@ -3543,10 +3549,10 @@ model EOSStrike {
   liftedById   Int?
   liftReason   String?
 
-  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  user      User      @relation("StrikedPerson", fields: [userId], references: [id], onDelete: Cascade)
-  createdBy User      @relation("StrikeCreator", fields: [createdById], references: [id])
-  liftedBy  User?     @relation("StrikeLifter", fields: [liftedById], references: [id], onDelete: SetNull)
+  workspace Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User       @relation("StrikedPerson", fields: [userId], references: [id], onDelete: Cascade)
+  createdBy User       @relation("StrikeCreator", fields: [createdById], references: [id])
+  liftedBy  User?      @relation("StrikeLifter", fields: [liftedById], references: [id], onDelete: SetNull)
   oneOnOnes OneOnOne[]
 
   @@index([workspaceId])
@@ -4794,11 +4800,12 @@ model WhatsappConversation {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  messages    WhatsappMessage[]
+  messages      WhatsappMessage[]
   // Leído por persona: reemplazado por los campos compartidos de arriba. Ya no
   // se lee ni se escribe; la tabla queda para poder volver atrás sin perder datos.
-  reads       WhatsappConversationRead[]
-  escalations WhatsappBotEscalation[]
+  reads         WhatsappConversationRead[]
+  escalations   WhatsappBotEscalation[]
+  notifications Notification[]
 
   @@unique([workspaceId, phoneE164])
   @@index([workspaceId, lastMessageAt])
@@ -5184,22 +5191,22 @@ model McpToken {
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   // Agentes IA: cada token es la identidad de un agente (su label es el nombre visible).
-  agentTasks              Task[]                  @relation("TaskAgent")
-  createdTasks            Task[]                  @relation("TaskCreatedByAgent")
-  agentRecurrences        TaskRecurrence[]        @relation("RecurrenceAgent")
-  createdRecurrences      TaskRecurrence[]        @relation("RecurrenceCreatedByAgent")
-  taskComments            TaskComment[]           @relation("TaskCommentAgent")
-  situationEntriesCreated ProjectSituationEntry[] @relation("SituationEntryCreatedByAgent")
-  situationEntriesUpdated ProjectSituationEntry[] @relation("SituationEntryUpdatedByAgent")
-  whatsappMessages        WhatsappMessage[]       @relation("WhatsappMessageAgent")
-  whatsappControls        WhatsappConversation[]  @relation("WhatsappConversationAgentControl")
-  backlinksCreated        Backlink[]              @relation("BacklinkCreatedByAgent")
-  backlinksUpdated        Backlink[]              @relation("BacklinkUpdatedByAgent")
-  backlinkProspectsCreated BacklinkProspect[]     @relation("BacklinkProspectCreatedByAgent")
-  backlinkProspectsUpdated BacklinkProspect[]     @relation("BacklinkProspectUpdatedByAgent")
-  backlinkReadingsCreated BacklinkProfileReading[] @relation("BacklinkReadingCreatedByAgent")
-  cannibalResolutions     CannibalResolution[]
-  authFailures            McpAuthFailure[]
+  agentTasks               Task[]                   @relation("TaskAgent")
+  createdTasks             Task[]                   @relation("TaskCreatedByAgent")
+  agentRecurrences         TaskRecurrence[]         @relation("RecurrenceAgent")
+  createdRecurrences       TaskRecurrence[]         @relation("RecurrenceCreatedByAgent")
+  taskComments             TaskComment[]            @relation("TaskCommentAgent")
+  situationEntriesCreated  ProjectSituationEntry[]  @relation("SituationEntryCreatedByAgent")
+  situationEntriesUpdated  ProjectSituationEntry[]  @relation("SituationEntryUpdatedByAgent")
+  whatsappMessages         WhatsappMessage[]        @relation("WhatsappMessageAgent")
+  whatsappControls         WhatsappConversation[]   @relation("WhatsappConversationAgentControl")
+  backlinksCreated         Backlink[]               @relation("BacklinkCreatedByAgent")
+  backlinksUpdated         Backlink[]               @relation("BacklinkUpdatedByAgent")
+  backlinkProspectsCreated BacklinkProspect[]       @relation("BacklinkProspectCreatedByAgent")
+  backlinkProspectsUpdated BacklinkProspect[]       @relation("BacklinkProspectUpdatedByAgent")
+  backlinkReadingsCreated  BacklinkProfileReading[] @relation("BacklinkReadingCreatedByAgent")
+  cannibalResolutions      CannibalResolution[]
+  authFailures             McpAuthFailure[]
 
   @@index([workspaceId])
 }
@@ -5942,7 +5949,7 @@ model FinanceAuditLog {
 // par (página, destino): un backlink es "este sitio nos menciona", y a qué URL
 // nuestra apunta lo resuelve el verificador y queda en el historial de chequeos.
 model Backlink {
-  id          Int    @id @default(autoincrement())
+  id          Int @id @default(autoincrement())
   workspaceId Int
   projectId   Int
 
@@ -6063,13 +6070,13 @@ model BacklinkCheck {
 // miles de filas de página, pero la decisión ("¿podemos conseguir un enlace de este
 // sitio?") se toma una sola vez por sitio.
 model BacklinkProspect {
-  id          Int    @id @default(autoincrement())
+  id          Int @id @default(autoincrement())
   workspaceId Int
   projectId   Int
 
   domain             String // host sin www, minúsculas — LA identidad
-  competitors        String @default("[]") // JSON ["comp1.com","comp2.com"]: a quién enlaza (la evidencia)
-  linksToCompetitors Int    @default(0) // la señal de prioridad
+  competitors        String  @default("[]") // JSON ["comp1.com","comp2.com"]: a quién enlaza (la evidencia)
+  linksToCompetitors Int     @default(0) // la señal de prioridad
   exampleUrl         String? // una fila de muestra, para no perder el contexto
   exampleAnchor      String?
   domainRating       Float?
@@ -6085,10 +6092,10 @@ model BacklinkProspect {
   // al perder el enlace la fila volvería a "sin evaluar" habiendo estado evaluada.
   // La API expone un `effectiveVerdict` que resuelve los dos en el estado único que
   // ve el usuario ("ya lo tenemos" gana).
-  verdict       String  @default("sin_evaluar") // sin_evaluar | conseguible | no_conseguible | no_vale_la_pena
-  verdictSource String  @default("none") // none | ai | manual
-  verdictReason String?
-  verdictAt     DateTime?
+  verdict         String    @default("sin_evaluar") // sin_evaluar | conseguible | no_conseguible | no_vale_la_pena
+  verdictSource   String    @default("none") // none | ai | manual
+  verdictReason   String?
+  verdictAt       DateTime?
   // El candado del override: la clasificación IA lo lleva en el WHERE de su
   // updateMany, así una corrección manual es inmune incluso DURANTE la corrida.
   verdictLockedAt DateTime?

@@ -1,6 +1,7 @@
 // Helpers compartidos por los controllers del módulo Ventas (CRM).
 const prisma = require('../../lib/prisma')
 const { ACTIVE_LEAD_STATUS_KEYS } = require('../../lib/salesCatalog')
+const { isConversationUnread, lastUnreadableMessageIds } = require('../../lib/whatsappRead')
 
 // Includes reutilizables (shape estable devuelto al frontend).
 const OWNER_SELECT = { select: { id: true, name: true, avatar: true } }
@@ -73,12 +74,11 @@ async function assertContactAvailable(client, { workspaceId, contactId, excludeL
 /**
  * Adjunta `whatsapp: { connected, unread, lastMessageAt }` a cada lead de una
  * lista, resuelto por el contactId principal (ver "Fase 2" del plan de
- * WhatsApp). `unread` es por usuario (mismo cálculo que listConversations en
- * whatsapp.controller.js: hay no-leídos si el último mensaje es más nuevo que
- * lastReadMessageId). Early-exit si el workspace no tiene WhatsApp conectado
+ * WhatsApp). `unread` es el leído COMPARTIDO por el equipo, mismo criterio que la
+ * bandeja y el número de la barra (lib/whatsappRead.js). Early-exit si el workspace no tiene WhatsApp conectado
  * o ningún lead tiene contacto principal, para no pagar la query de más.
  */
-async function attachWhatsappStatus(leads, workspaceId, userId) {
+async function attachWhatsappStatus(leads, workspaceId) {
   const EMPTY = { connected: false, unread: false, lastMessageAt: null }
   const contactIds = [...new Set(leads.map(l => l.primaryContactId).filter(Boolean))]
   if (contactIds.length === 0) return leads.map(l => ({ ...l, whatsapp: EMPTY }))
@@ -89,20 +89,20 @@ async function attachWhatsappStatus(leads, workspaceId, userId) {
   const conversations = await prisma.whatsappConversation.findMany({
     where: { workspaceId, contactId: { in: contactIds } },
     select: {
+      id: true,
       contactId: true,
       lastMessageAt: true,
-      messages: { orderBy: { id: 'desc' }, take: 1, select: { id: true } },
-      reads: { where: { userId }, take: 1, select: { lastReadMessageId: true } },
+      lastReadMessageId: true,
+      markedUnreadAt: true,
     },
   })
+  const lastUnreadable = await lastUnreadableMessageIds(conversations.map(c => c.id))
 
   // Un contacto podría (en teoría) tener más de una conversación vinculada —
   // se toma la más reciente y "no leído" gana si cualquiera de las dos lo está.
   const byContact = new Map()
   for (const c of conversations) {
-    const lastMessageId = c.messages[0]?.id ?? null
-    const lastRead = c.reads[0]?.lastReadMessageId ?? 0
-    const unread = Boolean(lastMessageId && lastMessageId > lastRead)
+    const unread = isConversationUnread(c, lastUnreadable.get(c.id))
     const prev = byContact.get(c.contactId)
     const newer = !prev?.lastMessageAt || (c.lastMessageAt && c.lastMessageAt > prev.lastMessageAt)
     byContact.set(c.contactId, {

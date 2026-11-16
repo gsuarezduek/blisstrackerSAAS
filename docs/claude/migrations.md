@@ -7,3 +7,6 @@
 
 ### `backlinks`
 Seis tablas para la gestión del perfil de enlaces (Marketing → GEO/SEO → Enlaces): `Backlink` (enlaces entrantes, UNIQUE por `projectId`+`sourceUrl` = la idempotencia del import de CSV), `BacklinkCheck` (historial de verificación, append-only), `BacklinkProspect` (competencia y oportunidades en un solo modelo, UNIQUE por `projectId`+`domain`), `BacklinkProfileReading` (la lectura externa de Ahrefs/Semrush, append-only), `BacklinkSnapshot` (el mensual, UNIQUE por `projectId`+`month`, que es el que consume el informe) y `BacklinkJob` (`kind: verify|classify`). Sin backfill: no había dato previo de backlinks en el producto.
+
+### `whatsapp_unread_notifications`
+`Notification.whatsappConversationId` (FK a `WhatsappConversation`, `SetNull`, indexado): el aviso `WHATSAPP_MESSAGE` apunta a su chat, así hay uno solo sin leer por chat y por persona y abrir el chat lo apaga para todo el equipo. Sin backfill: los avisos viejos quedan sin chat y siguen abriendo el lead como antes.

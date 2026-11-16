@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import api from '../../api/client'
 import { notifyNavCountsChanged } from '../../hooks/useNavCounts'
 import { useAuth } from '../../context/AuthContext'
@@ -121,6 +122,21 @@ export default function WhatsappTab({ onOpenLead }) {
       setLoadingMessages(false)
     }
   }, [loadConversations])
+
+  // `?conversation=<id>`: llegar desde el aviso de la campana abre ese chat. El
+  // parámetro se consume (se saca de la URL) para que recargar o volver no lo
+  // reabra ni lo vuelva a marcar leído.
+  const [searchParams, setSearchParams] = useSearchParams()
+  const conversationParam = Number(searchParams.get('conversation')) || null
+  useEffect(() => {
+    if (!account || !conversationParam) return
+    openConversation(conversationParam).catch(() => {})
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev)
+      next.delete('conversation')
+      return next
+    }, { replace: true })
+  }, [account, conversationParam, openConversation, setSearchParams])
 
   const loadMoreMessages = useCallback(async () => {
     if (!activeId || messages.length === 0) return

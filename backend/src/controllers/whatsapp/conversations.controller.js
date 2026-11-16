@@ -290,7 +290,7 @@ async function sendMessage(req, res, next) {
       emitTo(`workspace:${req.workspace.id}`, 'whatsapp:bot', { conversationId: conversation.id, botEnabled: false, agentControl: message.senderAgent, agentControlName: message.senderAgentName })
     }
 
-    // Entrada liviana en el timeline del lead (best-effort, ver notifyLeadOfMessage
+    // Entrada liviana en el timeline del lead (best-effort, ver notifyInboundMessage
     // en whatsapp.webhook.js — misma idea, dirección "out").
     if (conversation.contactId) {
       const lead = await prisma.lead.findFirst({

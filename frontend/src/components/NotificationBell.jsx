@@ -297,6 +297,10 @@ export default function NotificationBell({ buttonClassName, panelClassName } = {
                 const ventasBase = user?.isAdmin ? '/admin/ventas' : '/ventas'
                 const dest = n.leadId
                   ? `${ventasBase}?lead=${n.leadId}`
+                  // Chat de WhatsApp sin lead (lo típico de lo que atiende el bot):
+                  // abre esa conversación en la bandeja.
+                  : (isWhatsappMessage && n.whatsappConversationId)
+                    ? `${ventasBase}?tab=whatsapp&conversation=${n.whatsappConversationId}`
                   : n.calendarEvent
                     ? `/calendario?view=semana&date=${n.calendarEvent.date}`
                     : n.type === 'VACATION_REQUEST'

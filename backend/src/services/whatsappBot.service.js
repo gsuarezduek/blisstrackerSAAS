@@ -5,6 +5,7 @@ const { emitTo } = require('../lib/socket')
 const { ACTIVE_LEAD_STATUS_KEYS } = require('../lib/salesCatalog')
 const { logLeadEvent } = require('../controllers/ventas/_shared')
 const { buildKnowledgeBlock } = require('./whatsappBotDocument.service')
+const { notifyWhatsappConversation } = require('./whatsappNotify.service')
 
 const MODEL = 'claude-haiku-4-5-20251001' // costo bajo + rápido, mismo criterio que salesResearch/weeklyReport
 const HISTORY_LIMIT = 20 // últimos N mensajes como contexto — alcanza para una charla comercial sin inflar el prompt
@@ -298,31 +299,25 @@ async function applyLeadInsights({ insights, contact, leadId, workspaceId }) {
 }
 
 /**
- * Notifica al responsable que el bot pasó la conversación a un humano (baja
- * confianza o escalationWords) — mismo mecanismo que `notifyLeadOfMessage` en
- * whatsapp.webhook.js (WHATSAPP_MESSAGE, sin actorId porque quien "actuó" es
- * el bot, no un User). Best-effort: nunca debe romper el flujo del bot.
+ * Avisa que el bot pasó la conversación a un humano (baja confianza o
+ * escalationWords) — mismo aviso que un mensaje entrante (WHATSAPP_MESSAGE, ver
+ * services/whatsappNotify.service.js): al responsable si lo hay, si no a todo
+ * Ventas, y reemplaza el aviso sin leer de ese chat en vez de sumar otro.
+ * Best-effort: nunca debe romper el flujo del bot.
  */
 async function notifyEscalation({ workspaceId, contact, conversation, reason }) {
-  if (!contact) return
   try {
-    const lead = await prisma.lead.findFirst({
-      where: { workspaceId, primaryContactId: contact.id, status: { in: ACTIVE_LEAD_STATUS_KEYS } },
-      select: { id: true, ownerId: true },
+    const lead = contact
+      ? await prisma.lead.findFirst({
+          where: { workspaceId, primaryContactId: contact.id, status: { in: ACTIVE_LEAD_STATUS_KEYS } },
+          select: { id: true, ownerId: true },
+        })
+      : null
+    const contactLabel = contact?.name || conversation.contactName || conversation.phoneE164
+    await notifyWhatsappConversation({
+      workspaceId, conversation, lead,
+      message: `El bot pasó a un humano la conversación con ${contactLabel}: ${reason || 'necesita atención'}`,
     })
-    const targetUserId = conversation.assignedToId || lead?.ownerId
-    if (!targetUserId) return
-    const contactLabel = contact.name || conversation.phoneE164
-    await prisma.notification.create({
-      data: {
-        userId: targetUserId,
-        workspaceId,
-        leadId: lead?.id || null,
-        type: 'WHATSAPP_MESSAGE',
-        message: `El bot pasó a un humano la conversación con ${contactLabel}: ${reason || 'necesita atención'}`,
-      },
-    })
-    emitTo(`user:${targetUserId}`, 'notification:new', { type: 'WHATSAPP_MESSAGE', leadId: lead?.id || null })
   } catch (err) {
     console.error('[WhatsApp Bot] Error notificando escalamiento:', err.message)
   }
@@ -430,7 +425,7 @@ async function maybeRespondWithBot({ account, conversation, contact }) {
 
   if (result.escalate) {
     await prisma.whatsappConversation.update({ where: { id: conversation.id }, data: { botEnabled: false } })
-    await notifyEscalation({ workspaceId: account.workspaceId, contact, conversation: fresh, reason: result.escalateReason })
+    await notifyEscalation({ workspaceId: account.workspaceId, contact, conversation: { ...fresh, id: conversation.id, contactName: conversation.contactName }, reason: result.escalateReason })
     // Log independiente de si hay Lead asociado — fuente de verdad del panel
     // de calidad (revisar casos reales de escalamiento, no solo lo que quedó
     // en el timeline de un lead puntual). Best-effort: no debe romper el flujo.

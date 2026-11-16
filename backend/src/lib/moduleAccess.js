@@ -79,12 +79,24 @@ function memberRoleNames(member) {
 function hasModuleAccess(req, key) {
   const m = req.workspaceMember
   if (!m) return false
-  if (m.role === 'admin' || m.role === 'owner') return true
-  const { allMembers, roles, userIds } = resolveModuleAccess(req.workspace, key)
+  return memberHasModuleAccess(req.workspace, { ...m, userId: m.userId ?? req.user?.userId }, key)
+}
+
+/**
+ * Misma regla que `hasModuleAccess`, sin request: para decidir a quién avisar de
+ * algo de un módulo (ej. un chat de WhatsApp sin responsable → todo Ventas).
+ * @param {{ moduleAccess?: any } | null} workspace
+ * @param {{ role?: string, userId?: number, teamRole?: string|null, extraTeamRoles?: any } | null} member
+ * @param {string} key
+ * @returns {boolean}
+ */
+function memberHasModuleAccess(workspace, member, key) {
+  if (!member) return false
+  if (member.role === 'admin' || member.role === 'owner') return true
+  const { allMembers, roles, userIds } = resolveModuleAccess(workspace, key)
   if (allMembers) return true
-  const userId = m.userId ?? req.user?.userId
-  if (userId != null && userIds.includes(userId)) return true
-  return memberRoleNames(m).some(r => roles.includes(r))
+  if (member.userId != null && userIds.includes(member.userId)) return true
+  return memberRoleNames(member).some(r => roles.includes(r))
 }
 
 /**
@@ -111,5 +123,5 @@ function getAllModuleAccess(req) {
 
 module.exports = {
   MODULE_KEYS, MODULE_ACCESS_DEFAULTS,
-  resolveModuleAccess, hasModuleAccess, memberRoleNames, moduleAccessGuard, getAllModuleAccess,
+  resolveModuleAccess, hasModuleAccess, memberHasModuleAccess, memberRoleNames, moduleAccessGuard, getAllModuleAccess,
 }

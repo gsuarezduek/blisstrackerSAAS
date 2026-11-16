@@ -3,6 +3,7 @@
 jest.mock('../../src/lib/prisma', () => ({
   whatsappConversation: { updateMany: jest.fn(ops => ops) },
   whatsappMessage:      { groupBy: jest.fn() },
+  notification:         { updateMany: jest.fn(ops => ops) },
   $transaction:         jest.fn(),
 }))
 
@@ -60,10 +61,20 @@ describe('markConversationRead', () => {
     expect(clear.data).toEqual({ markedUnreadAt: null })
   })
 
-  it('una conversación sin mensajes solo pierde la marca manual', async () => {
+  it('apaga los avisos de la campana de ese chat, para todo el equipo', async () => {
+    await markConversationRead(3, 20)
+    const ops = prisma.$transaction.mock.calls[0][0]
+    const notif = ops[ops.length - 1]
+    expect(notif.where).toEqual({ whatsappConversationId: 3, type: 'WHATSAPP_MESSAGE', read: false })
+    expect(notif.where.userId).toBeUndefined()
+    expect(notif.data).toEqual({ read: true })
+  })
+
+  it('una conversación sin mensajes no mueve el puntero', async () => {
     await markConversationRead(3, null)
     const ops = prisma.$transaction.mock.calls[0][0]
-    expect(ops).toHaveLength(1)
+    expect(ops).toHaveLength(2)
     expect(ops[0].data).toEqual({ markedUnreadAt: null })
+    expect(ops[1].data).toEqual({ read: true })
   })
 })
