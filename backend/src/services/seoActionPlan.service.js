@@ -11,6 +11,17 @@ function normSeverity(sev) {
   return 'low'
 }
 
+// Tope de enlaces perdidos que entran como hallazgo. Sin esto, un proyecto al que se
+// le cayó medio perfil llenaría Prioridades con 80 filas y taparía todo lo demás.
+const MAX_LOST_LINK_ITEMS = 5
+
+// Inicio del mes en UTC — mismo criterio que el snapshot y las alertas al decidir si un
+// `lostAt` cae en el mes.
+function monthStartUtc(month) {
+  const [y, m] = String(month).split('-').map(Number)
+  return new Date(Date.UTC(y, m - 1, 1))
+}
+
 function currentMonthStr() {
   const now = new Date(new Date().toLocaleString('en-US', { timeZone: DEFAULT_TZ }))
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
@@ -42,7 +53,7 @@ async function computeSeoActionItems({ projectId, workspaceId }) {
   const project = await prisma.project.findFirst({ where: { id: projectId, workspaceId }, select: { id: true, name: true } })
   if (!project) return null
 
-  const [geoAudit, cannibal, psMobile, psDesktop, kwRankings, brief, cannibalResolutions] = await Promise.all([
+  const [geoAudit, cannibal, psMobile, psDesktop, kwRankings, brief, cannibalResolutions, lostLinks] = await Promise.all([
     prisma.geoAudit.findFirst({
       where: { projectId, workspaceId, status: 'completed' },
       orderBy: { createdAt: 'desc' },
@@ -76,6 +87,16 @@ async function computeSeoActionItems({ projectId, workspaceId }) {
     prisma.cannibalResolution.findMany({
       where:  { projectId, workspaceId },
       select: { query: true, language: true, status: true },
+    }),
+    // Enlaces entrantes que se cayeron en el mes. Es el hallazgo que nadie más ve:
+    // Ahrefs descubre enlaces, no avisa cuando el que conseguiste en marzo murió en
+    // agosto. Se ordenan por autoridad del sitio porque recuperar el de un medio
+    // grande vale mucho más que el de un directorio.
+    prisma.backlink.findMany({
+      where:   { projectId, workspaceId, status: 'perdido', lostAt: { gte: monthStartUtc(month) } },
+      orderBy: [{ domainRating: 'desc' }, { lostAt: 'desc' }],
+      take:    MAX_LOST_LINK_ITEMS,
+      select:  { sourceDomain: true, sourceUrl: true, linkType: true, domainRating: true, anchor: true },
     }),
   ])
 
@@ -138,6 +159,21 @@ async function computeSeoActionItems({ projectId, workspaceId }) {
       detail: `${r.impressions} impresiones · ${r.clicks} clicks este mes. Mejorá el contenido y los enlaces internos de la página que rankea.`,
       priority: r.position <= 10 ? 'high' : 'medium',
     }))
+
+  // Enlaces entrantes perdidos — uno por enlace y no un "se perdieron N": el título
+  // de un hallazgo es su identidad para "Ignorar" y para no duplicar la tarea (ver
+  // marketingPending.service.js), y un contador cambia de valor en cada recálculo.
+  lostLinks.forEach(l => push({
+    source: 'backlinks', category: 'Enlaces',
+    title:  `Recuperar el enlace perdido de ${l.sourceDomain}`,
+    detail: [
+      l.domainRating != null ? `Autoridad del sitio: ${Math.round(l.domainRating)}.` : null,
+      l.anchor ? `Estaba con el texto "${l.anchor}".` : null,
+      'La página sigue en línea pero ya no nos enlaza: escribile a quien la publicó antes de que se olvide el contacto.',
+    ].filter(Boolean).join(' '),
+    // Un dofollow perdido deja de transferir autoridad; un nofollow valía menos.
+    priority: l.linkType === 'follow' ? 'high' : 'medium',
+  }))
 
   // Foco del cliente (brief SEO/SEM) → prioriza items que lo mencionan
   const answers = brief?.answers && typeof brief.answers === 'object' ? brief.answers : {}

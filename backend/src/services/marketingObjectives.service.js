@@ -236,6 +236,46 @@ async function computeOne(obj, ctx) {
     return finalize(base, def, audit?.score ?? null, { latestGlobal: true, date: audit?.createdAt ?? null })
   }
 
+  // ── SEO: dominios de referencia (stock, inventario de Enlaces) ──
+  if (obj.metric === 'referring_domains') {
+    const snap = await prisma.backlinkSnapshot.findFirst({
+      where:   { projectId, workspaceId, month: { in: months } },
+      orderBy: { month: 'desc' },
+      select:  { referringDomains: true, reportedDomains: true, month: true },
+    })
+    let actual = snap?.referringDomains ?? null
+    let latestGlobal = false
+    if (actual == null) {
+      // Sin snapshot del período (el primer mes de uso, antes de que corra la cadena
+      // mensual) se cae al conteo VIVO. `latestGlobal: true` es lo que le dice al
+      // informe "este número es de hoy, no del período", igual que domain_rating.
+      const rows = await prisma.backlink.findMany({
+        where:    { projectId, workspaceId, status: 'activo' },
+        select:   { sourceDomain: true },
+        distinct: ['sourceDomain'],
+      })
+      actual = rows.length
+      latestGlobal = true
+    }
+    base.label = 'Dominios de referencia'
+    // `reportedDomains` viaja al detalle para que se vea la brecha: tener 37 cargados
+    // cuando Ahrefs reporta 412 no es un objetivo incumplido, es inventario sin cargar.
+    return finalize(base, def, actual, { latestGlobal, month: snap?.month ?? null, reportedDomains: snap?.reportedDomains ?? null })
+  }
+
+  // ── SEO: enlaces conseguidos (flujo, suma de los nuevos de cada mes) ──
+  if (obj.metric === 'backlinks_won') {
+    const snaps = await prisma.backlinkSnapshot.findMany({
+      where:  { projectId, workspaceId, month: { in: months } },
+      select: { newLinks: true },
+    })
+    // Sin ningún snapshot del período → no_data y no 0: un cero acá se leería como
+    // "no conseguimos nada" cuando lo que pasa es que el mes todavía no cerró.
+    const actual = snaps.length ? snaps.reduce((s, x) => s + (x.newLinks ?? 0), 0) : null
+    base.label = 'Enlaces conseguidos'
+    return finalize(base, def, actual, { monthsWithData: snaps.length, monthsExpected: months.length })
+  }
+
   // ── RRSS: seguidores nuevos (flujo). Por red si hay platform, si no suma todas. ──
   if (obj.metric === 'seguidores') {
     const networks = RRSS_NETWORKS.includes(obj.platform) ? [obj.platform] : RRSS_NETWORKS

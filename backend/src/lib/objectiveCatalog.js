@@ -26,6 +26,8 @@ const METRICS = {
   keywords_top10: { category: 'seo',  label: 'Keywords en Top 10',          unit: '',    direction: 'higher', aggregation: 'stock', param: null },
   domain_rating:  { category: 'seo',  label: 'Domain Rating (autoridad)',   unit: '',    direction: 'higher', aggregation: 'stock', param: null },
   geo_score:      { category: 'seo',  label: 'Presencia en IAs (GEO)',      unit: '',    direction: 'higher', aggregation: 'stock', param: null },
+  referring_domains: { category: 'seo', label: 'Dominios de referencia',   unit: '',    direction: 'higher', aggregation: 'stock', param: null },
+  backlinks_won:  { category: 'seo',  label: 'Enlaces conseguidos',       unit: '',    direction: 'higher', aggregation: 'flow',  param: null },
   // RRSS
   seguidores:     { category: 'rrss', label: 'Seguidores nuevos',    unit: '',    direction: 'higher', aggregation: 'flow',  param: null, rrssPlatform: true },
   interaccion:    { category: 'rrss', label: 'Interacciones',        unit: '',    direction: 'higher', aggregation: 'flow',  param: null, rrssPlatform: true },

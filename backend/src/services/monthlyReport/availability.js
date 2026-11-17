@@ -15,6 +15,7 @@ async function getAvailableSections(projectId, workspaceId) {
   const [
     integrations, project, analyticsSnap, pageSpeed, geoAudit, seoSnap,
     keyword, igSnap, tkSnap, ytSnap, liSnap, fbSnap, metaAdsSnap, googleAdsSnap, chatgptAdsSnap, competitor, objective,
+    backlinkSnap,
   ] = await Promise.all([
     prisma.projectIntegration.findMany({ where: { projectId }, select: { type: true, status: true } }),
     prisma.project.findUnique({ where: { id: projectId }, select: { websiteUrl: true, reportSections: true } }),
@@ -33,6 +34,7 @@ async function getAvailableSections(projectId, workspaceId) {
     prisma.adsSnapshot.findFirst({ where: { projectId, workspaceId, type: 'chatgpt_ads' }, select: { id: true } }),
     prisma.competitorAccount.findFirst({ where: { projectId, platform: 'instagram' }, select: { id: true } }),
     prisma.marketingObjective.findFirst({ where: { projectId, workspaceId }, select: { id: true } }),
+    prisma.backlinkSnapshot.findFirst({ where: { projectId, workspaceId }, select: { id: true } }),
   ])
 
   const intgByType = new Map(integrations.map(i => [i.type, i.status]))
@@ -60,6 +62,11 @@ async function getAvailableSections(projectId, workspaceId) {
     metaAds:         build(has('meta_ads')              || !!metaAdsSnap,   'meta_ads'),
     googleAds:       build(has('google_ads')            || !!googleAdsSnap, 'google_ads'),
     chatgptAds:      build(has('chatgpt_ads')           || !!chatgptAdsSnap, 'chatgpt_ads'),
+    // Sin integración (el DR sale de Ahrefs, que solo necesita websiteUrl), pero a
+    // diferencia de geo/performance NO alcanza con tener sitio web: la sección se arma
+    // desde el snapshot mensual, y ofrecerla sin snapshot sería ofrecer una tarjeta vacía
+    // en el modal de generar informe.
+    authority:       build(!!backlinkSnap, null),
     competitors:     build(!!competitor, null),
     objectives:      build(!!objective, null),
     tasks:           build(true, null),

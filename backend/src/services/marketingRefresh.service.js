@@ -11,6 +11,7 @@ const { saveMonthKeywordRankings, currentMonthStr }     = require('./keywordTrac
 const { refreshScrapeForIntegration: refreshInstagramScrape } = require('../controllers/instagram.controller')
 const { refreshScrapeForIntegration: refreshFacebookScrape }  = require('../controllers/facebook.controller')
 const { refreshScrapeForIntegration: refreshLinkedinScrape }  = require('../controllers/linkedin.controller')
+const { startVerification, runVerification }           = require('./backlinkVerifier.service')
 
 // Refresco masivo de fuentes de Marketing — ver "Marketing refresh masivo (MCP)"
 // en backend/CLAUDE.md. Cada fuente mapea a la MISMA acción real que su botón
@@ -23,11 +24,14 @@ const { refreshScrapeForIntegration: refreshLinkedinScrape }  = require('../cont
 const ALL_SOURCES = [
   'analytics', 'search_console', 'domain_rating', 'keywords',
   'instagram', 'facebook', 'linkedin', 'tiktok', 'youtube',
-  'google_ads', 'meta_ads', 'chatgpt_ads', 'pagespeed',
+  'google_ads', 'meta_ads', 'chatgpt_ads', 'pagespeed', 'backlinks',
 ]
-// pagespeed consume cuota real de la API de Google (2 llamadas por proyecto) —
-// queda afuera del default, solo corre si se pide explícito en `sources`.
-const DEFAULT_SOURCES = ALL_SOURCES.filter(s => s !== 'pagespeed')
+// pagespeed consume cuota real de la API de Google (2 llamadas por proyecto) y
+// backlinks hace tráfico a sitios de TERCEROS con un UA identificable — las dos quedan
+// afuera del default y solo corren si se piden explícito en `sources`. Ser un crawler
+// educado importa: 100 fetches a medios por proyecto no es algo que se dispare "por si
+// acaso" junto con todo lo demás.
+const DEFAULT_SOURCES = ALL_SOURCES.filter(s => s !== 'pagespeed' && s !== 'backlinks')
 
 const INTEGRATION_TYPE = {
   analytics:      'google_analytics',
@@ -118,6 +122,22 @@ async function runForProjectSource(source, project, integrationsByType, identity
         const count = await prisma.trackedKeyword.count({ where: { projectId: project.id } })
         if (count === 0) return { status: 'not_connected' }
         await saveMonthKeywordRankings(project.id, project.workspaceId, currentMonthStr())
+        return { status: 'ok' }
+      }
+      case 'backlinks': {
+        // Corre el verificador de verdad (el mismo que el botón "Verificar enlaces" y
+        // el cron de los lunes), no un snapshot: lo que importa es ir a ver si los
+        // enlaces siguen puestos. Sin `force`, así respeta el cooldown de 6 h — un
+        // agente pidiendo un refresco masivo no es motivo para volver a golpear a los
+        // mismos sitios de terceros.
+        const pending = await prisma.backlink.count({
+          where: { projectId: project.id, workspaceId: project.workspaceId, verifiable: true, statusLockedAt: null },
+        })
+        if (pending === 0) return { status: 'not_connected' }
+        const r = await startVerification({ projectId: project.id, workspaceId: project.workspaceId, autorun: false })
+        if (r.skipped && r.reason === 'cooldown') return { status: 'cooldown', waitMinutes: r.waitMinutes }
+        if (r.skipped) return { status: 'error', detail: r.reason }
+        await runVerification(r.jobId, project.workspaceId, project.id)
         return { status: 'ok' }
       }
       case 'instagram':

@@ -7,6 +7,7 @@ jest.mock('../../src/lib/prisma', () => ({
   linkedinSnapshot:      { findMany: jest.fn() },
   facebookSnapshot:      { findMany: jest.fn() },
   adsSnapshot:           { findMany: jest.fn() },
+  backlinkSnapshot:      { findMany: jest.fn() },
 }))
 
 const prisma = require('../../src/lib/prisma')
@@ -121,5 +122,67 @@ describe('loadReportHistory', () => {
     const h = await loadReportHistory({ ...base, sections: { analytics: {}, seo: {} } })
     expect(Object.keys(h.sections)).toEqual(['analytics'])
     warn.mockRestore()
+  })
+})
+
+describe('historial de autoridad y enlaces', () => {
+  it('los dominios de referencia van como línea: son un acumulado, no un volumen del mes', () => {
+    // Pintados como barras se leerían "en abril conseguimos 30 dominios, en mayo 34",
+    // cuando 34 ES el total, no lo nuevo del mes.
+    const h = buildSourceHistory(SOURCES.authority, [
+      { month: '2026-04', referringDomains: 30, newLinks: 4, lostLinks: 0, domainRating: 40 },
+      { month: '2026-05', referringDomains: 34, newLinks: 5, lostLinks: 1, domainRating: 41 },
+      { month: '2026-06', referringDomains: 38, newLinks: 6, lostLinks: 2, domainRating: 44 },
+    ], MONTHS)
+    expect(metric(h, 'referringDomains')).toMatchObject({ chart: 'line', values: [30, 34, 38] })
+    expect(metric(h, 'newLinks')).toMatchObject({ chart: 'bar', values: [4, 5, 6] })
+  })
+
+  it('los enlaces conseguidos y perdidos van como barras, que es lo que pasó en el mes', () => {
+    const h = buildSourceHistory(SOURCES.authority, [
+      { month: '2026-04', newLinks: 4, lostLinks: 0 },
+      { month: '2026-06', newLinks: 6, lostLinks: 2 },
+    ], MONTHS)
+    expect(metric(h, 'lostLinks').values).toEqual([0, null, 2])
+  })
+
+  it('un mes sin snapshot queda en null y no en cero', () => {
+    const h = buildSourceHistory(SOURCES.authority, [
+      { month: '2026-04', referringDomains: 30 },
+      { month: '2026-06', referringDomains: 38 },
+    ], MONTHS)
+    expect(metric(h, 'referringDomains').values).toEqual([30, null, 38])
+  })
+
+  it('con un solo mes de datos no hay serie que comparar', () => {
+    const h = buildSourceHistory(SOURCES.authority, [{ month: '2026-06', referringDomains: 38 }], MONTHS)
+    expect(h).toBeNull()
+  })
+
+  it('la serie se pide al snapshot mensual de enlaces, scopeada al proyecto', async () => {
+    prisma.backlinkSnapshot.findMany.mockResolvedValue([
+      { month: '2026-05', referringDomains: 34, newLinks: 5, lostLinks: 1, domainRating: 41 },
+      { month: '2026-06', referringDomains: 38, newLinks: 6, lostLinks: 2, domainRating: 44 },
+    ])
+    const out = await loadReportHistory({
+      projectId: 7, workspaceId: 1, dataMonth: '2026-06',
+      period: { end: '2026-06-30' }, multiMonth: false, monthsCovered: ['2026-06'],
+      sections: { authority: {} },
+    })
+    expect(prisma.backlinkSnapshot.findMany).toHaveBeenCalled()
+    const where = prisma.backlinkSnapshot.findMany.mock.calls[0][0].where
+    expect(where).toMatchObject({ projectId: 7, workspaceId: 1 })
+    expect(out.sections.authority).toBeTruthy()
+    expect(metric(out.sections.authority, 'referringDomains').values.slice(-2)).toEqual([34, 38])
+  })
+
+  it('sin la sección en el informe no se consulta el snapshot', async () => {
+    // El historial no puede filtrar datos de una sección que el informe no incluye.
+    await loadReportHistory({
+      projectId: 7, workspaceId: 1, dataMonth: '2026-06',
+      period: { end: '2026-06-30' }, multiMonth: false, monthsCovered: ['2026-06'],
+      sections: { analytics: {} },
+    })
+    expect(prisma.backlinkSnapshot.findMany).not.toHaveBeenCalled()
   })
 })

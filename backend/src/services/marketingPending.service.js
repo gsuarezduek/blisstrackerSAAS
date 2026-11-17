@@ -30,6 +30,7 @@ const SEO_SOURCE_LINK = {
   cannibal:  { tab: 'geo-seo', sub: 'diagnostico', view: 'canibalizacion' },
   pagespeed: { tab: 'web',     sub: 'performance' },
   keywords:  { tab: 'geo-seo', sub: 'keywords' },
+  backlinks: { tab: 'geo-seo', sub: 'enlaces', view: 'nuestros' },
 }
 const RRSS_PLATFORM_LABEL = { instagram: 'Instagram', tiktok: 'TikTok', linkedin: 'LinkedIn', facebook: 'Facebook', youtube: 'YouTube' }
 
@@ -37,7 +38,7 @@ const RRSS_PLATFORM_LABEL = { instagram: 'Instagram', tiktok: 'TikTok', linkedin
 // agrupar y limitar a top-3 por sección. `content` no mapea a ninguna de las 6
 // secciones toggleables — vive en su propio bucket "contenido", siempre visible.
 const SECTION_BY_SOURCE = {
-  geo: 'geo-seo', cannibal: 'geo-seo', keywords: 'geo-seo',
+  geo: 'geo-seo', cannibal: 'geo-seo', keywords: 'geo-seo', backlinks: 'geo-seo',
   pagespeed: 'web',
   ads_advisor: 'anuncios',
   rrss_advisor: 'rrss',

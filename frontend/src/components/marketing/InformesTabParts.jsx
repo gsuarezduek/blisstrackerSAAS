@@ -59,6 +59,7 @@ export const SECTION_CATALOG = [
   { key: 'geo',             label: 'Presencia en IA (GEO)' },
   { key: 'seo',             label: 'Rendimiento del sitio (Search Console)' },
   { key: 'keywords',        label: 'Posicionamiento SEO (keywords)' },
+  { key: 'authority',       label: 'Autoridad y enlaces' },
   { key: 'instagram',       label: 'Instagram' },
   { key: 'tiktok',          label: 'TikTok' },
   { key: 'youtube',         label: 'YouTube' },

@@ -4,7 +4,7 @@ const {
   dismissFinding, snoozeFinding, listDismissedFindings, undismissFinding,
 } = require('../services/marketingPending.service')
 
-const VALID_SOURCES = new Set(['geo', 'cannibal', 'pagespeed', 'keywords', 'objective', 'content', 'ads_advisor', 'rrss_advisor', 'report'])
+const VALID_SOURCES = new Set(['geo', 'cannibal', 'pagespeed', 'keywords', 'backlinks', 'objective', 'content', 'ads_advisor', 'rrss_advisor', 'report'])
 
 /**
  * GET /api/marketing/projects/:id/pending

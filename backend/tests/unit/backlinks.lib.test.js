@@ -1,6 +1,6 @@
 const {
   normalizeLinkUrl, isOwnDomain, linkTypeFromRel, checkVerdict, nextLinkState,
-  profileFromLinks, monthCounts, effectiveVerdict, MAX_URL_LENGTH,
+  profileFromLinks, monthCounts, effectiveVerdict, followLostInWindow, MAX_URL_LENGTH,
   prospectDomain, aggregateProspects, mergeCompetitorEvidence, parseCompetitors,
   competitorLinkTotal,
 } = require('../../src/lib/backlinks')
@@ -296,5 +296,71 @@ describe('backlinks — la evidencia de a qué competidores enlaza un dominio', 
 
   it('tolera la forma vieja, una lista de dominios sueltos', () => {
     expect(parseCompetitors('["a.com","b.com"]')).toEqual([{ domain: 'a.com', links: 0 }, { domain: 'b.com', links: 0 }])
+  })
+})
+
+describe('backlinks — el enlace que sigue puesto y dejó de transferir autoridad', () => {
+  const FROM = new Date('2026-10-01T00:00:00Z')
+  const TO   = new Date('2026-11-01T00:00:00Z')
+  const chk = (backlinkId, linkType, createdAt, found = true) => ({ backlinkId, linkType, found, createdAt })
+
+  it('cuenta el que pasó de follow a nofollow dentro de la ventana', () => {
+    expect(followLostInWindow([
+      chk(1, 'follow', '2026-09-25'),
+      chk(1, 'nofollow', '2026-10-06'),
+    ], FROM, TO)).toBe(1)
+  })
+
+  it('no cuenta el que siguió siendo follow', () => {
+    expect(followLostInWindow([
+      chk(1, 'follow', '2026-09-25'),
+      chk(1, 'follow', '2026-10-06'),
+    ], FROM, TO)).toBe(0)
+  })
+
+  it('cuenta también sponsored y ugc: tampoco transfieren autoridad', () => {
+    expect(followLostInWindow([
+      chk(1, 'follow', '2026-10-02'), chk(1, 'sponsored', '2026-10-20'),
+      chk(2, 'follow', '2026-10-02'), chk(2, 'ugc', '2026-10-20'),
+    ], FROM, TO)).toBe(2)
+  })
+
+  it('ignora los chequeos que no encontraron el enlace', () => {
+    // Un 403 o un timeout no dice NADA sobre el rel. Tratarlo como pérdida sería la
+    // misma falsa alarma que la histéresis evita del otro lado.
+    expect(followLostInWindow([
+      chk(1, 'follow', '2026-09-25'),
+      chk(1, 'nofollow', '2026-10-06', false),
+    ], FROM, TO)).toBe(0)
+  })
+
+  it('un enlace cuenta una sola vez, aunque oscile entre follow y nofollow', () => {
+    expect(followLostInWindow([
+      chk(1, 'follow', '2026-10-02'), chk(1, 'nofollow', '2026-10-09'),
+      chk(1, 'follow', '2026-10-16'), chk(1, 'nofollow', '2026-10-23'),
+    ], FROM, TO)).toBe(1)
+  })
+
+  it('el cambio tiene que caer DENTRO de la ventana', () => {
+    expect(followLostInWindow([
+      chk(1, 'follow', '2026-09-05'),
+      chk(1, 'nofollow', '2026-09-19'),
+    ], FROM, TO)).toBe(0)
+  })
+
+  it('no le importa el orden en que vengan los chequeos', () => {
+    expect(followLostInWindow([
+      chk(1, 'nofollow', '2026-10-06'),
+      chk(1, 'follow', '2026-09-25'),
+    ], FROM, TO)).toBe(1)
+  })
+
+  it('un enlace con un solo chequeo no es una pérdida: no hay contra qué comparar', () => {
+    expect(followLostInWindow([chk(1, 'nofollow', '2026-10-06')], FROM, TO)).toBe(0)
+  })
+
+  it('tolera una lista vacía o basura', () => {
+    expect(followLostInWindow([], FROM, TO)).toBe(0)
+    expect(followLostInWindow(null, FROM, TO)).toBe(0)
   })
 })

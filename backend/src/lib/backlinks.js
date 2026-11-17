@@ -167,6 +167,46 @@ function monthCounts(links, month) {
   }
 }
 
+/**
+ * Cuántos enlaces pasaron de dofollow a nofollow DENTRO de una ventana.
+ *
+ * Es la pérdida que ningún otro contador ve: el enlace sigue puesto, la página sigue
+ * cargando, el estado sigue `activo` — y dejó de transferir autoridad. Un cliente que
+ * lee "0 enlaces perdidos" mientras su mejor enlace editorial pasó a nofollow no se
+ * está enterando de nada.
+ *
+ * Se mira el historial de chequeos (append-only) y no la columna `linkType` del enlace,
+ * porque el verificador la SOBREESCRIBE con lo último que leyó: en la fila ya no queda
+ * rastro de que antes era follow. Sólo cuentan los chequeos que encontraron el enlace
+ * (`found`): un 403 no dice nada sobre el `rel`, y tratarlo como pérdida sería la
+ * misma falsa alarma que la histéresis evita del otro lado.
+ *
+ * @param {Array} checks  chequeos con { backlinkId, linkType, found, createdAt }
+ * @param {Date} from     inicio de la ventana (inclusive)
+ * @param {Date} to       fin de la ventana (exclusivo)
+ */
+function followLostInWindow(checks, from, to) {
+  const byLink = new Map()
+  for (const c of Array.isArray(checks) ? checks : []) {
+    if (!c?.found) continue
+    if (!byLink.has(c.backlinkId)) byLink.set(c.backlinkId, [])
+    byLink.get(c.backlinkId).push(c)
+  }
+  let lost = 0
+  for (const list of byLink.values()) {
+    list.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
+    for (let i = 1; i < list.length; i++) {
+      const at = new Date(list[i].createdAt)
+      if (at < from || at >= to) continue
+      if (list[i - 1].linkType === 'follow' && list[i].linkType && list[i].linkType !== 'follow') {
+        lost++
+        break   // un enlace cuenta una vez, aunque oscile
+      }
+    }
+  }
+  return lost
+}
+
 function toMonth(date) {
   const d = date instanceof Date ? date : new Date(date)
   if (Number.isNaN(d.getTime())) return null
@@ -294,6 +334,7 @@ module.exports = {
   nextLinkState,
   profileFromLinks,
   monthCounts,
+  followLostInWindow,
   effectiveVerdict,
   prospectDomain,
   aggregateProspects,

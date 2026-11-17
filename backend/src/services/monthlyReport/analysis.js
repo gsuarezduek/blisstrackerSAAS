@@ -39,7 +39,7 @@ function emptyAnalysis(error) {
   return { resumen: '', highlights: [], alertas: [], nextSteps: [], _error: error }
 }
 
-async function generateAnalysis({ project, month, periodLabel, geo, analytics, instagram, tiktok, youtube, linkedin, facebook, keywords, seo, performance, googleAds, metaAds, chatgptAds, competitors, workspaceId, objectives = [], services = [], briefs = null }) {
+async function generateAnalysis({ project, month, periodLabel, geo, analytics, instagram, tiktok, youtube, linkedin, facebook, keywords, seo, authority, performance, googleAds, metaAds, chatgptAds, competitors, workspaceId, objectives = [], services = [], briefs = null }) {
   // Cumplimiento de objetivos (array calculado por computeObjectives)
   const fmtVal = (v, unit) => v == null ? '—' : (unit === '$' ? `$${v}` : unit === '%' ? `${v}%` : unit === 'pos' ? `#${v}` : `${v}`)
   const objCtx = (Array.isArray(objectives) ? objectives : [])
@@ -118,6 +118,17 @@ async function generateAnalysis({ project, month, periodLabel, geo, analytics, i
       ctr:         seo.ctr != null ? `${(seo.ctr * 100).toFixed(2)}%` : null,
       posPromedio: seo.avgPosition,
       deltaClicks: seo.delta?.clicks,
+    } : null,
+    // Solo lo que la sección ya le muestra al cliente. Nada de prospectos ni pipeline:
+    // el análisis se publica en el informe, y a quién le vamos a pedir un enlace o
+    // cuánto estaríamos dispuestos a pagar es trabajo interno.
+    enlaces: authority ? {
+      domainRating:        authority.domainRating,
+      deltaDomainRating:   authority.delta?.domainRating,   // en PUNTOS, no en %
+      dominiosQueNosEnlazan: authority.referringDomains,
+      deltaDominios:       authority.delta?.referringDomains,
+      enlacesNuevos:       authority.newLinks,
+      enlacesPerdidos:     authority.lostLinks,
     } : null,
     performance: performance ? {
       mobile:  performance.mobile?.score,

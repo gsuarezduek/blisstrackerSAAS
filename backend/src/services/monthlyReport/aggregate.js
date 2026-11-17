@@ -13,6 +13,7 @@ const {
   buildGeoSection, buildAnalyticsSection, buildEvolutionSection,
   buildPerformanceSection, buildSeoSection, buildKeywordsSection,
 } = require('./sectionBuilders/webAndSeo')
+const { buildAuthoritySection } = require('./sectionBuilders/authority')
 const { generateAnalysis } = require('./analysis')
 const { loadReportHistory } = require('./history')
 
@@ -113,6 +114,8 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
     integrations,
     seoSnap,
     seoPrev,
+    backlinkSnap,
+    backlinkPrev,
     competitorAccounts,
   ] = await Promise.all([
     // Proyecto
@@ -274,6 +277,19 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
       select:  { clicks: true, impressions: true, ctr: true, avgPosition: true },
     }),
 
+    // Autoridad y enlaces — el snapshot mensual del módulo de Enlaces. NO se consulta
+    // BacklinkProspect: competencia, oportunidades y pipeline son trabajo interno y
+    // nunca se publican al cliente (ver sectionBuilders/authority.js).
+    prisma.backlinkSnapshot.findFirst({
+      where:  { projectId, workspaceId, month: dataMonth },
+      select: { referringDomains: true, activeLinks: true, followLinks: true,
+                newLinks: true, lostLinks: true, avgDomainRating: true, domainRating: true },
+    }),
+    prisma.backlinkSnapshot.findFirst({
+      where:  { projectId, workspaceId, month: prev },
+      select: { referringDomains: true, activeLinks: true, domainRating: true },
+    }),
+
     // Competidores de Instagram — snapshots del período (dataMonth) + mes anterior (para crecimiento)
     prisma.competitorAccount.findMany({
       where:  { projectId, platform: 'instagram' },
@@ -298,7 +314,7 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
   let flow = null
   if (multiMonth) {
     const inMonths = { projectId, workspaceId, month: { in: monthsCovered } }
-    const [ga4Rows, seoRows, igRows, tkRows, ytRows, liRows, fbRows] = await Promise.all([
+    const [ga4Rows, seoRows, igRows, tkRows, ytRows, liRows, fbRows, blkRows] = await Promise.all([
       prisma.analyticsSnapshot.findMany({ where: inMonths, select: { sessions: true, activeUsers: true, newUsers: true, pageviews: true, conversions: true } }),
       prisma.searchConsoleSnapshot.findMany({ where: inMonths, select: { clicks: true, impressions: true } }),
       prisma.instagramSnapshot.findMany({ where: inMonths, select: { postsCount: true } }),
@@ -306,6 +322,7 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
       prisma.youTubeSnapshot.findMany({ where: inMonths, select: { monthViews: true, videosThisMonth: true, shortsThisMonth: true, longsThisMonth: true } }),
       prisma.linkedinSnapshot.findMany({ where: inMonths, select: { postsThisMonth: true, impressions: true, clicks: true, totalLikes: true, totalComments: true, totalShares: true } }),
       prisma.facebookSnapshot.findMany({ where: inMonths, select: { postsThisMonth: true, totalLikes: true, totalComments: true, totalShares: true } }),
+      prisma.backlinkSnapshot.findMany({ where: inMonths, select: { newLinks: true, lostLinks: true } }),
     ])
     const sum = (rows, f) => rows.reduce((s, r) => s + (r[f] ?? 0), 0)
     flow = {
@@ -316,6 +333,9 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
       yt:  { monthViews: sum(ytRows, 'monthViews'), videosThisMonth: sum(ytRows, 'videosThisMonth'), shortsThisMonth: sum(ytRows, 'shortsThisMonth'), longsThisMonth: sum(ytRows, 'longsThisMonth') },
       li:  { postsThisMonth: sum(liRows, 'postsThisMonth'), impressions: sum(liRows, 'impressions'), clicks: sum(liRows, 'clicks'), totalLikes: sum(liRows, 'totalLikes'), totalComments: sum(liRows, 'totalComments'), totalShares: sum(liRows, 'totalShares') },
       fb:  { postsThisMonth: sum(fbRows, 'postsThisMonth'), totalLikes: sum(fbRows, 'totalLikes'), totalComments: sum(fbRows, 'totalComments'), totalShares: sum(fbRows, 'totalShares') },
+      // Enlaces ganados y perdidos: son de FLUJO, así que un informe trimestral suma los
+      // tres meses. El stock (dominios, activos, DR) sale del mes ancla, como el resto.
+      blk: { newLinks: sum(blkRows, 'newLinks'), lostLinks: sum(blkRows, 'lostLinks') },
     }
   }
 
@@ -364,6 +384,7 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
 
   // ── Search Console (SEO) ────────────────────────────────────────────────────
   const seo = buildSeoSection(seoSnap, seoPrev, flow)
+  const authority = buildAuthoritySection(backlinkSnap, backlinkPrev, flow)
 
   // ── Keywords ──────────────────────────────────────────────────────────────────
   const keywords = buildKeywordsSection(allKeywords, dataMonth, prev)
@@ -383,7 +404,7 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
   // ── Secciones (filtradas según enabledSections) ───────────────────────────────
   // Si el informe define secciones habilitadas, las demás se excluyen por completo
   // (no se guardan en el caché ni viajan al link público del cliente).
-  const allSections = { geo, analytics, evolution, instagram, tiktok, youtube, linkedin, facebook, seo, keywords, googleAds, metaAds, chatgptAds, performance, tasks, competitors }
+  const allSections = { geo, analytics, evolution, instagram, tiktok, youtube, linkedin, facebook, seo, keywords, authority, googleAds, metaAds, chatgptAds, performance, tasks, competitors }
   const sections = {}
   for (const [key, val] of Object.entries(allSections)) {
     sections[key] = wants(key) ? val : null
@@ -409,7 +430,7 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
     : await generateAnalysis({ project, month: dataMonth, periodLabel: periodMeta.label,
         geo: sections.geo, analytics: sections.analytics, instagram: sections.instagram,
         tiktok: sections.tiktok, youtube: sections.youtube, linkedin: sections.linkedin, facebook: sections.facebook, keywords: sections.keywords,
-        seo: sections.seo, performance: sections.performance, googleAds: sections.googleAds,
+        seo: sections.seo, authority: sections.authority, performance: sections.performance, googleAds: sections.googleAds,
         metaAds: sections.metaAds, chatgptAds: sections.chatgptAds, competitors: sections.competitors,
         workspaceId, objectives: objectivesResults, services, briefs })
 

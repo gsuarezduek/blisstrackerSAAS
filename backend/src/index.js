@@ -88,6 +88,7 @@ const { saveAllPreviousMonthSnapshots, refreshAllCurrentMonthSnapshots } = requi
 const { runAllMonthlyPageSpeed }        = require('./services/pageSpeed.service')
 const { saveAllKeywordRankings, saveCurrentMonthKeywordRankings } = require('./services/keywordTracking.service')
 const { verifyAllProjects } = require('./services/backlinkVerifier.service')
+const { saveAllBacklinkSnapshots } = require('./services/backlinkSnapshot.service')
 const { captureAllSerpSnapshots } = require('./services/serpApi.service')
 const { runAllMonthlyGeoAudits }           = require('./services/geoAudit.service')
 const { saveAllMonthlyInstagramSnapshots } = require('./services/instagramSnapshot.service')
@@ -308,6 +309,12 @@ const MONTHLY_CHAIN = [
   ['CompetitorSnapshot', saveAllMonthlyCompetitorSnapshots],
   ['RrhhMetricSnapshot', saveAllPrevRrhhMetrics],
   ['PeopleAnalyzerSnapshot', saveAllPrevPeopleAnalyzer], // solo crea si no se capturó ya durante el mes
+  // Va DESPUÉS de 'SeoSnapshot+DR' (que acaba de refrescar Project.domainRating, que el
+  // snapshot copia) y ANTES de 'SeoAlerts', que lee el snapshot para avisar enlaces
+  // perdidos. El `force: true` es necesario: sin él el cooldown de 6 h del verificador
+  // puede saltear la corrida del 1° y el cierre contaría como activos enlaces que se
+  // cayeron hace una semana — y ese número va al informe del cliente.
+  ['Backlinks',          async () => { await verifyAllProjects({ force: true }); await saveAllBacklinkSnapshots() }],
   ['SeoAlerts',          checkAndSendAllSeoAlerts], // compara el mes cerrado vs anterior y avisa retrocesos
   ['StorageSnapshot',    freezeLastMonthStorageSnapshot], // congela el total de R2 del mes cerrado + avisa si supera el umbral
 ]

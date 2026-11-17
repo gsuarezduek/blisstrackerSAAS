@@ -271,18 +271,64 @@ export function PublicidadSection({ s, contextPublicidad, canEdit, contextEditin
 }
 
 // ── 4. SEO y GEO ──────────────────────────────────────────────────────────────
+// ── Autoridad y enlaces ───────────────────────────────────────────────────────
+// Los enlaces entrantes que el equipo cargó y el verificador confirmó. El texto dice
+// "que seguimos" a propósito: nuestro inventario casi nunca es el perfil completo del
+// sitio (Ahrefs puede reportar 412 dominios cuando cargamos 40), y presentarlo como el
+// total haría que un cliente que también mira Ahrefs crea que el número está mal. La
+// brecha contra la herramienta externa es un dato operativo y queda en Perfil, para el
+// equipo. Nunca se muestra nada del pipeline ni de la competencia.
+export function AuthorityCard({ a }) {
+  const kpis = [
+    a.domainRating != null && { value: Math.round(a.domainRating), label: 'Domain Rating' },
+    { value: fmt(a.referringDomains), label: 'Dominios que nos enlazan', delta: a.delta?.referringDomains },
+    { value: fmt(a.newLinks),  label: 'Enlaces nuevos' },
+    { value: fmt(a.lostLinks), label: 'Enlaces perdidos' },
+  ].filter(Boolean)
+
+  const drDelta = a.delta?.domainRating
+  const footer = [
+    a.followLinks > 0 && `${fmt(a.followLinks)} de ${fmt(a.activeLinks)} transfieren autoridad (dofollow)`,
+    a.avgDomainRating != null && `autoridad promedio de los sitios que nos enlazan: ${a.avgDomainRating}`,
+  ].filter(Boolean)
+
+  return (
+    <SectionCard title="Autoridad y enlaces" sectionKey="authority">
+      <p className="text-xs text-gray-500 dark:text-gray-400 -mt-2 mb-4">
+        Los enlaces de otros sitios hacia el tuyo que seguimos y verificamos. Son la señal
+        de autoridad que más peso tiene en el posicionamiento.
+      </p>
+      <KpiGrid items={kpis} />
+      {/* El DR se mueve en puntos sobre una escala 0–100, no en porcentaje: va aparte
+          porque DeltaChip siempre escribe "%". */}
+      {drDelta != null && drDelta !== 0 && (
+        <p className="text-xs text-gray-500 dark:text-gray-400 mt-3">
+          El Domain Rating {drDelta > 0 ? 'subió' : 'bajó'}{' '}
+          <span className={drDelta > 0 ? 'font-semibold text-green-600 dark:text-green-400' : 'font-semibold text-red-500 dark:text-red-400'}>
+            {Math.abs(drDelta)} {Math.abs(drDelta) === 1 ? 'punto' : 'puntos'}
+          </span>{' '}respecto del período anterior.
+        </p>
+      )}
+      {footer.length > 0 && (
+        <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">{footer.join(' · ')}</p>
+      )}
+      <SectionHistory sectionKey="authority" />
+    </SectionCard>
+  )
+}
+
 export function SeoGeoSection({ s, contextSEO, canEdit, contextEditing }) {
   const aiTrafficEntries = (() => {
     const entries = Object.entries(s.analytics?.aiTraffic || {}).sort(([, a], [, b]) => b - a)
     return entries.length > 0 ? entries : null
   })()
 
-  const hasSeoGeo = !!(s.keywords || s.seo || s.geo || aiTrafficEntries)
+  const hasSeoGeo = !!(s.keywords || s.seo || s.geo || s.authority || aiTrafficEntries)
   if (!hasSeoGeo) return null
 
   return (
     <>
-      <GroupHeader title="SEO y GEO" groupKeys={['keywords', 'seo', 'geo']} />
+      <GroupHeader title="SEO y GEO" groupKeys={['keywords', 'seo', 'geo', 'authority']} />
       <ContextNote sectionKey="seo" analysisKey="contextSEO" contextValue={contextSEO} canEdit={canEdit} contextEditing={contextEditing} />
 
       {/* Keywords */}
@@ -457,6 +503,9 @@ export function SeoGeoSection({ s, contextSEO, canEdit, contextEditing }) {
           )}
         </SectionCard>
       )}
+
+      {/* Autoridad y enlaces */}
+      {s.authority && <AuthorityCard a={s.authority} />}
 
       {/* Tráfico desde IAs */}
       {aiTrafficEntries && (

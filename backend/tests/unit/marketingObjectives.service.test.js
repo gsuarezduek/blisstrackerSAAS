@@ -12,6 +12,8 @@ jest.mock('../../src/lib/prisma', () => ({
   trackedKeyword:     { findMany: jest.fn() },
   geoAudit:           { findFirst: jest.fn() },
   project:            { findUnique: jest.fn() },
+  backlinkSnapshot:   { findFirst: jest.fn(), findMany: jest.fn() },
+  backlink:           { findMany: jest.fn() },
 }))
 
 const prisma = require('../../src/lib/prisma')
@@ -33,6 +35,9 @@ function resetAll() {
   prisma.trackedKeyword.findMany.mockResolvedValue([])
   prisma.geoAudit.findFirst.mockResolvedValue(null)
   prisma.project.findUnique.mockResolvedValue(null)
+  prisma.backlinkSnapshot.findFirst.mockResolvedValue(null)
+  prisma.backlinkSnapshot.findMany.mockResolvedValue([])
+  prisma.backlink.findMany.mockResolvedValue([])
 }
 
 const CTX = { projectId: 1, workspaceId: 1, dataMonth: '2026-05' }
@@ -273,6 +278,70 @@ it('geo_score toma el score del último audit disponible', async () => {
   expect(r.actual).toBe(72)
   expect(r.status).toBe('ok')
   expect(r.detail.latestGlobal).toBe(true)
+})
+
+describe('objetivos de enlaces', () => {
+  const objective = (metric, over = {}) => [
+    { id: 90, projectId: 1, workspaceId: 1, category: 'seo', metric, periodicity: 'monthly', target: 50, ...over },
+  ]
+
+  it('referring_domains toma los dominios del snapshot del mes', async () => {
+    prisma.marketingObjective.findMany.mockResolvedValue(objective('referring_domains'))
+    prisma.backlinkSnapshot.findFirst.mockResolvedValue({ referringDomains: 40, reportedDomains: 412, month: '2026-05' })
+    const [r] = await computeObjectives(CTX)
+    expect(r.actual).toBe(40)
+    expect(r.detail.latestGlobal).toBe(false)
+    expect(r.detail.month).toBe('2026-05')
+    expect(r.status).toBe('partial')   // 40/50 = 80%
+  })
+
+  it('arrastra lo que reporta la herramienta externa, para que la brecha se vea', async () => {
+    // Tener 40 cargados cuando Ahrefs reporta 412 no es un objetivo incumplido: es
+    // inventario sin cargar. Sin este dato al lado, el número se lee como un fracaso.
+    prisma.marketingObjective.findMany.mockResolvedValue(objective('referring_domains'))
+    prisma.backlinkSnapshot.findFirst.mockResolvedValue({ referringDomains: 40, reportedDomains: 412, month: '2026-05' })
+    const [r] = await computeObjectives(CTX)
+    expect(r.detail.reportedDomains).toBe(412)
+  })
+
+  it('sin snapshot del período cae al conteo vivo y lo marca como dato de hoy', async () => {
+    // Es el primer mes de uso: la cadena mensual todavía no corrió. Decir "sin datos"
+    // cuando el inventario tiene 12 dominios cargados sería mentirle al que los cargó.
+    prisma.marketingObjective.findMany.mockResolvedValue(objective('referring_domains'))
+    prisma.backlink.findMany.mockResolvedValue([
+      { sourceDomain: 'uno.com' }, { sourceDomain: 'dos.com' }, { sourceDomain: 'tres.com' },
+    ])
+    const [r] = await computeObjectives(CTX)
+    expect(r.actual).toBe(3)
+    expect(r.detail.latestGlobal).toBe(true)
+  })
+
+  it('el conteo vivo pide dominios DISTINTOS y solo los activos', async () => {
+    // Un sitio que nos enlaza desde 5 páginas es UN dominio de referencia, y un enlace
+    // perdido no suma autoridad. Las dos cosas las tiene que pedir la query, no el JS.
+    prisma.marketingObjective.findMany.mockResolvedValue(objective('referring_domains'))
+    await computeObjectives(CTX)
+    const arg = prisma.backlink.findMany.mock.calls[0][0]
+    expect(arg.distinct).toEqual(['sourceDomain'])
+    expect(arg.where.status).toBe('activo')
+  })
+
+  it('backlinks_won suma los nuevos de cada mes del período', async () => {
+    prisma.marketingObjective.findMany.mockResolvedValue(objective('backlinks_won', { periodicity: 'quarterly', target: 12 }))
+    prisma.backlinkSnapshot.findMany.mockResolvedValue([{ newLinks: 4 }, { newLinks: 5 }, { newLinks: 3 }])
+    const [r] = await computeObjectives(CTX)
+    expect(r.actual).toBe(12)
+    expect(r.status).toBe('ok')
+    expect(r.detail.monthsWithData).toBe(3)
+  })
+
+  it('sin ningún snapshot del período queda sin datos, no en cero', async () => {
+    // Un cero se lee como "no conseguimos nada"; lo que pasa es que el mes no cerró.
+    prisma.marketingObjective.findMany.mockResolvedValue(objective('backlinks_won', { target: 4 }))
+    const [r] = await computeObjectives(CTX)
+    expect(r.actual).toBeNull()
+    expect(r.status).toBe('no_data')
+  })
 })
 
 it('sin objetivos devuelve array vacío', async () => {

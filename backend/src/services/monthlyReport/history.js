@@ -92,6 +92,16 @@ const SOURCES = {
       { key: 'engagementRate', label: 'Engagement',        get: field('engagementRate'), format: 'percent', chart: 'line' },
     ],
   },
+  authority: {
+    model: 'backlinkSnapshot',
+    select: { referringDomains: true, activeLinks: true, newLinks: true, lostLinks: true, domainRating: true },
+    metrics: [
+      { key: 'referringDomains', label: 'Dominios de referencia', get: field('referringDomains'), chart: 'line' },
+      { key: 'newLinks',         label: 'Enlaces conseguidos',    get: field('newLinks') },
+      { key: 'lostLinks',        label: 'Enlaces perdidos',       get: field('lostLinks') },
+      { key: 'domainRating',     label: 'Domain Rating',          get: field('domainRating'), format: 'decimal', chart: 'line' },
+    ],
+  },
   metaAds: {
     model: 'adsSnapshot', adsType: 'meta_ads',
     select: { spend: true, clicks: true, reach: true, ctr: true },
