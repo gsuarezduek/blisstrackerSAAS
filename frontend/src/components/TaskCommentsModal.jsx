@@ -43,8 +43,13 @@ function fmtDate(iso) {
   })
 }
 
-export default function TaskCommentsModal({ task, onClose, onCommentAdded, onTaskEdited, onTaskDeleted, onFollowChanged }) {
+export default function TaskCommentsModal({ task: taskProp, onClose, onCommentAdded, onTaskEdited, onTaskDeleted, onFollowChanged }) {
   const { user } = useAuth()
+  // Lo que devolvió "Completar" se superpone a la tarea recibida: el modal pasa a
+  // mostrarla completada sin depender de que quien lo abrió le pase la versión nueva
+  // (lo abren 5 pantallas y no todas actualizan su copia).
+  const [completedData, setCompletedData] = useState(null)
+  const task = completedData?.id === taskProp.id ? { ...taskProp, ...completedData } : taskProp
   const [comments, setComments]   = useState([])
   const [loading, setLoading]     = useState(true)
   const [text, setText]           = useState('')
@@ -166,6 +171,48 @@ export default function TaskCommentsModal({ task, onClose, onCommentAdded, onTas
 
   // Admin/owner del workspace, dueño de la tarea, o quien la delegó (creador)
   const canEdit = user && (user.isAdmin || user.id === task.userId || user.id === task.createdById)
+
+  // Completar desde el detalle — pensado para la tarea que buscás por número (Cmd+K)
+  // en vez de rastrearla en el Dashboard. Solo el responsable (el backend responde 404
+  // a cualquier otro). Pendiente y pausada se completan directo, sin pasar por "en
+  // curso", así no se pausa la tarea que tengas activa; la pendiente pide antes una
+  // duración opcional porque no tiene tiempo registrado. Bloqueada: primero se desbloquea.
+  const canComplete = !!user && user.id === task.userId && ['PENDING', 'PAUSED', 'IN_PROGRESS'].includes(task.status)
+  const [completeOpen, setCompleteOpen]     = useState(false) // formulario de duración (solo PENDING)
+  const [completeHours, setCompleteHours]   = useState('')
+  const [completeMins, setCompleteMins]     = useState('')
+  const [completeSaving, setCompleteSaving] = useState(false)
+  const [completeError, setCompleteError]   = useState('')
+
+  async function handleComplete() {
+    if (completeSaving) return
+    let body
+    if (task.status === 'PENDING') {
+      const h = completeHours.trim() === '' ? 0 : Number(completeHours)
+      const m = completeMins.trim() === '' ? 0 : Number(completeMins)
+      if (!Number.isInteger(h) || !Number.isInteger(m) || h < 0 || m < 0) {
+        setCompleteError('La duración tiene que ser en horas y minutos enteros.')
+        return
+      }
+      const total = h * 60 + m
+      if (total > 1440) { setCompleteError('La duración no puede superar 24 horas.'); return }
+      if (completeHours.trim() !== '' || completeMins.trim() !== '') body = { minutes: total }
+    }
+    setCompleteSaving(true)
+    setCompleteError('')
+    try {
+      const { data } = await api.patch(`/tasks/${task.id}/complete`, body)
+      setCompletedData(data)
+      setCompleteOpen(false)
+      // Mismo evento con el que el modal global ya avisa ediciones: el Dashboard, la
+      // ficha del proyecto y el Calendario lo escuchan y recargan sus listas.
+      window.dispatchEvent(new CustomEvent('bliss:task-created', { detail: data }))
+    } catch (err) {
+      setCompleteError(err.response?.data?.error || 'No se pudo completar la tarea.')
+    } finally {
+      setCompleteSaving(false)
+    }
+  }
 
   // Seguimiento de la tarea
   const [following, setFollowing]       = useState(null)  // null = aún cargando
@@ -448,6 +495,17 @@ export default function TaskCommentsModal({ task, onClose, onCommentAdded, onTas
               </button>
             </div>
             <div className="flex items-center gap-2 flex-shrink-0 -mt-1">
+              {canComplete && !completeOpen && (
+                <button
+                  type="button"
+                  onClick={() => (task.status === 'PENDING' ? setCompleteOpen(true) : handleComplete())}
+                  disabled={completeSaving}
+                  title={task.status === 'PENDING' ? 'Marcarla como hecha sin haberla iniciado' : 'Completar la tarea'}
+                  className="text-xs font-medium px-2.5 py-1 rounded-full bg-green-600 text-white hover:bg-green-700 transition-colors disabled:opacity-50"
+                >
+                  {completeSaving ? 'Completando…' : 'Completar'}
+                </button>
+              )}
               {/* Seguir tarea: notifica al seguidor cuando se completa o se comenta */}
               <button
                 onClick={handleToggleFollow}
@@ -470,6 +528,45 @@ export default function TaskCommentsModal({ task, onClose, onCommentAdded, onTas
               </button>
             </div>
           </div>
+
+          {/* Completar una pendiente: duración opcional (no tiene tiempo registrado) */}
+          {completeOpen && (
+            <div className="mb-3 rounded-xl border border-green-200 dark:border-green-900 bg-green-50 dark:bg-green-900/20 px-3 py-2.5">
+              <p className="text-xs font-medium text-green-800 dark:text-green-300">¿Cuánto te llevó? <span className="font-normal text-green-700/70 dark:text-green-400/70">(opcional)</span></p>
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <label className="flex items-center gap-1 text-xs text-gray-600 dark:text-gray-300">
+                  <input
+                    type="number" min="0" max="24" inputMode="numeric" aria-label="Horas"
+                    value={completeHours} onChange={e => setCompleteHours(e.target.value)}
+                    className="w-14 px-2 py-1 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-100 text-sm"
+                  />
+                  h
+                </label>
+                <label className="flex items-center gap-1 text-xs text-gray-600 dark:text-gray-300">
+                  <input
+                    type="number" min="0" max="59" inputMode="numeric" aria-label="Minutos"
+                    value={completeMins} onChange={e => setCompleteMins(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') handleComplete() }}
+                    className="w-14 px-2 py-1 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-100 text-sm"
+                  />
+                  min
+                </label>
+                <button
+                  type="button" onClick={handleComplete} disabled={completeSaving}
+                  className="text-xs font-medium px-3 py-1.5 rounded-lg bg-green-600 text-white hover:bg-green-700 transition-colors disabled:opacity-50"
+                >
+                  {completeSaving ? 'Completando…' : 'Completar'}
+                </button>
+                <button
+                  type="button" onClick={() => { setCompleteOpen(false); setCompleteError('') }}
+                  className="text-xs px-2 py-1.5 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          )}
+          {completeError && <p className="mb-2 text-xs text-red-500">{completeError}</p>}
 
           {/* Descripción editable */}
           {editing ? (

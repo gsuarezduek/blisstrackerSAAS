@@ -524,7 +524,30 @@ async function completeTask(req, res, next) {
       include: { workDay: { select: { date: true } } },
     })
     if (!existing || existing.userId !== userId) return res.status(404).json({ error: 'Tarea no encontrada' })
-    if (existing.status !== 'IN_PROGRESS') return res.status(400).json({ error: 'Solo se puede completar una tarea en curso.' })
+
+    // Completar directo, sin pasar por "en curso": una tarea PENDIENTE o PAUSADA se
+    // puede cerrar desde la app (el caso real: la buscás por número en Cmd+K y ya la
+    // hiciste). Antes había que iniciarla primero, lo que además pausaba la tarea que
+    // tuvieras en curso — completar directo no toca la regla de "una sola en curso".
+    // Vía MCP sigue exigiendo IN_PROGRESS: el agente registra su tiempo iniciando y
+    // completando (o con task_log_done), y un atajo acá lo dejaría cerrar en 0 minutos.
+    const direct = existing.status === 'PENDING' || existing.status === 'PAUSED'
+    if (existing.status !== 'IN_PROGRESS' && (!direct || requestAgentId(req) !== null)) {
+      const error = requestAgentId(req) !== null ? 'Solo se puede completar una tarea en curso.'
+        : existing.status === 'BLOCKED' ? 'Desbloqueá la tarea antes de completarla.'
+        : 'La tarea ya está completada.'
+      return res.status(400).json({ error })
+    }
+
+    // Duración declarada (opcional) al completar directo una tarea que nunca se inició:
+    // no hay sesiones de las que sacarla. Mismo tope que setDuration.
+    const { minutes } = req.body || {}
+    if (minutes != null) {
+      if (existing.status !== 'PENDING') return res.status(400).json({ error: 'La duración solo se indica al completar una tarea sin empezar.' })
+      if (!Number.isInteger(minutes) || minutes < 0 || minutes > MAX_TASK_OVERRIDE_MINS) {
+        return res.status(400).json({ error: `La duración tiene que ser un entero entre 0 y ${MAX_TASK_OVERRIDE_MINS} minutos.` })
+      }
+    }
 
     // Red de seguridad para la tarea que quedó IN_PROGRESS de un día previo (el cron de
     // medianoche no la pausó, o se inició antes de este fix): se cierra en la jornada de
@@ -540,6 +563,23 @@ async function completeTask(req, res, next) {
     const closedByOwner = existing.isAgentTask && requestAgentId(req) === null
 
     const now    = new Date()
+
+    // Completar directo: se cierra como si se hubiera trabajado hasta ahora.
+    // - PAUSADA: el tiempo desde la pausa cuenta como pausa (igual que resumeTask), si
+    //   no la duración sumaría todo lo que estuvo parada.
+    // - PENDIENTE: startedAt = ahora (muchas métricas filtran `startedAt: not null`) y
+    //   la duración, si se declaró, como minutesOverride.
+    // Las dos salen del Backlog y de "Programadas": una tarea completada no puede quedar
+    // escondida detrás de una fecha futura ni marcada como depósito.
+    let directData = {}
+    if (existing.status === 'PAUSED') {
+      const pausedMs = existing.pausedAt ? now.getTime() - new Date(existing.pausedAt).getTime() : 0
+      directData = { pausedMinutes: { increment: Math.round(pausedMs / 60000) } }
+    } else if (existing.status === 'PENDING') {
+      directData = { startedAt: now, ...(minutes != null ? { minutesOverride: minutes } : {}) }
+    }
+    if (direct) directData = { ...directData, isBacklog: false, scheduledFor: null }
+
     const [task] = await prisma.$transaction([
       prisma.task.update({
         where:   { id: taskId, userId },
@@ -548,7 +588,7 @@ async function completeTask(req, res, next) {
         data:    {
           status: 'COMPLETED', completedAt: now, pausedAt: null, createdByAgentSeenAt: null,
           ...(closedByOwner ? { agentUpdateAt: now, agentUpdateKind: 'completed' } : {}),
-          ...rehome, ...executorNameData(existing, req),
+          ...directData, ...rehome, ...executorNameData(existing, req),
         },
         include: taskInclude,
       }),

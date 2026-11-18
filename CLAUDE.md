@@ -122,8 +122,11 @@ Los conceptos núcleo (Task/Project/Workspace/Notificaciones/Dashboard) están a
 PENDING → IN_PROGRESS → PAUSED / BLOCKED / COMPLETED
 BLOCKED → IN_PROGRESS (unblock)
 PAUSED  → IN_PROGRESS (resume)
+PENDING / PAUSED → COMPLETED (completar directo, solo desde la app — no vía MCP)
 ```
 Only one task can be `IN_PROGRESS` per user at a time (enforced via `assertNoActiveTask()`). Blocking requires a reason and notifies all project members.
+
+**Completar directo (`PENDING`/`PAUSED → COMPLETED`):** `PATCH /tasks/:id/complete` también acepta una tarea pendiente o pausada, **sin pasar por en curso** — así no pausa la tarea que la persona tenga activa (que es lo que hacía "iniciar y completar"). Lo usa el botón **"Completar"** del detalle de la tarea (`TaskCommentsModal.jsx`, solo para el responsable), pensado para la tarea que se busca por número en Cmd+K en vez de rastrearla en el Dashboard. Pausada: el tiempo desde la pausa suma a `pausedMinutes` (mismo cálculo que `resumeTask`), así conserva lo trabajado. Pendiente: `startedAt = completedAt = ahora` (las métricas filtran `startedAt: not null`) y una duración opcional `{ minutes }` (solo en este caso, tope 1440) que se guarda como `minutesOverride` — el modal la pide antes de completar. Las dos salen del Backlog y de Programadas (`isBacklog:false`, `scheduledFor:null`) y se re-alojan hoy como cualquier cierre. Bloqueada → 400 (primero se desbloquea). **Vía MCP sigue exigiendo `IN_PROGRESS`**: el agente registra su tiempo iniciando y completando (o con `task_log_done`), y el atajo lo dejaría cerrar en 0 minutos. El modal avisa con `bliss:task-created` y Dashboard / ficha del proyecto / Calendario recargan. Tests: `tests/integration/taskCompleteDirect.test.js` y `src/tests/components/taskCommentsModalComplete.test.jsx`.
 
 **Starred tasks:** Up to 3 tasks can be starred simultaneously. `starred` is an Int 0–3 (0=none, 1=green, 2=yellow, 3=red). The star is the sole status indicator on TaskCard. Starred tasks appear in the "Foco del día" section, sorted by priority (3 = red first).
 
@@ -278,10 +281,10 @@ Hay además un quinto flag de preferencia personal, `notesBoardEnabled` (`@defau
 /marketing        → Marketing.jsx        (PrivateRoute) — `?tab=&sub=&view=&projectId=`. Secciones (`marketingNav.js` NAV): Prioridades (panel de Conexiones + hallazgos) · GEO / SEO (Diagnóstico [vistas GEO/SEO/On-Page/Canibalización] · Keywords y oportunidades · Contenido SEO [Content Brief/Content Gap/Inventario del blog]) · Web · RRSS · Anuncios · **Mailing** (Campañas/Bases y contactos/Configuración, `?campaign=<id>` abre una; solo con el flag `mailing`, ver `docs/claude/mailing.md`) · Informes. Los ids viejos de sub-pestaña (`geo`, `seo`, `onpage`, `canibalizacion`, `content-gap`, `plan`) se reescriben vía `LEGACY_SUB_MAP`.
 /contenido        → Contenido.jsx        (PrivateRoute) — requiere feature flag `contenido`. Calendario de contenido: vistas Calendario/Tabla/Kanban + modal de detalle, selector de proyecto y estado en la URL (`?view=&projectId=&month=&piece=&status=&network=`). El recorte de la vista es el **mes** (`?month=`, `none` = sin programar), no el estado: la Tabla navega por pestañas de mes y muestra todo junto, publicadas incluidas. — ver "Vistas y navegación" en `docs/claude/contenido.md`. El viejo `?view=inventario` redirige a Marketing → GEO / SEO → Contenido SEO → Inventario del blog
 /calendario       → Calendario.jsx       (PrivateRoute) — requiere feature flag `calendario`. Disponibilidad del equipo: vistas Mi semana/Equipo/Mes en la URL (`?view=&date=&people=`), conexión personal con Google Calendar (push)
+/baja/:token      → MailingUnsubscribe.jsx (pública) — baja de un mail de Mailing (link del pie; pide confirmar con un botón)
 /report/:token    → ReportOrClientPortal.jsx  (pública, sin auth) — despacha por formato de `:token`: UUID → `ReportPublic.jsx` (informe mensual individual); slug corto → `ClientPortal.jsx` (portal de cliente: Informes, Briefs, Contenido, Datos en vivo)
 /report-print/:printToken → ReportPrint.jsx (pública, sin UI de navegación) — portada + informe en formato A4; SOLO la abre el render de PDF del backend con un token de impresión de vida corta
 /oauth            → OAuthPopup.jsx       (pública) — popup OAuth (Google/Meta/TikTok)
-/baja/:token      → MailingUnsubscribe.jsx (pública) — baja de un mail de Mailing (link del pie; pide confirmar con un botón)
 /auth             → AuthCallback.jsx     (pública) — callback de Google Sign-In
 /oauth-result     → OAuthResult.jsx      (pública) — puente de callback OAuth: postMessage al opener y cierra popup
 /billing          → Billing.jsx          (PrivateRoute) — visible para todos; acciones solo admin/owner
@@ -316,10 +319,10 @@ Hay además un quinto flag de preferencia personal, `notesBoardEnabled` (`@defau
 | `0 3 * * 0` (domingos 03:00) | ART | Limpia notificaciones antiguas (leídas >30d, no leídas >90d) |
 | `*/15 * * * *` (cada 15 min) | — | Ejecuta eliminaciones de workspaces programadas vencidas |
 | `*/15 * * * *` (cada 15 min) | ART | Refresca los calendarios traídos de afuera (Google ya conectado + URLs iCal) — mantiene fresco el cache que la vista Equipo y el buscador de huecos leen de OTRAS personas; los propios se refrescan al abrir el Calendario (ver `docs/claude/calendario.md`) |
+| `* * * * *` (cada minuto) | — | Envío de campañas de Mailing (`mailingDispatch`): lanza las programadas vencidas y manda el próximo lote de cada proyecto respetando su ventana horaria y su tope diario (ver `docs/claude/mailing.md`) |
 | `* * * * *` (cada minuto) | — | Respuestas del bot de WhatsApp en espera (`runDueBotReplies`: prioridad a los agentes de IA, `WhatsappBotConfig.agentWaitMins`, ver `docs/claude/whatsapp.md`) |
 
 Los jobs con lógica pesada usan in-memory locks (`let jobRunning = false`) para evitar solapamiento del mismo job consigo mismo. Los **11 jobs mensuales del día 1°** ya **no son crons sueltos**: corren en una **única cadena secuencial** (`MONTHLY_CHAIN`, un solo cron + un solo lock `monthlyChainRunning`), así que no se pisan entre sí (resuelve el problema de PageSpeed solapando a los siguientes).
-| `* * * * *` (cada minuto) | — | Envío de campañas de Mailing (`mailingDispatch`): lanza las programadas vencidas y manda el próximo lote de cada proyecto respetando su ventana horaria y su tope diario (ver `docs/claude/mailing.md`) |
 
 > **⚠️ Deuda técnica — escalabilidad de crons (revisar a ~100 workspaces):** Hoy todos los crons corren en el **mismo proceso web**; la cadena mensual es secuencial (no se solapa), pero su **tiempo total es la suma** de todos los jobs y el procesamiento pesado (GEO con cheerio+Claude, scraping Apify) compite con el tráfico HTTP. **Fix definitivo (opción A, pendiente):** mover los crons a un **worker process** separado (segundo servicio en Railway) + **cola** (BullMQ/Redis) con concurrencia controlada y **backoff ante 429** de APIs externas (PageSpeed/SerpAPI/Apify/Anthropic). Palancas intermedias adicionales si hiciera falta antes: **repartir la cadena en varios días** del mes (hoy es un solo día por completitud del informe on-demand, que lee estos snapshots) y agregar backoff a los llamados externos.
 
@@ -359,14 +362,14 @@ backend/
       projectModules.test.js              # criterio de módulos por proyecto: el campo ausente cuenta como prendido, cada módulo mira el suyo, y los `where` que se esparcen en ~25 queries no se mutan
       contentSeo.test.js                  # inventario del blog (Marketing): las reglas de alerta con su piso de volumen (una nota que pasó de 2 clics a 1 no "perdió el 50%"), la curva de CTR esperado por posición, el idioma por prefijo de ruta y la lectura de un sitemap y de la API de WordPress
       trialLifecycle.test.js              # mails del trial: urgencia contada contra trialEndsAt (trial de 30 días, extendido a mano, trial corto), días en la tz del workspace, y precio/plan Gratis leídos de la configuración en vez de escritos en el template
-      externalCalendar.test.js            # calendarios traídos de afuera: instante UTC → hora de pared del workspace, y el mapeo de lo que devuelven Google y un ICS (fin EXCLUSIVO del día completo, el evento de las 22:00 que en UTC cae al día siguiente, series expandidas con EXDATE, lo rechazado y los carteles de Google que no son citas)
-    integration/
-      auth.test.js
       mailingRender.test.js               # Mailing: bloques → HTML de mail sin HTML inyectable, links numerados para tracking (sin mailto ni links con variables), pie de baja siempre, variables escapadas con default
       mailingSchedule.test.js             # Mailing: ventana horaria en la tz del workspace (también cruzando la medianoche) y estimación de días según el tope diario
       mailingAudience.test.js             # Mailing: audiencia = alguna base incluida y ninguna excluida, solo suscriptos, nunca "todos" sin bases
       mailingDispatcher.test.js           # Mailing: el tope diario (y el techo de plataforma) manda cuántos salen por tick, fuera de la ventana no sale nada, quien se dio de baja en cola no recibe, credencial rechazada no quema intentos, backoff de los errores temporales
       mailingProviders.test.js            # Mailing: qué errores de Resend/SMTP se reintentan o invalidan la config, y el SMTP no puede apuntar a la red interna (SSRF)
+      externalCalendar.test.js            # calendarios traídos de afuera: instante UTC → hora de pared del workspace, y el mapeo de lo que devuelven Google y un ICS (fin EXCLUSIVO del día completo, el evento de las 22:00 que en UTC cae al día siguiente, series expandidas con EXDATE, lo rechazado y los carteles de Google que no son citas)
+    integration/
+      auth.test.js
       starTask.test.js
       taskComments.test.js
       announcements.controller.test.js
@@ -379,6 +382,7 @@ backend/
       mfaLogin.test.js                    # login con 2FA no entrega sesión, el mfaToken no sirve como Bearer, verify con TOTP/código de recuperación, desafío quemado a los 5 intentos, reset de contraseña exige el código
       mfaSetup.test.js                    # setup/confirm/disable/regenerate: el secret se guarda cifrado y nunca sale en GET /profile, confirm valida el primer código, disable pide contraseña Y código
       agentTasks.test.js                  # tareas de agente: crear/iniciar/delegar/borrar vía MCP, la bandeja de novedades (las dos fuentes), y el desbloqueo desde la app (PAUSED + respuesta como comentario + disparo de los canales de salida), los filtros de la cola (por bot y por fecha) y el cierre con fecha hacia atrás (`logged-at`: jornada + completedAt juntos, tope del mes en curso)
+      taskCompleteDirect.test.js          # completar directo una pendiente/pausada: no toca la tarea en curso, conserva lo trabajado de la pausada, duración opcional solo en la pendiente, sale de Backlog/Programadas, bloqueada y vía MCP → 400
       taskSearch.test.js                  # búsqueda de tareas: filas recortadas, atajo "open", admin para ver las de otra persona, proyectos privados afuera
       cannibalResolution.test.js          # marcar/desmarcar un conflicto como resuelto (persona y agente), el split abierto/resuelto en la lectura del reporte con los conteos recalculados, y los permisos (canWrite)
       connectionsStatus.test.js           # GET /marketing/connections: los tres estados + reconnectUrl, secciones apagadas, vista de todo el workspace y gate de proyectos privados resuelto en el handler
@@ -387,11 +391,11 @@ backend/
       financeInvoiceEdit.test.js          # editar una factura de Finanzas: sólo las informativas (un comprobante de ARCA se rechaza con o sin CAE) y el monto no puede bajar de lo ya cobrado
       financeMovementInvoice.test.js      # imputar un ingreso ya cargado a una factura: pasar de "a cuenta" a factura, el pendiente que no se cuenta dos veces a sí mismo, nota de crédito y factura rechazada afuera, y la cuota del extra que se desvincula
       blogInventory.test.js               # inventario del blog (rutas de Marketing): la tabla con sus filtros y su orden (lo no medido va al final, "mejor posición" es el número más chico), las 3 queries y las dos ventanas del refresco, el cooldown, la importación idempotente en dos pasos, la ficha SEO (y que Contenido ya no escribe esos datos) y la fusión de grupos de traducción
+      mailing.test.js                     # Mailing: gates (flag `mailing`, Marketing apagado → 404, escritura canWrite), la API key del cliente se guarda cifrada y nunca vuelve, SMTP a la red interna rechazado, importación sin re-suscribir a los dados de baja, clic → URL guardada (no open redirect), pixel siempre 200, one-click de Gmail, webhook de Resend firmado (rebote duro suprime, temporal no)
       externalCalendars.test.js           # suscribir un calendario de afuera: la URL iCal se guarda cifrada y nunca vuelve, son de cada persona (404 sobre el de otro), el título de la agenda ajena se enmascara salvo showDetails, y las reuniones que empujamos a Google no vuelven como "externas"
 
 frontend/
   src/tests/
-      mailing.test.js                     # Mailing: gates (flag `mailing`, Marketing apagado → 404, escritura canWrite), la API key del cliente se guarda cifrada y nunca vuelve, SMTP a la red interna rechazado, importación sin re-suscribir a los dados de baja, clic → URL guardada (no open redirect), pixel siempre 200, one-click de Gmail, webhook de Resend firmado (rebote duro suprime, temporal no)
     setup.js
     utils/
       format.test.js
@@ -399,6 +403,7 @@ frontend/
       linkify.test.jsx
       webTabDates.test.js                 # getDateParams, formatDateLabel, currentMonthStr, prevMonthStr
     components/
+      taskCommentsModalComplete.test.jsx # "Completar" en el detalle de la tarea: la pendiente pide duración opcional, en curso/pausada en un click, no aparece en ajenas/bloqueadas/completadas
       projectAccesos.test.jsx           # la fila de un acceso: quién lo cargó y quién lo editó, y que un acceso viejo sin autor no se lo invente
       monthlyTrendChart.test.jsx        # gráfico de 12 meses de Web → Analytics: un mes sin dato es "s/d" y no una barra en cero, el tooltip con visitas/eventos/variación, el aviso del mes en curso, y el espejo del catálogo GA4 (formato de tasa/duración y valores crudos como "202611")
     hooks/
