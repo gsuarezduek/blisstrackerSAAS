@@ -34,6 +34,15 @@ function cleanCredentials(provider, raw) {
     if (!/^re_[A-Za-z0-9_]{8,}$/.test(apiKey)) throw Object.assign(new Error('La API key de Resend tiene que empezar con "re_"'), { status: 400 })
     return { apiKey }
   }
+  if (provider === 'ses') {
+    const accessKeyId = String(raw.accessKeyId || '').trim()
+    const region = String(raw.region || '').trim().toLowerCase()
+    if (!/^(AKIA|ASIA)[A-Z0-9]{12,}$/.test(accessKeyId)) throw Object.assign(new Error('La access key de AWS no tiene el formato esperado (AKIA…)'), { status: 400 })
+    if (!getProvider('ses').REGION_RE.test(region)) throw Object.assign(new Error('Región de AWS inválida (ej. us-east-1)'), { status: 400 })
+    const configurationSet = String(raw.configurationSet || '').trim().slice(0, 64) || null
+    if (configurationSet && !/^[A-Za-z0-9_-]+$/.test(configurationSet)) throw Object.assign(new Error('Nombre de configuration set inválido'), { status: 400 })
+    return { accessKeyId, secretAccessKey: raw.secretAccessKey ? String(raw.secretAccessKey).trim() : null, region, configurationSet }
+  }
   if (provider === 'smtp') {
     const host = String(raw.host || '').trim().toLowerCase()
     const port = Number(raw.port) || 587
@@ -68,6 +77,11 @@ async function saveConfig(req, res, next) {
       if (creds && provider === 'smtp' && !creds.pass && !providerChanged) {
         creds.pass = readCredentials(existing)?.pass ?? null
       }
+      // SES: el secret vacío conserva el guardado (igual que la contraseña SMTP).
+      if (creds && provider === 'ses' && !creds.secretAccessKey && !providerChanged) {
+        creds.secretAccessKey = readCredentials(existing)?.secretAccessKey ?? null
+      }
+      if (creds && provider === 'ses' && !creds.secretAccessKey) throw Object.assign(new Error('Falta la secret access key de AWS'), { status: 400 })
       if (creds && provider === 'smtp') await getProvider('smtp').assertPublicSmtpHost(creds.host, creds.port).catch(e => { throw Object.assign(e, { status: 400 }) })
       data.credentials = writeCredentials(creds)
     } else if (providerChanged && existing) {
@@ -103,8 +117,8 @@ async function saveConfig(req, res, next) {
       data.status = 'unverified'
       data.lastError = null
     }
-    // Otro proveedor = otro webhook (el viejo era de la cuenta anterior).
-    if (providerChanged || (data.credentials !== undefined && provider === 'resend')) {
+    // Otro proveedor u otra cuenta = otro webhook (el viejo era de la cuenta anterior).
+    if (providerChanged || (data.credentials !== undefined && provider !== 'smtp')) {
       data.webhookSecret = null
       data.webhookId = null
     }
@@ -143,6 +157,15 @@ async function verifyConfig(req, res, next) {
     }
 
     const data = { status: 'active', lastError: null, lastVerifiedAt: new Date() }
+    // SES: la tasa máxima de la cuenta queda junto a la credencial para que el
+    // envío no la supere, y se avisa si el tope diario pasa la cuota de 24 h.
+    if (config.provider === 'ses' && result.info?.maxSendRate) {
+      data.credentials = writeCredentials({ ...creds, maxSendRate: result.info.maxSendRate })
+      const quota = result.info.max24HourSend
+      if (quota && quota > 0 && config.dailyLimit > quota) {
+        result.warnings = [...(result.warnings || []), `El tope diario (${config.dailyLimit}) supera la cuota de 24 h de la cuenta de SES (${quota}): bajalo o pedí más cuota a AWS.`]
+      }
+    }
     if (result.webhook) {
       data.webhookId = result.webhook.id
       data.webhookSecret = encrypt(result.webhook.secret)

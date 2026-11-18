@@ -61,6 +61,7 @@ const publicFilesRoutes        = require('./routes/publicFiles.routes')
 const publicPricingRoutes      = require('./routes/publicPricing.routes')
 const publicMailingRoutes      = require('./routes/publicMailing.routes')
 const { handleResendMailingWebhook } = require('./webhooks/mailingResend.webhook')
+const { handleSesMailingWebhook } = require('./webhooks/mailingSes.webhook')
 const eosRoutes               = require('./routes/eos.routes')
 const processesRoutes         = require('./routes/processes.routes')
 const gamificationRoutes      = require('./routes/gamification.routes')
@@ -88,13 +89,20 @@ app.use(helmet({
 // Mismo chequeo lo reutiliza Socket.IO (lib/socket.js) vía lib/corsOrigins.js.
 const { isAllowedOrigin } = require('./lib/corsOrigins')
 
-app.use(cors({
+const appCors = cors({
   origin: (origin, callback) => {
     if (isAllowedOrigin(origin)) return callback(null, true)
     callback(new Error('Not allowed by CORS'))
   },
   credentials: true,
-}))
+})
+// El formulario de suscripción de Mailing se pega en la web de cada CLIENTE, así
+// que tiene que aceptar cualquier origen. Sin credenciales (no viaja ninguna
+// cookie ni token) y solo para ese path: el resto de la API sigue cerrado.
+const subscribeCors = cors({ origin: true, credentials: false, methods: ['POST', 'OPTIONS'] })
+app.use((req, res, next) => (
+  req.path.startsWith('/api/public/mailing/subscribe/') ? subscribeCors(req, res, next) : appCors(req, res, next)
+))
 
 // El webhook de Stripe necesita el body RAW — debe montarse ANTES de express.json()
 app.post('/api/billing/webhook', express.raw({ type: 'application/json' }), handleWebhook)
@@ -105,6 +113,8 @@ app.post('/api/whatsapp/webhook/chakra', express.raw({ type: 'application/json' 
 // Mismo motivo: Resend firma con Svix sobre el body crudo. Un webhook por proyecto
 // (el token de la URL lo identifica), creado en la cuenta de Resend del cliente.
 app.post('/api/mailing/webhook/resend/:token', express.raw({ type: 'application/json' }), handleResendMailingWebhook)
+// SNS manda `text/plain` aunque el cuerpo sea JSON, y la firma es sobre esos campos.
+app.post('/api/mailing/webhook/ses/:token', express.raw({ type: () => true, limit: '256kb' }), handleSesMailingWebhook)
 
 // 1mb: los editores WYSIWYG (informes, briefs, notas) y payloads de regeneración
 // superan holgadamente 100kb. Multipart (uploads de imagen) va por multer, no por acá.
@@ -215,6 +225,17 @@ app.use('/api/insights/refresh', aiLimiter)
 app.use('/api/marketing/geo/audit', aiLimiter)
 app.use('/api/landing/contact', contactLimiter)
 app.use('/api/public/leads/:token', leadWebhookLimiter)
+// Formulario de suscripción de Mailing: instancia propia, keyeada por formulario +
+// IP. Cada envío puede disparar un mail de confirmación, así que el tope es bajo.
+const mailingSubscribeLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 20,
+  keyGenerator: (req) => `${req.params.formToken || ''}:${ipKeyGenerator(req.ip)}`,
+  message: { error: 'Demasiados intentos. Probá más tarde.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+})
+app.use('/api/public/mailing/subscribe/:formToken', mailingSubscribeLimiter)
 
 app.use('/api/auth',              authRoutes)
 app.use('/api/workspaces',        workspaceRoutes)

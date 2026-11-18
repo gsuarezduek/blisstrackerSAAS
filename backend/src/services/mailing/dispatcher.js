@@ -14,7 +14,7 @@ const prisma = require('../../lib/prisma')
 const { todayString } = require('../../utils/dates')
 const { getSetting } = require('../../lib/platformSettings')
 const { getProvider } = require('./providers')
-const { readCredentials, formatFrom, backendBase } = require('./config')
+const { readCredentials, formatFrom, backendBase, frontendBase } = require('./config')
 const { renderCampaignHtml, renderCampaignText, prepareTracking, personalize } = require('./render')
 const { resolveAudience } = require('./audience')
 const { inSendWindow } = require('./schedule')
@@ -56,12 +56,6 @@ function trackingUrls(token) {
     one_click: `${api}/u/${token}`,
     click: i => `${api}/c/${token}/${i}`,
   }
-}
-
-// La página de baja vive en la SPA (dominio raíz). En desarrollo, FRONTEND_URL.
-function frontendBase() {
-  if (process.env.NODE_ENV !== 'production' && process.env.FRONTEND_URL) return process.env.FRONTEND_URL.replace(/\/$/, '')
-  return `https://${process.env.APP_DOMAIN || 'blisstracker.app'}`
 }
 
 function listUnsubscribeHeaders(urls, config) {

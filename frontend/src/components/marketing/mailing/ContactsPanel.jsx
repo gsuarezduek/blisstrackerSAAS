@@ -2,11 +2,13 @@
 // derecha los contactos del proyecto filtrados por base / estado / texto. Un
 // contacto es único por proyecto y puede estar en varias bases.
 import { useCallback, useEffect, useState } from 'react'
-import { Pencil, Trash2 } from 'lucide-react'
+import { Pencil, Trash2, FileInput, RefreshCw } from 'lucide-react'
 import api from '../../../api/client'
 import { Icon } from '../../ui/Icon'
 import ConfirmModal from '../../ConfirmModal'
 import CsvImportModal from './CsvImportModal'
+import CrmImportModal from './CrmImportModal'
+import ListFormModal from './ListFormModal'
 import {
   Card, Modal, Field, inputCls, btnPrimary, btnSecondary, btnGhost, ErrorNote,
   StatusPill, CONTACT_STATUS, apiError, fmtInt,
@@ -104,6 +106,9 @@ export default function ContactsPanel({ projectId }) {
   const [modal, setModal] = useState(null) // { type: 'list'|'contact'|'import', item? }
   const [confirm, setConfirm] = useState(null)
   const [error, setError] = useState('')
+  const [configActive, setConfigActive] = useState(false)
+
+  useEffect(() => { api.get(`${base}/config`).then(r => setConfigActive(r.data.status === 'active')).catch(() => {}) }, [base])
 
   const loadLists = useCallback(() => {
     api.get(`${base}/lists`).then(r => { setLists(r.data.lists); setCounts(r.data.contactCounts) }).catch(() => {})
@@ -160,8 +165,13 @@ export default function ContactsPanel({ projectId }) {
             <button onClick={() => setListId(l.id)} className="flex-1 min-w-0 text-left px-2.5 py-2">
               <span className={`block text-sm truncate ${listId === l.id ? 'text-primary-700 dark:text-primary-300 font-medium' : 'text-gray-700 dark:text-gray-300'}`}>{l.name}</span>
               <span className="block text-[11px] text-gray-400">{fmtInt(l.subscribed)} suscriptos · {fmtInt(l.total)} en total</span>
+              {(l.subscribeUrl || l.crmFilter) && (
+                <span className="block text-[10px] text-gray-400 mt-0.5">{[l.subscribeUrl && 'Formulario activo', l.crmFilter && 'Desde Ventas'].filter(Boolean).join(' · ')}</span>
+              )}
             </button>
-            <div className="hidden group-hover:flex items-center pt-2 pr-1">
+            <div className="flex lg:hidden lg:group-hover:flex items-center pt-2 pr-1">
+              <button className={btnGhost} title="Formulario de suscripción" onClick={() => setModal({ type: 'form', item: l })}><Icon as={FileInput} size={13} /></button>
+              {l.crmFilter && <button className={btnGhost} title="Volver a sincronizar con Ventas" onClick={() => setModal({ type: 'crm', item: l })}><Icon as={RefreshCw} size={13} /></button>}
               <button className={btnGhost} title="Editar" onClick={() => setModal({ type: 'list', item: l })}><Icon as={Pencil} size={13} /></button>
               <button className={btnGhost} title="Eliminar" onClick={() => setConfirm({ type: 'list', item: l })}><Icon as={Trash2} size={13} /></button>
             </div>
@@ -178,6 +188,7 @@ export default function ContactsPanel({ projectId }) {
             {Object.entries(CONTACT_STATUS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
           </select>
           <div className="flex-1" />
+          <button className={btnSecondary} onClick={() => setModal({ type: 'crm' })}>Importar desde Ventas</button>
           <button className={btnSecondary} onClick={() => setModal({ type: 'import' })}>Importar CSV</button>
           <button className={btnPrimary} onClick={() => setModal({ type: 'contact' })}>+ Contacto</button>
         </div>
@@ -251,6 +262,8 @@ export default function ContactsPanel({ projectId }) {
 
       {modal?.type === 'list' && <ListModal list={modal.item} onClose={() => setModal(null)} onSave={p => saveList(p, modal.item)} />}
       {modal?.type === 'contact' && <ContactModal contact={modal.item} lists={lists} onClose={() => setModal(null)} onSave={p => saveContact(p, modal.item)} />}
+      {modal?.type === 'crm' && <CrmImportModal base={base} lists={lists} defaultListId={listId} syncList={modal.item} onClose={() => setModal(null)} onDone={refresh} />}
+      {modal?.type === 'form' && <ListFormModal base={base} list={modal.item} configActive={configActive} onClose={() => setModal(null)} onChange={loadLists} />}
       {modal?.type === 'import' && <CsvImportModal base={base} lists={lists} defaultListId={listId} onClose={() => setModal(null)} onDone={refresh} />}
       <ConfirmModal
         open={!!confirm}

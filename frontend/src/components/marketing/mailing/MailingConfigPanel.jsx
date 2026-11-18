@@ -8,8 +8,11 @@ import { Card, Field, inputCls, btnPrimary, btnSecondary, ErrorNote, WarnNote, a
 
 const PROVIDERS = [
   { key: 'resend', label: 'Resend', help: 'Recomendado. Recibimos entregas, rebotes y quejas de spam automáticamente.' },
+  { key: 'ses',    label: 'Amazon SES', help: 'El más barato a volumen. Rebotes y quejas por SNS (requiere configurarlo en AWS).' },
   { key: 'smtp',   label: 'SMTP',   help: 'Google Workspace, el hosting del cliente u otro servidor. Sin aviso de rebotes.' },
 ]
+
+const AWS_REGIONS = ['us-east-1', 'us-east-2', 'us-west-1', 'us-west-2', 'sa-east-1', 'ca-central-1', 'eu-west-1', 'eu-west-2', 'eu-west-3', 'eu-central-1', 'eu-north-1', 'eu-south-1', 'ap-south-1', 'ap-southeast-1', 'ap-southeast-2', 'ap-northeast-1', 'ap-northeast-2']
 
 const STATUS = {
   active:     { label: 'Verificada', icon: CheckCircle2, cls: 'text-green-700 dark:text-green-400' },
@@ -40,7 +43,11 @@ export default function MailingConfigPanel({ projectId }) {
         sendWindowStart: r.data.sendWindowStart || '09:00', sendWindowEnd: r.data.sendWindowEnd || '20:00',
       })
       const hint = r.data.credentialsHint
-      setCreds(r.data.provider === 'smtp' && hint ? { host: hint.host, port: hint.port, user: hint.user || '' } : {})
+      setCreds(
+        r.data.provider === 'smtp' && hint ? { host: hint.host, port: hint.port, user: hint.user || '' }
+          : r.data.provider === 'ses' && hint ? { region: hint.region, configurationSet: hint.configurationSet || '' }
+            : {},
+      )
     }).catch(err => setError(apiError(err, 'No se pudo cargar la configuración')))
   }
   useEffect(load, [projectId]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -57,8 +64,10 @@ export default function MailingConfigPanel({ projectId }) {
       // Credenciales: solo si se escribió algo (vacío = conservar las guardadas).
       if (form.provider === 'resend' && creds.apiKey) body.credentials = { apiKey: creds.apiKey }
       if (form.provider === 'smtp' && creds.host) body.credentials = { host: creds.host, port: Number(creds.port) || 587, user: creds.user, pass: creds.pass || undefined }
+      // SES: la access key es lo que identifica la cuenta; sin ella no se toca lo guardado.
+      if (form.provider === 'ses' && creds.accessKeyId) body.credentials = { accessKeyId: creds.accessKeyId, secretAccessKey: creds.secretAccessKey || undefined, region: creds.region || 'us-east-1', configurationSet: creds.configurationSet || undefined }
       const { data } = await api.put(`${base}/config`, body)
-      setConfig(data); setCreds(c => ({ ...c, apiKey: '', pass: '' })); setSaved(true)
+      setConfig(data); setCreds(c => ({ ...c, apiKey: '', pass: '', accessKeyId: '', secretAccessKey: '' })); setSaved(true)
       return data
     } catch (err) {
       setError(apiError(err, 'No se pudo guardar'))
@@ -101,7 +110,7 @@ export default function MailingConfigPanel({ projectId }) {
               </span>
             )}
           </div>
-          <div className="grid sm:grid-cols-2 gap-2">
+          <div className="grid sm:grid-cols-3 gap-2">
             {PROVIDERS.map(p => (
               <button key={p.key} type="button" onClick={() => set('provider', p.key)}
                 className={`text-left rounded-lg border px-3 py-2.5 transition-colors ${form.provider === p.key
@@ -120,6 +129,24 @@ export default function MailingConfigPanel({ projectId }) {
                 placeholder={config.provider === 'resend' && config.configured && !providerChanged ? `Guardada (${config.credentialsHint}) — dejala vacía para conservarla` : 're_…'}
                 value={creds.apiKey || ''} onChange={e => setCreds(c => ({ ...c, apiKey: e.target.value }))} />
             </Field>
+          ) : form.provider === 'ses' ? (
+            <div className="grid sm:grid-cols-6 gap-3">
+              <div className="sm:col-span-3"><Field label="Access key ID"
+                hint={config.provider === 'ses' && config.configured && !providerChanged ? `Guardada (${config.credentialsHint?.accessKeyId}) — dejala vacía para conservarla` : 'De un usuario IAM con permisos ses:SendEmail, ses:GetAccount y ses:GetEmailIdentity.'}>
+                <input className={inputCls} autoComplete="off" placeholder="AKIA…" value={creds.accessKeyId || ''} onChange={e => setCreds(c => ({ ...c, accessKeyId: e.target.value }))} />
+              </Field></div>
+              <div className="sm:col-span-3"><Field label="Secret access key" hint="Vacía = conservar la guardada.">
+                <input type="password" autoComplete="new-password" className={inputCls} value={creds.secretAccessKey || ''} onChange={e => setCreds(c => ({ ...c, secretAccessKey: e.target.value }))} />
+              </Field></div>
+              <div className="sm:col-span-3"><Field label="Región">
+                <select className={inputCls} value={creds.region || 'us-east-1'} onChange={e => setCreds(c => ({ ...c, region: e.target.value }))}>
+                  {AWS_REGIONS.map(r => <option key={r} value={r}>{r}</option>)}
+                </select>
+              </Field></div>
+              <div className="sm:col-span-3"><Field label="Configuration set (opcional)" hint="Si usás uno para los eventos de envío.">
+                <input className={inputCls} value={creds.configurationSet || ''} onChange={e => setCreds(c => ({ ...c, configurationSet: e.target.value }))} />
+              </Field></div>
+            </div>
           ) : (
             <div className="grid sm:grid-cols-6 gap-3">
               <div className="sm:col-span-4"><Field label="Servidor SMTP">
@@ -189,6 +216,28 @@ export default function MailingConfigPanel({ projectId }) {
             Hasta que la configuración esté verificada se pueden armar campañas y mandar pruebas, pero no lanzarlas.
           </p>
         </Card>
+
+        {config.provider === 'ses' && config.configured && (
+          <Card className="p-5 space-y-3">
+            <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">Rebotes y quejas (SNS)</p>
+            {config.webhookConfigured ? (
+              <p className="text-xs text-green-700 dark:text-green-400">Conectado: los rebotes y las quejas de spam suprimen al contacto solos.</p>
+            ) : (
+              <>
+                <ol className="text-xs text-gray-600 dark:text-gray-400 leading-snug list-decimal pl-4 space-y-1">
+                  <li>En AWS → SNS, creá un tópico (estándar) en la misma región.</li>
+                  <li>Creá una suscripción <b>HTTPS</b> a ese tópico con esta URL. Se confirma sola.</li>
+                  <li>En SES → Identidades → el dominio → Notificaciones, mandá <i>Bounce</i>, <i>Complaint</i> y <i>Delivery</i> a ese tópico.</li>
+                </ol>
+                <div className="flex gap-1.5">
+                  <input readOnly className={`${inputCls} text-[11px]`} value={config.webhookUrl || ''} />
+                  <button className={btnSecondary} onClick={() => navigator.clipboard?.writeText(config.webhookUrl)} title="Copiar"><Icon as={Copy} size={14} /></button>
+                </div>
+                <p className="text-[11px] text-gray-500">Mientras no esté conectado, los rebotes no se registran: revisá que la tasa de rebote no suba.</p>
+              </>
+            )}
+          </Card>
+        )}
 
         {config.provider === 'resend' && config.configured && (
           <Card className="p-5 space-y-3">

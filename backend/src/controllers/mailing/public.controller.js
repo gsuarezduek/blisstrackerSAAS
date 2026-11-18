@@ -3,6 +3,8 @@
 // no expone ids ni permite enumerar.
 const prisma = require('../../lib/prisma')
 const events = require('../../services/mailing/events')
+const optin = require('../../services/mailing/optin')
+const { frontendBase } = require('../../services/mailing/config')
 
 // GIF transparente 1×1.
 const PIXEL = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64')
@@ -77,4 +79,57 @@ async function unsubscribePost(req, res) {
   }
 }
 
-module.exports = { openPixel, clickRedirect, unsubscribeInfo, unsubscribePost, maskEmail }
+// Un form HTML clásico (lo que pega el cliente en su web) espera una redirección;
+// un fetch espera JSON. Se decide por lo que pidió el navegador.
+function wantsJson(req) {
+  return req.is('application/json') || /application\/json/.test(req.get('accept') || '')
+}
+
+function thanksUrl(status) {
+  return `${frontendBase()}/suscripcion?estado=${status === 'pending' ? 'revisa-tu-mail' : 'listo'}`
+}
+
+/**
+ * POST /api/public/mailing/subscribe/:formToken
+ * Body (JSON o form-urlencoded): email, nombre?, apellido?, website (honeypot).
+ */
+async function subscribe(req, res) {
+  try {
+    const r = await optin.subscribe({ formToken: req.params.formToken, body: req.body || {} })
+    if (wantsJson(req)) return res.json({ ok: true, status: r.status })
+    res.redirect(303, r.redirect || thanksUrl(r.status))
+  } catch (err) {
+    const status = err.status && err.status < 600 ? err.status : 500
+    if (status >= 500 && status !== 503) console.error('[mailing] error en suscripción:', err.message)
+    const message = status === 500 ? 'No pudimos procesar la suscripción. Probá de nuevo.' : err.message
+    if (wantsJson(req)) return res.status(status).json({ error: message })
+    res.redirect(303, `${frontendBase()}/suscripcion?estado=error&mensaje=${encodeURIComponent(message)}`)
+  }
+}
+
+/** GET /api/public/mailing/confirm/:token — datos para la página de confirmación. */
+async function confirmInfo(req, res) {
+  try {
+    const c = await optin.findByConfirmToken(req.params.token)
+    if (!c) return res.status(404).json({ error: 'El link de confirmación no es válido o ya se usó.' })
+    const [project, config] = await Promise.all([
+      prisma.project.findUnique({ where: { id: c.projectId }, select: { name: true } }),
+      prisma.mailingConfig.findUnique({ where: { projectId: c.projectId }, select: { fromName: true } }),
+    ])
+    res.json({ email: maskEmail(c.email), sender: config?.fromName || project?.name || '', expired: c.expired, confirmed: c.status === 'subscribed' })
+  } catch {
+    res.status(500).json({ error: 'No pudimos cargar la información.' })
+  }
+}
+
+/** POST /api/public/mailing/confirm/:token — confirma (con un botón: los antivirus abren los links solos). */
+async function confirmPost(req, res) {
+  try {
+    await optin.confirm(req.params.token)
+    res.json({ ok: true })
+  } catch (err) {
+    res.status(err.status && err.status < 500 ? err.status : 500).json({ error: err.status ? err.message : 'No pudimos confirmar. Probá de nuevo.' })
+  }
+}
+
+module.exports = { openPixel, clickRedirect, unsubscribeInfo, unsubscribePost, subscribe, confirmInfo, confirmPost, maskEmail }

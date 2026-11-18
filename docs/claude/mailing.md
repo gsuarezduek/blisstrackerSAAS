@@ -21,6 +21,7 @@ Email marketing **por proyecto**: cada cliente tiene su remitente, sus bases de 
 
 `MailingConfig` (una por proyecto) guarda el proveedor y **su** credencial:
 - una API key de Resend,
+- credenciales IAM de Amazon SES (access key, secret, región, configuration set opcional),
 - o host/puerto/usuario/contraseña SMTP.
 
 `credentials` es un JSON **cifrado** (`lib/encryption.js`) que nunca vuelve en una respuesta: `publicConfig` expone sólo `configured` + `credentialsHint` (`re_…1234` o host/usuario). Que la credencial sea del cliente es la decisión central: la reputación de envío y el costo quedan de su lado. La API key de Resend **de la plataforma** (`services/email/_shared.js`, mails transaccionales) no se usa nunca para esto.
@@ -39,6 +40,13 @@ Email marketing **por proyecto**: cada cliente tiene su remitente, sus bases de 
     2. avisa si el dominio tiene el tracking propio de Resend (los links se reescribirían dos veces);
     3. **crea solo el webhook** de entregas/rebotes/quejas en la cuenta del cliente y guarda su `signing_secret` cifrado.
   - Con una key de solo envío (`restricted`) no puede crear el webhook: la UI ofrece crearlo a mano y pegar el `whsec_…` (`PUT .../config/webhook-secret`).
+- **Amazon SES** (`@aws-sdk/client-sesv2`, `SendEmail` con contenido `Simple` + `Headers` para el one-click):
+  - `verify` llama a `GetAccount`: el envío no puede estar pausado, y avisa si la cuenta está en **sandbox**.
+  - Exige que el dominio o el email del remitente estén verificados (`GetEmailIdentity`).
+  - Guarda la `MaxSendRate` de la cuenta **dentro de las credenciales**, para que el envío la respete (pausa entre mails = 1/tasa).
+  - Avisa si el tope diario supera la cuota de 24 h.
+  - Permisos IAM mínimos: `ses:SendEmail`, `ses:GetAccount`, `ses:GetEmailIdentity`.
+  - Los rebotes llegan por **SNS** (ver "Webhook de SES" abajo), que la persona configura en AWS siguiendo los pasos de la pantalla.
 - **SMTP:**
   - Usa `nodemailer` con pool.
   - **SSRF:** `assertPublicSmtpHost` rechaza hosts locales, IPs privadas y dominios que resuelven a una privada. Solo acepta los puertos 25/465/587/2525. Se valida al guardar y antes de cada lote, porque el DNS puede cambiar.
@@ -127,6 +135,15 @@ Es igual para todos los proveedores, así las métricas se comparan entre client
 
 Volver a mandarle a una dirección que no existe, o a quien marcó spam, es lo que más castiga la reputación del dominio.
 
+## Webhook de SES (SNS)
+
+`POST /api/mailing/webhook/ses/:token`, montado con `express.raw({ type: () => true })` porque SNS manda `text/plain` aunque el cuerpo sea JSON.
+
+- **Firma** (`lib/snsVerify.js`, sin dependencias): se arma el texto firmado según el `Type` y se verifica con el certificado (v1 SHA1 / v2 SHA256). El certificado se baja solo de `https://sns.<región>.amazonaws.com/…pem`; si aceptara cualquier host, un atacante firmaría con el suyo y nos haría suprimir direcciones válidas.
+- **`SubscriptionConfirmation`:** se confirma solo (GET al `SubscribeURL`, también restringido a SNS) y **se fija el tópico** en `MailingConfig.webhookId`. Desde ahí, un mensaje de otro tópico (otra cuenta de AWS suscripta a la misma URL) recibe 403.
+- **Formatos:** acepta las notificaciones de identidad (`notificationType`) y el event publishing de un configuration set (`eventType`). `Bounce` `Permanent`/`Undetermined` suprime, `Transient` no; `Complaint` suprime; `Delivery` marca entregado. Usa el mismo `applyProviderEvent` que Resend.
+- `webhookConfigured` en la forma pública es "hay tópico confirmado" para SES y "hay secreto" para Resend.
+
 ## Contactos
 
 - **Alta manual** (`POST .../contacts`): si el email ya existe se suma a las bases **sin cambiar su estado**.
@@ -138,14 +155,37 @@ Volver a mandarle a una dirección que no existe, o a quien marcó spam, es lo q
   - Dos pasos con `dryRun`, como la importación de enlaces.
   - **Exige declarar el consentimiento** (`consent: true`, queda en `consentSource`).
   - Un email existente completa los datos que faltan y se suma a las bases, pero **conserva su estado**; los suprimidos se informan aparte.
+- **Importar desde Ventas** (`controllers/mailing/crm.controller.js`):
+  - Trae los `Contact` del CRM con email.
+  - Filtros: empresas con leads en ciertos estados/orígenes, o solo el contacto principal del lead; los archivados quedan afuera salvo que se pidan.
+  - Destino: **una base**.
+  - El nombre se parte en nombre/apellido, y empresa, cargo y rubro quedan como `{{campo.empresa|cargo|rubro}}`. Guarda `crmContactId`.
+  - Es una importación **puntual**, no sincronización en vivo: el filtro queda en `MailingList.crmFilter` y "Volver a sincronizar" (`POST .../lists/:listId/crm-sync`) la repite, sumando los nuevos sin re-suscribir a nadie.
+  - Tope de 20.000 contactos por corrida (`truncated` en la respuesta).
+  - **Requiere acceso a Ventas** (flag `ventas` + `hasModuleAccess(req,'ventas')`), porque los contactos del CRM son del workspace, no del proyecto.
+  - La lógica de alta es la misma de la importación CSV: `services/mailing/importer.js` `importRows`, que comparten las dos.
 - **Borrar un contacto pierde su supresión:** una importación posterior lo volvería a crear suscripto. La UI lo advierte y sugiere dar de baja en vez de borrar.
 
-## Pendiente (fases siguientes del plan)
+## Formulario público de suscripción y doble opt-in
 
-- **Fase 2:**
-  - Amazon SES (envío + SNS para rebotes).
-  - Importar desde Contactos/Leads de Ventas (`MailingContact.crmContactId` ya existe).
-  - Formulario público de suscripción con doble opt-in (`MailingList.publicFormToken`/`doubleOptIn` y `MailingContact.confirmToken` ya existen).
+Cada base puede tener un formulario (`POST .../lists/:listId/form { enabled }`). Activarlo genera `MailingList.publicFormToken`; desactivarlo lo borra, y reactivarlo genera **otro** token, así el código viejo no revive. Se configura desde el ícono de la base (`ListFormModal.jsx`): doble opt-in, página de destino (`formSuccessUrl`, solo `https://`) y el **snippet HTML** para pegar en la web del cliente.
+
+- **Endpoint:** `POST /api/public/mailing/subscribe/:formToken` (`services/mailing/optin.js`).
+  - Acepta form-urlencoded (form HTML → **303** a `formSuccessUrl` o a `/suscripcion?estado=…`) o JSON (fetch → `{ ok, status }`).
+  - Campos: `email`, `nombre`/`apellido` y el honeypot `website`.
+  - **CORS abierto solo para este path** (`subscribeCors` en `app.js`, sin credenciales). El resto de la API sigue aceptando solo los orígenes de blisstracker.
+  - Limiter propio: 20 por hora por formulario + IP, porque cada envío puede disparar un mail.
+- **Reglas:**
+  - Con doble opt-in (default) el contacto nuevo queda `pending`, **sin `consentAt`**, y recibe el mail de confirmación por el proveedor del proyecto (si la config no está activa, 503).
+  - Quien se había **dado de baja siempre confirma**, aunque la base no pida doble opt-in: si no, cualquiera podría re-suscribir a otro escribiendo su email.
+  - Rebotados y quejas se ignoran en silencio.
+  - La respuesta **no depende de si el email ya existía**, para no filtrar quién está en la base.
+  - La confirmación no se reenvía más de una vez cada 10 min (`confirmSentAt`), así el form no sirve para bombardear una casilla ajena.
+- **Confirmar:** el link del mail lleva a `/confirmar-suscripcion/:token` (`pages/MailingSubscription.jsx`), que pide **un clic** (los antivirus de correo abren los links solos) → `POST /api/public/mailing/confirm/:token`. Eso pasa el contacto a `subscribed` con `consentSource: 'form_double_optin'`. El link vence a los 7 días (410).
+- Un `pending` está en la base pero no recibe campañas, porque la audiencia solo toma `subscribed`.
+
+## Pendiente (fase 3 del plan)
+
 - **Fase 3:**
   - Sección en el informe mensual.
   - Alertas en Prioridades (rebotes > 5%, quejas > 0,1%, credencial inválida).
@@ -157,13 +197,13 @@ Volver a mandarle a una dirección que no existe, o a quien marcó spam, es lo q
 ## Archivos
 
 - **Backend:**
-  - `services/mailing/` (`render`, `audience`, `schedule`, `dispatcher`, `events`, `config`, `providers/`)
-  - `controllers/mailing/` (`config`, `contacts`, `campaigns`, `images`, `public`, `summary`)
+  - `services/mailing/` (`render`, `audience`, `schedule`, `dispatcher`, `events`, `config`, `importer`, `optin`, `providers/` — `resend`, `ses`, `smtp`)
+  - `controllers/mailing/` (`config`, `contacts`, `campaigns`, `crm`, `images`, `public`, `summary`)
   - `routes/mailing.routes.js` y `routes/publicMailing.routes.js`
-  - `webhooks/mailingResend.webhook.js`
+  - `webhooks/mailingResend.webhook.js`, `webhooks/mailingSes.webhook.js` y `lib/snsVerify.js`
   - el cron en `index.js`
-- **Frontend:** `components/marketing/mailing/` (`MailingTab`, `CampaignsPanel`, `CampaignEditor`, `BlockEditor`, `MailTextEditor`, `CampaignStats`, `ContactsPanel`, `CsvImportModal`, `MailingConfigPanel`, `MailingSummary`, `csv.js`, `ui.jsx`) y `pages/MailingUnsubscribe.jsx`.
+- **Frontend:** `components/marketing/mailing/` (`MailingTab`, `CampaignsPanel`, `CampaignEditor`, `BlockEditor`, `MailTextEditor`, `CampaignStats`, `ContactsPanel`, `CsvImportModal`, `MailingConfigPanel`, `MailingSummary`, `CrmImportModal`, `ListFormModal`, `csv.js`, `ui.jsx`), `pages/MailingUnsubscribe.jsx` y `pages/MailingSubscription.jsx`.
 - **Tests:**
-  - unit: `mailingRender`, `mailingSchedule`, `mailingAudience`, `mailingProviders`, `mailingDispatcher`
-  - integración: `tests/integration/mailing.test.js`
+  - unit: `mailingRender`, `mailingSchedule`, `mailingAudience`, `mailingProviders`, `mailingDispatcher`, `mailingSns`, `mailingCrmFilter`
+  - integración: `tests/integration/mailing.test.js` y `tests/integration/mailingPhase2.test.js`
   - frontend: `src/tests/utils/mailingCsv.test.js`

@@ -1,33 +1,21 @@
 // Bases (MailingList) y contactos (MailingContact) de un proyecto.
+const crypto = require('crypto')
 const prisma = require('../../lib/prisma')
+const { backendBase } = require('../../services/mailing/config')
 const { normalizeEmail } = require('../../lib/normalizeEmail')
 const { buildTextSearchFilters } = require('../../lib/textSearch')
 const { resolveCtx, intParam, sendError } = require('./_shared')
 const { ownListIds } = require('../../services/mailing/audience')
+const { importRows, addMemberships, cleanFields, cleanName, EMAIL_RE } = require('../../services/mailing/importer')
 
-const EMAIL_RE = /^[^\s@<>"(),;:]+@[^\s@<>"(),;:]+\.[a-z]{2,}$/i
 const STATUSES = ['pending', 'subscribed', 'unsubscribed', 'bounced', 'complained']
 const MAX_IMPORT_ROWS = 2000
-const MAX_FIELDS = 30
-
-function cleanFields(raw) {
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {}
-  const out = {}
-  for (const [k, v] of Object.entries(raw).slice(0, MAX_FIELDS)) {
-    const key = String(k).trim().toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 40)
-    if (!key || v == null) continue
-    const val = String(v).trim().slice(0, 500)
-    if (val) out[key] = val
-  }
-  return out
-}
-
-function cleanName(v) {
-  const s = String(v ?? '').trim().slice(0, 80)
-  return s || null
-}
 
 // ─── Bases ───────────────────────────────────────────────────────────────────
+
+function formInfo(list) {
+  return { subscribeUrl: list.publicFormToken ? `${backendBase()}/api/public/mailing/subscribe/${list.publicFormToken}` : null }
+}
 
 /** GET /projects/:id/mailing/lists — con total y suscriptos por base. */
 async function listLists(req, res, next) {
@@ -38,7 +26,10 @@ async function listLists(req, res, next) {
       prisma.mailingList.findMany({
         where: { projectId: ctx.projectId },
         orderBy: { name: 'asc' },
-        select: { id: true, name: true, description: true, doubleOptIn: true, createdAt: true, _count: { select: { members: true } } },
+        select: {
+          id: true, name: true, description: true, doubleOptIn: true, publicFormToken: true, formSuccessUrl: true,
+          crmFilter: true, crmSyncedAt: true, createdAt: true, _count: { select: { members: true } },
+        },
       }),
       prisma.mailingListMember.groupBy({
         by: ['listId'],
@@ -55,7 +46,7 @@ async function listLists(req, res, next) {
     const counts = Object.fromEntries(STATUSES.map(s => [s, 0]))
     for (const t of totals) counts[t.status] = t._count._all
     res.json({
-      lists: lists.map(({ _count, ...l }) => ({ ...l, total: _count.members, subscribed: subs.get(l.id) || 0 })),
+      lists: lists.map(({ _count, ...l }) => ({ ...l, ...formInfo(l), total: _count.members, subscribed: subs.get(l.id) || 0 })),
       contactCounts: { ...counts, total: Object.values(counts).reduce((a, b) => a + b, 0) },
     })
   } catch (err) { next(err) }
@@ -95,7 +86,36 @@ async function updateList(req, res, next) {
       data.name = name
     }
     if (req.body?.description !== undefined) data.description = String(req.body.description || '').trim().slice(0, 300) || null
-    res.json(await prisma.mailingList.update({ where: { id: list.id }, data }))
+    if (req.body?.doubleOptIn !== undefined) data.doubleOptIn = req.body.doubleOptIn === true
+    if (req.body?.formSuccessUrl !== undefined) {
+      const u = String(req.body.formSuccessUrl || '').trim()
+      if (u && !/^https:\/\/[^\s]+$/i.test(u)) return res.status(400).json({ error: 'La página de destino tiene que ser una URL https://' })
+      data.formSuccessUrl = u.slice(0, 500) || null
+    }
+    const updated = await prisma.mailingList.update({ where: { id: list.id }, data })
+    res.json({ ...updated, ...formInfo(updated) })
+  } catch (err) { next(err) }
+}
+
+/**
+ * POST /projects/:id/mailing/lists/:listId/form { enabled }
+ * Prender genera el token público del formulario; apagarlo lo borra (los forms
+ * ya pegados en la web del cliente empiezan a responder 404). Volver a prenderlo
+ * genera OTRO token: el código viejo no revive.
+ */
+async function setListForm(req, res, next) {
+  try {
+    const ctx = await resolveCtx(req, res, { write: true })
+    if (!ctx) return
+    const listId = intParam(req.params.listId)
+    const list = listId && await prisma.mailingList.findFirst({ where: { id: listId, projectId: ctx.projectId } })
+    if (!list) return res.status(404).json({ error: 'Base no encontrada' })
+    const enabled = req.body?.enabled === true
+    const updated = await prisma.mailingList.update({
+      where: { id: list.id },
+      data: { publicFormToken: enabled ? (list.publicFormToken || crypto.randomBytes(18).toString('base64url')) : null },
+    })
+    res.json({ ...updated, ...formInfo(updated) })
   } catch (err) { next(err) }
 }
 
@@ -145,15 +165,6 @@ async function listContacts(req, res, next) {
     ])
     res.json({ items: items.map(shapeContact), total, page, pageSize })
   } catch (err) { next(err) }
-}
-
-async function addMemberships(contactIds, listIds) {
-  if (!contactIds.length || !listIds.length) return
-  const data = []
-  for (const contactId of contactIds) for (const listId of listIds) data.push({ contactId, listId })
-  for (let i = 0; i < data.length; i += 5000) {
-    await prisma.mailingListMember.createMany({ data: data.slice(i, i + 5000), skipDuplicates: true })
-  }
 }
 
 /**
@@ -303,72 +314,12 @@ async function importContacts(req, res, next) {
     if (!dryRun && req.body.consent !== true) return res.status(400).json({ error: 'Tenés que confirmar que estos contactos aceptaron recibir mails.' })
     const listIds = await ownListIds(ctx.projectId, req.body.listIds)
 
-    const invalid = []
-    const seen = new Map()
-    let duplicatesInFile = 0
-    rows.forEach((r, i) => {
-      const email = normalizeEmail(String(r?.email || ''))
-      if (!EMAIL_RE.test(email || '')) { invalid.push({ row: i + 1, email: String(r?.email || '').slice(0, 120) }); return }
-      if (seen.has(email)) { duplicatesInFile++; return }
-      seen.set(email, { email, firstName: cleanName(r.firstName), lastName: cleanName(r.lastName), fields: cleanFields(r.fields) })
-    })
-
-    const emails = [...seen.keys()]
-    const existing = emails.length
-      ? await prisma.mailingContact.findMany({
-        where: { projectId: ctx.projectId, email: { in: emails } },
-        select: { id: true, email: true, firstName: true, lastName: true, fields: true, status: true },
-      })
-      : []
-    const byEmail = new Map(existing.map(c => [c.email, c]))
-    const toCreate = emails.filter(e => !byEmail.has(e)).map(e => seen.get(e))
-    const suppressed = existing.filter(c => c.status !== 'subscribed').length
-
-    const summary = {
-      total: rows.length,
-      valid: emails.length,
-      new: toCreate.length,
-      existing: existing.length,
-      suppressed,
-      duplicatesInFile,
-      invalid: invalid.slice(0, 50),
-      invalidCount: invalid.length,
-    }
-    if (dryRun) return res.json({ dryRun: true, ...summary })
-
-    const now = new Date()
-    if (toCreate.length) {
-      await prisma.mailingContact.createMany({
-        data: toCreate.map(c => ({
-          workspaceId: ctx.workspaceId, projectId: ctx.projectId, ...c,
-          source: 'csv', consentAt: now, consentSource: 'csv',
-        })),
-        skipDuplicates: true,
-      })
-    }
-    // Completar datos faltantes de los que ya estaban.
-    const updates = []
-    for (const c of existing) {
-      const inc = seen.get(c.email)
-      const data = {}
-      if (!c.firstName && inc.firstName) data.firstName = inc.firstName
-      if (!c.lastName && inc.lastName) data.lastName = inc.lastName
-      const merged = { ...inc.fields, ...(c.fields || {}) }
-      if (Object.keys(merged).length !== Object.keys(c.fields || {}).length) data.fields = merged
-      if (Object.keys(data).length) updates.push(prisma.mailingContact.update({ where: { id: c.id }, data }))
-    }
-    for (let i = 0; i < updates.length; i += 200) await prisma.$transaction(updates.slice(i, i + 200))
-
-    if (listIds.length) {
-      const all = await prisma.mailingContact.findMany({ where: { projectId: ctx.projectId, email: { in: emails } }, select: { id: true } })
-      await addMemberships(all.map(c => c.id), listIds)
-    }
-    res.json({ dryRun: false, ...summary, created: toCreate.length, updated: updates.length })
+    res.json(await importRows({ workspaceId: ctx.workspaceId, projectId: ctx.projectId, rows, listIds, dryRun: !!dryRun, source: 'csv' }))
   } catch (err) { sendError(res, next, err) }
 }
 
 module.exports = {
-  listLists, createList, updateList, deleteList,
+  listLists, createList, updateList, deleteList, setListForm,
   listContacts, createContact, updateContact, deleteContact, bulkContacts, importContacts,
   cleanFields, EMAIL_RE,
 }

@@ -547,7 +547,7 @@ POST   /api/marketing/projects/:id/mailing/config/verify            # verifica c
 PUT    /api/marketing/projects/:id/mailing/config/webhook-secret    # { secret: 'whsec_…' } — webhook de Resend creado a mano (key de solo envío)
 GET    /api/marketing/projects/:id/mailing/lists                    # { lists: [{…, total, subscribed}], contactCounts por estado }
 POST   /api/marketing/projects/:id/mailing/lists                    # { name, description? } — nombre único por proyecto (409)
-PATCH  /api/marketing/projects/:id/mailing/lists/:listId
+PATCH  /api/marketing/projects/:id/mailing/lists/:listId            # { name?, description?, doubleOptIn?, formSuccessUrl? (https) }
 DELETE /api/marketing/projects/:id/mailing/lists/:listId            # los contactos quedan, solo se van las pertenencias
 GET    /api/marketing/projects/:id/mailing/contacts                 # ?listId=&status=&q=&page=&pageSize= → { items (con listIds), total }
 POST   /api/marketing/projects/:id/mailing/contacts                 # { email, firstName?, lastName?, fields?, listIds? } — si existe se suma a las bases sin cambiar su estado
@@ -555,6 +555,10 @@ PATCH  /api/marketing/projects/:id/mailing/contacts/:contactId      # status a m
 DELETE /api/marketing/projects/:id/mailing/contacts/:contactId
 POST   /api/marketing/projects/:id/mailing/contacts/bulk            # { action: add-to-list|remove-from-list|unsubscribe|delete, contactIds, listId? }
 POST   /api/marketing/projects/:id/mailing/contacts/import          # { rows: [{email, firstName, lastName, fields}] ≤2000, listIds, consent: true, dryRun } — nunca re-suscribe
+POST   /api/marketing/projects/:id/mailing/lists/:listId/form       # { enabled } — genera/borra el token del formulario público (reactivar = token NUEVO) → base con subscribeUrl
+POST   /api/marketing/projects/:id/mailing/lists/:listId/crm-sync   # { dryRun, consent } — repite la importación de Ventas con el filtro guardado (crmFilter)
+GET    /api/marketing/projects/:id/mailing/crm/options              # { available (flag ventas + acceso), statuses, origins }
+POST   /api/marketing/projects/:id/mailing/crm/import               # { listId, filter: { statuses, origins, onlyPrimary, includeArchived }, dryRun, consent } — 403 sin acceso a Ventas; tope 20.000 (truncated)
 POST   /api/marketing/projects/:id/mailing/images                   # multipart `file` (PNG/JPG/GIF/WEBP ≤5MB) → R2 con URL pública permanente → { url }; 503 sin R2
 POST   /api/marketing/projects/:id/mailing/audience                 # { includeListIds, excludeListIds } → { count, capacity: { dailyLimit, usedToday, queuedAhead, days, finishDate } }
 GET    /api/marketing/projects/:id/mailing/campaigns                # lista con contadores
@@ -576,6 +580,10 @@ GET    /api/public/mailing/c/:token/:idx     # 302 a MailingLink.url (de la DB, 
 GET    /api/public/mailing/u/:token          # datos para la página /baja/:token (email enmascarado, remitente)
 POST   /api/public/mailing/u/:token          # baja — la página (JSON { reason }) y el one-click RFC 8058 de Gmail/Yahoo (form-urlencoded)
 POST   /api/mailing/webhook/resend/:token    # webhook de Resend del cliente (raw body, firma Svix con el secreto del proyecto)
+POST   /api/mailing/webhook/ses/:token       # SNS de Amazon SES (raw text/plain, firma SNS; SubscriptionConfirmation se confirma sola y fija el tópico)
+POST   /api/public/mailing/subscribe/:formToken  # formulario público (form-urlencoded → 303, JSON → { ok, status }); CORS abierto solo acá; 20/h por form+IP
+GET    /api/public/mailing/confirm/:token    # datos para /confirmar-suscripcion/:token
+POST   /api/public/mailing/confirm/:token    # confirma el doble opt-in (410 si venció a los 7 días)
 
 # Competencia y oportunidades — el MISMO recurso (BacklinkProspect), con la unidad en el DOMINIO.
 # Una oportunidad es un prospecto `conseguible` que todavía no tenemos: su vista es este endpoint con otro filtro.

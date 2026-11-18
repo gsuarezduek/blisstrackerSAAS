@@ -7,6 +7,13 @@ function backendBase() {
   return (process.env.BACKEND_URL || 'http://localhost:3001').replace(/\/$/, '')
 }
 
+// Páginas públicas de la SPA (baja, confirmación de suscripción): dominio raíz.
+// En desarrollo, FRONTEND_URL.
+function frontendBase() {
+  if (process.env.NODE_ENV !== 'production' && process.env.FRONTEND_URL) return process.env.FRONTEND_URL.replace(/\/$/, '')
+  return `https://${process.env.APP_DOMAIN || 'blisstracker.app'}`
+}
+
 function webhookUrlFor(config) {
   return `${backendBase()}/api/mailing/webhook/${config.provider}/${config.webhookToken}`
 }
@@ -25,6 +32,7 @@ function credentialsHint(provider, creds) {
   if (!creds) return null
   if (provider === 'resend') return creds.apiKey ? `re_…${String(creds.apiKey).slice(-4)}` : null
   if (provider === 'smtp') return { host: creds.host, port: creds.port, user: creds.user || null }
+  if (provider === 'ses') return { region: creds.region, accessKeyId: creds.accessKeyId ? `${String(creds.accessKeyId).slice(0, 4)}…${String(creds.accessKeyId).slice(-4)}` : null, configurationSet: creds.configurationSet || null }
   return null
 }
 
@@ -37,7 +45,8 @@ function publicConfig(config) {
     ...rest,
     configured: !!creds,
     credentialsHint: credentialsHint(config.provider, creds),
-    webhookConfigured: !!webhookSecret,
+    // Resend: el secreto de firma. SES: el tópico SNS confirmado (no hay secreto, firma AWS).
+    webhookConfigured: config.provider === 'ses' ? !!config.webhookId : !!webhookSecret,
     webhookUrl: config.provider === 'smtp' ? null : webhookUrlFor(config),
   }
 }
@@ -53,6 +62,6 @@ async function loadConfig(projectId) {
 }
 
 module.exports = {
-  backendBase, webhookUrlFor, readCredentials, writeCredentials,
+  backendBase, frontendBase, webhookUrlFor, readCredentials, writeCredentials,
   publicConfig, formatFrom, loadConfig,
 }

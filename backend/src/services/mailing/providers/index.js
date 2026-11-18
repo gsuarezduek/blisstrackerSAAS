@@ -5,8 +5,9 @@
 //   supportsWebhooks           → si avisa entregas/rebotes/quejas
 const resend = require('./resend')
 const smtp = require('./smtp')
+const ses = require('./ses')
 
-const PROVIDERS = { resend, smtp }
+const PROVIDERS = { resend, smtp, ses }
 const PROVIDER_KEYS = Object.keys(PROVIDERS)
 
 function getProvider(key) {

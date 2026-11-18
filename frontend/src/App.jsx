@@ -114,6 +114,7 @@ const ReportPrint      = lazyWithReload(() => import('./pages/ReportPrint'))
 const FacturaPrint     = lazyWithReload(() => import('./pages/FacturaPrint'))
 const ProposalPublic   = lazyWithReload(() => import('./pages/ProposalPublic'))
 const MailingUnsubscribe = lazyWithReload(() => import('./pages/MailingUnsubscribe'))
+const MailingSubscription = lazyWithReload(() => import('./pages/MailingSubscription'))
 const SharedFolderPublic = lazyWithReload(() => import('./pages/SharedFolderPublic'))
 const SharedFilePublic   = lazyWithReload(() => import('./pages/SharedFilePublic'))
 const Blog              = lazyWithReload(() => import('./pages/Blog'))
@@ -219,6 +220,8 @@ export default function App() {
           <Route path="/finanzas/factura-print/:printToken" element={<FacturaPrint />} />
           <Route path="/proposal/:token" element={<ProposalPublic />} />
           <Route path="/baja/:token" element={<MailingUnsubscribe />} />
+          <Route path="/suscripcion" element={<MailingSubscription />} />
+          <Route path="/confirmar-suscripcion/:token" element={<MailingSubscription />} />
           <Route path="/shared-folder/:token" element={<SharedFolderPublic />} />
           <Route path="/shared-file/:token" element={<SharedFilePublic />} />
           <Route path="/blog"         element={<Blog />} />

@@ -6328,6 +6328,7 @@ model MailingContact {
   source            String    @default("manual") // csv | manual | crm | form
   crmContactId      Int?
   confirmToken      String?   @unique // doble opt-in
+  confirmSentAt     DateTime? // último mail de confirmación: no se reenvía más de uno cada 10 min
   bouncedAt         DateTime?
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
@@ -6344,15 +6345,22 @@ model MailingContact {
 }
 
 model MailingList {
-  id              Int      @id @default(autoincrement())
+  id              Int       @id @default(autoincrement())
   workspaceId     Int
   projectId       Int
   name            String
   description     String?
-  doubleOptIn     Boolean  @default(true) // sólo aplica al formulario público
-  publicFormToken String?  @unique
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  doubleOptIn     Boolean   @default(true) // sólo aplica al formulario público
+  publicFormToken String?   @unique
+  // Formulario público: adónde vuelve la persona después de suscribirse desde la
+  // web del cliente (form HTML clásico). Vacío = nuestra página de "gracias".
+  formSuccessUrl  String?
+  // Base armada desde Ventas: el filtro con el que se importó, para "volver a
+  // sincronizar" (importación puntual, no sincronización en vivo).
+  crmFilter       Json?
+  crmSyncedAt     DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   workspace Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   project   Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)

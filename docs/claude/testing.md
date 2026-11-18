@@ -41,6 +41,8 @@ backend/
       mailingSchedule.test.js             # Mailing: ventana horaria en la tz del workspace (también cruzando la medianoche) y estimación de días según el tope diario
       mailingAudience.test.js             # Mailing: audiencia = alguna base incluida y ninguna excluida, solo suscriptos, nunca "todos" sin bases
       mailingDispatcher.test.js           # Mailing: el tope diario (y el techo de plataforma) manda cuántos salen por tick, fuera de la ventana no sale nada, quien se dio de baja en cola no recibe, credencial rechazada no quema intentos, backoff de los errores temporales
+      mailingSns.test.js                  # Mailing: firma de SNS (v1/v2, mensaje alterado, certificado fuera del dominio de SNS) y qué errores de SES invalidan la config
+      mailingCrmFilter.test.js            # Mailing: qué contactos de Ventas entran según estados/orígenes/contacto principal
       mailingProviders.test.js            # Mailing: qué errores de Resend/SMTP se reintentan o invalidan la config, y el SMTP no puede apuntar a la red interna (SSRF)
       externalCalendar.test.js            # calendarios traídos de afuera: instante UTC → hora de pared del workspace, y el mapeo de lo que devuelven Google y un ICS (fin EXCLUSIVO del día completo, el evento de las 22:00 que en UTC cae al día siguiente, series expandidas con EXDATE, lo rechazado y los carteles de Google que no son citas)
     integration/
@@ -66,6 +68,7 @@ backend/
       financeInvoiceEdit.test.js          # editar una factura de Finanzas: sólo las informativas (un comprobante de ARCA se rechaza con o sin CAE) y el monto no puede bajar de lo ya cobrado
       financeMovementInvoice.test.js      # imputar un ingreso ya cargado a una factura: pasar de "a cuenta" a factura, el pendiente que no se cuenta dos veces a sí mismo, nota de crédito y factura rechazada afuera, y la cuota del extra que se desvincula
       blogInventory.test.js               # inventario del blog (rutas de Marketing): la tabla con sus filtros y su orden (lo no medido va al final, "mejor posición" es el número más chico), las 3 queries y las dos ventanas del refresco, el cooldown, la importación idempotente en dos pasos, la ficha SEO (y que Contenido ya no escribe esos datos) y la fusión de grupos de traducción
+      mailingPhase2.test.js               # Mailing fase 2: formulario público (303 a "revisá tu mail", CORS abierto solo ahí, re-suscripción siempre confirmada, honeypot, freno de reenvío), confirmación (y link vencido), webhook de SES (tópico fijado, queja suprime) e importación desde Ventas sin acceso → 403
       mailing.test.js                     # Mailing: gates (flag `mailing`, Marketing apagado → 404, escritura canWrite), la API key del cliente se guarda cifrada y nunca vuelve, SMTP a la red interna rechazado, importación sin re-suscribir a los dados de baja, clic → URL guardada (no open redirect), pixel siempre 200, one-click de Gmail, webhook de Resend firmado (rebote duro suprime, temporal no)
       externalCalendars.test.js           # suscribir un calendario de afuera: la URL iCal se guarda cifrada y nunca vuelve, son de cada persona (404 sobre el de otro), el título de la agenda ajena se enmascara salvo showDetails, y las reuniones que empujamos a Google no vuelven como "externas"
 

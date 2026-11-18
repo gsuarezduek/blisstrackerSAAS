@@ -36,7 +36,7 @@ El detalle de cada tema vive en `docs/claude/`. **Esos archivos NO se cargan aut
 | `docs/claude/env-vars.md` | Variables de entorno de backend y frontend |
 | `docs/claude/navegacion.md` | Proyecto fijado entre secciones, barra lateral, avisos por módulo, `FloatingDock`, atajos de teclado, buscador Cmd/Ctrl+K |
 | `docs/claude/marketing.md` | GEO/SEO, RRSS (Instagram/TikTok/LinkedIn/Facebook/YouTube), Ads, Competidores, Informes mensuales, Objetivos de marketing, Domain Rating, SERP, servicios de scraping |
-| `docs/claude/mailing.md` | Mailing (Marketing → Mailing): email marketing por proyecto con el Resend/SMTP del cliente, bases e importación CSV, campañas por bloques, envío con tope diario y ventana horaria, tracking propio, baja one-click, webhook de rebotes |
+| `docs/claude/mailing.md` | Mailing (Marketing → Mailing): email marketing por proyecto con el Resend/SES/SMTP del cliente, bases e importación CSV o desde Ventas, formulario público con doble opt-in, campañas por bloques, envío con tope diario y ventana horaria, tracking propio, baja one-click, webhook de rebotes |
 | `docs/claude/ventas.md` | CRM: Empresas/Contactos/Leads, Propuestas (documento estructurado), Pipeline Kanban, Métricas/Forecast, Recordatorios |
 | `docs/claude/finanzas.md` | Finanzas: cuentas/saldos/ajustes, movimientos/impuestos/cheques, clientes (cuenta corriente, razón social) y facturación ARCA, Extras (cobros y pagos al equipo), Pendientes, rutas |
 | `docs/claude/whatsapp.md` | Automatización de reactivación, analítica/costo, bot (entrenamiento, reglas de seguridad, base de conocimiento), bloqueo de spam, Coexistence |
