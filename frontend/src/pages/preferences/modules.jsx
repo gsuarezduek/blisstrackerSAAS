@@ -4,7 +4,7 @@ import { useAuth } from '../../context/AuthContext'
 import { useWorkspace } from '../../context/WorkspaceContext'
 import { moduleMeta } from '../../lib/moduleCatalog'
 import ModuleAccessEditor from '../../components/ModuleAccessEditor'
-import { invalidateFeatureFlag } from '../../hooks/useFeatureFlag'
+import { invalidateFeatureFlag, useFeatureFlag } from '../../hooks/useFeatureFlag'
 import { NAV, SECTION_DESCRIPTIONS } from '../../components/marketing/marketingNav'
 import { Toggle } from './shared'
 
@@ -38,6 +38,9 @@ export default function ModulesTab({ loaded }) {
   // Marketing: configuración propia del módulo
   const [globalSettings,      setGlobalSettings]      = useState(null)
   const [sectionsErr,         setSectionsErr]         = useState('')
+  // Mailing tiene flag propio: si el workspace no lo tiene, no se ofrece acá.
+  const { enabled: mailingFlag } = useFeatureFlag('mailing')
+  const navShown = NAV.filter(n => n.id !== 'mailing' || mailingFlag)
   const [marketingDigestTest, setMarketingDigestTest] = useState({ sending: false, msg: '', error: false })
 
   useEffect(() => {
@@ -148,7 +151,7 @@ export default function ModulesTab({ loaded }) {
     setSectionsErr('')
     const current = globalSettings?.marketingDisabledSections || []
     const next = current.includes(id) ? current.filter(x => x !== id) : [...current, id]
-    if (next.length >= NAV.length) {
+    if (navShown.every(n => next.includes(n.id))) {
       setSectionsErr('Debe quedar al menos una pestaña visible.')
       return
     }
@@ -374,7 +377,7 @@ export default function ModulesTab({ loaded }) {
                       Elegí qué pestañas ve el equipo dentro de Marketing. Útil para ocultar las que no aplican a este workspace.
                     </p>
                     <div className="space-y-0.5">
-                      {NAV.map(n => (
+                      {navShown.map(n => (
                         <label key={n.id} className="flex items-start gap-2.5 py-1.5 px-1 rounded-lg hover:bg-white dark:hover:bg-gray-700/60 cursor-pointer">
                           <input
                             type="checkbox"

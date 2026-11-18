@@ -68,6 +68,17 @@ export const NAV = [
     ],
   },
   {
+    // Requiere además el feature flag `mailing` (opt-in por workspace): sin él,
+    // Marketing.jsx la saca de la navegación.
+    id: 'mailing',
+    label: 'Mailing',
+    subs: [
+      { id: 'campanas',      label: 'Campañas' },
+      { id: 'bases',         label: 'Bases y contactos' },
+      { id: 'configuracion', label: 'Configuración' },
+    ],
+  },
+  {
     id: 'informes',
     label: 'Informes',
     subs: [],
@@ -82,6 +93,7 @@ export const SECTION_DESCRIPTIONS = {
   web:        'Analytics (GA4) y Performance (PageSpeed).',
   rrss:       'Instagram, TikTok, LinkedIn, Facebook, YouTube y Competidores.',
   anuncios:   'Meta Ads, Google Ads y ChatGPT Ads.',
+  mailing:    'Email marketing: bases de contactos, campañas y métricas de aperturas, clics y bajas (requiere el módulo Mailing).',
   informes:   'Informes mensuales para compartir con el cliente.',
 }
 

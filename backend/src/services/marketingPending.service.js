@@ -227,7 +227,8 @@ async function computeProjectPendingItems({ projectId, workspaceId, tz = DEFAULT
     .map(({ key, ...rest }, i) => ({ key: `p-${i}`, ...rest }))
 
   const groups = MARKETING_SECTION_IDS
-    .filter(id => id !== 'hoy' && !disabledSections.includes(id))
+    // Mailing todavía no aporta hallazgos a Prioridades (no tiene label ni items).
+    .filter(id => id !== 'hoy' && id in SECTION_LABELS && !disabledSections.includes(id))
     .map(id => {
       const all = items.filter(it => it.section === id)
       return { id, label: SECTION_LABELS[id], items: all.slice(0, 3), moreCount: Math.max(0, all.length - 3), total: all.length }

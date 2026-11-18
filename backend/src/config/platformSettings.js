@@ -282,6 +282,16 @@ const PLATFORM_SETTINGS = [
     help:    'Después de cuántos días se borran los McpAuthFailure a los que no les llega un intento nuevo (los 401 de /api/mcp: token revocado, token inexistente o sin header). Es una fila por valor rechazado con su contador, no una por intento, así que la tabla crece con la cantidad de conectores mal configurados y no con el tráfico.',
   },
   {
+    key:     'mailingMaxDailyPerProject',
+    type:    'integer',
+    default: 10000,
+    min:     0,
+    max:     1000000,
+    group:   'operational',
+    label:   'Mailing: tope máximo de envíos por día y proyecto',
+    help:    'Techo global del módulo Mailing (Marketing → Mailing). Cada proyecto configura su propio tope diario, pero nunca puede mandar más que esto por día: protege al proceso web (el envío corre en el mismo proceso que la API) y a la reputación de los dominios de los clientes ante una configuración equivocada. 0 = sin techo global (manda el tope de cada proyecto).',
+  },
+  {
     key:     'accessLogRetentionDays',
     type:    'integer',
     default: 365,

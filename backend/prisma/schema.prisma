@@ -277,6 +277,10 @@ model Workspace {
   backlinkProfileReadings    BacklinkProfileReading[]
   backlinkSnapshots          BacklinkSnapshot[]
   backlinkJobs               BacklinkJob[]
+  mailingConfigs             MailingConfig[]
+  mailingContacts            MailingContact[]
+  mailingLists               MailingList[]
+  mailingCampaigns           MailingCampaign[]
   financeAuditLogs           FinanceAuditLog[]
 
   @@index([slug])
@@ -486,6 +490,7 @@ model User {
   accessesCreated                   ProjectAccess[]             @relation("ProjectAccessCreatedBy")
   backlinksCreated                  Backlink[]                  @relation("BacklinkCreatedBy")
   backlinksUpdated                  Backlink[]                  @relation("BacklinkUpdatedBy")
+  mailingCampaignsCreated           MailingCampaign[]           @relation("MailingCampaignCreatedBy")
   backlinkProspectsOwned            BacklinkProspect[]          @relation("BacklinkProspectOwner")
   backlinkProspectsCreated          BacklinkProspect[]          @relation("BacklinkProspectCreatedBy")
   backlinkProspectsUpdated          BacklinkProspect[]          @relation("BacklinkProspectUpdatedBy")
@@ -795,6 +800,11 @@ model Project {
   backlinkProfileReadings  BacklinkProfileReading[]
   backlinkSnapshots        BacklinkSnapshot[]
   backlinkJobs             BacklinkJob[]
+  mailingConfig            MailingConfig?
+  mailingContacts          MailingContact[]
+  mailingLists             MailingList[]
+  mailingCampaigns         MailingCampaign[]
+  mailingDailyUsage        MailingDailyUsage[]
   financeItems             FinanceItem[]
 
   @@unique([workspaceId, name])
@@ -4085,6 +4095,7 @@ model Contact {
 
   primaryForLeads       Lead[]                 @relation("LeadPrimaryContact")
   whatsappConversations WhatsappConversation[]
+  mailingContacts       MailingContact[]
 
   @@index([workspaceId])
   @@index([companyId])
@@ -5210,6 +5221,7 @@ model McpToken {
   whatsappControls         WhatsappConversation[]   @relation("WhatsappConversationAgentControl")
   backlinksCreated         Backlink[]               @relation("BacklinkCreatedByAgent")
   backlinksUpdated         Backlink[]               @relation("BacklinkUpdatedByAgent")
+  mailingCampaignsCreated  MailingCampaign[]        @relation("MailingCampaignCreatedByAgent")
   backlinkProspectsCreated BacklinkProspect[]       @relation("BacklinkProspectCreatedByAgent")
   backlinkProspectsUpdated BacklinkProspect[]       @relation("BacklinkProspectUpdatedByAgent")
   backlinkReadingsCreated  BacklinkProfileReading[] @relation("BacklinkReadingCreatedByAgent")
@@ -6256,4 +6268,236 @@ model BacklinkJob {
 
   @@index([projectId, kind, createdAt])
   @@index([workspaceId])
+}
+
+// ─── Mailing (Marketing → Mailing) ───────────────────────────────────────────
+// Email marketing POR PROYECTO: cada cliente tiene su remitente, sus bases, sus
+// campañas y sus métricas. Ver docs/claude/mailing.md.
+
+// Remitente y proveedor de un proyecto. Las credenciales son del CLIENTE (su API
+// key de Resend, su SMTP): la reputación de envío y el costo quedan de su lado,
+// no de la plataforma. `credentials` es un JSON cifrado (AES-256-GCM) que nunca
+// sale en una respuesta — el GET expone sólo `configured`.
+model MailingConfig {
+  id              Int       @id @default(autoincrement())
+  workspaceId     Int
+  projectId       Int       @unique
+  provider        String    @default("resend") // resend | smtp | ses
+  credentials     String? // JSON cifrado
+  fromName        String?
+  fromEmail       String?
+  replyTo         String?
+  postalAddress   String? // va al pie de cada mail (exigido por las leyes anti-spam)
+  brandColor      String? // color de botones y links — el de la marca del CLIENTE, no el del workspace
+  dailyLimit      Int       @default(500)
+  sendWindowStart String    @default("09:00") // HH:MM en la tz del workspace
+  sendWindowEnd   String    @default("20:00")
+  status          String    @default("unverified") // unverified | active | invalid
+  lastVerifiedAt  DateTime?
+  lastError       String?
+  // El token va en la URL del webhook del proveedor (identifica el proyecto sin
+  // exponer ids); el secret firma los eventos (Svix en Resend). Cifrado.
+  webhookToken    String    @unique @default(uuid())
+  webhookSecret   String?
+  webhookId       String? // id del webhook creado en la cuenta del proveedor
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project   Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+}
+
+// Un contacto es único POR PROYECTO (no por base): la baja es "no me escribas más
+// de este cliente", no "sacame de esta lista". Un contacto puede estar en varias
+// bases y recibe UN solo mail por campaña aunque esté en todas las incluidas.
+model MailingContact {
+  id                Int       @id @default(autoincrement())
+  workspaceId       Int
+  projectId         Int
+  email             String // normalizado (trim + lowercase)
+  firstName         String?
+  lastName          String?
+  fields            Json      @default("{}") // variables personalizadas {{campo.x}}
+  status            String    @default("subscribed") // pending | subscribed | unsubscribed | bounced | complained
+  unsubscribedAt    DateTime?
+  unsubscribeReason String?
+  consentAt         DateTime?
+  consentSource     String? // csv | manual | crm | form — cómo se declaró el consentimiento
+  source            String    @default("manual") // csv | manual | crm | form
+  crmContactId      Int?
+  confirmToken      String?   @unique // doble opt-in
+  bouncedAt         DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  workspace   Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project     Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  crmContact  Contact?            @relation(fields: [crmContactId], references: [id], onDelete: SetNull)
+  memberships MailingListMember[]
+  sends       MailingSend[]
+
+  @@unique([projectId, email])
+  @@index([projectId, status])
+  @@index([workspaceId])
+}
+
+model MailingList {
+  id              Int      @id @default(autoincrement())
+  workspaceId     Int
+  projectId       Int
+  name            String
+  description     String?
+  doubleOptIn     Boolean  @default(true) // sólo aplica al formulario público
+  publicFormToken String?  @unique
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  workspace Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project   Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  members   MailingListMember[]
+
+  @@unique([projectId, name])
+  @@index([workspaceId])
+}
+
+model MailingListMember {
+  id        Int      @id @default(autoincrement())
+  listId    Int
+  contactId Int
+  addedAt   DateTime @default(now())
+
+  list    MailingList    @relation(fields: [listId], references: [id], onDelete: Cascade)
+  contact MailingContact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@unique([listId, contactId])
+  @@index([contactId])
+}
+
+// `blocks` es lo que edita la persona; `html`/`text` son el snapshot que se congela
+// al lanzar (con los links ya numerados y los placeholders de tracking/baja), así
+// editar el borrador de otra campaña o cambiar la marca no altera lo que está en cola.
+// Los contadores son desnormalizados (los incrementan el dispatcher, el tracking y
+// los webhooks): la lista de campañas no puede agregar MailingSend por cada fila.
+model MailingCampaign {
+  id               Int       @id @default(autoincrement())
+  workspaceId      Int
+  projectId        Int
+  name             String
+  subject          String    @default("")
+  preheader        String?
+  blocks           Json      @default("[]")
+  html             String?
+  text             String?
+  includeListIds   Json      @default("[]")
+  excludeListIds   Json      @default("[]")
+  status           String    @default("draft") // draft | scheduled | sending | paused | sent | cancelled
+  scheduledAt      DateTime?
+  launchedAt       DateTime?
+  finishedAt       DateTime?
+  recipients       Int       @default(0)
+  sentCount        Int       @default(0)
+  deliveredCount   Int       @default(0)
+  openCount        Int       @default(0) // aperturas ÚNICAS
+  clickCount       Int       @default(0) // clics ÚNICOS (por destinatario)
+  bounceCount      Int       @default(0)
+  complaintCount   Int       @default(0)
+  unsubscribeCount Int       @default(0)
+  failedCount      Int       @default(0)
+  createdById      Int?
+  createdByAgentId Int?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  workspace      Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project        Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdBy      User?         @relation("MailingCampaignCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdByAgent McpToken?     @relation("MailingCampaignCreatedByAgent", fields: [createdByAgentId], references: [id], onDelete: SetNull)
+  sends          MailingSend[]
+  links          MailingLink[]
+
+  @@index([projectId, status])
+  @@index([status, scheduledAt])
+  @@index([workspaceId])
+}
+
+// Un destinatario de una campaña. Es a la vez la cola de envío (status +
+// nextAttemptAt) y el registro de lo que pasó con ese mail. `token` es aleatorio:
+// identifica el envío en el pixel, en los links y en la baja sin exponer ids.
+model MailingSend {
+  id                Int       @id @default(autoincrement())
+  campaignId        Int
+  projectId         Int
+  contactId         Int?
+  email             String // snapshot: el contacto puede cambiar de email o borrarse
+  token             String    @unique
+  status            String    @default("queued") // queued | sending | sent | delivered | failed | bounced | complained | cancelled
+  providerMessageId String?
+  attempts          Int       @default(0)
+  nextAttemptAt     DateTime?
+  claimedAt         DateTime? // cuándo lo tomó el dispatcher (status sending)
+  errorMsg          String?
+  sentAt            DateTime?
+  deliveredAt       DateTime?
+  firstOpenedAt     DateTime?
+  openCount         Int       @default(0)
+  firstClickedAt    DateTime?
+  clickCount        Int       @default(0)
+  bouncedAt         DateTime?
+  bounceType        String?
+  complainedAt      DateTime?
+  unsubscribedAt    DateTime?
+  createdAt         DateTime  @default(now())
+
+  campaign MailingCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  contact  MailingContact? @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  clicks   MailingClick[]
+
+  @@index([campaignId, status])
+  @@index([projectId, status])
+  @@index([status, nextAttemptAt])
+  @@index([providerMessageId])
+}
+
+// Las URLs de una campaña, numeradas al lanzar. El redirect de clic toma la URL
+// de acá (nunca del request), así el endpoint público no es un open redirect.
+model MailingLink {
+  id           Int    @id @default(autoincrement())
+  campaignId   Int
+  idx          Int
+  url          String
+  clickCount   Int    @default(0)
+  uniqueClicks Int    @default(0)
+
+  campaign MailingCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  clicks   MailingClick[]
+
+  @@unique([campaignId, idx])
+}
+
+model MailingClick {
+  id        Int      @id @default(autoincrement())
+  sendId    Int
+  linkId    Int
+  createdAt DateTime @default(now())
+
+  send MailingSend @relation(fields: [sendId], references: [id], onDelete: Cascade)
+  link MailingLink @relation(fields: [linkId], references: [id], onDelete: Cascade)
+
+  @@unique([sendId, linkId])
+}
+
+// Fuente del tope diario: cuántos mails salieron hoy (fecha en la tz del
+// workspace) de este proyecto. Se incrementa en la misma transacción que marca
+// el envío como `sent`.
+model MailingDailyUsage {
+  id        Int    @id @default(autoincrement())
+  projectId Int
+  date      String // YYYY-MM-DD
+  count     Int    @default(0)
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, date])
 }

@@ -26,6 +26,7 @@ import CompetitorsTab from '../components/marketing/CompetitorsTab'
 import MetaAdsTab    from '../components/marketing/MetaAdsTab'
 import GoogleAdsTab  from '../components/marketing/GoogleAdsTab'
 import ChatGptAdsTab from '../components/marketing/ChatGptAdsTab'
+import MailingTab    from '../components/marketing/mailing/MailingTab'
 import ProjectSearchSelect from '../components/marketing/ProjectSearchSelect'
 import SocialIcon from '../components/marketing/SocialIcon'
 import { useFeatureFlag } from '../hooks/useFeatureFlag'
@@ -53,6 +54,7 @@ function ComingSoon({ label }) {
 
 export default function Marketing() {
   const { enabled, loading: flagLoading } = useFeatureFlag('marketing')
+  const { enabled: mailingEnabled } = useFeatureFlag('mailing')
   const { user } = useAuth()
   const moduleAllowed = enabled && !!user?.moduleAccess?.marketing
   const { workspace } = useWorkspace()
@@ -81,7 +83,10 @@ export default function Marketing() {
   }, [projectId, projects]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const disabledSections = workspace?.marketingDisabledSections || []
-  const visibleNav = NAV.filter(n => !disabledSections.includes(n.id))
+  // Mailing es la única sección con flag propio (opt-in por workspace): sin él no
+  // existe, igual que si estuviera apagada en "Pestañas visibles".
+  const hiddenSections = mailingEnabled ? disabledSections : [...disabledSections, 'mailing']
+  const visibleNav = NAV.filter(n => !hiddenSections.includes(n.id))
 
   function resolveNav() {
     const rawTab  = searchParams.get('tab')
@@ -101,7 +106,7 @@ export default function Marketing() {
 
   function normalize(rawTab, rawSub, rawView) {
     let tab = VALID_TABS.has(rawTab) ? rawTab : 'hoy'
-    if (disabledSections.includes(tab)) tab = visibleNav[0]?.id ?? tab
+    if (hiddenSections.includes(tab)) tab = visibleNav[0]?.id ?? tab
     const navItem = NAV.find(n => n.id === tab)
     const subItem = navItem?.subs.find(s => s.id === rawSub) ?? navItem?.subs[0]
     const view = subItem?.views
@@ -224,6 +229,7 @@ export default function Marketing() {
     if (tab === 'anuncios' && sub === 'meta-ads')    return <MetaAdsTab    projectId={projectId} onSelectProject={handleProjectChange} projects={projects} />
     if (tab === 'anuncios' && sub === 'google-ads')  return <GoogleAdsTab  projectId={projectId} onSelectProject={handleProjectChange} projects={projects} />
     if (tab === 'anuncios' && sub === 'chatgpt-ads') return <ChatGptAdsTab projectId={projectId} onSelectProject={handleProjectChange} projects={projects} />
+    if (tab === 'mailing') return <MailingTab sub={sub} projectId={projectId} projects={projects} onSelectProject={handleProjectChange} onNavigate={sub2 => navigateTo({ tab: 'mailing', sub: sub2 })} />
 
     return <ComingSoon label={activeSub?.label ?? activeNav.label} />
   }

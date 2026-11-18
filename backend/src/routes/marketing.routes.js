@@ -78,6 +78,9 @@ router.use(moduleAccessGuard('marketing'))
 // proyecto" en CLAUDE.md.
 router.use('/projects/:id', requireProjectModulePrefix('marketing'))
 
+// Mailing (email marketing por proyecto). Flag propio, opt-in por workspace.
+router.use('/projects/:id/mailing', requireFeatureFlag('mailing'), require('./mailing.routes'))
+
 // GEO
 router.post('/geo/audit',                    geo.runAudit)
 router.get('/geo/audits',                    geo.listAudits)
@@ -368,5 +371,6 @@ router.get('/summary/reports-stats', summary.getReportsStats)
 router.get('/summary/objectives-live', summary.getLiveObjectivesSummary)
 router.get('/summary/seo',         summary.getSeoSummary)
 router.get('/summary/pending',     marketingPending.getWorkspacePending)
+router.get('/summary/mailing',     requireFeatureFlag('mailing'), require('../controllers/mailing/summary.controller').getMailingSummary)
 
 module.exports = router

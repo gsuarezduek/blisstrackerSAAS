@@ -59,6 +59,8 @@ const publicLeadsRoutes       = require('./routes/publicLeads.routes')
 const publicClientPortalRoutes = require('./routes/publicClientPortal.routes')
 const publicFilesRoutes        = require('./routes/publicFiles.routes')
 const publicPricingRoutes      = require('./routes/publicPricing.routes')
+const publicMailingRoutes      = require('./routes/publicMailing.routes')
+const { handleResendMailingWebhook } = require('./webhooks/mailingResend.webhook')
 const eosRoutes               = require('./routes/eos.routes')
 const processesRoutes         = require('./routes/processes.routes')
 const gamificationRoutes      = require('./routes/gamification.routes')
@@ -100,6 +102,10 @@ app.post('/api/billing/webhook', express.raw({ type: 'application/json' }), hand
 // Mismo motivo: el webhook de Chakra firma el body crudo (X-Chakra-Signature-256).
 app.post('/api/whatsapp/webhook/chakra', express.raw({ type: 'application/json' }), handleChakraWebhook)
 
+// Mismo motivo: Resend firma con Svix sobre el body crudo. Un webhook por proyecto
+// (el token de la URL lo identifica), creado en la cuenta de Resend del cliente.
+app.post('/api/mailing/webhook/resend/:token', express.raw({ type: 'application/json' }), handleResendMailingWebhook)
+
 // 1mb: los editores WYSIWYG (informes, briefs, notas) y payloads de regeneración
 // superan holgadamente 100kb. Multipart (uploads de imagen) va por multer, no por acá.
 app.use(express.json({ limit: '1mb' }))
@@ -112,7 +118,10 @@ const globalLimiter = rateLimit({
   message: { error: 'Demasiadas solicitudes. Intentá de nuevo en 15 minutos.' },
   standardHeaders: true,
   legacyHeaders: false,
-  skip: (req) => req.path === '/api/health',
+  // El pixel y los clics de Mailing los piden los proxies de imágenes de Gmail/
+  // Outlook desde pocas IPs compartidas: con el límite por IP, una campaña abierta
+  // por miles de personas cortaría el tracking (y los clics darían 429 al lector).
+  skip: (req) => req.path === '/api/health' || /^\/api\/public\/mailing\/(o|c)\//.test(req.originalUrl),
 })
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -245,6 +254,7 @@ app.use('/api/public',           publicFilesRoutes)
 app.use('/api/public',           publicPricingRoutes)
 app.use('/api/public',           whatsappMediaPublicRoutes)
 app.use('/api/public',           chatAttachmentPublicRoutes)
+app.use('/api/public',           publicMailingRoutes)
 
 // Tracking de eventos de conversión (público, sin auth — captura signups, CTA clicks, etc.)
 const eventsController = require('./controllers/events.controller')

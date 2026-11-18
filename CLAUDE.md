@@ -21,6 +21,7 @@ Para que cada sesión de Claude Code cargue menos contexto de entrada, el detall
 | `backend/CLAUDE.md` | Arquitectura backend (Express/Prisma/middleware/servicios compartidos) + env vars de `backend/.env`. Se carga solo al trabajar en `backend/` |
 | `frontend/CLAUDE.md` | Arquitectura frontend (contexts/hooks/convenciones de UI/Navbar/atajos/buscador) + env vars de `frontend/.env.development`. Se carga solo al trabajar en `frontend/` |
 | `docs/claude/marketing.md` | GEO/SEO, RRSS (Instagram/TikTok/LinkedIn/Facebook/YouTube), Ads, Competidores, Informes mensuales, Objetivos de marketing, Domain Rating, SERP, servicios de scraping |
+| `docs/claude/mailing.md` | Mailing (Marketing → Mailing): email marketing por proyecto con el Resend/SMTP del cliente, bases e importación CSV, campañas por bloques, envío con tope diario y ventana horaria, tracking propio, baja one-click, webhook de rebotes |
 | `docs/claude/ventas.md` | CRM: Empresas/Contactos/Leads, Propuestas (documento estructurado), Pipeline Kanban, Métricas/Forecast, Recordatorios |
 | `docs/claude/finanzas.md` | Finanzas: cuentas/saldos/ajustes, movimientos/impuestos/cheques, clientes (cuenta corriente, razón social) y facturación ARCA, Extras (cobros y pagos al equipo), Pendientes, rutas |
 | `docs/claude/whatsapp.md` | Automatización de reactivación, analítica/costo, bot (entrenamiento, reglas de seguridad, base de conocimiento), bloqueo de spam, Coexistence |
@@ -274,12 +275,13 @@ Hay además un quinto flag de preferencia personal, `notesBoardEnabled` (`@defau
 /preferences      → Preferences.jsx      (PrivateRoute)
 /realtime         → RealTime.jsx         (PrivateRoute)
 /docs             → Docs.jsx             (PrivateRoute)
-/marketing        → Marketing.jsx        (PrivateRoute) — `?tab=&sub=&view=&projectId=`. Secciones (`marketingNav.js` NAV): Prioridades (panel de Conexiones + hallazgos) · GEO / SEO (Diagnóstico [vistas GEO/SEO/On-Page/Canibalización] · Keywords y oportunidades · Contenido SEO [Content Brief/Content Gap/Inventario del blog]) · Web · RRSS · Anuncios · Informes. Los ids viejos de sub-pestaña (`geo`, `seo`, `onpage`, `canibalizacion`, `content-gap`, `plan`) se reescriben vía `LEGACY_SUB_MAP`.
+/marketing        → Marketing.jsx        (PrivateRoute) — `?tab=&sub=&view=&projectId=`. Secciones (`marketingNav.js` NAV): Prioridades (panel de Conexiones + hallazgos) · GEO / SEO (Diagnóstico [vistas GEO/SEO/On-Page/Canibalización] · Keywords y oportunidades · Contenido SEO [Content Brief/Content Gap/Inventario del blog]) · Web · RRSS · Anuncios · **Mailing** (Campañas/Bases y contactos/Configuración, `?campaign=<id>` abre una; solo con el flag `mailing`, ver `docs/claude/mailing.md`) · Informes. Los ids viejos de sub-pestaña (`geo`, `seo`, `onpage`, `canibalizacion`, `content-gap`, `plan`) se reescriben vía `LEGACY_SUB_MAP`.
 /contenido        → Contenido.jsx        (PrivateRoute) — requiere feature flag `contenido`. Calendario de contenido: vistas Calendario/Tabla/Kanban + modal de detalle, selector de proyecto y estado en la URL (`?view=&projectId=&month=&piece=&status=&network=`). El recorte de la vista es el **mes** (`?month=`, `none` = sin programar), no el estado: la Tabla navega por pestañas de mes y muestra todo junto, publicadas incluidas. — ver "Vistas y navegación" en `docs/claude/contenido.md`. El viejo `?view=inventario` redirige a Marketing → GEO / SEO → Contenido SEO → Inventario del blog
 /calendario       → Calendario.jsx       (PrivateRoute) — requiere feature flag `calendario`. Disponibilidad del equipo: vistas Mi semana/Equipo/Mes en la URL (`?view=&date=&people=`), conexión personal con Google Calendar (push)
 /report/:token    → ReportOrClientPortal.jsx  (pública, sin auth) — despacha por formato de `:token`: UUID → `ReportPublic.jsx` (informe mensual individual); slug corto → `ClientPortal.jsx` (portal de cliente: Informes, Briefs, Contenido, Datos en vivo)
 /report-print/:printToken → ReportPrint.jsx (pública, sin UI de navegación) — portada + informe en formato A4; SOLO la abre el render de PDF del backend con un token de impresión de vida corta
 /oauth            → OAuthPopup.jsx       (pública) — popup OAuth (Google/Meta/TikTok)
+/baja/:token      → MailingUnsubscribe.jsx (pública) — baja de un mail de Mailing (link del pie; pide confirmar con un botón)
 /auth             → AuthCallback.jsx     (pública) — callback de Google Sign-In
 /oauth-result     → OAuthResult.jsx      (pública) — puente de callback OAuth: postMessage al opener y cierra popup
 /billing          → Billing.jsx          (PrivateRoute) — visible para todos; acciones solo admin/owner
@@ -317,6 +319,7 @@ Hay además un quinto flag de preferencia personal, `notesBoardEnabled` (`@defau
 | `* * * * *` (cada minuto) | — | Respuestas del bot de WhatsApp en espera (`runDueBotReplies`: prioridad a los agentes de IA, `WhatsappBotConfig.agentWaitMins`, ver `docs/claude/whatsapp.md`) |
 
 Los jobs con lógica pesada usan in-memory locks (`let jobRunning = false`) para evitar solapamiento del mismo job consigo mismo. Los **11 jobs mensuales del día 1°** ya **no son crons sueltos**: corren en una **única cadena secuencial** (`MONTHLY_CHAIN`, un solo cron + un solo lock `monthlyChainRunning`), así que no se pisan entre sí (resuelve el problema de PageSpeed solapando a los siguientes).
+| `* * * * *` (cada minuto) | — | Envío de campañas de Mailing (`mailingDispatch`): lanza las programadas vencidas y manda el próximo lote de cada proyecto respetando su ventana horaria y su tope diario (ver `docs/claude/mailing.md`) |
 
 > **⚠️ Deuda técnica — escalabilidad de crons (revisar a ~100 workspaces):** Hoy todos los crons corren en el **mismo proceso web**; la cadena mensual es secuencial (no se solapa), pero su **tiempo total es la suma** de todos los jobs y el procesamiento pesado (GEO con cheerio+Claude, scraping Apify) compite con el tráfico HTTP. **Fix definitivo (opción A, pendiente):** mover los crons a un **worker process** separado (segundo servicio en Railway) + **cola** (BullMQ/Redis) con concurrencia controlada y **backoff ante 429** de APIs externas (PageSpeed/SerpAPI/Apify/Anthropic). Palancas intermedias adicionales si hiciera falta antes: **repartir la cadena en varios días** del mes (hoy es un solo día por completitud del informe on-demand, que lee estos snapshots) y agregar backoff a los llamados externos.
 
@@ -359,6 +362,11 @@ backend/
       externalCalendar.test.js            # calendarios traídos de afuera: instante UTC → hora de pared del workspace, y el mapeo de lo que devuelven Google y un ICS (fin EXCLUSIVO del día completo, el evento de las 22:00 que en UTC cae al día siguiente, series expandidas con EXDATE, lo rechazado y los carteles de Google que no son citas)
     integration/
       auth.test.js
+      mailingRender.test.js               # Mailing: bloques → HTML de mail sin HTML inyectable, links numerados para tracking (sin mailto ni links con variables), pie de baja siempre, variables escapadas con default
+      mailingSchedule.test.js             # Mailing: ventana horaria en la tz del workspace (también cruzando la medianoche) y estimación de días según el tope diario
+      mailingAudience.test.js             # Mailing: audiencia = alguna base incluida y ninguna excluida, solo suscriptos, nunca "todos" sin bases
+      mailingDispatcher.test.js           # Mailing: el tope diario (y el techo de plataforma) manda cuántos salen por tick, fuera de la ventana no sale nada, quien se dio de baja en cola no recibe, credencial rechazada no quema intentos, backoff de los errores temporales
+      mailingProviders.test.js            # Mailing: qué errores de Resend/SMTP se reintentan o invalidan la config, y el SMTP no puede apuntar a la red interna (SSRF)
       starTask.test.js
       taskComments.test.js
       announcements.controller.test.js
@@ -383,6 +391,7 @@ backend/
 
 frontend/
   src/tests/
+      mailing.test.js                     # Mailing: gates (flag `mailing`, Marketing apagado → 404, escritura canWrite), la API key del cliente se guarda cifrada y nunca vuelve, SMTP a la red interna rechazado, importación sin re-suscribir a los dados de baja, clic → URL guardada (no open redirect), pixel siempre 200, one-click de Gmail, webhook de Resend firmado (rebote duro suprime, temporal no)
     setup.js
     utils/
       format.test.js

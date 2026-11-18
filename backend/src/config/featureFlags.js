@@ -71,6 +71,12 @@ const FEATURE_FLAGS = [
     description: 'Finanzas internas de la agencia: ingresos, egresos, saldos por cuenta/moneda, cuenta corriente de clientes (facturas y cobros), extras puntuales y un tablero de pendientes asistido por IA. Acceden admins y los roles configurables (Admin → Equipo); la Configuración del módulo (cuentas/categorías/items/impuestos) es admin/owner siempre.',
     stage: 'testing',
   },
+  {
+    key: 'mailing',
+    name: 'Mailing (Marketing)',
+    description: 'Email marketing por proyecto dentro de Marketing: bases de contactos, campañas con editor por bloques, envío con tope diario usando el Resend/SMTP del cliente, y métricas de aperturas, clics, rebotes y bajas. Opt-in por su riesgo operativo (reputación de los dominios de los clientes).',
+    stage: 'testing',
+  },
 ]
 
 module.exports = { FEATURE_FLAGS }

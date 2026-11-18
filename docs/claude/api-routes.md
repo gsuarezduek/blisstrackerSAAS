@@ -540,6 +540,43 @@ GET    /api/marketing/projects/:id/backlinks/:blId/checks         # historial de
 GET    /api/marketing/projects/:id/backlinks/profile              # { live, totalLinks, readings, snapshots, domainRating, drHistory, hasUrl }
 POST   /api/marketing/projects/:id/backlinks/profile/readings     # body: { reportedDomains?, reportedLinks?, reportedSource?, notes? } — los conteos propios los calcula el backend
 
+# Marketing — Mailing (flag 'mailing' además de los gates de Marketing). Escritura: canWrite. Ver docs/claude/mailing.md
+GET    /api/marketing/projects/:id/mailing/config                   # forma pública: sin credentials ni webhookSecret (configured + credentialsHint + webhookUrl)
+PUT    /api/marketing/projects/:id/mailing/config                   # { provider, credentials?, fromName, fromEmail, replyTo, postalAddress, brandColor, dailyLimit, sendWindowStart, sendWindowEnd } — clave ausente = no se toca; credentials ausente = conservar; cambiar proveedor/credencial/remitente → unverified
+POST   /api/marketing/projects/:id/mailing/config/verify            # verifica con el proveedor (Resend: dominio verificado + crea el webhook) → { config, warnings, info }; 400 deja status=invalid con lastError
+PUT    /api/marketing/projects/:id/mailing/config/webhook-secret    # { secret: 'whsec_…' } — webhook de Resend creado a mano (key de solo envío)
+GET    /api/marketing/projects/:id/mailing/lists                    # { lists: [{…, total, subscribed}], contactCounts por estado }
+POST   /api/marketing/projects/:id/mailing/lists                    # { name, description? } — nombre único por proyecto (409)
+PATCH  /api/marketing/projects/:id/mailing/lists/:listId
+DELETE /api/marketing/projects/:id/mailing/lists/:listId            # los contactos quedan, solo se van las pertenencias
+GET    /api/marketing/projects/:id/mailing/contacts                 # ?listId=&status=&q=&page=&pageSize= → { items (con listIds), total }
+POST   /api/marketing/projects/:id/mailing/contacts                 # { email, firstName?, lastName?, fields?, listIds? } — si existe se suma a las bases sin cambiar su estado
+PATCH  /api/marketing/projects/:id/mailing/contacts/:contactId      # status a mano: → unsubscribed siempre; → subscribed solo desde bounced
+DELETE /api/marketing/projects/:id/mailing/contacts/:contactId
+POST   /api/marketing/projects/:id/mailing/contacts/bulk            # { action: add-to-list|remove-from-list|unsubscribe|delete, contactIds, listId? }
+POST   /api/marketing/projects/:id/mailing/contacts/import          # { rows: [{email, firstName, lastName, fields}] ≤2000, listIds, consent: true, dryRun } — nunca re-suscribe
+POST   /api/marketing/projects/:id/mailing/images                   # multipart `file` (PNG/JPG/GIF/WEBP ≤5MB) → R2 con URL pública permanente → { url }; 503 sin R2
+POST   /api/marketing/projects/:id/mailing/audience                 # { includeListIds, excludeListIds } → { count, capacity: { dailyLimit, usedToday, queuedAhead, days, finishDate } }
+GET    /api/marketing/projects/:id/mailing/campaigns                # lista con contadores
+POST   /api/marketing/projects/:id/mailing/campaigns                # { name } → borrador con bloques de arranque
+GET    /api/marketing/projects/:id/mailing/campaigns/:campaignId    # sin el snapshot html/text
+PATCH  /api/marketing/projects/:id/mailing/campaigns/:campaignId    # solo draft/scheduled (409 si ya se lanzó)
+DELETE /api/marketing/projects/:id/mailing/campaigns/:campaignId    # 409 si está sending/paused (cancelar primero)
+POST   /api/marketing/projects/:id/mailing/campaigns/:campaignId/duplicate
+POST   /api/marketing/projects/:id/mailing/campaigns/:campaignId/preview   # { subject?, preheader?, blocks? } → { html } (mismo render que el envío)
+POST   /api/marketing/projects/:id/mailing/campaigns/:campaignId/test      # { emails ≤5 } — sin tracking, no consume tope ni métricas
+POST   /api/marketing/projects/:id/mailing/campaigns/:campaignId/launch    # { scheduledAt? } — futura → scheduled; si no, congela y encola (400 con problems si falta algo)
+POST   /api/marketing/projects/:id/mailing/campaigns/:campaignId/pause|resume|cancel|unschedule
+GET    /api/marketing/projects/:id/mailing/campaigns/:campaignId/stats      # { campaign, progress por estado, pending, capacity, links, hourly (aperturas por hora, 72h) }
+GET    /api/marketing/projects/:id/mailing/campaigns/:campaignId/recipients # ?filter=opened|clicked|unsubscribed|<status>&q=&page=
+GET    /api/marketing/summary/mailing                               # sin proyecto: últimas 30 campañas del workspace (respeta privacidad y Marketing apagado)
+# Mailing — públicos (sin auth; el token aleatorio de MailingSend identifica el envío). o/ y c/ exentos del globalLimiter
+GET    /api/public/mailing/o/:token(.gif)    # pixel de apertura, siempre 200
+GET    /api/public/mailing/c/:token/:idx     # 302 a MailingLink.url (de la DB, no del request); 404 si no existe
+GET    /api/public/mailing/u/:token          # datos para la página /baja/:token (email enmascarado, remitente)
+POST   /api/public/mailing/u/:token          # baja — la página (JSON { reason }) y el one-click RFC 8058 de Gmail/Yahoo (form-urlencoded)
+POST   /api/mailing/webhook/resend/:token    # webhook de Resend del cliente (raw body, firma Svix con el secreto del proyecto)
+
 # Competencia y oportunidades — el MISMO recurso (BacklinkProspect), con la unidad en el DOMINIO.
 # Una oportunidad es un prospecto `conseguible` que todavía no tenemos: su vista es este endpoint con otro filtro.
 GET    /api/marketing/projects/:id/backlinks/prospects            # ?verdict=&pipeline=&alreadyLinked=&competitor=&q=&view=&page=&limit= → { items (con effectiveVerdict, competitors parseado, verdictLocked), total, counts, pipelineCounts }. `verdict=ya_lo_tenemos` filtra por el booleano, no por la columna. **`view=pipeline`** (la vista Oportunidades) trae lo conseguible MÁS lo que ya se está trabajando, sin filtrar por `alreadyLinked`

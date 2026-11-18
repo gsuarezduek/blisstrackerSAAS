@@ -385,6 +385,16 @@ cron.schedule('* * * * *', () => runCron('whatsappBotDue', 5 * 60 * 1000, async 
   catch (err) { console.error('[WhatsApp Bot] Error en cron de respuestas en espera:', err.message) }
 }), { timezone: DEFAULT_TZ })
 
+// Cron: envío de campañas de Mailing (Marketing → Mailing) — cada minuto. Lanza
+// las programadas que vencieron y manda el próximo lote de cada proyecto
+// respetando su ventana horaria y su tope diario. Sin campañas en curso son dos
+// queries indexadas.
+cron.schedule('* * * * *', () => runCron('mailingDispatch', 10 * 60 * 1000, async () => {
+  const { dispatchTick } = require('./services/mailing/dispatcher')
+  try { await dispatchTick() }
+  catch (err) { console.error('[Mailing] Error en cron de envío:', err.message) }
+}), { timezone: DEFAULT_TZ })
+
 // Cron: acumulación automática de vacaciones (regla "+N días cada M meses" por
 // aniversario de ingreso) — diario 02:00 ART
 cron.schedule('0 2 * * *', () => runCron('vacationAccrual', 30 * 60 * 1000, async () => {
