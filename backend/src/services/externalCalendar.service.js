@@ -164,11 +164,24 @@ async function probeIcsUrl(url, { tz = DEFAULT_TZ } = {}) {
  * que puede aparecer en la respuesta.
  */
 async function ownPushedGoogleIds(workspaceId, { from, to }) {
-  const rows = await prisma.calendarEvent.findMany({
-    where: { workspaceId, googleEventId: { not: null }, date: { gte: from, lte: to } },
-    select: { googleEventId: true },
-  })
-  return new Set(rows.map(r => r.googleEventId))
+  const [rows, series] = await Promise.all([
+    prisma.calendarEvent.findMany({
+      where: { workspaceId, googleEventId: { not: null }, date: { gte: from, lte: to } },
+      select: { googleEventId: true },
+    }),
+    // Las series van a Google como UN evento recurrente: con singleEvents=true sus
+    // instancias vuelven con id "<idDelEvento>_<fecha>", incluidas las de fechas que
+    // todavía nadie miró acá (y por eso no tienen fila para comparar por id).
+    prisma.calendarEventRecurrence.findMany({
+      where: { workspaceId, googleEventId: { not: null } },
+      select: { googleEventId: true },
+    }),
+  ])
+  const ids = new Set(rows.map(r => r.googleEventId))
+  const masters = (series || []).map(r => r.googleEventId)
+  return {
+    has: id => ids.has(id) || masters.some(m => id === m || id.startsWith(`${m}_`)),
+  }
 }
 
 /**

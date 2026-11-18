@@ -3087,6 +3087,14 @@ model CalendarEventRecurrence {
   startDate         String // "YYYY-MM-DD" — primera ocurrencia posible
   endDate           String? // "YYYY-MM-DD" — null = nunca termina; "borrar esta y las siguientes" la setea al día anterior a la ocurrencia borrada
   active            Boolean  @default(true)
+  // Evento RECURRENTE espejado en el Google Calendar del organizador (uno solo con
+  // RRULE, no uno por ocurrencia) — ver googleCalendarSync.service.js. Empujar cada
+  // ocurrencia como evento suelto hacía que Google mandara una invitación por fecha
+  // cada vez que alguien abría un mes nuevo en el Calendario. `googleStartDate` es
+  // la primera fecha que cubre ese evento: lo anterior (ocurrencias empujadas
+  // sueltas antes de este cambio, o pasadas) queda afuera.
+  googleEventId     String?
+  googleStartDate   String? // "YYYY-MM-DD"
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 

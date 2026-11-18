@@ -59,3 +59,79 @@ describe('buildEventPayload', () => {
     expect(payload.attendees).toEqual([{ email: 'invitado@bliss.ar' }])
   })
 })
+
+// ─── Series recurrentes: un evento recurrente en Google, no uno por ocurrencia ──
+const { buildRecurrenceRule, wallToUtc, isInstanceOf } = require('../../src/services/googleCalendarSync.service')
+const TZ = 'America/Argentina/Buenos_Aires'
+
+describe('wallToUtc', () => {
+  it('hora de pared de Buenos Aires (UTC-3) → instante UTC', () => {
+    expect(wallToUtc('2026-12-07', '11:00', TZ).toISOString()).toBe('2026-12-07T14:00:00.000Z')
+  })
+  it('respeta el horario de verano de la zona', () => {
+    expect(wallToUtc('2026-07-01', '09:00', 'Europe/Madrid').toISOString()).toBe('2026-07-01T07:00:00.000Z')
+    expect(wallToUtc('2026-01-15', '09:00', 'Europe/Madrid').toISOString()).toBe('2026-01-15T08:00:00.000Z')
+  })
+})
+
+describe('buildRecurrenceRule', () => {
+  const base = { startTime: '11:00', startDate: '2026-12-07', endDate: null }
+
+  it('semanal multi-día con los días de la semana de la serie (0 = domingo)', () => {
+    const rec = { ...base, frequency: 'weekly', weekdays: '[1,3]' }
+    expect(buildRecurrenceRule(rec, { tz: TZ, startDate: '2026-12-07' })).toEqual(['RRULE:FREQ=WEEKLY;BYDAY=MO,WE'])
+  })
+
+  it('diaria', () => {
+    expect(buildRecurrenceRule({ ...base, frequency: 'daily' }, { tz: TZ, startDate: '2026-12-07' }))
+      .toEqual(['RRULE:FREQ=DAILY'])
+  })
+
+  it('mensual el 31 cae el último día en los meses cortos, igual que nextOccurrenceOnOrAfter', () => {
+    const rec = { ...base, frequency: 'monthly', dayOfMonth: 31, startDate: '2026-12-31' }
+    expect(buildRecurrenceRule(rec, { tz: TZ, startDate: '2026-12-31' }))
+      .toEqual(['RRULE:FREQ=MONTHLY;BYMONTHDAY=28,29,30,31;BYSETPOS=-1'])
+  })
+
+  it('mensual un día ≤ 28 va directo', () => {
+    const rec = { ...base, frequency: 'monthly', dayOfMonth: 7 }
+    expect(buildRecurrenceRule(rec, { tz: TZ, startDate: '2026-12-07' })).toEqual(['RRULE:FREQ=MONTHLY;BYMONTHDAY=7'])
+  })
+
+  it('anual con mes y día', () => {
+    const rec = { ...base, frequency: 'annual', month: 3, dayOfMonth: 15 }
+    expect(buildRecurrenceRule(rec, { tz: TZ, startDate: '2027-03-15' })).toEqual(['RRULE:FREQ=YEARLY;BYMONTH=3;BYMONTHDAY=15'])
+  })
+
+  it('UNTIL = fin del último día en la tz del workspace, expresado en UTC', () => {
+    const rec = { ...base, frequency: 'daily', endDate: '2026-12-31' }
+    // 31/12 23:59:59 en Buenos Aires = 1/1 02:59:59 UTC: una reunión de las 22hs
+    // del último día tiene que quedar adentro.
+    expect(buildRecurrenceRule(rec, { tz: TZ, startDate: '2026-12-07' }))
+      .toEqual(['RRULE:FREQ=DAILY;UNTIL=20270101T025959Z'])
+  })
+
+  it('el corte de "esta y las siguientes" gana si es anterior al endDate de la serie', () => {
+    const rec = { ...base, frequency: 'daily', endDate: '2027-06-30' }
+    expect(buildRecurrenceRule(rec, { tz: TZ, startDate: '2026-12-07', untilDate: '2026-12-20' })[0])
+      .toBe('RRULE:FREQ=DAILY;UNTIL=20261221T025959Z')
+  })
+
+  it('las ocurrencias borradas sueltas van como EXDATE en hora de pared con TZID (solo las del rango)', () => {
+    const rec = { ...base, frequency: 'weekly', weekdays: '[1]', endDate: '2026-12-31' }
+    const rules = buildRecurrenceRule(rec, {
+      tz: TZ, startDate: '2026-12-07', exceptionDates: ['2026-12-21', '2026-11-30', '2027-01-04', '2026-12-14'],
+    })
+    expect(rules[1]).toBe(`EXDATE;TZID=${TZ}:20261214T110000,20261221T110000`)
+  })
+})
+
+describe('isInstanceOf', () => {
+  it('reconoce las instancias del evento recurrente por prefijo', () => {
+    expect(isInstanceOf('abc123_20261207T140000Z', 'abc123')).toBe(true)
+    expect(isInstanceOf('abc123', 'abc123')).toBe(true)
+    expect(isInstanceOf('abc1234_20261207T140000Z', 'abc123')).toBe(false)
+    expect(isInstanceOf(null, 'abc123')).toBe(false)
+    expect(isInstanceOf('abc123_x', null)).toBe(false)
+  })
+})

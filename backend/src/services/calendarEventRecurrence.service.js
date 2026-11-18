@@ -83,7 +83,10 @@ async function materializeOccurrence(rec, date, tz) {
   const pendingInviteeIds = inviteeIds.filter(id => !autoAccept.has(id))
   await notifyInvitees(event, pendingInviteeIds, rec.organizerId)
   emitTo(`workspace:${rec.workspaceId}`, 'calendar:event:created', { event: formatEvent(event) })
-  setImmediate(() => googleCalendarSync.pushEvent(event.id).catch(() => {}))
+  // Nunca como evento suelto: la primera ocurrencia crea el evento RECURRENTE en
+  // Google (una invitación) y las demás solo se vinculan a su instancia — ver
+  // googleCalendarSync.service.js. Empujarlas sueltas mandaba un mail por fecha.
+  setImmediate(() => googleCalendarSync.syncOccurrence(event.id).catch(() => {}))
   return event
 }
 

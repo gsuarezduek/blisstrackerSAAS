@@ -10,3 +10,6 @@ Seis tablas para la gestión del perfil de enlaces (Marketing → GEO/SEO → En
 
 ### `whatsapp_unread_notifications`
 `Notification.whatsappConversationId` (FK a `WhatsappConversation`, `SetNull`, indexado): el aviso `WHATSAPP_MESSAGE` apunta a su chat, así hay uno solo sin leer por chat y por persona y abrir el chat lo apaga para todo el equipo. Sin backfill: los avisos viejos quedan sin chat y siguen abriendo el lead como antes.
+
+### `calendar_recurrence_google_series`
+`CalendarEventRecurrence.googleEventId` / `googleStartDate` (`TEXT`, nullables): la serie de reuniones se espeja en Google como UN evento recurrente (RRULE) en vez de un evento suelto por ocurrencia, que mandaba una invitación por fecha. `googleStartDate` es la primera fecha que cubre ese evento. Sin backfill: las series existentes crean su evento recurrente la próxima vez que se materializa una ocurrencia, arrancando después de la última que se empujó suelta.

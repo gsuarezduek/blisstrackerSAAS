@@ -18,6 +18,7 @@ jest.mock('../../src/lib/prisma', () => ({
   externalCalendarEvent: { findMany: jest.fn(), findFirst: jest.fn(), deleteMany: jest.fn(), createMany: jest.fn() },
   googleCalendarConnection: { findUnique: jest.fn() },
   calendarEvent: { findMany: jest.fn() },
+  calendarEventRecurrence: { findMany: jest.fn().mockResolvedValue([]) },
   $transaction: jest.fn(ops => Promise.all(ops)),
 }))
 jest.mock('axios')

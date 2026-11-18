@@ -702,8 +702,10 @@ async function updateEventSeries(req, res, next, existing) {
 
       const fresh = await loadEvent(occId, workspaceId)
       emitTo(`workspace:${workspaceId}`, 'calendar:event:updated', { event: formatEvent(fresh) })
-      setImmediate(() => googleCalendarSync.updateEvent(occId).catch(() => {}))
     }
+    // UN solo cambio en el evento recurrente de Google (no uno por ocurrencia, que
+    // le mandaba a cada invitado un mail por fecha).
+    setImmediate(() => googleCalendarSync.updateSeries(rec.id, existing.date).catch(() => {}))
 
     const freshRec = await prisma.calendarEventRecurrence.findUnique({ where: { id: rec.id } })
     const freshExisting = await loadEvent(existing.id, workspaceId)
@@ -779,7 +781,6 @@ async function deleteEventSeries(req, res, next, existing) {
       const invitees = occ.participants.filter(p => p.userId !== organizerId)
       for (const p of occ.participants) await removeTaskIfPending(p)
       await prisma.calendarEvent.delete({ where: { id: occ.id } })
-      setImmediate(() => googleCalendarSync.deleteEvent(occ).catch(() => {}))
       for (const p of invitees) {
         await prisma.notification.create({
           data: {
@@ -801,6 +802,9 @@ async function deleteEventSeries(req, res, next, existing) {
     } else {
       await prisma.calendarEventRecurrence.update({ where: { id: rec.id }, data: { endDate: addDaysYMD(existing.date, -1) } })
     }
+    // Un solo cambio en Google: se corta (o se borra) el evento recurrente, en vez
+    // de mandar una cancelación por cada ocurrencia.
+    setImmediate(() => googleCalendarSync.endSeries(rec, existing.date, futureOccurrences).catch(() => {}))
 
     res.json({ ok: true, seriesEnded: true })
   } catch (err) { next(err) }
