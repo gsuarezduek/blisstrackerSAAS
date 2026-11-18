@@ -1351,9 +1351,12 @@ const tools = [
   {
     name: 'task_complete',
     shape: 'task',
-    description: 'Marca una tarea como completada.',
-    inputSchema: { taskId: z.number().int() },
-    request: ({ taskId }) => ({ method: 'PATCH', path: `/tasks/${taskId}/complete` }),
+    description: 'Marca una tarea como completada. Sirve en curso, pausada o pendiente (no hace falta iniciarla antes; bloqueada no: desbloqueala primero). La tarea sigue siendo de quien era: si la persona te dice que ELLA ya hizo una tarea suya, usá esta tool (no `task_log_done`, que la pasaría a ser tuya). Si la tarea estaba pendiente, pasá `minutes` con lo que llevó — en una tarea tuya son horas que se le informan al cliente: minutos REALES; sin `minutes` queda en 0. Una pausada conserva lo que ya se trabajó.',
+    inputSchema: {
+      taskId: z.number().int(),
+      minutes: z.number().int().min(0).max(1440).optional().describe('Solo si la tarea está pendiente (nunca se inició): minutos reales que llevó, máximo 1440'),
+    },
+    request: ({ taskId, minutes }) => ({ method: 'PATCH', path: `/tasks/${taskId}/complete`, ...(minutes != null ? { body: { minutes } } : {}) }),
   },
   {
     name: 'task_block',

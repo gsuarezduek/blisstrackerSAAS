@@ -161,13 +161,33 @@ describe('PATCH /tasks/:id/complete — completar directo', () => {
     expect((await complete()).status).toBe(404)
   })
 
-  it('vía MCP sigue exigiendo que esté en curso (el agente registra su tiempo iniciando)', async () => {
+  it('vía MCP, una tarea de la persona se cierra directo y sigue siendo de la persona', async () => {
+    prisma.task.findFirst.mockResolvedValue(makeTask({ status: 'PENDING' }))
+
+    const res = await complete({ minutes: 20 }, { auth: authHeader({ mcpTokenId: 9 }) })
+
+    expect(res.status).toBe(200)
+    const data = updateData()
+    expect(data).toMatchObject({ status: 'COMPLETED', minutesOverride: 20 })
+    expect(data.isAgentTask).toBeUndefined()
+    expect(data.agentId).toBeUndefined()
+  })
+
+  it('vía MCP, una tarea de agente también se cierra directo con sus minutos', async () => {
     prisma.task.findFirst.mockResolvedValue(makeTask({ status: 'PENDING', isAgentTask: true, agentId: 9 }))
+
+    const res = await complete({ minutes: 35 }, { auth: authHeader({ mcpTokenId: 9 }) })
+
+    expect(res.status).toBe(200)
+    expect(updateData()).toMatchObject({ status: 'COMPLETED', minutesOverride: 35 })
+  })
+
+  it('una delegada a "cualquiera de mis agentes" queda asignada al agente que la cierra', async () => {
+    prisma.task.findFirst.mockResolvedValue(makeTask({ status: 'PENDING', isAgentTask: true, agentId: null }))
 
     const res = await complete(undefined, { auth: authHeader({ mcpTokenId: 9 }) })
 
-    expect(res.status).toBe(400)
-    expect(res.body.error).toBe('Solo se puede completar una tarea en curso.')
-    expect(prisma.task.update).not.toHaveBeenCalled()
+    expect(res.status).toBe(200)
+    expect(updateData()).toMatchObject({ status: 'COMPLETED', agentId: 9 })
   })
 })

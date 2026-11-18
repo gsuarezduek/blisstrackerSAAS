@@ -526,16 +526,15 @@ async function completeTask(req, res, next) {
     if (!existing || existing.userId !== userId) return res.status(404).json({ error: 'Tarea no encontrada' })
 
     // Completar directo, sin pasar por "en curso": una tarea PENDIENTE o PAUSADA se
-    // puede cerrar desde la app (el caso real: la buscás por número en Cmd+K y ya la
-    // hiciste). Antes había que iniciarla primero, lo que además pausaba la tarea que
-    // tuvieras en curso — completar directo no toca la regla de "una sola en curso".
-    // Vía MCP sigue exigiendo IN_PROGRESS: el agente registra su tiempo iniciando y
-    // completando (o con task_log_done), y un atajo acá lo dejaría cerrar en 0 minutos.
+    // puede cerrar (el caso real: la buscás por número en Cmd+K y ya la hiciste). Antes
+    // había que iniciarla primero, lo que además chocaba con la tarea que tuvieras en
+    // curso — completar directo no toca la regla de "una sola en curso".
+    // Vale también vía MCP y también para las tareas de agente (modelo de confianza):
+    // una tarea de agente cerrada sin `minutes` queda en 0, que es cobrar de menos y
+    // nunca de más; la guía del agente le pide informar los minutos reales.
     const direct = existing.status === 'PENDING' || existing.status === 'PAUSED'
-    if (existing.status !== 'IN_PROGRESS' && (!direct || requestAgentId(req) !== null)) {
-      const error = requestAgentId(req) !== null ? 'Solo se puede completar una tarea en curso.'
-        : existing.status === 'BLOCKED' ? 'Desbloqueá la tarea antes de completarla.'
-        : 'La tarea ya está completada.'
+    if (existing.status !== 'IN_PROGRESS' && !direct) {
+      const error = existing.status === 'BLOCKED' ? 'Desbloqueá la tarea antes de completarla.' : 'La tarea ya está completada.'
       return res.status(400).json({ error })
     }
 
@@ -579,6 +578,10 @@ async function completeTask(req, res, next) {
       directData = { startedAt: now, ...(minutes != null ? { minutesOverride: minutes } : {}) }
     }
     if (direct) directData = { ...directData, isBacklog: false, scheduledFor: null }
+    // Delegada a "cualquiera de mis agentes" (agentId null) y cerrada por un agente sin
+    // haberla iniciado: queda asignada a quien la cerró, igual que en startTask.
+    const claimAgentId = existing.isAgentTask && existing.agentId == null ? requestAgentId(req) : null
+    if (claimAgentId) directData.agentId = claimAgentId
 
     const [task] = await prisma.$transaction([
       prisma.task.update({
