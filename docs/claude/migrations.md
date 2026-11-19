@@ -22,3 +22,6 @@ Mailing fase 2, solo columnas nullable: `MailingList.formSuccessUrl` (a dónde v
 
 ### `mailing_phase3`
 Mailing fase 3: `MailingConfig.warmupEnabled`/`warmupStartedAt` (calentamiento del dominio), `MailingCampaign.subjectB`/`abTestPercent`/`abWaitHours`/`abWinner`/`abDecidedAt` (A/B de asunto) y `resendOfId` (FK a sí misma, `SetNull`: reenvío a quienes no abrieron), `MailingSend.variant`. El estado `held` de `MailingSend` es un valor nuevo de un `String`, sin cambio de tipo. Ver `docs/claude/mailing.md`.
+
+### `finanzas_tarjetas_resumenes`
+Finanzas → importar el resumen de la tarjeta: `FinanceCard` (nombre, últimos 4, cuentas de pesos y de dólares que pagan el resumen, `SetNull`), `FinanceCardStatement` (un resumen importado: cierre, vencimiento, PDF en R2 con `fileExpiresAt` a un año, `summary` Json con el control de saldos, soft-delete = importación deshecha), `FinanceCardStatementLine` (cada renglón importado con su `fingerprint` y el `movementId` que lo contiene, `SetNull`) y `FinanceCardRule` (memoria: UNIQUE `cardId`+`merchantKey`+`type` → item + categoría, `Cascade`). Solo tablas nuevas, sin backfill. Ver `docs/claude/finanzas.md`.

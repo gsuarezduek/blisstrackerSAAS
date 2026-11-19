@@ -180,7 +180,7 @@ const TASK_STATUSES = [
 // Tipos de entidad para FinanceAuditLog.entityType — ver lib/financeAudit.js.
 const AUDIT_ENTITY_TYPES = [
   'account', 'issuer', 'tax', 'category', 'item', 'movement', 'transfer', 'check',
-  'fundValuation', 'invoice', 'extra', 'nextAction', 'task', 'adjustment',
+  'fundValuation', 'invoice', 'extra', 'nextAction', 'task', 'adjustment', 'cardStatement',
 ]
 
 // FinanceAuditLog.action — ver lib/financeAudit.js.

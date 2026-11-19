@@ -28,6 +28,7 @@ backend/
       mfa.test.js                         # verifyTotp (códigos con espacios, basura, secret inválido), hasMfa (enrolamiento sin confirmar ≠ activo), códigos de recuperación (alfabeto, normalización, un solo uso, carrera entre requests), verifySecondFactor
       agentOutboundChannels.test.js       # canales de salida hacia un agente: el aviso pegado a la respuesta de una tool (no marca visto, throttle), el webhook (firma HMAC, no filtra el trabajo, reintento, SSRF) y el despertador (identidad del agente, args inválidos, tope de pasos)
       cannibalResolution.test.js          # conflictos de canibalización resueltos: identidad (query+idioma), ventana posterior al arreglo, corte de volumen prorrateado y la regla de reapertura (impresiones residuales de un 301 ≠ "volvió")
+      cardStatement.test.js               # resumen de tarjeta (lógica pura): clave del comercio sin códigos variables, memoria por prefijo, montos en formato argentino, huella estable que distingue renglones idénticos, control de saldos con los números reales de un resumen Visa Patagonia y agrupación por comercio
       libroIvaDigital.test.js             # Libro IVA Digital (ventas): líneas de 266/62 caracteres reproducidas byte a byte de un export real, alícuotas múltiples, documento 99, nombre con caracteres fuera de Windows-1252 sin correr el ancho, y un monto que no entra es error y no recorte
       textSearch.test.js                  # búsqueda tolerante a tildes (backend): variantes de una palabra (lineales, por la regla de "una tilde por palabra" del español) y combinación de palabras con AND
       connectionCatalog.test.js           # estado de las fuentes de datos de un proyecto (active/expired/missing), el link de reconexión apunta a la app y no a OAuth, y el espejo con ConnectionsPanel.jsx del frontend
@@ -69,6 +70,7 @@ backend/
       financeLibroIva.test.js             # exportar Libro IVA Digital: un emisor y un mes, solo responsables inscriptos, el resumen (NC resta, lo sin confirmar queda afuera con aviso, homologación) y el ZIP con los dos .txt en Windows-1252 + CRLF
       financeInvoiceList.test.js          # listado de facturas de Finanzas (pestaña Facturas): rango de emisión inclusive por día, emisor (incluido `none` = informativas), fechas mal formadas o invertidas → 400
       financeInvoiceEdit.test.js          # editar una factura de Finanzas: sólo las informativas (un comprobante de ARCA se rechaza con o sin CAE) y el monto no puede bajar de lo ya cobrado
+      financeCardStatements.test.js       # importar resumen de tarjeta: pedir la clave (422 + code), vista previa con memoria de la tarjeta / sugerencia de IA / pagos y ya importados aparte, confirmar (un movimiento por grupo en la cuenta de su moneda, total recalculado, item nuevo, memoria), cuenta de otra moneda, duplicados, borrar el PDF si falla, deshacer y purga de PDFs vencidos
       financeMovementInvoice.test.js      # imputar un ingreso ya cargado a una factura: pasar de "a cuenta" a factura, el pendiente que no se cuenta dos veces a sí mismo, nota de crédito y factura rechazada afuera, y la cuota del extra que se desvincula
       blogInventory.test.js               # inventario del blog (rutas de Marketing): la tabla con sus filtros y su orden (lo no medido va al final, "mejor posición" es el número más chico), las 3 queries y las dos ventanas del refresco, el cooldown, la importación idempotente en dos pasos, la ficha SEO (y que Contenido ya no escribe esos datos) y la fusión de grupos de traducción
       mailingPhase3.test.js               # Mailing fase 3: lanzar/reanudar/cancelar vía MCP → 403 HUMAN_ONLY (pausar sí), y el reenvío a quienes no abrieron (solo de una campaña terminada, con su audiencia)
@@ -85,6 +87,7 @@ frontend/
       linkify.test.jsx
       webTabDates.test.js                 # getDateParams, formatDateLabel, currentMonthStr, prevMonthStr
     components/
+      cardStatementImport.test.jsx      # "+ Cargar" → Tarjeta: pide la clave, muestra recordado/sugerido/crear item, manda lo corregido y respeta los grupos destildados
       taskCommentsModalComplete.test.jsx # "Completar" en el detalle de la tarea: la pendiente pide duración opcional, en curso/pausada en un click, no aparece en ajenas/bloqueadas/completadas
       projectAccesos.test.jsx           # la fila de un acceso: quién lo cargó y quién lo editó, y que un acceso viejo sin autor no se lo invente
       monthlyTrendChart.test.jsx        # gráfico de 12 meses de Web → Analytics: un mes sin dato es "s/d" y no una barra en cero, el tooltip con visitas/eventos/variación, el aviso del mes en curso, y el espejo del catálogo GA4 (formato de tasa/duración y valores crudos como "202611")

@@ -272,6 +272,10 @@ model Workspace {
   financeTasks               FinanceTask[]
   financeWorkspaceNote       FinanceWorkspaceNote?
   financeAiSummary           FinanceAiSummary?
+  financeCards               FinanceCard[]
+  financeCardStatements      FinanceCardStatement[]
+  financeCardStatementLines  FinanceCardStatementLine[]
+  financeCardRules           FinanceCardRule[]
   backlinks                  Backlink[]
   backlinkProspects          BacklinkProspect[]
   backlinkProfileReadings    BacklinkProfileReading[]
@@ -5303,6 +5307,8 @@ model FinanceAccount {
   fundValuations FinanceFundValuation[]
   adjustments    FinanceBalanceAdjustment[]
   checksCredited FinanceCheck[]             @relation("CheckCreditedAccount")
+  cardsArs       FinanceCard[]              @relation("FinanceCardArsAccount")
+  cardsUsd       FinanceCard[]              @relation("FinanceCardUsdAccount")
 
   @@index([workspaceId])
   @@index([workspaceId, active])
@@ -5363,6 +5369,7 @@ model FinanceCategory {
 
   items     FinanceItem[]
   movements FinanceMovement[]
+  cardRules FinanceCardRule[]
 
   @@index([workspaceId])
   @@index([workspaceId, type, active])
@@ -5464,6 +5471,7 @@ model FinanceItem {
   extras      FinanceExtra[]
   nextActions FinanceNextAction[]
   tasks       FinanceTask[]
+  cardRules   FinanceCardRule[]
 
   @@index([workspaceId])
   @@index([workspaceId, active])
@@ -5515,11 +5523,12 @@ model FinanceMovement {
   deletedById Int?
   deletedBy   User?     @relation("FinanceMovementDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
 
-  taxes           FinanceMovementTax[]    @relation("MovementTaxLines")
-  generatedForTax FinanceMovementTax?     @relation("TaxGeneratedMovement")
-  check           FinanceCheck?
-  extraPayment    FinanceExtraPayment?
-  extraTeamPayout FinanceExtraTeamPayout?
+  taxes              FinanceMovementTax[]       @relation("MovementTaxLines")
+  generatedForTax    FinanceMovementTax?        @relation("TaxGeneratedMovement")
+  check              FinanceCheck?
+  extraPayment       FinanceExtraPayment?
+  extraTeamPayout    FinanceExtraTeamPayout?
+  cardStatementLines FinanceCardStatementLine[]
 
   @@index([workspaceId])
   @@index([workspaceId, type, date])
@@ -5528,6 +5537,111 @@ model FinanceMovement {
   @@index([categoryId])
   @@index([sourceMovementId])
   @@index([invoiceId])
+}
+
+// Tarjeta de crédito (Finanzas → "+ Cargar" → Tarjeta). No es una cuenta: sus
+// consumos salen como egresos de las cuentas de banco que pagan el resumen
+// (`arsAccountId` para los consumos en pesos, `usdAccountId` para los en
+// dólares). Es la llave de la memoria de categorías (FinanceCardRule) y de la
+// detección de duplicados (FinanceCardStatementLine.fingerprint).
+model FinanceCard {
+  id           Int             @id @default(autoincrement())
+  workspaceId  Int
+  workspace    Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  name         String
+  last4        String?
+  arsAccountId Int?
+  arsAccount   FinanceAccount? @relation("FinanceCardArsAccount", fields: [arsAccountId], references: [id], onDelete: SetNull)
+  usdAccountId Int?
+  usdAccount   FinanceAccount? @relation("FinanceCardUsdAccount", fields: [usdAccountId], references: [id], onDelete: SetNull)
+  active       Boolean         @default(true)
+  createdById  Int?
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  statements FinanceCardStatement[]
+  lines      FinanceCardStatementLine[]
+  rules      FinanceCardRule[]
+
+  @@index([workspaceId])
+}
+
+// Un resumen importado. El PDF original (tal cual se subió, con clave si la
+// tenía) vive en R2 hasta `fileExpiresAt` (1 año); el cron `cardStatementPurge`
+// lo borra y deja `fileKey` en null. `deletedAt` = importación deshecha (sus
+// movimientos se soft-deletean juntos).
+model FinanceCardStatement {
+  id            Int         @id @default(autoincrement())
+  workspaceId   Int
+  workspace     Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  cardId        Int
+  card          FinanceCard @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  closingDate   DateTime?
+  dueDate       DateTime?
+  fileKey       String?
+  fileName      String?
+  fileSize      Int?
+  fileEncrypted Boolean     @default(false)
+  fileExpiresAt DateTime?
+  summary       Json? // saldos por moneda + control de totales al momento de importar
+  createdById   Int?
+  createdAt     DateTime    @default(now())
+  deletedAt     DateTime?
+  deletedById   Int?
+
+  lines FinanceCardStatementLine[]
+
+  @@index([workspaceId, cardId])
+  @@index([fileExpiresAt])
+}
+
+// Cada renglón del resumen que se importó (los agrupados por comercio apuntan
+// todos al mismo movimiento). `fingerprint` = hash de fecha + comprobante +
+// moneda + monto + detalle: un renglón con la misma huella en la misma tarjeta
+// y con su movimiento vivo es un duplicado.
+model FinanceCardStatementLine {
+  id          Int                  @id @default(autoincrement())
+  workspaceId Int
+  workspace   Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  cardId      Int
+  card        FinanceCard          @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  statementId Int
+  statement   FinanceCardStatement @relation(fields: [statementId], references: [id], onDelete: Cascade)
+  date        DateTime
+  description String
+  merchantKey String
+  currency    String // 'ARS' | 'USD'
+  amount      Decimal              @db.Decimal(20, 8) // siempre positivo; el sentido lo da `kind`
+  kind        String // 'purchase' | 'charge' | 'credit'
+  fingerprint String
+  movementId  Int?
+  movement    FinanceMovement?     @relation(fields: [movementId], references: [id], onDelete: SetNull)
+
+  @@index([cardId, fingerprint])
+  @@index([statementId])
+  @@index([movementId])
+}
+
+// Memoria de categorías: "en esta tarjeta, este comercio se anota así". Se
+// escribe al confirmar una importación (lo que el usuario dejó, sugerido o
+// corregido). `merchantKey` = detalle normalizado (lib/cardStatement.js).
+model FinanceCardRule {
+  id          Int             @id @default(autoincrement())
+  workspaceId Int
+  workspace   Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  cardId      Int
+  card        FinanceCard     @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  merchantKey String
+  type        String // 'income' | 'expense'
+  itemId      Int
+  item        FinanceItem     @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  categoryId  Int
+  category    FinanceCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  @@unique([cardId, merchantKey, type])
+  @@index([workspaceId, merchantKey])
 }
 
 // Impuesto efectivamente aplicado a UN movimiento o UNA transferencia (XOR,

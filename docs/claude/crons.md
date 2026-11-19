@@ -17,6 +17,7 @@
 | `0 3 * * *` (diario 03:00) | ART | Marca trials expirados como `past_due` |
 | `0 0 * * *` (medianoche) | ART | Auto-pausa tareas `IN_PROGRESS` al cierre del día |
 | `0 3 * * 0` (domingos 03:00) | ART | Limpia notificaciones antiguas (leídas >30d, no leídas >90d) |
+| `30 4 * * *` (diario 04:30) | ART | `cardStatementPurge`: borra de R2 los PDFs de resúmenes de tarjeta de Finanzas con más de un año (`FinanceCardStatement.fileExpiresAt`); los movimientos importados quedan |
 | `*/15 * * * *` (cada 15 min) | — | Ejecuta eliminaciones de workspaces programadas vencidas |
 | `*/15 * * * *` (cada 15 min) | ART | Refresca los calendarios traídos de afuera (Google ya conectado + URLs iCal) — mantiene fresco el cache que la vista Equipo y el buscador de huecos leen de OTRAS personas; los propios se refrescan al abrir el Calendario (ver `docs/claude/calendario.md`) |
 | `* * * * *` (cada minuto) | — | Envío de campañas de Mailing (`mailingDispatch`): lanza las programadas vencidas y manda el próximo lote de cada proyecto respetando su ventana horaria y su tope diario (ver `docs/claude/mailing.md`) |

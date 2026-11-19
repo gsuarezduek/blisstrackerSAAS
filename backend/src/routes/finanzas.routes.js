@@ -27,6 +27,11 @@ const workspaceNote  = require('../controllers/finanzas/workspaceNote.controller
 const aiSummary      = require('../controllers/finanzas/aiSummary.controller')
 const padron         = require('../controllers/finanzas/padron.controller')
 const adjustments    = require('../controllers/finanzas/adjustments.controller')
+const cardStatements = require('../controllers/finanzas/cardStatements.controller')
+const multer         = require('multer')
+
+// PDF del resumen de tarjeta: en memoria (se lee y, al confirmar, se sube a R2).
+const statementUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 15 * 1024 * 1024, files: 1 } })
 
 // Todo el módulo Finanzas requiere: autenticación + workspace + acceso al
 // módulo (admin/owner o rol configurable, ver moduleAccess.js) + que el
@@ -91,6 +96,17 @@ router.post('/movements',            movements.createMovement)
 router.patch('/movements/:id',       movements.updateMovement)
 router.delete('/movements/:id',      movements.deleteMovement)
 router.post('/movements/:id/restore', movements.restoreMovement)
+
+// Tarjetas de crédito e importación del resumen en PDF ("+ Cargar" → Tarjeta).
+// Mismo criterio que los movimientos: cualquiera con acceso al módulo.
+router.get('/cards',                       cardStatements.listCards)
+router.post('/cards',                      cardStatements.createCard)
+router.patch('/cards/:id',                 cardStatements.updateCard)
+router.get('/cards/:id/statements',        cardStatements.listStatements)
+router.post('/card-statements/parse',      statementUpload.single('file'), cardStatements.parseStatement)
+router.post('/card-statements',            statementUpload.single('file'), cardStatements.confirmStatement)
+router.get('/card-statements/:id/pdf',     cardStatements.downloadStatementPdf)
+router.delete('/card-statements/:id',      cardStatements.deleteStatement)
 
 router.get('/transfers',         transfers.listTransfers)
 router.post('/transfers',        transfers.createTransfer)

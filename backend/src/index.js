@@ -211,6 +211,18 @@ cron.schedule('0 3 * * 0', () => runCron('weeklyCleanup', 30 * 60 * 1000, async 
   }
 }), { timezone: DEFAULT_TZ })
 
+// Cron: PDFs de resúmenes de tarjeta (Finanzas) con más de un año — diario a 04:30 ART.
+// Borra solo el archivo de R2; los movimientos importados quedan.
+const { purgeExpiredStatementFiles } = require('./controllers/finanzas/cardStatements.controller')
+cron.schedule('30 4 * * *', () => runCron('cardStatementPurge', 10 * 60 * 1000, async () => {
+  try {
+    const n = await purgeExpiredStatementFiles()
+    if (n) console.log(`[CardStatementPurge] ${n} PDFs vencidos borrados`)
+  } catch (err) {
+    console.error('[CardStatementPurge] Error:', err.message)
+  }
+}), { timezone: DEFAULT_TZ })
+
 // Cron: email lifecycle del trial — diario a 09:00 ART (días 3, 7, 12, 13)
 const { runTrialLifecycle } = require('./services/trialLifecycle.service')
 cron.schedule('0 9 * * *', () => runCron('trialLifecycle', 30 * 60 * 1000, async () => {

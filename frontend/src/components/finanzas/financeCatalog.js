@@ -202,6 +202,7 @@ const AUDIT_ENTITY_TYPE_LABELS = {
   account: 'Cuenta', issuer: 'Emisor', tax: 'Impuesto', category: 'Categoría', item: 'Item',
   movement: 'Movimiento', transfer: 'Transferencia', check: 'Cheque', fundValuation: 'Valuación de fondo',
   invoice: 'Factura', extra: 'Extra', nextAction: 'Próxima acción', task: 'Tarea', adjustment: 'Ajuste de saldo',
+  cardStatement: 'Resumen de tarjeta',
 }
 const AUDIT_ACTION_META = {
   create:  { label: 'Creó', color: 'green' },
