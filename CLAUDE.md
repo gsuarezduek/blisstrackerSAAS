@@ -50,7 +50,7 @@ El detalle de cada tema vive en `docs/claude/`. **Esos archivos NO se cargan aut
 | `docs/claude/migrations.md` | Historial de migraciones de Prisma (contexto histórico; `git log` y la carpeta de migraciones son la fuente autoritativa) |
 | `docs/claude/integrations-oauth.md` | Setup de OAuth (Google/Meta/TikTok/LinkedIn): redirect URIs, scopes, permisos |
 
-**Regla práctica:** si la tarea menciona alguno de estos temas (o un archivo que vive en su carpeta/componente), leé el doc correspondiente primero — ahorra idas y vueltas de búsqueda.
+**Regla práctica:** si la tarea menciona alguno de estos temas (o un archivo que vive en su carpeta/componente), leé el doc correspondiente primero — ahorra idas y vueltas de búsqueda. Si un comentario de código dice "ver X en CLAUDE.md" (o en `backend/CLAUDE.md`), esa sección probablemente se movió: buscá X con grep en `docs/claude/`.
 
 **Dónde se documenta lo nuevo (regla de tamaño):** los tres `CLAUDE.md` se cargan solos y se pagan en tokens en cada mensaje; los `docs/claude/*.md` solo cuando se leen. Por eso:
 - El detalle de una feature (cómo funciona, por qué se decidió así, casos borde, endpoints, tests) va en el `docs/claude/<tema>.md` que corresponda, o en uno nuevo agregado a la tabla de arriba.
