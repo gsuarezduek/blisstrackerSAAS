@@ -7,6 +7,8 @@ const { computeObjectives } = require('./marketingObjectives.service')
 const { prevMonthStr, monthLabel } = require('../lib/monthUtils')
 const { MARKETING_SECTION_IDS } = require('../lib/marketingSections')
 const { jaccardSimilarity } = require('../lib/textSimilarity')
+const { isFlagEnabledForWorkspace } = require('../lib/featureFlags')
+const { mailingFindings } = require('./mailing/health')
 
 // Días que dura el auto-snooze al crear una tarea desde un hallazgo (a diferencia de
 // "Ignorar" a mano, que es indefinido). Si el análisis lo sigue detectando después de
@@ -43,10 +45,11 @@ const SECTION_BY_SOURCE = {
   ads_advisor: 'anuncios',
   rrss_advisor: 'rrss',
   report: 'informes',
+  mailing: 'mailing',
 }
 const SECTION_BY_OBJ_CATEGORY = { web: 'web', seo: 'geo-seo', rrss: 'rrss', ads: 'anuncios' }
 const SECTION_LABELS = {
-  'geo-seo': 'GEO / SEO', web: 'Web', rrss: 'RRSS', anuncios: 'Anuncios', informes: 'Informes',
+  'geo-seo': 'GEO / SEO', web: 'Web', rrss: 'RRSS', anuncios: 'Anuncios', mailing: 'Mailing', informes: 'Informes',
 }
 const CONTENIDO_LABEL = 'Contenido'
 
@@ -179,6 +182,25 @@ async function rrssItems({ projectId, workspaceId }) {
   return items
 }
 
+// Salud del envío de Mailing (config caída, rebotes y quejas). Solo con el flag
+// `mailing`: sin él la sección no existe y sus hallazgos no tienen adónde llevar.
+async function mailingItems({ projectId, enabled }) {
+  if (!enabled) return []
+  const since = new Date(Date.now() - 30 * 86400000)
+  const [config, campaigns] = await Promise.all([
+    prisma.mailingConfig.findUnique({
+      where: { projectId },
+      select: { provider: true, status: true, lastError: true, webhookSecret: true, webhookId: true },
+    }),
+    prisma.mailingCampaign.findMany({
+      where: { projectId, OR: [{ launchedAt: { gte: since } }, { status: { in: ['sending', 'paused'] } }] },
+      select: { name: true, status: true, launchedAt: true, sentCount: true, bounceCount: true, complaintCount: true },
+    }),
+  ])
+  if (!config && !campaigns.length) return []
+  return mailingFindings({ config, campaigns })
+}
+
 /**
  * Backlog único de pendientes accionables de un proyecto: SEO/GEO (Plan de acción ya
  * existente), objetivos atrasados, contenido que requiere atención del equipo, el
@@ -192,15 +214,20 @@ async function rrssItems({ projectId, workspaceId }) {
  * Contenido, que no es una de las 6 secciones toggleables).
  */
 async function computeProjectPendingItems({ projectId, workspaceId, tz = DEFAULT_TZ }) {
-  const [seo, objectives, content, ads, rrss, reports, dismissed, workspace] = await Promise.all([
+  const [workspace, mailingFlag] = await Promise.all([
+    prisma.workspace.findUnique({ where: { id: workspaceId }, select: { marketingDisabledSections: true, disabledFeatureKeys: true } }),
+    prisma.featureFlag.findUnique({ where: { key: 'mailing' } }),
+  ])
+  const mailingOn = isFlagEnabledForWorkspace(mailingFlag, workspaceId, JSON.parse(workspace?.disabledFeatureKeys || '[]'))
+  const [seo, objectives, content, ads, rrss, reports, mailing, dismissed] = await Promise.all([
     computeSeoActionItems({ projectId, workspaceId }).catch(() => null),
     objectiveItems({ projectId, workspaceId, tz }).catch(() => []),
     contentItems({ projectId, workspaceId }).catch(() => []),
     adsItems({ projectId, workspaceId }).catch(() => []),
     rrssItems({ projectId, workspaceId }).catch(() => []),
     reportItems({ projectId, workspaceId, tz }).catch(() => []),
+    mailingItems({ projectId, enabled: mailingOn }).catch(() => []),
     prisma.dismissedFinding.findMany({ where: { projectId, workspaceId }, select: { source: true, signature: true, title: true, snoozedUntil: true } }),
-    prisma.workspace.findUnique({ where: { id: workspaceId }, select: { marketingDisabledSections: true } }),
   ])
   if (!seo) return null
 
@@ -218,7 +245,7 @@ async function computeProjectPendingItems({ projectId, workspaceId, tz = DEFAULT
   }
 
   const seoItems = seo.items.map(it => ({ ...it, taskPrefix: 'SEO', link: SEO_SOURCE_LINK[it.source] ?? { tab: 'geo-seo', sub: 'diagnostico' } }))
-  const allItems = [...seoItems, ...objectives, ...content, ...ads, ...rrss, ...reports].map(it => ({ ...it, section: sectionOf(it) }))
+  const allItems = [...seoItems, ...objectives, ...content, ...ads, ...rrss, ...reports, ...mailing].map(it => ({ ...it, section: sectionOf(it) }))
 
   const items = allItems
     .filter(it => it.section === 'contenido' || !disabledSections.includes(it.section))
@@ -227,8 +254,7 @@ async function computeProjectPendingItems({ projectId, workspaceId, tz = DEFAULT
     .map(({ key, ...rest }, i) => ({ key: `p-${i}`, ...rest }))
 
   const groups = MARKETING_SECTION_IDS
-    // Mailing todavía no aporta hallazgos a Prioridades (no tiene label ni items).
-    .filter(id => id !== 'hoy' && id in SECTION_LABELS && !disabledSections.includes(id))
+    .filter(id => id !== 'hoy' && !disabledSections.includes(id) && (id !== 'mailing' || mailingOn))
     .map(id => {
       const all = items.filter(it => it.section === id)
       return { id, label: SECTION_LABELS[id], items: all.slice(0, 3), moreCount: Math.max(0, all.length - 3), total: all.length }

@@ -9,7 +9,7 @@ import {
   PRINT_STYLES, ReportEditContext, fmt, monthLabel, dataPeriodLabel,
   DeltaChip, SectionCard, ObjectivesResults, ReportSignature, reportTaskLine,
 } from './ReportViewerParts'
-import { RRSSSection, PublicidadSection, SeoGeoSection, SitioWebSection } from './ReportViewerSections'
+import { RRSSSection, PublicidadSection, EmailSection, SeoGeoSection, SitioWebSection } from './ReportViewerSections'
 import { ReportHistoryContext } from './ReportHistory'
 
 export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, onRemoveSection, report = null, workspace = null, showFooter = true, compactHero = false, printMode = false }) {
@@ -628,6 +628,9 @@ export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, o
 
       {/* ── 3. Publicidad ── */}
       <PublicidadSection s={s} contextPublicidad={contextPublicidad} canEdit={canEdit} contextEditing={contextEditing} />
+
+      {/* ── Email marketing ── */}
+      <EmailSection s={s} />
 
       {/* ── 4. SEO y GEO ── */}
       <SeoGeoSection s={s} contextSEO={contextSEO} canEdit={canEdit} contextEditing={contextEditing} />

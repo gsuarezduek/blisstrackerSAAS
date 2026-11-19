@@ -560,17 +560,18 @@ POST   /api/marketing/projects/:id/mailing/lists/:listId/crm-sync   # { dryRun, 
 GET    /api/marketing/projects/:id/mailing/crm/options              # { available (flag ventas + acceso), statuses, origins }
 POST   /api/marketing/projects/:id/mailing/crm/import               # { listId, filter: { statuses, origins, onlyPrimary, includeArchived }, dryRun, consent } — 403 sin acceso a Ventas; tope 20.000 (truncated)
 POST   /api/marketing/projects/:id/mailing/images                   # multipart `file` (PNG/JPG/GIF/WEBP ≤5MB) → R2 con URL pública permanente → { url }; 503 sin R2
-POST   /api/marketing/projects/:id/mailing/audience                 # { includeListIds, excludeListIds } → { count, capacity: { dailyLimit, usedToday, queuedAhead, days, finishDate } }
+POST   /api/marketing/projects/:id/mailing/audience                 # { includeListIds, excludeListIds } o { resendOfId } → { count, capacity: { dailyLimit, usedToday, queuedAhead, days, finishDate } }
 GET    /api/marketing/projects/:id/mailing/campaigns                # lista con contadores
 POST   /api/marketing/projects/:id/mailing/campaigns                # { name } → borrador con bloques de arranque
 GET    /api/marketing/projects/:id/mailing/campaigns/:campaignId    # sin el snapshot html/text
-PATCH  /api/marketing/projects/:id/mailing/campaigns/:campaignId    # solo draft/scheduled (409 si ya se lanzó)
+PATCH  /api/marketing/projects/:id/mailing/campaigns/:campaignId    # solo draft/scheduled (409 si ya se lanzó). Acepta subjectB (null lo apaga), abTestPercent (10/20/30/50/100), abWaitHours (1-72)
 DELETE /api/marketing/projects/:id/mailing/campaigns/:campaignId    # 409 si está sending/paused (cancelar primero)
 POST   /api/marketing/projects/:id/mailing/campaigns/:campaignId/duplicate
+POST   /api/marketing/projects/:id/mailing/campaigns/:campaignId/resend-non-openers  # solo sobre una campaña `sent` → 201 borrador con resendOfId (+ `audience`); 409 si no terminó
 POST   /api/marketing/projects/:id/mailing/campaigns/:campaignId/preview   # { subject?, preheader?, blocks? } → { html } (mismo render que el envío)
 POST   /api/marketing/projects/:id/mailing/campaigns/:campaignId/test      # { emails ≤5 } — sin tracking, no consume tope ni métricas
 POST   /api/marketing/projects/:id/mailing/campaigns/:campaignId/launch    # { scheduledAt? } — futura → scheduled; si no, congela y encola (400 con problems si falta algo)
-POST   /api/marketing/projects/:id/mailing/campaigns/:campaignId/pause|resume|cancel|unschedule
+POST   /api/marketing/projects/:id/mailing/campaigns/:campaignId/pause|resume|cancel|unschedule  # launch/resume/cancel vía MCP → 403 HUMAN_ONLY (pause sí)
 GET    /api/marketing/projects/:id/mailing/campaigns/:campaignId/stats      # { campaign, progress por estado, pending, capacity, links, hourly (aperturas por hora, 72h) }
 GET    /api/marketing/projects/:id/mailing/campaigns/:campaignId/recipients # ?filter=opened|clicked|unsubscribed|<status>&q=&page=
 GET    /api/marketing/summary/mailing                               # sin proyecto: últimas 30 campañas del workspace (respeta privacidad y Marketing apagado)

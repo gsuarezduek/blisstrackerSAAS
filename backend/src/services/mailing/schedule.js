@@ -49,9 +49,11 @@ function addDays(ymd, n) {
  *
  * @returns {{ days, finishDate, todayCapacity }}  finishDate = YYYY-MM-DD en la tz
  */
-function estimateFinish({ count, dailyLimit, usedToday = 0, tz, start, end, now = new Date() }) {
+function estimateFinish({ count, dailyLimit, limitForDay = null, usedToday = 0, tz, start, end, now = new Date() }) {
   const today = dateStringInTz(now, tz)
   if (!count || count <= 0) return { days: 0, finishDate: today, todayCapacity: 0 }
+  // Con un tope que cambia día a día (calentamiento) se recorre día por día.
+  if (limitForDay) return estimateVariable({ count, limitForDay, usedToday, tz, start, end, now, today })
   const limit = Math.max(1, dailyLimit || 1)
   const windowOpen = !isHHMM(start) || !isHHMM(end) || start === end
     ? true
@@ -63,4 +65,52 @@ function estimateFinish({ count, dailyLimit, usedToday = 0, tz, start, end, now 
   return { days, finishDate: addDays(today, extraDays), todayCapacity }
 }
 
-module.exports = { isHHMM, inSendWindow, estimateFinish, localMinutes }
+function windowStillOpenToday(now, tz, start, end) {
+  if (!isHHMM(start) || !isHHMM(end) || start === end) return true
+  return inSendWindow(now, tz, start, end) || (toMins(start) < toMins(end) && localMinutes(now, tz) < toMins(start))
+}
+
+function estimateVariable({ count, limitForDay, usedToday, tz, start, end, now, today }) {
+  const todayCapacity = windowStillOpenToday(now, tz, start, end) ? Math.max(0, limitForDay(0) - usedToday) : 0
+  let left = count - todayCapacity
+  if (left <= 0) return { days: 1, finishDate: today, todayCapacity }
+  let d = 0
+  while (left > 0 && d < 365) {
+    d++
+    left -= Math.max(1, limitForDay(d))
+  }
+  return { days: d + (todayCapacity > 0 ? 1 : 0), finishDate: addDays(today, d), todayCapacity }
+}
+
+// ─── Calentamiento del dominio ───────────────────────────────────────────────
+// Un dominio que nunca mandó volumen y de golpe manda miles es lo que más
+// desconfianza genera en Gmail/Outlook. Con el calentamiento prendido el tope del
+// día arranca en 50 y crece 50% por día (50, 75, 113, 169, 253, 380, 570…) hasta
+// alcanzar el tope configurado: ~2 semanas para llegar a 10.000.
+const WARMUP_START = 50
+const WARMUP_GROWTH = 1.5
+
+function warmupLimit(dayIndex) {
+  const d = Math.max(0, Math.floor(dayIndex))
+  return Math.round(WARMUP_START * WARMUP_GROWTH ** d)
+}
+
+function daysBetweenYmd(a, b) {
+  return Math.round((new Date(`${b}T12:00:00Z`) - new Date(`${a}T12:00:00Z`)) / 86400000)
+}
+
+/**
+ * Tope de HOY para un proyecto: el configurado, recortado por el techo de
+ * plataforma (`hardCap`, 0 = sin techo) y, con calentamiento, por la curva del día.
+ * @returns {{ limit, warmup: null | { day, limit, done } }}
+ */
+function effectiveDailyLimit({ dailyLimit, hardCap = 0, warmupEnabled, warmupStartedAt, tz, now = new Date() }) {
+  let limit = Math.max(0, dailyLimit || 0)
+  if (hardCap > 0) limit = Math.min(limit, hardCap)
+  if (!warmupEnabled || !warmupStartedAt) return { limit, warmup: null }
+  const day = Math.max(0, daysBetweenYmd(dateStringInTz(new Date(warmupStartedAt), tz), dateStringInTz(now, tz)))
+  const w = warmupLimit(day)
+  return { limit: Math.min(limit, w), warmup: { day: day + 1, limit: w, done: w >= limit } }
+}
+
+module.exports = { isHHMM, inSendWindow, estimateFinish, localMinutes, warmupLimit, effectiveDailyLimit }

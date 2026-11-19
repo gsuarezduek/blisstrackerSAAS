@@ -39,6 +39,7 @@ const AREAS = [
   { key: 'contenido',  label: 'Contenido',              match: n => n.startsWith('contenido_') },
   { key: 'ventas',     label: 'Ventas / CRM',           match: n => n.startsWith('ventas_') },
   { key: 'whatsapp',   label: 'WhatsApp',               match: n => n.startsWith('whatsapp_') },
+  { key: 'mailing',    label: 'Mailing (email marketing)', match: n => n.startsWith('mailing_') },
 ]
 // `backlink` cubre marketing_backlink_* y marketing_backlinks_*: sin eso caen en
 // "Marketing (métricas)" en vez de "SEO avanzado".
@@ -198,6 +199,15 @@ Bandeja de WhatsApp del número de la agencia, vinculada al CRM (contacto → le
 - Flujo: \`whatsapp_conversations_list\` (\`mine: true\` para tu bandeja; si no, filtrá por \`awaitingReply\`/\`q\`) → \`whatsapp_conversation_take_control\` → \`whatsapp_conversation_messages\` → \`whatsapp_message_send\`. Con el \`leadId\` de la conversación podés seguir en Ventas (estado, notas, próximas acciones).
 - \`whatsapp_conversation_pin\`/\`whatsapp_conversation_unpin\` fijan/desfijan una conversación arriba de la lista (pin compartido, lo ve todo el equipo). Útil para marcar algo urgente o que necesita seguimiento del equipo.
 - No se puede por MCP: plantillas/reabrir conversaciones vencidas, mandar imágenes o archivos, configurar el bot o las automatizaciones, marcar spam, vincular contactos.`,
+  mailing: `## Mailing (Marketing → Mailing; requiere el módulo Mailing)
+Email marketing por proyecto: cada cliente manda con su propio proveedor y remitente, a sus bases de contactos.
+- **Vos armás, una persona lanza.** Podés crear y editar borradores, mandar pruebas, calcular la audiencia, leer métricas y pausar. **Lanzar, reanudar y cancelar** devuelven 403 \`HUMAN_ONLY\`: cuando el borrador esté listo, avisale al usuario que lo revise y lo lance desde la app. No lo intentes por otro camino.
+- Flujo de una campaña: \`mailing_lists_list\` (ids de las bases) → \`mailing_campaign_create\` → \`mailing_campaign_update\` (asunto, bloques, bases) → \`mailing_audience_count\` → \`mailing_campaign_test\` a una dirección del usuario → pedirle que la lance.
+- Antes de armar algo, \`mailing_config_get\`: si \`status\` no es \`active\`, la campaña se puede preparar pero no va a salir hasta que alguien verifique la configuración (credenciales: solo desde la app).
+- Contenido: \`blocks\` reemplaza todo el contenido (leé la campaña antes si vas a cambiar una parte). Para texto usá \`{type:"text", text}\` con párrafos separados por línea en blanco. Imágenes: solo URLs https públicas que ya existan.
+- Las **pruebas** van solo a direcciones del equipo o del usuario, nunca a contactos del cliente.
+- Métricas: las aperturas son estimadas (Apple Mail las infla), los clics son el dato confiable. Un test A/B elige el ganador por tasa de clics (o de apertura si nadie hizo clic). Para insistir con quienes no abrieron: \`mailing_campaign_resend_non_openers\` sobre una campaña terminada, y cambiale el asunto.
+- No se puede por MCP: lanzar/reanudar/cancelar, credenciales y verificación del remitente, dar de alta, importar o editar contactos (declarar el consentimiento de una base es responsabilidad de una persona), el formulario de suscripción.`,
 }
 
 const LIMITS = `## Lo que hoy NO está disponible por MCP

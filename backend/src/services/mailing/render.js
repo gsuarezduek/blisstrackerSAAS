@@ -88,6 +88,25 @@ function pickAlign(a) {
 }
 
 /**
+ * Texto plano → documento de TipTap: un párrafo por bloque separado por línea en
+ * blanco, y los saltos simples como salto de línea. Es el formato que usan los
+ * agentes por MCP (`{ type: 'text', text: '...' }`), que no tienen el editor.
+ */
+function plainTextDoc(text) {
+  const paragraphs = String(text).slice(0, 20000).split(/\n{2,}/).map(p => p.trim()).filter(Boolean)
+  return {
+    type: 'doc',
+    content: paragraphs.map(p => ({
+      type: 'paragraph',
+      content: p.split('\n').flatMap((line, i) => [
+        ...(i ? [{ type: 'hardBreak' }] : []),
+        ...(line ? [{ type: 'text', text: line }] : []),
+      ]),
+    })),
+  }
+}
+
+/**
  * Normaliza lo que manda el editor: descarta tipos desconocidos, recorta strings,
  * valida URLs y colores. Lo que no pasa queda afuera en silencio — el editor
  * nunca manda eso, así que solo puede venir de un request armado a mano.
@@ -103,7 +122,11 @@ function sanitizeBlocks(raw) {
         out.push({ id, type: 'heading', text: str(b.text, 300), align: pickAlign(b.align), size: b.size === 'sm' ? 'sm' : 'lg' })
         break
       case 'text':
-        out.push({ id, type: 'text', doc: b.doc && typeof b.doc === 'object' && b.doc.type === 'doc' ? b.doc : { type: 'doc', content: [] } })
+        out.push({
+          id, type: 'text',
+          doc: b.doc && typeof b.doc === 'object' && b.doc.type === 'doc' ? b.doc
+            : typeof b.text === 'string' ? plainTextDoc(b.text) : { type: 'doc', content: [] },
+        })
         break
       case 'image':
         out.push({
@@ -318,6 +341,7 @@ function personalize(template, { contact = {}, system = {} }, { html = true } = 
 
 module.exports = {
   BLOCK_TYPES,
+  plainTextDoc,
   sanitizeBlocks,
   renderCampaignHtml,
   renderCampaignText,

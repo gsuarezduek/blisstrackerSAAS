@@ -6,12 +6,12 @@ const { todayString } = require('../../utils/dates')
 const { getSetting } = require('../../lib/platformSettings')
 const { resolveCtx, intParam, sendError } = require('./_shared')
 const { sanitizeBlocks, renderCampaignHtml, personalize } = require('../../services/mailing/render')
-const { countAudience, ownListIds } = require('../../services/mailing/audience')
-const { estimateFinish } = require('../../services/mailing/schedule')
+const { countAudience, ownListIds, countNonOpeners } = require('../../services/mailing/audience')
+const { estimateFinish, effectiveDailyLimit } = require('../../services/mailing/schedule')
 const dispatcher = require('../../services/mailing/dispatcher')
 
 const EDITABLE = ['draft', 'scheduled']
-const SEND_STATUSES = ['queued', 'sending', 'sent', 'delivered', 'failed', 'bounced', 'complained', 'cancelled']
+const SEND_STATUSES = ['held', 'queued', 'sending', 'sent', 'delivered', 'failed', 'bounced', 'complained', 'cancelled']
 
 // Plantilla de arranque: algo que ya se ve como un mail, para editar encima.
 function starterBlocks() {
@@ -26,7 +26,17 @@ const LIST_SELECT = {
   id: true, name: true, subject: true, status: true, scheduledAt: true, launchedAt: true, finishedAt: true,
   recipients: true, sentCount: true, deliveredCount: true, openCount: true, clickCount: true,
   bounceCount: true, complaintCount: true, unsubscribeCount: true, failedCount: true,
+  subjectB: true, abWinner: true, resendOfId: true,
   createdAt: true, updatedAt: true, createdBy: { select: { id: true, name: true } },
+}
+
+// Lanzar (y reanudar o cancelar lo que está saliendo) es una decisión de una
+// persona: un agente puede armar el borrador, probarlo y leer las métricas, pero
+// el botón que manda mails a miles de contactos del cliente no lo aprieta él.
+function rejectAgent(req, res) {
+  if (!req.user?.mcpTokenId) return false
+  res.status(403).json({ error: 'Lanzar, reanudar o cancelar una campaña lo hace una persona desde la app.', code: 'HUMAN_ONLY' })
+  return true
 }
 
 async function findCampaign(ctx, req, res) {
@@ -74,7 +84,10 @@ async function getCampaign(req, res, next) {
     const c = await findCampaign(ctx, req, res)
     if (!c) return
     const { html, text, ...rest } = c
-    res.json(rest)
+    const resendOf = c.resendOfId
+      ? await prisma.mailingCampaign.findUnique({ where: { id: c.resendOfId }, select: { id: true, name: true, subject: true } })
+      : null
+    res.json({ ...rest, resendOf })
   } catch (err) { next(err) }
 }
 
@@ -93,6 +106,17 @@ async function updateCampaign(req, res, next) {
     if (b.blocks !== undefined) data.blocks = sanitizeBlocks(b.blocks)
     if (b.includeListIds !== undefined) data.includeListIds = await ownListIds(ctx.projectId, b.includeListIds)
     if (b.excludeListIds !== undefined) data.excludeListIds = await ownListIds(ctx.projectId, b.excludeListIds)
+    // A/B de asunto: `subjectB: null` lo apaga.
+    if (b.subjectB !== undefined) data.subjectB = b.subjectB == null ? null : String(b.subjectB).slice(0, 200)
+    if (b.abTestPercent !== undefined) {
+      if (b.abTestPercent != null && !dispatcher.AB_PERCENTS.includes(Number(b.abTestPercent))) return res.status(400).json({ error: `El test A/B va con ${dispatcher.AB_PERCENTS.join(', ')}% de la audiencia` })
+      data.abTestPercent = b.abTestPercent == null ? null : Number(b.abTestPercent)
+    }
+    if (b.abWaitHours !== undefined) {
+      const h = Number(b.abWaitHours)
+      if (!Number.isInteger(h) || h < 1 || h > 72) return res.status(400).json({ error: 'La espera del test A/B va de 1 a 72 horas' })
+      data.abWaitHours = h
+    }
     const { html, text, ...rest } = await prisma.mailingCampaign.update({ where: { id: c.id }, data })
     res.json(rest)
   } catch (err) { next(err) }
@@ -109,10 +133,38 @@ async function duplicateCampaign(req, res, next) {
         workspaceId: ctx.workspaceId, projectId: ctx.projectId,
         name: `${c.name} (copia)`.slice(0, 120), subject: c.subject, preheader: c.preheader,
         blocks: c.blocks, includeListIds: c.includeListIds, excludeListIds: c.excludeListIds,
+        subjectB: c.subjectB, abTestPercent: c.abTestPercent, abWaitHours: c.abWaitHours,
         createdById: ctx.userId, createdByAgentId: ctx.agentId,
       },
     })
     res.status(201).json(copy)
+  } catch (err) { next(err) }
+}
+
+/**
+ * POST .../campaigns/:campaignId/resend-non-openers
+ * Arma un BORRADOR con el mismo contenido para los que recibieron la campaña y no
+ * la abrieron. Conviene cambiarle el asunto: es lo que más mueve la apertura en
+ * un segundo intento. Solo sobre una campaña terminada.
+ */
+async function resendNonOpeners(req, res, next) {
+  try {
+    const ctx = await resolveCtx(req, res, { write: true })
+    if (!ctx) return
+    const c = await findCampaign(ctx, req, res)
+    if (!c) return
+    if (c.status !== 'sent') return res.status(409).json({ error: 'Se puede reenviar cuando la campaña terminó de salir.' })
+    const count = await countNonOpeners(c.id)
+    if (!count) return res.status(400).json({ error: 'No queda nadie a quien reenviarle: todos abrieron, se dieron de baja o rebotaron.' })
+    const draft = await prisma.mailingCampaign.create({
+      data: {
+        workspaceId: ctx.workspaceId, projectId: ctx.projectId,
+        name: `${c.name} — reenvío a quienes no abrieron`.slice(0, 120),
+        subject: c.subject, preheader: c.preheader, blocks: c.blocks, resendOfId: c.id,
+        createdById: ctx.userId, createdByAgentId: ctx.agentId,
+      },
+    })
+    res.status(201).json({ ...draft, audience: count })
   } catch (err) { next(err) }
 }
 
@@ -162,16 +214,20 @@ async function capacityInfo(projectId, count) {
   })
   if (!config) return null
   const tz = config.workspace?.timezone || 'America/Argentina/Buenos_Aires'
-  const hard = Number(await getSetting('mailingMaxDailyPerProject').catch(() => 0)) || 0
-  const dailyLimit = hard > 0 ? Math.min(config.dailyLimit, hard) : config.dailyLimit
+  const hardCap = Number(await getSetting('mailingMaxDailyPerProject').catch(() => 0)) || 0
+  const { limit: dailyLimit, warmup } = effectiveDailyLimit({ ...config, hardCap, tz })
   const usage = await prisma.mailingDailyUsage.findUnique({ where: { projectId_date: { projectId, date: todayString(tz) } } })
   // Lo que ya está en cola de otras campañas sale antes (FIFO por lanzamiento).
   const queuedAhead = await prisma.mailingSend.count({ where: { projectId, status: { in: ['queued', 'sending'] } } })
+  const now = new Date()
+  const limitForDay = warmup && !warmup.done
+    ? d => effectiveDailyLimit({ ...config, hardCap, tz, now: new Date(now.getTime() + d * 86400000) }).limit
+    : null
   const est = estimateFinish({
-    count: count + queuedAhead, dailyLimit, usedToday: usage?.count || 0,
+    count: count + queuedAhead, dailyLimit, limitForDay, usedToday: usage?.count || 0, now,
     tz, start: config.sendWindowStart, end: config.sendWindowEnd,
   })
-  return { dailyLimit, usedToday: usage?.count || 0, queuedAhead, ...est, sendWindowStart: config.sendWindowStart, sendWindowEnd: config.sendWindowEnd }
+  return { dailyLimit, warmup, usedToday: usage?.count || 0, queuedAhead, ...est, sendWindowStart: config.sendWindowStart, sendWindowEnd: config.sendWindowEnd }
 }
 
 /** POST /projects/:id/mailing/audience { includeListIds, excludeListIds } → conteo + estimación */
@@ -179,7 +235,15 @@ async function audiencePreview(req, res, next) {
   try {
     const ctx = await resolveCtx(req, res)
     if (!ctx) return
-    const count = await countAudience(ctx.projectId, req.body?.includeListIds, req.body?.excludeListIds)
+    let count
+    const resendOfId = intParam(req.body?.resendOfId)
+    if (resendOfId) {
+      const parent = await prisma.mailingCampaign.findFirst({ where: { id: resendOfId, projectId: ctx.projectId }, select: { id: true } })
+      if (!parent) return res.status(404).json({ error: 'Campaña original no encontrada' })
+      count = await countNonOpeners(parent.id)
+    } else {
+      count = await countAudience(ctx.projectId, req.body?.includeListIds, req.body?.excludeListIds)
+    }
     res.json({ count, capacity: await capacityInfo(ctx.projectId, count) })
   } catch (err) { next(err) }
 }
@@ -210,6 +274,7 @@ async function sendTestCampaign(req, res, next) {
  */
 async function launch(req, res, next) {
   try {
+    if (rejectAgent(req, res)) return
     const ctx = await resolveCtx(req, res, { write: true })
     if (!ctx) return
     const c = await findCampaign(ctx, req, res)
@@ -232,8 +297,9 @@ async function launch(req, res, next) {
   } catch (err) { sendError(res, next, err) }
 }
 
-async function transition(req, res, next, { from, to, extra }) {
+async function transition(req, res, next, { from, to, extra, humanOnly = false }) {
   try {
+    if (humanOnly && rejectAgent(req, res)) return
     const ctx = await resolveCtx(req, res, { write: true })
     if (!ctx) return
     const c = await findCampaign(ctx, req, res)
@@ -241,15 +307,16 @@ async function transition(req, res, next, { from, to, extra }) {
     const r = await prisma.mailingCampaign.updateMany({ where: { id: c.id, status: { in: from } }, data: { status: to, ...(extra || {}) } })
     if (!r.count) return res.status(409).json({ error: 'La campaña no está en un estado que permita esa acción' })
     if (to === 'cancelled') {
-      await prisma.mailingSend.updateMany({ where: { campaignId: c.id, status: 'queued' }, data: { status: 'cancelled', errorMsg: 'Campaña cancelada' } })
+      await prisma.mailingSend.updateMany({ where: { campaignId: c.id, status: { in: ['queued', 'held'] } }, data: { status: 'cancelled', errorMsg: 'Campaña cancelada' } })
     }
     res.json({ status: to })
   } catch (err) { next(err) }
 }
 
 const pause = (req, res, next) => transition(req, res, next, { from: ['sending'], to: 'paused' })
-const resume = (req, res, next) => transition(req, res, next, { from: ['paused'], to: 'sending' })
-const cancel = (req, res, next) => transition(req, res, next, { from: ['sending', 'paused'], to: 'cancelled', extra: { finishedAt: new Date() } })
+// Pausar sí lo puede hacer un agente: frenar un envío nunca manda nada.
+const resume = (req, res, next) => transition(req, res, next, { from: ['paused'], to: 'sending', humanOnly: true })
+const cancel = (req, res, next) => transition(req, res, next, { from: ['sending', 'paused'], to: 'cancelled', extra: { finishedAt: new Date() }, humanOnly: true })
 const unschedule = (req, res, next) => transition(req, res, next, { from: ['scheduled'], to: 'draft', extra: { scheduledAt: null } })
 
 /** GET .../stats — contadores, progreso, links y aperturas por hora (primeras 72h). */
@@ -283,7 +350,8 @@ async function stats(req, res, next) {
       buckets.forEach((v, i) => { if (v) last = i })
       for (let i = 0; i <= Math.max(last, 23); i++) hourly.push({ hour: i, opens: buckets[i] })
     }
-    const pending = progress.queued + progress.sending
+    const pending = progress.held + progress.queued + progress.sending
+    const ab = c.subjectB != null ? await dispatcher.variantStats(c.id) : null
     const { html, text, blocks, ...campaign } = c
     res.json({
       campaign,
@@ -292,6 +360,9 @@ async function stats(req, res, next) {
       capacity: pending && ['sending', 'paused'].includes(c.status) ? await capacityInfo(ctx.projectId, 0) : null,
       links,
       hourly,
+      ab,
+      resendOf: c.resendOfId ? await prisma.mailingCampaign.findUnique({ where: { id: c.resendOfId }, select: { id: true, name: true } }) : null,
+      nonOpeners: c.status === 'sent' ? await countNonOpeners(c.id) : null,
     })
   } catch (err) { next(err) }
 }
@@ -318,7 +389,7 @@ async function recipients(req, res, next) {
         where, orderBy: { id: 'asc' }, skip: (page - 1) * pageSize, take: pageSize,
         select: {
           id: true, email: true, status: true, sentAt: true, deliveredAt: true, firstOpenedAt: true, openCount: true,
-          firstClickedAt: true, clickCount: true, bouncedAt: true, bounceType: true, unsubscribedAt: true, errorMsg: true, attempts: true,
+          firstClickedAt: true, clickCount: true, bouncedAt: true, bounceType: true, unsubscribedAt: true, errorMsg: true, attempts: true, variant: true,
         },
       }),
       prisma.mailingSend.count({ where }),
@@ -329,6 +400,6 @@ async function recipients(req, res, next) {
 
 module.exports = {
   listCampaigns, createCampaign, getCampaign, updateCampaign, duplicateCampaign, deleteCampaign,
-  previewCampaign, audiencePreview, sendTestCampaign, launch, pause, resume, cancel, unschedule,
+  previewCampaign, audiencePreview, sendTestCampaign, launch, pause, resume, cancel, unschedule, resendNonOpeners,
   stats, recipients,
 }

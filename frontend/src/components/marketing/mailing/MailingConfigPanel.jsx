@@ -39,7 +39,7 @@ export default function MailingConfigPanel({ projectId }) {
         provider: r.data.provider || 'resend',
         fromName: r.data.fromName || '', fromEmail: r.data.fromEmail || '', replyTo: r.data.replyTo || '',
         postalAddress: r.data.postalAddress || '', brandColor: r.data.brandColor || '',
-        dailyLimit: r.data.dailyLimit ?? 500,
+        dailyLimit: r.data.dailyLimit ?? 500, warmupEnabled: !!r.data.warmupEnabled,
         sendWindowStart: r.data.sendWindowStart || '09:00', sendWindowEnd: r.data.sendWindowEnd || '20:00',
       })
       const hint = r.data.credentialsHint
@@ -194,9 +194,16 @@ export default function MailingConfigPanel({ projectId }) {
             <Field label="Desde"><input type="time" className={inputCls} value={form.sendWindowStart} onChange={e => set('sendWindowStart', e.target.value)} /></Field>
             <Field label="Hasta"><input type="time" className={inputCls} value={form.sendWindowEnd} onChange={e => set('sendWindowEnd', e.target.value)} /></Field>
           </div>
-          <p className="text-[11px] text-gray-500 dark:text-gray-400 leading-snug">
-            Con un dominio nuevo, arrancá con pocos mails por día (50–100) y subilo de a poco: los proveedores de correo desconfían de un dominio que de golpe manda miles.
-          </p>
+          <label className="flex items-start gap-2 text-sm text-gray-700 dark:text-gray-300">
+            <input type="checkbox" className="mt-0.5 rounded" checked={form.warmupEnabled} onChange={e => set('warmupEnabled', e.target.checked)} />
+            <span>
+              <b>Calentamiento del dominio</b>
+              <span className="block text-xs text-gray-500 dark:text-gray-400 leading-snug">
+                Para un dominio que nunca mandó volumen: el primer día salen como mucho 50 mails y el tope crece 50% por día (50, 75, 113, 169…) hasta llegar al tope de arriba, en unas dos semanas. Los proveedores de correo desconfían de un dominio que de golpe manda miles.
+                {config.warmupEnabled && config.warmupStartedAt && <> Activo desde el {new Date(config.warmupStartedAt).toLocaleDateString('es-AR')}. Apagarlo y volver a prenderlo empieza de nuevo en 50.</>}
+              </span>
+            </span>
+          </label>
         </Card>
 
         <ErrorNote>{error || (config.status === 'invalid' && config.lastError) || ''}</ErrorNote>

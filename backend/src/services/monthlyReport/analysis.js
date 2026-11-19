@@ -39,7 +39,7 @@ function emptyAnalysis(error) {
   return { resumen: '', highlights: [], alertas: [], nextSteps: [], _error: error }
 }
 
-async function generateAnalysis({ project, month, periodLabel, geo, analytics, instagram, tiktok, youtube, linkedin, facebook, keywords, seo, authority, performance, googleAds, metaAds, chatgptAds, competitors, workspaceId, objectives = [], services = [], briefs = null }) {
+async function generateAnalysis({ project, month, periodLabel, geo, analytics, instagram, tiktok, youtube, linkedin, facebook, keywords, seo, authority, email, performance, googleAds, metaAds, chatgptAds, competitors, workspaceId, objectives = [], services = [], briefs = null }) {
   // Cumplimiento de objetivos (array calculado por computeObjectives)
   const fmtVal = (v, unit) => v == null ? '—' : (unit === '$' ? `$${v}` : unit === '%' ? `${v}%` : unit === 'pos' ? `#${v}` : `${v}`)
   const objCtx = (Array.isArray(objectives) ? objectives : [])
@@ -129,6 +129,17 @@ async function generateAnalysis({ project, month, periodLabel, geo, analytics, i
       deltaDominios:       authority.delta?.referringDomains,
       enlacesNuevos:       authority.newLinks,
       enlacesPerdidos:     authority.lostLinks,
+    } : null,
+    // Mismo recorte que la sección: números y asuntos, nunca contactos ni bases.
+    emailMarketing: email ? {
+      campañas:          email.campaigns,
+      enviados:          email.sent,
+      tasaApertura:      email.openRate != null ? `${email.openRate}% (estimada: Apple Mail la infla)` : null,
+      tasaClics:         email.clickRate != null ? `${email.clickRate}%` : null,
+      deltaClicsPuntos:  email.delta?.clickRatePts,
+      bajas:             email.unsubscribes,
+      suscriptos:        email.subscribers,
+      nuevosSuscriptos:  email.newSubscribers,
     } : null,
     performance: performance ? {
       mobile:  performance.mobile?.score,

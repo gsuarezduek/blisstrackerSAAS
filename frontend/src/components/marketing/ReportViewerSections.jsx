@@ -270,6 +270,86 @@ export function PublicidadSection({ s, contextPublicidad, canEdit, contextEditin
   )
 }
 
+// ── Email marketing (Mailing) ───────────────────────────────────────────────
+// Números y asuntos de las campañas del período — nunca contactos ni nombres de
+// bases. Las tasas se mueven en PUNTOS (no en %), así que van aparte del DeltaChip.
+// La apertura se aclara como estimada: Apple Mail la infla y el cliente que compara
+// con otra herramienta tiene que saber por qué el número no coincide.
+function PointsDelta({ value, label }) {
+  if (value == null || value === 0) return null
+  return (
+    <span>
+      {label} {value > 0 ? 'subió' : 'bajó'}{' '}
+      <span className={value > 0 ? 'font-semibold text-green-600 dark:text-green-400' : 'font-semibold text-red-500 dark:text-red-400'}>
+        {Math.abs(value)} {Math.abs(value) === 1 ? 'punto' : 'puntos'}
+      </span>
+    </span>
+  )
+}
+
+export function EmailSection({ s }) {
+  const e = s.email
+  if (!e) return null
+  const pctTxt = v => (v != null ? `${String(v).replace('.', ',')}%` : '—')
+  const deltas = [
+    <PointsDelta key="o" value={e.delta?.openRatePts} label="La apertura" />,
+    <PointsDelta key="c" value={e.delta?.clickRatePts} label="Los clics" />,
+  ].filter(d => d.props.value)
+  return (
+    <>
+      <GroupHeader title="Email marketing" groupKeys={['email']} />
+      <SectionCard title="Campañas de email" sectionKey="email">
+        <KpiGrid items={[
+          { label: e.campaigns === 1 ? 'Campaña enviada' : 'Campañas enviadas', value: fmt(e.campaigns) },
+          { label: 'Mails enviados', value: fmt(e.sent), delta: e.delta?.sent ?? undefined },
+          { label: 'Apertura (estimada)', value: pctTxt(e.openRate) },
+          { label: 'Clics', value: pctTxt(e.clickRate) },
+        ]} />
+        <p className="text-xs text-gray-500 dark:text-gray-400 mt-3">
+          {fmt(e.subscribers)} personas suscriptas
+          {e.newSubscribers > 0 && <> · {fmt(e.newSubscribers)} nuevas en el período</>}
+          {e.unsubscribedInPeriod > 0 && <> · {fmt(e.unsubscribedInPeriod)} se dieron de baja</>}
+        </p>
+        {deltas.length > 0 && (
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+            {deltas.reduce((acc, d, i) => (i ? [...acc, ' · ', d] : [d]), [])} respecto del período anterior.
+          </p>
+        )}
+        {e.list?.length > 0 && (
+          <div className="mt-4 overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-[11px] text-gray-500 dark:text-gray-400 uppercase tracking-wide border-b border-gray-100 dark:border-gray-700">
+                  <th className="text-left py-2 pr-3 font-medium">Asunto</th>
+                  <th className="text-right py-2 px-2 font-medium">Enviados</th>
+                  <th className="text-right py-2 px-2 font-medium">Apertura</th>
+                  <th className="text-right py-2 pl-2 font-medium">Clics</th>
+                </tr>
+              </thead>
+              <tbody>
+                {e.list.map((c, i) => (
+                  <tr key={i} className="border-b border-gray-50 dark:border-gray-700/50 last:border-0 print-break-avoid">
+                    <td className="py-2 pr-3 text-gray-800 dark:text-gray-200">
+                      {c.subject}
+                      <span className="block text-[11px] text-gray-400">{c.date.split('-').reverse().join('/')}{c.abTest ? ' · test A/B de asunto' : ''}</span>
+                    </td>
+                    <td className="py-2 px-2 text-right text-gray-600 dark:text-gray-400">{fmt(c.sent)}</td>
+                    <td className="py-2 px-2 text-right text-gray-600 dark:text-gray-400">{pctTxt(c.openRate)}</td>
+                    <td className="py-2 pl-2 text-right text-gray-600 dark:text-gray-400">{pctTxt(c.clickRate)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-3">
+          La apertura es estimada: algunos clientes de correo cargan las imágenes solos y otros las bloquean. Los clics son el dato más confiable.
+        </p>
+      </SectionCard>
+    </>
+  )
+}
+
 // ── 4. SEO y GEO ──────────────────────────────────────────────────────────────
 // ── Autoridad y enlaces ───────────────────────────────────────────────────────
 // Los enlaces entrantes que el equipo cargó y el verificador confirmó. El texto dice

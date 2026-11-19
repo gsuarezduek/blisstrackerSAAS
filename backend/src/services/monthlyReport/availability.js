@@ -15,7 +15,7 @@ async function getAvailableSections(projectId, workspaceId) {
   const [
     integrations, project, analyticsSnap, pageSpeed, geoAudit, seoSnap,
     keyword, igSnap, tkSnap, ytSnap, liSnap, fbSnap, metaAdsSnap, googleAdsSnap, chatgptAdsSnap, competitor, objective,
-    backlinkSnap,
+    backlinkSnap, emailCampaign,
   ] = await Promise.all([
     prisma.projectIntegration.findMany({ where: { projectId }, select: { type: true, status: true } }),
     prisma.project.findUnique({ where: { id: projectId }, select: { websiteUrl: true, reportSections: true } }),
@@ -35,6 +35,7 @@ async function getAvailableSections(projectId, workspaceId) {
     prisma.competitorAccount.findFirst({ where: { projectId, platform: 'instagram' }, select: { id: true } }),
     prisma.marketingObjective.findFirst({ where: { projectId, workspaceId }, select: { id: true } }),
     prisma.backlinkSnapshot.findFirst({ where: { projectId, workspaceId }, select: { id: true } }),
+    prisma.mailingCampaign.findFirst({ where: { projectId, launchedAt: { not: null } }, select: { id: true } }),
   ])
 
   const intgByType = new Map(integrations.map(i => [i.type, i.status]))
@@ -67,6 +68,9 @@ async function getAvailableSections(projectId, workspaceId) {
     // desde el snapshot mensual, y ofrecerla sin snapshot sería ofrecer una tarjeta vacía
     // en el modal de generar informe.
     authority:       build(!!backlinkSnap, null),
+    // Mailing: solo si alguna vez salió una campaña (la integración es la config del
+    // proyecto, no una ProjectIntegration).
+    email:           build(!!emailCampaign, null),
     competitors:     build(!!competitor, null),
     objectives:      build(!!objective, null),
     tasks:           build(true, null),

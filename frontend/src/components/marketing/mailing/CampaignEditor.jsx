@@ -37,6 +37,49 @@ function ListChips({ lists, selected, other, onToggle, tone }) {
   )
 }
 
+// A/B de asunto: una parte de la audiencia recibe A o B; pasadas N horas gana el
+// que tuvo más clics (o aperturas si nadie hizo clic) y el resto recibe ese.
+const AB_PERCENTS = [10, 20, 30, 50, 100]
+function AbTestFields({ c, set, editable }) {
+  const on = c.subjectB != null
+  if (!on) {
+    return editable ? (
+      <button type="button" className="text-xs text-primary-700 dark:text-primary-400 hover:underline" onClick={() => set({ subjectB: '', abTestPercent: c.abTestPercent ?? 20 })}>
+        + Probar dos asuntos (test A/B)
+      </button>
+    ) : null
+  }
+  const pct = c.abTestPercent ?? 20
+  return (
+    <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-3 space-y-2">
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-semibold text-gray-700 dark:text-gray-300">Test A/B de asunto</p>
+        {editable && <button type="button" className={btnGhost} onClick={() => set({ subjectB: null })}>Quitar</button>}
+      </div>
+      <Field label="Asunto B"><input className={inputCls} value={c.subjectB} disabled={!editable} onChange={e => set({ subjectB: e.target.value })} placeholder="Otra forma de decirlo" /></Field>
+      <div className="grid grid-cols-2 gap-2">
+        <Field label="Prueban">
+          <select className={inputCls} value={pct} disabled={!editable} onChange={e => set({ abTestPercent: Number(e.target.value) })}>
+            {AB_PERCENTS.map(p => <option key={p} value={p}>{p === 100 ? 'Toda la audiencia (mitad y mitad)' : `${p}% de la audiencia`}</option>)}
+          </select>
+        </Field>
+        {pct < 100 && (
+          <Field label="Elegir el ganador después de">
+            <select className={inputCls} value={c.abWaitHours ?? 4} disabled={!editable} onChange={e => set({ abWaitHours: Number(e.target.value) })}>
+              {[1, 2, 4, 8, 12, 24, 48].map(h => <option key={h} value={h}>{h} {h === 1 ? 'hora' : 'horas'}</option>)}
+            </select>
+          </Field>
+        )}
+      </div>
+      <p className="text-[11px] text-gray-500 leading-snug">
+        {pct < 100
+          ? `El ${pct}% recibe A o B (mitad y mitad). Pasado ese tiempo —y cuando la prueba terminó de salir— gana el de más clics (o aperturas, si nadie hizo clic) y el resto recibe ese asunto. Con audiencias de menos de 100 personas se parte todo mitad y mitad.`
+          : 'Toda la audiencia se parte mitad y mitad: en las métricas ves cuál funcionó mejor para la próxima.'}
+      </p>
+    </div>
+  )
+}
+
 function TestModal({ base, campaignId, onClose }) {
   const [emails, setEmails] = useState('')
   const [busy, setBusy] = useState(false)
@@ -92,7 +135,7 @@ function LaunchModal({ base, campaign, audience, onClose, onLaunched }) {
         <p><b>{fmtInt(audience?.count)}</b> destinatarios suscriptos (cada persona recibe un solo mail aunque esté en varias bases).</p>
         {cap && audience.count > 0 && (
           <p className="text-xs text-gray-500 dark:text-gray-400 leading-snug">
-            Tope de {fmtInt(cap.dailyLimit)} mails por día entre {cap.sendWindowStart} y {cap.sendWindowEnd}
+            Tope de {fmtInt(cap.dailyLimit)} mails por día{cap.warmup && !cap.warmup.done ? ` hoy (calentamiento, día ${cap.warmup.day}: crece cada día)` : ''} entre {cap.sendWindowStart} y {cap.sendWindowEnd}
             {cap.queuedAhead > 0 && <> · hay {fmtInt(cap.queuedAhead)} mails de otras campañas en cola antes</>}.{' '}
             {cap.days <= 1 ? 'Debería salir completa hoy.' : <>Si sale ahora, termina el <b>{fmtDay(cap.finishDate)}</b> ({cap.days} días de envío).</>}
           </p>
@@ -107,6 +150,9 @@ function LaunchModal({ base, campaign, audience, onClose, onLaunched }) {
           <Field label="Fecha y hora" hint="La audiencia se calcula en ese momento: los que se den de baja antes no la reciben.">
             <input type="datetime-local" className={inputCls} value={when} onChange={e => setWhen(e.target.value)} />
           </Field>
+        )}
+        {campaign.subjectB != null && (campaign.abTestPercent ?? 20) < 100 && (
+          <p className="text-xs text-gray-500">Test A/B: primero sale el {campaign.abTestPercent ?? 20}% de la audiencia; el resto recibe el asunto ganador, así que la campaña completa tarda más que la estimación.</p>
         )}
         <p className="text-xs text-gray-500">Una vez lanzada, la campaña no se puede editar (sí pausar o cancelar).</p>
         <ErrorNote>{error}</ErrorNote>
@@ -150,6 +196,7 @@ export default function CampaignEditor({ projectId, campaignId, onBack, onLaunch
         await api.patch(`${base}/campaigns/${c.id}`, {
           name: c.name, subject: c.subject, preheader: c.preheader, blocks: c.blocks,
           includeListIds: c.includeListIds, excludeListIds: c.excludeListIds,
+          subjectB: c.subjectB ?? null, abTestPercent: c.subjectB != null ? (c.abTestPercent ?? 20) : null, abWaitHours: c.abWaitHours ?? 4,
         })
         dirty.current = false
         setSaveState('saved')
@@ -168,12 +215,12 @@ export default function CampaignEditor({ projectId, campaignId, onBack, onLaunch
     return () => clearTimeout(t)
   }, [c?.subject, c?.preheader, c?.blocks, base]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Audiencia en vivo.
+  // Audiencia en vivo (de las bases, o los que no abrieron la original si es un reenvío).
   useEffect(() => {
     if (!c) return
-    api.post(`${base}/audience`, { includeListIds: c.includeListIds, excludeListIds: c.excludeListIds })
-      .then(r => setAudience(r.data)).catch(() => {})
-  }, [c?.includeListIds, c?.excludeListIds, base]) // eslint-disable-line react-hooks/exhaustive-deps
+    const body = c.resendOfId ? { resendOfId: c.resendOfId } : { includeListIds: c.includeListIds, excludeListIds: c.excludeListIds }
+    api.post(`${base}/audience`, body).then(r => setAudience(r.data)).catch(() => {})
+  }, [c?.includeListIds, c?.excludeListIds, c?.resendOfId, base]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!c) return <Card className="p-6 text-sm text-gray-400">{error || 'Cargando…'}</Card>
 
@@ -218,6 +265,7 @@ export default function CampaignEditor({ projectId, campaignId, onBack, onLaunch
           <Card className="p-5 space-y-3">
             <Field label="Nombre interno"><input className={inputCls} value={c.name} disabled={!editable} onChange={e => set({ name: e.target.value })} /></Field>
             <Field label="Asunto"><input className={inputCls} value={c.subject} disabled={!editable} onChange={e => set({ subject: e.target.value })} placeholder="Lo que la persona ve en la bandeja" /></Field>
+            <AbTestFields c={c} set={set} editable={editable} />
             <Field label="Texto de vista previa (opcional)" hint="Aparece al lado del asunto en Gmail y otros clientes.">
               <input className={inputCls} value={c.preheader || ''} disabled={!editable} onChange={e => set({ preheader: e.target.value })} />
             </Field>
@@ -232,14 +280,23 @@ export default function CampaignEditor({ projectId, campaignId, onBack, onLaunch
               <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">Destinatarios</p>
               <p className="text-sm text-gray-700 dark:text-gray-300"><b>{fmtInt(audience?.count)}</b> suscriptos</p>
             </div>
-            <div>
-              <p className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">Mandar a quienes estén en alguna de estas bases</p>
-              <ListChips tone="include" lists={lists} selected={c.includeListIds || []} other={c.excludeListIds || []} onToggle={id => editable && toggle('includeListIds', id)} />
-            </div>
-            <div>
-              <p className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">…excepto quienes estén en estas</p>
-              <ListChips tone="exclude" lists={lists} selected={c.excludeListIds || []} other={c.includeListIds || []} onToggle={id => editable && toggle('excludeListIds', id)} />
-            </div>
+            {c.resendOfId ? (
+              <p className="text-sm text-gray-600 dark:text-gray-400 leading-snug">
+                Reenvío de <b>«{c.resendOf?.name}»</b> a quienes la recibieron y no la abrieron ni hicieron clic (y siguen suscriptos). Se calcula al lanzar.
+                Cambiale el asunto: es lo que más mueve la apertura en un segundo intento{c.resendOf?.subject ? <> (el original era «{c.resendOf.subject}»)</> : ''}.
+              </p>
+            ) : (
+              <>
+                <div>
+                  <p className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">Mandar a quienes estén en alguna de estas bases</p>
+                  <ListChips tone="include" lists={lists} selected={c.includeListIds || []} other={c.excludeListIds || []} onToggle={id => editable && toggle('includeListIds', id)} />
+                </div>
+                <div>
+                  <p className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">…excepto quienes estén en estas</p>
+                  <ListChips tone="exclude" lists={lists} selected={c.excludeListIds || []} other={c.includeListIds || []} onToggle={id => editable && toggle('excludeListIds', id)} />
+                </div>
+              </>
+            )}
           </Card>
 
           <Card className="p-5">

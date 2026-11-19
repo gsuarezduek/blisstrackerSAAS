@@ -6292,6 +6292,11 @@ model MailingConfig {
   dailyLimit      Int       @default(500)
   sendWindowStart String    @default("09:00") // HH:MM en la tz del workspace
   sendWindowEnd   String    @default("20:00")
+  // Calentamiento: un dominio nuevo arranca con pocos mails por día y el tope
+  // efectivo crece solo (services/mailing/schedule.js warmupLimit) hasta llegar a
+  // dailyLimit. Se cuenta desde warmupStartedAt.
+  warmupEnabled   Boolean   @default(false)
+  warmupStartedAt DateTime?
   status          String    @default("unverified") // unverified | active | invalid
   lastVerifiedAt  DateTime?
   lastError       String?
@@ -6400,6 +6405,17 @@ model MailingCampaign {
   text             String?
   includeListIds   Json      @default("[]")
   excludeListIds   Json      @default("[]")
+  // A/B de asunto: con subjectB, un % de la audiencia (abTestPercent) se parte
+  // mitad A / mitad B; el resto queda `held` hasta que pasan abWaitHours y se
+  // elige el ganador (abWinner), que es el asunto que recibe el resto.
+  subjectB         String?
+  abTestPercent    Int?
+  abWaitHours      Int       @default(4)
+  abWinner         String? // A | B
+  abDecidedAt      DateTime?
+  // Reenvío a quienes no abrieron: la audiencia son los destinatarios de esa
+  // campaña que no abrieron ni hicieron clic (ignora las bases).
+  resendOfId       Int?
   status           String    @default("draft") // draft | scheduled | sending | paused | sent | cancelled
   scheduledAt      DateTime?
   launchedAt       DateTime?
@@ -6418,10 +6434,12 @@ model MailingCampaign {
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
-  workspace      Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  project        Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  createdBy      User?         @relation("MailingCampaignCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  createdByAgent McpToken?     @relation("MailingCampaignCreatedByAgent", fields: [createdByAgentId], references: [id], onDelete: SetNull)
+  workspace      Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project        Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdBy      User?             @relation("MailingCampaignCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  resendOf       MailingCampaign?  @relation("MailingCampaignResend", fields: [resendOfId], references: [id], onDelete: SetNull)
+  resends        MailingCampaign[] @relation("MailingCampaignResend")
+  createdByAgent McpToken?         @relation("MailingCampaignCreatedByAgent", fields: [createdByAgentId], references: [id], onDelete: SetNull)
   sends          MailingSend[]
   links          MailingLink[]
 
@@ -6440,7 +6458,8 @@ model MailingSend {
   contactId         Int?
   email             String // snapshot: el contacto puede cambiar de email o borrarse
   token             String    @unique
-  status            String    @default("queued") // queued | sending | sent | delivered | failed | bounced | complained | cancelled
+  status            String    @default("queued") // held | queued | sending | sent | delivered | failed | bounced | complained | cancelled
+  variant           String? // A | B (A/B de asunto); null = sin test
   providerMessageId String?
   attempts          Int       @default(0)
   nextAttemptAt     DateTime?

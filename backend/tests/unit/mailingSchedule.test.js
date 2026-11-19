@@ -58,3 +58,26 @@ describe('isHHMM', () => {
     expect(isHHMM('9:00')).toBe(false)
   })
 })
+
+describe('calentamiento del dominio', () => {
+  const { warmupLimit, effectiveDailyLimit } = require('../../src/services/mailing/schedule')
+
+  it('arranca en 50 y crece 50% por día', () => {
+    expect([0, 1, 2, 3, 4].map(warmupLimit)).toEqual([50, 75, 113, 169, 253])
+  })
+
+  it('el tope del día es el menor entre el configurado, el techo de plataforma y la curva', () => {
+    const now = at('2026-11-18T15:00:00Z')
+    const startedAt = at('2026-11-16T15:00:00Z') // hace 2 días → día 3 → 113
+    expect(effectiveDailyLimit({ dailyLimit: 1000, warmupEnabled: true, warmupStartedAt: startedAt, tz: TZ, now }))
+      .toEqual({ limit: 113, warmup: { day: 3, limit: 113, done: false } })
+    expect(effectiveDailyLimit({ dailyLimit: 80, warmupEnabled: true, warmupStartedAt: startedAt, tz: TZ, now }).warmup.done).toBe(true)
+    expect(effectiveDailyLimit({ dailyLimit: 1000, hardCap: 300, warmupEnabled: false, tz: TZ, now })).toEqual({ limit: 300, warmup: null })
+  })
+
+  it('la estimación recorre el tope de cada día', () => {
+    // 50 + 75 + 113 + 169 + 253 + 380 = 1040 → 6 días
+    const r = estimateFinish({ count: 1000, limitForDay: warmupLimit, tz: TZ, start: '09:00', end: '20:00', now: at('2026-11-18T15:00:00Z') })
+    expect(r).toMatchObject({ days: 6, finishDate: '2026-11-23', todayCapacity: 50 })
+  })
+})

@@ -32,7 +32,7 @@ function reportLabel(report) {
 // Claves de sección válidas para `enabledSections` (deben coincidir con las del servicio/ReportViewer)
 const SECTION_KEYS = [
   'objectives', 'analytics', 'performance', 'geo', 'seo', 'keywords',
-  'authority',
+  'authority', 'email',
   'instagram', 'tiktok', 'youtube', 'linkedin', 'facebook', 'metaAds', 'googleAds', 'chatgptAds', 'competitors', 'tasks',
 ]
 

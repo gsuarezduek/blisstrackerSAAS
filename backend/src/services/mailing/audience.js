@@ -49,4 +49,42 @@ async function resolveAudience(projectId, includeListIds, excludeListIds) {
   })
 }
 
-module.exports = { audienceWhere, countAudience, resolveAudience, ownListIds, toIdList }
+// ─── Reenvío a quienes no abrieron ───────────────────────────────────────────
+// La audiencia de un reenvío no sale de las bases: son los destinatarios de la
+// campaña original a los que el mail les llegó (sent/delivered) y no lo abrieron
+// ni hicieron clic, y que siguen suscriptos. Un rebote, una queja o una baja en el
+// medio los saca (el estado del contacto ya lo refleja).
+function nonOpenersWhere(parentId) {
+  return {
+    campaignId: parentId,
+    status: { in: ['sent', 'delivered'] },
+    firstOpenedAt: null,
+    firstClickedAt: null,
+    contact: { status: 'subscribed' },
+  }
+}
+
+async function countNonOpeners(parentId) {
+  return prisma.mailingSend.count({ where: nonOpenersWhere(parentId) })
+}
+
+async function resolveNonOpeners(parentId) {
+  const sends = await prisma.mailingSend.findMany({
+    where: nonOpenersWhere(parentId),
+    select: { contact: { select: { id: true, email: true } } },
+    orderBy: { id: 'asc' },
+  })
+  return sends.map(s => s.contact).filter(Boolean)
+}
+
+/** Audiencia de una campaña cualquiera: reenvío o bases. */
+async function campaignAudience(campaign) {
+  return campaign.resendOfId
+    ? resolveNonOpeners(campaign.resendOfId)
+    : resolveAudience(campaign.projectId, campaign.includeListIds, campaign.excludeListIds)
+}
+
+module.exports = {
+  audienceWhere, countAudience, resolveAudience, ownListIds, toIdList,
+  nonOpenersWhere, countNonOpeners, resolveNonOpeners, campaignAudience,
+}

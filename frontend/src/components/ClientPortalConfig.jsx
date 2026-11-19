@@ -17,6 +17,7 @@ const LIVE_SECTIONS = [
   { key: 'seo',         label: 'Rendimiento del sitio (Search Console)'},
   { key: 'keywords',    label: 'Posicionamiento SEO (keywords)'},
   { key: 'authority',   label: 'Autoridad y enlaces'},
+  { key: 'email',       label: 'Email marketing'},
   { key: 'instagram',   label: 'Instagram'},
   { key: 'tiktok',      label: 'TikTok'},
   { key: 'linkedin',    label: 'LinkedIn'},

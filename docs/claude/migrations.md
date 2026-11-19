@@ -19,3 +19,6 @@ Módulo Mailing (Marketing → Mailing), todo nuevo y por proyecto: `MailingConf
 
 ### `mailing_phase2`
 Mailing fase 2, solo columnas nullable: `MailingList.formSuccessUrl` (a dónde vuelve el formulario público), `MailingList.crmFilter`/`crmSyncedAt` (el filtro con el que se importó desde Ventas, para "volver a sincronizar") y `MailingContact.confirmSentAt` (freno de reenvío del mail de doble opt-in y vencimiento del link). Ver `docs/claude/mailing.md`.
+
+### `mailing_phase3`
+Mailing fase 3: `MailingConfig.warmupEnabled`/`warmupStartedAt` (calentamiento del dominio), `MailingCampaign.subjectB`/`abTestPercent`/`abWaitHours`/`abWinner`/`abDecidedAt` (A/B de asunto) y `resendOfId` (FK a sí misma, `SetNull`: reenvío a quienes no abrieron), `MailingSend.variant`. El estado `held` de `MailingSend` es un valor nuevo de un `String`, sin cambio de tipo. Ver `docs/claude/mailing.md`.

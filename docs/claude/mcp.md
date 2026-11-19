@@ -45,3 +45,5 @@
 - Sin OAuth: cada cliente MCP necesita un Bearer token estático (generado desde Preferencias), no hay authorization server OAuth 2.1 con dynamic client registration ni consentimiento granular por scope — deliberadamente fuera de alcance; el token ya hereda el rol real de quien lo generó, que es el control de acceso que importa.
 
 Tareas de agente desde el lado del producto (Dashboard, métricas, avisos): `docs/claude/agentes-ia.md`.
+
+**Mailing (`mailing_*`, 14 tools):** leer la config (sin credenciales), bases, contactos, campañas y métricas; armar, editar y duplicar borradores, preparar el reenvío a quienes no abrieron, contar la audiencia, mandar una prueba y pausar. **Lanzar, reanudar y cancelar son de una persona**: la API responde 403 `HUMAN_ONLY` a cualquier request con `mcpTokenId`, y no hay tools de credenciales ni de alta o importación de contactos. Detalle en `docs/claude/mailing.md` → "Agentes (MCP)".

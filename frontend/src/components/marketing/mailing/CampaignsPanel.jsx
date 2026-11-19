@@ -51,7 +51,7 @@ export default function CampaignsPanel({ projectId, onNavigate }) {
     const c = campaigns?.find(x => x.id === openId)
     if (!campaigns) return <Card className="p-6 text-sm text-gray-400">Cargando…</Card>
     if (c && !['draft', 'scheduled'].includes(c.status)) {
-      return <CampaignStats projectId={projectId} campaignId={openId} onBack={() => { open(null); load() }} onDuplicate={() => act(c, 'duplicate')} />
+      return <CampaignStats projectId={projectId} campaignId={openId} onBack={() => { open(null); load() }} onDuplicate={() => act(c, 'duplicate')} onOpenCampaign={id => { load(); open(id) }} />
     }
     return <CampaignEditor projectId={projectId} campaignId={openId} onBack={() => { open(null); load() }} onLaunched={() => { load() }} />
   }

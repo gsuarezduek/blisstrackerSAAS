@@ -1388,7 +1388,7 @@ Así el agente sabe sus límites desde el primer mensaje, sin que tengas que exp
         title: 'Qué puede (y qué no puede) hacer un agente',
         audience: 'todos',
         module: 'mcp',
-        summary: 'Proyectos, tareas, la Nube del proyecto, equipo, marketing, SEO, contenido, ventas y responder WhatsApp sí; chat, calendario, finanzas, RRHH y EOS todavía no.',
+        summary: 'Proyectos, tareas, la Nube del proyecto, equipo, marketing, SEO, contenido, ventas, borradores de Mailing y responder WhatsApp sí; chat, calendario, finanzas, RRHH y EOS todavía no.',
         body: `El agente usa **tus mismos permisos**: puede hacer lo que vos podés hacer en la app, nunca más. Si no tenés acceso a un módulo, el agente tampoco.
 
 ## Lo que sí puede hacer
@@ -1405,6 +1405,7 @@ Así el agente sabe sus límites desde el primer mensaje, sin que tengas que exp
 - **Contenido** — ver, crear, editar y borrar piezas; **subir la imagen o el video de la pieza** (queda también en la Nube del proyecto); ver historial y comentarios; comentar; enviar al dashboard del responsable; pedir aprobación al cliente. Mover una pieza de estado no le avisa nada al cliente: el único mail sale cuando se pide la aprobación.
 - **Ventas** — dashboard y métricas; empresas, contactos y leads (crear, editar, borrar); cambiar estado y responsable; archivar; convertir a proyecto; próximas acciones y notas; investigación con IA, informe de diagnóstico y propuestas (generarlas, cambiar precios, servicios y firma, y corregir el texto bloque por bloque sin regenerarlas).
 - **WhatsApp** — leer las conversaciones y **responder con texto** dentro de la ventana de 24 hs desde el último mensaje del contacto. El mensaje sale a tu nombre y en la bandeja queda rotulado con el nombre del agente. **El agente tiene prioridad sobre el bot**: cuando toma una conversación o responde, el bot deja de contestar ahí y el chip muestra "Agente «nombre»". También podés asignarle una conversación a tu agente desde el chat, en el selector **"La atiende mi agente"**. En la configuración del bot podés activar **"Darle prioridad a los agentes de IA"**: el bot espera unos minutos antes de responder y, si en ese rato un agente o una persona toma la conversación, no contesta. Para que el bot vuelva a atenderla, elegí **"La atiende el bot"**. También puede **fijar o desfijar** una conversación (el mismo pin 📌 compartido de la bandeja, lo ve todo el equipo).
+- **Mailing** — leer la configuración (sin credenciales), las bases, los contactos y las campañas con sus métricas; **armar y editar borradores** (asunto, contenido, bases, test A/B de asunto), calcular la audiencia, **mandar una prueba** a direcciones del equipo, preparar el reenvío a quienes no abrieron y **pausar** un envío. **Lanzar, reanudar o cancelar una campaña lo hace siempre una persona** desde la app: el agente te avisa cuando el borrador está listo.
 
 ## Cuando el agente se traba (y cómo le contestás)
 
@@ -1430,6 +1431,7 @@ Y sin configurar nada: la próxima vez que uses el agente, sus novedades aparece
 - Chat, notificaciones, Calendario y reuniones, Briefs, links y accesos de proyectos.
 - Finanzas, RRHH (vacaciones, legajos, beneficios), EOS y Gamification.
 - En WhatsApp: mandar plantillas o reabrir conversaciones vencidas (tienen costo), mandar imágenes o archivos, y configurar el bot o las automatizaciones.
+- En Mailing: lanzar, reanudar o cancelar campañas, cargar credenciales del remitente, y dar de alta o importar contactos (declarar que una base aceptó recibir mails es responsabilidad de una persona).
 - Administración: invitar o desactivar personas, roles, preferencias, módulos, facturación.
 - En tareas: borrar las tuyas (solo puede borrar las del agente), editar o pasar tareas de otras personas, destacarlas, moverlas al backlog o seguirlas.
 - Subir archivos al chat, ni **conectar** integraciones (Google, Meta, TikTok, LinkedIn): conectar necesita el navegador — lo que sí puede es decirte qué falta y pasarte el link. A una tarea, a la Nube del proyecto y a una pieza de Contenido sí puede subir.

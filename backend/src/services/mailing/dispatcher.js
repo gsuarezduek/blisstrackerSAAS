@@ -16,11 +16,16 @@ const { getSetting } = require('../../lib/platformSettings')
 const { getProvider } = require('./providers')
 const { readCredentials, formatFrom, backendBase, frontendBase } = require('./config')
 const { renderCampaignHtml, renderCampaignText, prepareTracking, personalize } = require('./render')
-const { resolveAudience } = require('./audience')
-const { inSendWindow } = require('./schedule')
+const { campaignAudience } = require('./audience')
+const { inSendWindow, effectiveDailyLimit } = require('./schedule')
 const { enabledWorkspaceIds } = require('../../lib/featureFlags')
 
 const MAX_ATTEMPTS = 3
+// A/B de asunto: qué porcentaje de la audiencia recibe la prueba (mitad A, mitad
+// B). 100 = se parte toda la audiencia y no hay ganador que mandar después.
+const AB_PERCENTS = [10, 20, 30, 50, 100]
+// Por debajo de esto el test no tiene muestra: se parte todo mitad y mitad.
+const AB_MIN_TEST = 100
 const BACKOFF_MINS = [5, 30, 120]
 const STUCK_SENDING_MINS = 15
 const CREATE_CHUNK = 1000
@@ -100,7 +105,11 @@ function readinessProblems(campaign, config) {
   if (!config?.postalAddress) problems.push('Falta la dirección postal del remitente (va al pie de cada mail).')
   if (!campaign.subject?.trim()) problems.push('Falta el asunto.')
   if (!Array.isArray(campaign.blocks) || campaign.blocks.length === 0) problems.push('El mail no tiene contenido.')
-  if (!Array.isArray(campaign.includeListIds) || campaign.includeListIds.length === 0) problems.push('Elegí al menos una base de destinatarios.')
+  if (!campaign.resendOfId && (!Array.isArray(campaign.includeListIds) || campaign.includeListIds.length === 0)) problems.push('Elegí al menos una base de destinatarios.')
+  if (campaign.subjectB != null) {
+    if (!campaign.subjectB.trim()) problems.push('Falta el asunto B del test A/B.')
+    if (!AB_PERCENTS.includes(campaign.abTestPercent)) problems.push('Elegí qué parte de la audiencia participa del test A/B.')
+  }
   return problems
 }
 
@@ -119,8 +128,13 @@ async function launchCampaign(campaignId) {
   const problems = readinessProblems(campaign, config)
   if (problems.length) throw Object.assign(new Error(problems[0]), { status: 400, problems })
 
-  const audience = await resolveAudience(campaign.projectId, campaign.includeListIds, campaign.excludeListIds)
-  if (!audience.length) throw Object.assign(new Error('La audiencia está vacía: no hay contactos suscriptos en las bases elegidas.'), { status: 400 })
+  const audience = await campaignAudience(campaign)
+  if (!audience.length) {
+    throw Object.assign(new Error(campaign.resendOfId
+      ? 'No queda nadie a quien reenviarle: todos abrieron, se dieron de baja o rebotaron.'
+      : 'La audiencia está vacía: no hay contactos suscriptos en las bases elegidas.'), { status: 400 })
+  }
+  const variants = assignVariants(audience.length, campaign.subjectB != null ? campaign.abTestPercent : null)
 
   const snap = buildSnapshot(campaign, config)
   const now = new Date()
@@ -139,8 +153,9 @@ async function launchCampaign(campaignId) {
     }
     for (let i = 0; i < audience.length; i += CREATE_CHUNK) {
       await tx.mailingSend.createMany({
-        data: audience.slice(i, i + CREATE_CHUNK).map(c => ({
+        data: audience.slice(i, i + CREATE_CHUNK).map((c, k) => ({
           campaignId: campaign.id, projectId: campaign.projectId, contactId: c.id, email: c.email, token: newToken(),
+          ...variants[i + k],
         })),
       })
     }
@@ -149,18 +164,97 @@ async function launchCampaign(campaignId) {
   return { recipients: audience.length }
 }
 
+/**
+ * Reparte la audiencia del test A/B. Devuelve, por posición, `{ variant, status }`:
+ * el grupo de prueba (`pct`% en orden aleatorio) mitad A / mitad B en `queued`, y
+ * el resto `held` hasta que se elija el ganador. Sin test, todos `queued` sin variante.
+ */
+function assignVariants(n, pct) {
+  if (!pct) return Array.from({ length: n }, () => ({}))
+  const test = pct >= 100 || n <= AB_MIN_TEST ? n : Math.max(2, Math.round(n * pct / 100))
+  const order = Array.from({ length: n }, (_, i) => i)
+  for (let i = n - 1; i > 0; i--) {
+    const j = crypto.randomInt(i + 1);
+    [order[i], order[j]] = [order[j], order[i]]
+  }
+  const out = new Array(n)
+  order.forEach((pos, rank) => {
+    out[pos] = rank < test ? { variant: rank % 2 === 0 ? 'A' : 'B', status: 'queued' } : { variant: null, status: 'held' }
+  })
+  return out
+}
+
 /** Envío de prueba: no consume el tope, no cuenta en métricas, sin tracking. */
 async function sendTest(campaign, config, emails) {
   const snap = buildSnapshot(campaign, config)
   const creds = readCredentials(config)
   if (!creds) throw Object.assign(new Error('Falta configurar el proveedor de envío.'), { status: 400 })
   const provider = getProvider(config.provider)
-  const c = { ...campaign, html: snap.html, text: snap.text, links: snap.links, subject: `[Prueba] ${campaign.subject || ''}` }
-  const messages = emails.map(email => buildMessage({
-    campaign: c, config, tracking: false,
+  // Con A/B se prueban los dos asuntos: cada dirección recibe A y B.
+  const subjects = campaign.subjectB
+    ? [['[Prueba A] ', campaign.subject], ['[Prueba B] ', campaign.subjectB]]
+    : [['[Prueba] ', campaign.subject]]
+  const messages = emails.flatMap(email => subjects.map(([tag, subject]) => buildMessage({
+    campaign: { ...campaign, html: snap.html, text: snap.text, links: snap.links, subject: `${tag}${subject || ''}` },
+    config, tracking: false,
     contact: { email, firstName: 'Nombre', lastName: 'Apellido', fields: {} },
-  }))
+  })))
   return provider.sendBatch(creds, messages)
+}
+
+function subjectFor(campaign, variant) {
+  return variant === 'B' && campaign.subjectB ? campaign.subjectB : campaign.subject
+}
+
+/**
+ * Elige el ganador de un test A/B. Manda la tasa de CLIC (las aperturas las
+ * infla Apple Mail); si nadie hizo clic, la de apertura; empate → A.
+ * Puro, para testearlo.
+ */
+function pickWinner({ A, B }) {
+  const rate = (x, k) => (x.sent ? x[k] / x.sent : 0)
+  if (A.clicks + B.clicks > 0) {
+    if (rate(B, 'clicks') > rate(A, 'clicks')) return 'B'
+    if (rate(B, 'clicks') < rate(A, 'clicks')) return 'A'
+  }
+  return rate(B, 'opens') > rate(A, 'opens') ? 'B' : 'A'
+}
+
+async function variantStats(campaignId) {
+  const out = {}
+  for (const v of ['A', 'B']) {
+    const base = { campaignId, variant: v }
+    const [sent, opens, clicks] = await Promise.all([
+      prisma.mailingSend.count({ where: { ...base, status: { in: ['sent', 'delivered', 'bounced', 'complained'] } } }),
+      prisma.mailingSend.count({ where: { ...base, firstOpenedAt: { not: null } } }),
+      prisma.mailingSend.count({ where: { ...base, firstClickedAt: { not: null } } }),
+    ])
+    out[v] = { sent, opens, clicks }
+  }
+  return out
+}
+
+/**
+ * Cierra los tests A/B vencidos: pasaron `abWaitHours` desde el lanzamiento Y el
+ * grupo de prueba ya salió entero (con el tope diario puede tardar más de las
+ * horas de espera; elegir antes sería comparar muestras incompletas). El resto
+ * de la audiencia (`held`) pasa a la cola con el asunto ganador.
+ */
+async function decideAbTests(now) {
+  const pending = await prisma.mailingCampaign.findMany({
+    where: { status: 'sending', subjectB: { not: null }, abWinner: null, abTestPercent: { lt: 100 }, launchedAt: { not: null } },
+    select: { id: true, launchedAt: true, abWaitHours: true },
+  })
+  for (const c of pending) {
+    if (now - c.launchedAt < c.abWaitHours * 3600000) continue
+    const unsent = await prisma.mailingSend.count({ where: { campaignId: c.id, variant: { not: null }, status: { in: ['queued', 'sending'] } } })
+    if (unsent > 0) continue
+    const winner = pickWinner(await variantStats(c.id))
+    const claimed = await prisma.mailingCampaign.updateMany({ where: { id: c.id, abWinner: null }, data: { abWinner: winner, abDecidedAt: now } })
+    if (claimed.count === 1) {
+      await prisma.mailingSend.updateMany({ where: { campaignId: c.id, status: 'held' }, data: { status: 'queued', variant: winner } })
+    }
+  }
 }
 
 // ─── Tick del cron ───────────────────────────────────────────────────────────
@@ -194,10 +288,9 @@ async function recoverStuck(now) {
   })
 }
 
-async function dailyCap(config) {
-  const hard = Number(await getSetting('mailingMaxDailyPerProject').catch(() => 0)) || 0
-  const own = Math.max(0, config.dailyLimit || 0)
-  return hard > 0 ? Math.min(own, hard) : own
+async function dailyCap(config, tz, now) {
+  const hardCap = Number(await getSetting('mailingMaxDailyPerProject').catch(() => 0)) || 0
+  return effectiveDailyLimit({ ...config, hardCap, tz, now }).limit
 }
 
 async function processProject(projectId, now) {
@@ -214,7 +307,7 @@ async function processProject(projectId, now) {
 
   const date = todayString(tz)
   const usage = await prisma.mailingDailyUsage.findUnique({ where: { projectId_date: { projectId, date } } })
-  const remaining = (await dailyCap(config)) - (usage?.count || 0)
+  const remaining = (await dailyCap(config, tz, now)) - (usage?.count || 0)
   if (remaining <= 0) return { skipped: 'cap' }
 
   const provider = getProvider(config.provider)
@@ -255,13 +348,16 @@ async function processProject(projectId, now) {
   const campaignIds = [...new Set(ready.map(s => s.campaignId))]
   const campaigns = new Map((await prisma.mailingCampaign.findMany({
     where: { id: { in: campaignIds } },
-    select: { id: true, subject: true, html: true, text: true },
+    select: { id: true, subject: true, subjectB: true, abWinner: true, html: true, text: true },
   })).map(c => [c.id, c]))
 
-  const messages = ready.map(s => buildMessage({
-    campaign: campaigns.get(s.campaignId), config, token: s.token,
-    contact: { ...s.contact, email: s.email },
-  }))
+  const messages = ready.map(s => {
+    const c = campaigns.get(s.campaignId)
+    return buildMessage({
+      campaign: { ...c, subject: subjectFor(c, s.variant) }, config, token: s.token,
+      contact: { ...s.contact, email: s.email },
+    })
+  })
 
   let results
   try {
@@ -324,7 +420,7 @@ async function finalizeCampaigns(now) {
   if (!sending.length) return
   const pending = await prisma.mailingSend.groupBy({
     by: ['campaignId'],
-    where: { campaignId: { in: sending.map(c => c.id) }, status: { in: ['queued', 'sending'] } },
+    where: { campaignId: { in: sending.map(c => c.id) }, status: { in: ['held', 'queued', 'sending'] } },
     _count: { _all: true },
   })
   const withPending = new Set(pending.map(p => p.campaignId))
@@ -344,6 +440,7 @@ async function dispatchTick(now = new Date()) {
 
   await launchDueScheduled(now, enabled)
   await recoverStuck(now)
+  await decideAbTests(now)
   const projects = await prisma.mailingCampaign.findMany({
     where: { status: 'sending' },
     distinct: ['projectId'],
@@ -362,6 +459,7 @@ async function dispatchTick(now = new Date()) {
 
 module.exports = {
   launchCampaign, sendTest, dispatchTick, processProject, readinessProblems,
+  assignVariants, pickWinner, variantStats, decideAbTests, subjectFor, AB_PERCENTS,
   buildSnapshot, buildMessage, trackingUrls, frontendBase, newToken,
   MAX_ATTEMPTS, BACKOFF_MINS,
 }

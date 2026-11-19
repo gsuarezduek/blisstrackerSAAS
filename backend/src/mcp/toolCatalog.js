@@ -2053,6 +2053,126 @@ const tools = [
     request: ({ projectId, itemId }) => ({ method: 'POST', path: `/projects/${projectId}/files/${itemId}/restore` }),
   },
 
+  // ── Mailing (Marketing → Mailing; requiere el flag `mailing`) ───────────
+  // Un agente arma y prueba borradores y lee métricas. LANZAR, reanudar o cancelar
+  // lo hace una persona: la API responde 403 HUMAN_ONLY a esas acciones vía MCP.
+  // Tampoco hay tools de credenciales ni de alta/importación de contactos (declarar
+  // el consentimiento de una base es responsabilidad de una persona).
+  {
+    name: 'mailing_config_get',
+    description: 'Cómo manda mails un proyecto: proveedor (resend/ses/smtp), remitente, dirección del pie, tope diario, ventana horaria, calentamiento y si la configuración está verificada (`status: active`). Nunca trae credenciales. Si `status` no es `active`, ninguna campaña puede lanzarse ni salir.',
+    inputSchema: { ...projectIdParam },
+    request: ({ projectId }) => ({ method: 'GET', path: `/marketing/projects/${projectId}/mailing/config` }),
+  },
+  {
+    name: 'mailing_lists_list',
+    description: 'Las bases de contactos del proyecto con cuántos suscriptos tiene cada una (`subscribed`) y el total, más el conteo de contactos del proyecto por estado. Los ids se usan en includeListIds/excludeListIds de una campaña.',
+    inputSchema: { ...projectIdParam },
+    request: ({ projectId }) => ({ method: 'GET', path: `/marketing/projects/${projectId}/mailing/lists` }),
+  },
+  {
+    name: 'mailing_contacts_list',
+    description: 'Contactos del proyecto (email, nombre, estado, bases). Paginado. Solo lectura.',
+    inputSchema: {
+      ...projectIdParam,
+      listId:   z.number().int().optional().describe('Solo los de esta base'),
+      status:   z.enum(['pending', 'subscribed', 'unsubscribed', 'bounced', 'complained']).optional(),
+      q:        z.string().optional().describe('Búsqueda por email o nombre'),
+      page:     z.number().int().optional(),
+      pageSize: z.number().int().optional().describe('10 a 200 (default 50)'),
+    },
+    request: ({ projectId, ...query }) => ({ method: 'GET', path: `/marketing/projects/${projectId}/mailing/contacts`, query }),
+  },
+  {
+    name: 'mailing_campaigns_list',
+    description: 'Campañas del proyecto con estado (draft/scheduled/sending/paused/sent/cancelled) y contadores: destinatarios, enviados, aperturas y clics ÚNICOS, rebotes, quejas, bajas.',
+    inputSchema: { ...projectIdParam },
+    request: ({ projectId }) => ({ method: 'GET', path: `/marketing/projects/${projectId}/mailing/campaigns` }),
+  },
+  {
+    name: 'mailing_campaign_get',
+    description: 'Una campaña completa: asunto(s), preheader, bloques del contenido, bases incluidas/excluidas, test A/B y, si es un reenvío, de qué campaña.',
+    inputSchema: { ...projectIdParam, campaignId: z.number().int() },
+    request: ({ projectId, campaignId }) => ({ method: 'GET', path: `/marketing/projects/${projectId}/mailing/campaigns/${campaignId}` }),
+  },
+  {
+    name: 'mailing_campaign_stats',
+    description: 'Métricas de una campaña lanzada: progreso por estado (cuántos en cola, enviados, fallidos), capacidad diaria y fecha estimada de fin, clics por link, aperturas por hora, resultado del test A/B por variante y cuántos no abrieron (`nonOpeners`, para un reenvío). Las aperturas son estimadas (Apple Mail las infla): los clics son el dato confiable.',
+    inputSchema: { ...projectIdParam, campaignId: z.number().int() },
+    request: ({ projectId, campaignId }) => ({ method: 'GET', path: `/marketing/projects/${projectId}/mailing/campaigns/${campaignId}/stats` }),
+  },
+  {
+    name: 'mailing_campaign_recipients',
+    description: 'Destinatarios de una campaña lanzada, uno por uno (email, estado del envío, cuándo abrió / hizo clic, variante A/B, error).',
+    inputSchema: {
+      ...projectIdParam,
+      campaignId: z.number().int(),
+      filter: z.enum(['opened', 'clicked', 'unsubscribed', 'held', 'queued', 'sent', 'delivered', 'failed', 'bounced', 'complained', 'cancelled']).optional(),
+      q:      z.string().optional().describe('Búsqueda por email'),
+      page:   z.number().int().optional(),
+    },
+    request: ({ projectId, campaignId, ...query }) => ({ method: 'GET', path: `/marketing/projects/${projectId}/mailing/campaigns/${campaignId}/recipients`, query }),
+  },
+  {
+    name: 'mailing_campaign_create',
+    description: 'Crea una campaña en BORRADOR con un contenido de arranque. Después se completa con mailing_campaign_update. No manda nada.',
+    inputSchema: { ...projectIdParam, name: z.string().describe('Nombre interno (no lo ve el destinatario)') },
+    request: ({ projectId, name }) => ({ method: 'POST', path: `/marketing/projects/${projectId}/mailing/campaigns`, body: { name } }),
+  },
+  {
+    name: 'mailing_campaign_update',
+    description: 'Edita un borrador (o una programada). Una clave ausente no se toca. `blocks` REEMPLAZA el contenido completo: es un array de bloques en orden, cada uno uno de: {type:"heading", text, align?:"left|center|right", size?:"lg|sm"} · {type:"text", text} (texto plano; párrafos separados por línea en blanco) · {type:"image", url (https, pública), alt?, href?, width?: 20-100, align?} · {type:"button", label, href, color?:"#RRGGBB", align?} · {type:"divider"} · {type:"spacer", height?: 8-80}. Variables en los textos: {{nombre}}, {{apellido}}, {{email}}, {{campo.x}}, con default {{nombre|hola}}. El pie con dirección y link de baja se agrega solo. Test A/B de asunto: `subjectB` + `abTestPercent` (10, 20, 30, 50 o 100) + `abWaitHours` (1-72); `subjectB: null` lo apaga.',
+    inputSchema: {
+      ...projectIdParam,
+      campaignId:     z.number().int(),
+      name:           z.string().optional(),
+      subject:        z.string().optional(),
+      preheader:      z.string().optional().describe('Texto de vista previa al lado del asunto'),
+      blocks:         z.array(z.record(z.any())).optional(),
+      includeListIds: z.array(z.number().int()).optional().describe('Bases a las que se manda (alguna de ellas)'),
+      excludeListIds: z.array(z.number().int()).optional().describe('…excepto quienes estén en estas'),
+      subjectB:       z.string().nullable().optional(),
+      abTestPercent:  z.number().int().nullable().optional(),
+      abWaitHours:    z.number().int().optional(),
+    },
+    request: ({ projectId, campaignId, ...body }) => ({ method: 'PATCH', path: `/marketing/projects/${projectId}/mailing/campaigns/${campaignId}`, body }),
+  },
+  {
+    name: 'mailing_campaign_duplicate',
+    description: 'Copia una campaña (cualquiera, también una ya enviada) como borrador nuevo.',
+    inputSchema: { ...projectIdParam, campaignId: z.number().int() },
+    request: ({ projectId, campaignId }) => ({ method: 'POST', path: `/marketing/projects/${projectId}/mailing/campaigns/${campaignId}/duplicate` }),
+  },
+  {
+    name: 'mailing_campaign_resend_non_openers',
+    description: 'Arma un BORRADOR para reenviarle una campaña TERMINADA (status sent) a quienes la recibieron y no la abrieron. Conviene cambiarle el asunto con mailing_campaign_update antes de que una persona la lance.',
+    inputSchema: { ...projectIdParam, campaignId: z.number().int().describe('La campaña original') },
+    request: ({ projectId, campaignId }) => ({ method: 'POST', path: `/marketing/projects/${projectId}/mailing/campaigns/${campaignId}/resend-non-openers` }),
+  },
+  {
+    name: 'mailing_audience_count',
+    description: 'Cuántos destinatarios tendría una campaña (suscriptos en alguna base incluida y en ninguna excluida, o los que no abrieron una campaña con `resendOfId`) y cuántos días tarda en salir con el tope diario.',
+    inputSchema: {
+      ...projectIdParam,
+      includeListIds: z.array(z.number().int()).optional(),
+      excludeListIds: z.array(z.number().int()).optional(),
+      resendOfId:     z.number().int().optional(),
+    },
+    request: ({ projectId, ...body }) => ({ method: 'POST', path: `/marketing/projects/${projectId}/mailing/audience`, body }),
+  },
+  {
+    name: 'mailing_campaign_test',
+    description: 'Manda la campaña como PRUEBA a 1-5 direcciones (con datos de ejemplo en las variables, sin tracking, sin consumir el tope). Con test A/B manda las dos versiones. Mandala solo a direcciones del equipo o del usuario, nunca a contactos del cliente.',
+    inputSchema: { ...projectIdParam, campaignId: z.number().int(), emails: z.array(z.string()).describe('1 a 5 emails') },
+    request: ({ projectId, campaignId, emails }) => ({ method: 'POST', path: `/marketing/projects/${projectId}/mailing/campaigns/${campaignId}/test`, body: { emails } }),
+  },
+  {
+    name: 'mailing_campaign_pause',
+    description: 'Pausa una campaña que está saliendo (frenar nunca manda nada, por eso lo puede hacer un agente). Reanudarla la hace una persona desde la app.',
+    inputSchema: { ...projectIdParam, campaignId: z.number().int() },
+    request: ({ projectId, campaignId }) => ({ method: 'POST', path: `/marketing/projects/${projectId}/mailing/campaigns/${campaignId}/pause` }),
+  },
+
   // ── Situación de la cuenta (hojas acumulables por proyecto) ─────────────
   {
     name: 'project_situation_list',

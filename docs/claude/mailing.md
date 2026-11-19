@@ -184,26 +184,72 @@ Cada base puede tener un formulario (`POST .../lists/:listId/form { enabled }`).
 - **Confirmar:** el link del mail lleva a `/confirmar-suscripcion/:token` (`pages/MailingSubscription.jsx`), que pide **un clic** (los antivirus de correo abren los links solos) → `POST /api/public/mailing/confirm/:token`. Eso pasa el contacto a `subscribed` con `consentSource: 'form_double_optin'`. El link vence a los 7 días (410).
 - Un `pending` está en la base pero no recibe campañas, porque la audiencia solo toma `subscribed`.
 
-## Pendiente (fase 3 del plan)
+## Calentamiento del dominio
 
-- **Fase 3:**
-  - Sección en el informe mensual.
-  - Alertas en Prioridades (rebotes > 5%, quejas > 0,1%, credencial inválida).
-  - Tools de MCP: borradores y métricas; **lanzar queda para una persona**.
-  - Aumento gradual del tope para dominios nuevos.
-  - A/B de asunto.
-  - Reenvío a quienes no abrieron.
+`MailingConfig.warmupEnabled` + `warmupStartedAt`. Un dominio que nunca mandó volumen y de golpe manda miles es lo que más desconfianza genera en Gmail/Outlook.
+
+- **La curva** (`schedule.js` `warmupLimit`): el tope del día arranca en 50 y crece 50% por día (50, 75, 113, 169, 253, 380, 570…), y llega a 10.000 en unas dos semanas.
+- **El tope efectivo** (`effectiveDailyLimit`) es el menor entre el configurado, el techo de plataforma y la curva del día. Lo usan el dispatcher y la estimación.
+- **La estimación** (`estimateFinish` con `limitForDay`) recorre día por día, porque con un tope que crece no hay fórmula cerrada.
+- **Prender y apagar:** prenderlo arranca la curva hoy. Apagarlo la descarta, así que volver a prenderlo empieza de nuevo en 50, que es lo prudente después de una pausa.
+
+## A/B de asunto
+
+`MailingCampaign.subjectB` + `abTestPercent` (10/20/30/50/100) + `abWaitHours` (1–72); `MailingSend.variant`.
+
+- **Al lanzar** (`assignVariants`): la audiencia se baraja y el `abTestPercent`% se parte mitad A / mitad B en `queued`. El resto queda en el estado **`held`**, que el dispatcher no toma. Con 100%, o con una audiencia de menos de 100 personas (`AB_MIN_TEST`), se parte toda y no hay nadie esperando.
+- **El ganador** (`decideAbTests`, en cada tick) se elige cuando pasaron `abWaitHours` desde el lanzamiento **y** la prueba terminó de salir. Con el tope diario la prueba puede tardar más que la espera, y elegir antes sería comparar muestras incompletas.
+- **El criterio** (`pickWinner`): manda la **tasa de clics**, porque las aperturas las infla Apple Mail. Si nadie hizo clic decide la de apertura, y un empate lo gana A. Los `held` pasan a `queued` con la variante ganadora.
+- **El asunto** se elige por variante al armar cada mensaje (`subjectFor`). `held` cuenta como pendiente para cerrar la campaña, y cancelar también lo cancela.
+- **La prueba manual** (`POST .../test`) manda las dos versiones.
+- **Métricas:** `stats.ab` trae enviados, aperturas y clics por variante.
+
+## Reenvío a quienes no abrieron
+
+`POST .../campaigns/:id/resend-non-openers`, solo sobre una campaña `sent`, arma un **borrador** con el mismo contenido y `resendOfId` apuntando a la original.
+
+- **La audiencia** no sale de las bases: son los destinatarios de la original con envío `sent`/`delivered`, sin apertura ni clic, y que siguen suscriptos (`audience.js` `nonOpenersWhere`). Se calcula **al lanzar**, como toda audiencia.
+- **El asunto:** la UI pide cambiarlo, porque es lo que más mueve la apertura en un segundo intento.
+
+## Sección "Email marketing" del informe mensual
+
+`services/monthlyReport/sectionBuilders/email.js`, clave de sección `email`.
+
+- **Se calcula en vivo** desde las campañas lanzadas en el período, sin snapshot mensual: el informe ya congela lo que generó en `dataCache`. No hay historial mes a mes en `history.js`.
+- **Qué muestra:** campañas, enviados y tasas de apertura y clic sobre lo enviado. Los deltas contra el período anterior del mismo largo van **en puntos**, no en %. También suscriptos, nuevos y bajas del período, y la lista de campañas con su asunto (el ganador, si hubo A/B).
+- **Disponibilidad:** solo si alguna vez salió una campaña.
+- **El análisis IA** recibe el mismo recorte.
+- **Privacidad:** no se publican emails, contactos, nombres de bases **ni el nombre de la campaña** (es interno: "leads fríos"). El cliente ve el asunto, que es lo que vio su audiencia. Lo fija `tests/unit/emailReportSection.test.js`.
+
+## Alertas en Prioridades
+
+`services/mailing/health.js` `mailingFindings` (puro), enganchado en `marketingPending.service.js` como fuente `mailing` → bucket `mailing`, **solo con el flag `mailing`**. Alerta por:
+
+- configuración `invalid` (alta prioridad, con cuántas campañas esperan);
+- campañas en curso con la config sin verificar (alta);
+- proveedor con webhooks pero sin conectar (media);
+- y, en campañas de los últimos 30 días con al menos 100 enviados, **rebote > 5%** y **quejas > 0,1%** (el umbral que Gmail publica), las dos de prioridad alta.
+
+## Agentes (MCP)
+
+14 tools `mailing_*` (área "Mailing" en `mcp/guide.js`, sección `mailing` de la guía):
+
+- **Lectura:** config sin credenciales, bases, contactos, campañas, métricas y destinatarios.
+- **Borradores:** crear, editar, duplicar y preparar el reenvío. Un bloque de texto acepta `{ type: 'text', text }` en texto plano (`render.js` `plainTextDoc`), así el agente no arma JSON de TipTap.
+- **Otras acciones:** audiencia, prueba y pausar.
+- **Lanzar, reanudar y cancelar son de una persona.** `campaigns.controller.js` `rejectAgent` responde **403 `HUMAN_ONLY`** si la request trae `mcpTokenId`. Es defensa en profundidad: el catálogo tampoco tiene esas tools.
+- **Sin tools** de credenciales ni de alta, importación o edición de contactos: declarar el consentimiento de una base es responsabilidad de una persona.
 
 ## Archivos
 
 - **Backend:**
-  - `services/mailing/` (`render`, `audience`, `schedule`, `dispatcher`, `events`, `config`, `importer`, `optin`, `providers/` — `resend`, `ses`, `smtp`)
+  - `services/mailing/` (`render`, `audience`, `schedule`, `dispatcher`, `events`, `config`, `importer`, `optin`, `health`, `providers/` — `resend`, `ses`, `smtp`) y `services/monthlyReport/sectionBuilders/email.js`
   - `controllers/mailing/` (`config`, `contacts`, `campaigns`, `crm`, `images`, `public`, `summary`)
   - `routes/mailing.routes.js` y `routes/publicMailing.routes.js`
   - `webhooks/mailingResend.webhook.js`, `webhooks/mailingSes.webhook.js` y `lib/snsVerify.js`
   - el cron en `index.js`
 - **Frontend:** `components/marketing/mailing/` (`MailingTab`, `CampaignsPanel`, `CampaignEditor`, `BlockEditor`, `MailTextEditor`, `CampaignStats`, `ContactsPanel`, `CsvImportModal`, `MailingConfigPanel`, `MailingSummary`, `CrmImportModal`, `ListFormModal`, `csv.js`, `ui.jsx`), `pages/MailingUnsubscribe.jsx` y `pages/MailingSubscription.jsx`.
 - **Tests:**
-  - unit: `mailingRender`, `mailingSchedule`, `mailingAudience`, `mailingProviders`, `mailingDispatcher`, `mailingSns`, `mailingCrmFilter`
-  - integración: `tests/integration/mailing.test.js` y `tests/integration/mailingPhase2.test.js`
+  - unit: `mailingRender`, `mailingSchedule`, `mailingAudience`, `mailingProviders`, `mailingDispatcher`, `mailingSns`, `mailingCrmFilter`, `mailingAbTest`, `mailingHealth`, `emailReportSection`
+  - integración: `tests/integration/mailing.test.js`, `mailingPhase2.test.js` y `mailingPhase3.test.js`
   - frontend: `src/tests/utils/mailingCsv.test.js`

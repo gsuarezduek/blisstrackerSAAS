@@ -13,7 +13,7 @@ const HEX_RE = /^#[0-9a-fA-F]{6}$/
 
 const DEFAULTS = {
   provider: 'resend', fromName: null, fromEmail: null, replyTo: null, postalAddress: null,
-  brandColor: null, dailyLimit: 500, sendWindowStart: '09:00', sendWindowEnd: '20:00',
+  brandColor: null, dailyLimit: 500, sendWindowStart: '09:00', sendWindowEnd: '20:00', warmupEnabled: false, warmupStartedAt: null,
   status: 'unverified', configured: false, credentialsHint: null, webhookConfigured: false, webhookUrl: null,
 }
 
@@ -104,6 +104,15 @@ async function saveConfig(req, res, next) {
       const n = Number(b.dailyLimit)
       if (!Number.isInteger(n) || n < 1 || n > 1000000) return res.status(400).json({ error: 'El tope diario tiene que ser un número entre 1 y 1.000.000' })
       data.dailyLimit = n
+    }
+    // Calentamiento: prenderlo arranca la curva HOY; apagarlo la descarta (volver a
+    // prenderlo empieza de nuevo en 50 por día, que es lo prudente después de una pausa).
+    if (b.warmupEnabled !== undefined) {
+      const on = b.warmupEnabled === true
+      if (on !== !!existing?.warmupEnabled) {
+        data.warmupEnabled = on
+        data.warmupStartedAt = on ? new Date() : null
+      }
     }
     for (const field of ['sendWindowStart', 'sendWindowEnd']) {
       if (b[field] === undefined) continue

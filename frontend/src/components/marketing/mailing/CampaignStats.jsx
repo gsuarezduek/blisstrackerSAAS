@@ -12,11 +12,11 @@ import {
 
 const RECIPIENT_FILTERS = [
   ['', 'Todos'], ['opened', 'Abrieron'], ['clicked', 'Hicieron clic'], ['unsubscribed', 'Se dieron de baja'],
-  ['bounced', 'Rebotaron'], ['failed', 'Fallidos'], ['queued', 'En cola'],
+  ['bounced', 'Rebotaron'], ['failed', 'Fallidos'], ['queued', 'En cola'], ['held', 'Esperando al ganador A/B'],
 ]
 
 const SEND_LABEL = {
-  queued: 'En cola', sending: 'Enviando', sent: 'Enviado', delivered: 'Entregado', failed: 'Falló',
+  held: 'Esperando al ganador', queued: 'En cola', sending: 'Enviando', sent: 'Enviado', delivered: 'Entregado', failed: 'Falló',
   bounced: 'Rebotó', complained: 'Marcó spam', cancelled: 'Cancelado',
 }
 
@@ -58,7 +58,41 @@ function HourlyOpens({ hourly }) {
   )
 }
 
-export default function CampaignStats({ projectId, campaignId, onBack, onDuplicate }) {
+function AbResult({ campaign, ab }) {
+  const rows = [['A', campaign.subject], ['B', campaign.subjectB]]
+  const rate = (x, k) => (x.sent ? `${((x[k] / x.sent) * 100).toFixed(1).replace('.', ',')}%` : '—')
+  const decided = campaign.abWinner
+  return (
+    <Card className="p-4">
+      <p className="text-sm font-semibold text-gray-800 dark:text-gray-100 mb-1">Test A/B de asunto</p>
+      <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+        {decided
+          ? `Ganó ${decided} (${fmtDateTime(campaign.abDecidedAt)}): el resto de la audiencia recibió ese asunto.`
+          : (campaign.abTestPercent ?? 100) >= 100
+            ? 'Toda la audiencia se partió mitad y mitad.'
+            : `El ganador se elige ${campaign.abWaitHours} h después del lanzamiento, cuando la prueba terminó de salir, por tasa de clics (o de apertura si nadie hizo clic).`}
+      </p>
+      <table className="w-full text-sm">
+        <thead><tr className="text-[11px] text-gray-500 uppercase tracking-wide border-b border-gray-100 dark:border-gray-700">
+          <th className="text-left py-1.5 font-medium">Asunto</th><th className="text-right py-1.5 px-2 font-medium">Enviados</th>
+          <th className="text-right py-1.5 px-2 font-medium">Apertura</th><th className="text-right py-1.5 font-medium">Clics</th>
+        </tr></thead>
+        <tbody>
+          {rows.map(([v, subject]) => (
+            <tr key={v} className="border-b border-gray-50 dark:border-gray-700/50 last:border-0">
+              <td className="py-2 pr-2 text-gray-800 dark:text-gray-200"><b>{v}</b>{decided === v ? ' · ganador' : ''}<span className="block text-xs text-gray-500 truncate max-w-xs">{subject}</span></td>
+              <td className="py-2 px-2 text-right text-gray-600 dark:text-gray-400">{fmtInt(ab[v].sent)}</td>
+              <td className="py-2 px-2 text-right text-gray-600 dark:text-gray-400">{rate(ab[v], 'opens')}</td>
+              <td className="py-2 text-right text-gray-600 dark:text-gray-400">{rate(ab[v], 'clicks')}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </Card>
+  )
+}
+
+export default function CampaignStats({ projectId, campaignId, onBack, onDuplicate, onOpenCampaign }) {
   const base = `/marketing/projects/${projectId}/mailing/campaigns/${campaignId}`
   const [data, setData] = useState(null)
   const [error, setError] = useState('')
@@ -88,6 +122,14 @@ export default function CampaignStats({ projectId, campaignId, onBack, onDuplica
   }, [base, filter, q, page])
   useEffect(() => { setPage(1) }, [filter, q])
 
+  async function resend() {
+    setError('')
+    try {
+      const { data: draft } = await api.post(`${base}/resend-non-openers`)
+      onOpenCampaign?.(draft.id)
+    } catch (err) { setError(apiError(err)) }
+  }
+
   async function action(name) {
     setError('')
     try { await api.post(`${base}/${name}`); load() }
@@ -110,8 +152,14 @@ export default function CampaignStats({ projectId, campaignId, onBack, onDuplica
         {c.status === 'sending' && <button className={btnSecondary} onClick={() => action('pause')}>Pausar</button>}
         {c.status === 'paused' && <button className={btnSecondary} onClick={() => action('resume')}>Reanudar</button>}
         {['sending', 'paused'].includes(c.status) && <button className={`${btnSecondary} text-red-600`} onClick={() => setConfirm(true)}>Cancelar envío</button>}
+        {c.status === 'sent' && data.nonOpeners > 0 && (
+          <button className={btnSecondary} onClick={resend} title="Arma un borrador para quienes no la abrieron">
+            Reenviar a quienes no abrieron ({fmtInt(data.nonOpeners)})
+          </button>
+        )}
         <button className={btnSecondary} onClick={onDuplicate}>Duplicar</button>
       </div>
+      {data.resendOf && <p className="text-xs text-gray-500 -mt-2">Reenvío de «{data.resendOf.name}» a quienes no la abrieron.</p>}
       <p className="text-xs text-gray-500 -mt-2">«{c.subject}» · lanzada {fmtDateTime(c.launchedAt)}{c.finishedAt ? ` · terminó ${fmtDateTime(c.finishedAt)}` : ''}</p>
       <ErrorNote>{error}</ErrorNote>
 
@@ -128,7 +176,7 @@ export default function CampaignStats({ projectId, campaignId, onBack, onDuplica
             ? <p className="text-[11px] text-gray-500 mt-1.5">Pausada: no sale nada hasta que la reanudes.</p>
             : cap && (
               <p className="text-[11px] text-gray-500 mt-1.5">
-                Tope de {fmtInt(cap.dailyLimit)} por día ({fmtInt(cap.usedToday)} ya usados hoy), entre {cap.sendWindowStart} y {cap.sendWindowEnd}.
+                Tope de {fmtInt(cap.dailyLimit)} por día{cap.warmup && !cap.warmup.done ? ` (calentamiento, día ${cap.warmup.day})` : ''} ({fmtInt(cap.usedToday)} ya usados hoy), entre {cap.sendWindowStart} y {cap.sendWindowEnd}.
                 {cap.days > 1 ? <> Termina aproximadamente el {fmtDay(cap.finishDate)}.</> : ' Debería terminar hoy.'}
               </p>
             )}
@@ -145,6 +193,8 @@ export default function CampaignStats({ projectId, campaignId, onBack, onDuplica
       <p className="text-[11px] text-gray-400 -mt-2 leading-snug">
         Las aperturas son estimadas: Apple Mail precarga las imágenes (cuenta aperturas que no fueron) y otros clientes las bloquean (no cuenta algunas que sí). Los clics son el dato confiable.
       </p>
+
+      {data.ab && <AbResult campaign={c} ab={data.ab} />}
 
       <div className="grid lg:grid-cols-2 gap-4">
         <Card className="p-4">

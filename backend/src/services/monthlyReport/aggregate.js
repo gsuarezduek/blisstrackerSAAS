@@ -14,6 +14,7 @@ const {
   buildPerformanceSection, buildSeoSection, buildKeywordsSection,
 } = require('./sectionBuilders/webAndSeo')
 const { buildAuthoritySection } = require('./sectionBuilders/authority')
+const { buildEmailSection } = require('./sectionBuilders/email')
 const { generateAnalysis } = require('./analysis')
 const { loadReportHistory } = require('./history')
 
@@ -386,6 +387,9 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
   const seo = buildSeoSection(seoSnap, seoPrev, flow)
   const authority = buildAuthoritySection(backlinkSnap, backlinkPrev, flow)
 
+  // ── Email marketing (Mailing) — en vivo desde las campañas del período ──────
+  const email = wants('email') ? await buildEmailSection({ projectId, period }) : null
+
   // ── Keywords ──────────────────────────────────────────────────────────────────
   const keywords = buildKeywordsSection(allKeywords, dataMonth, prev)
 
@@ -404,7 +408,7 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
   // ── Secciones (filtradas según enabledSections) ───────────────────────────────
   // Si el informe define secciones habilitadas, las demás se excluyen por completo
   // (no se guardan en el caché ni viajan al link público del cliente).
-  const allSections = { geo, analytics, evolution, instagram, tiktok, youtube, linkedin, facebook, seo, keywords, authority, googleAds, metaAds, chatgptAds, performance, tasks, competitors }
+  const allSections = { geo, analytics, evolution, instagram, tiktok, youtube, linkedin, facebook, seo, keywords, authority, email, googleAds, metaAds, chatgptAds, performance, tasks, competitors }
   const sections = {}
   for (const [key, val] of Object.entries(allSections)) {
     sections[key] = wants(key) ? val : null
@@ -430,7 +434,7 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
     : await generateAnalysis({ project, month: dataMonth, periodLabel: periodMeta.label,
         geo: sections.geo, analytics: sections.analytics, instagram: sections.instagram,
         tiktok: sections.tiktok, youtube: sections.youtube, linkedin: sections.linkedin, facebook: sections.facebook, keywords: sections.keywords,
-        seo: sections.seo, authority: sections.authority, performance: sections.performance, googleAds: sections.googleAds,
+        seo: sections.seo, authority: sections.authority, email: sections.email, performance: sections.performance, googleAds: sections.googleAds,
         metaAds: sections.metaAds, chatgptAds: sections.chatgptAds, competitors: sections.competitors,
         workspaceId, objectives: objectivesResults, services, briefs })
 
