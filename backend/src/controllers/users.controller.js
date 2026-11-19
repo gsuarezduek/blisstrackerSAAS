@@ -113,6 +113,7 @@ const profileTaskInclude = {
   // solos (devuelve todos los del modelo); nombrarlos es un error de validación de Prisma
   // —"include statements only accept relation fields"— que tira 500 todo el endpoint.
   agent: { select: { id: true, label: true } },
+  createdByAgent: { select: { id: true, label: true } }, // quién la creó (el detalle lo muestra)
 }
 
 // Filtra tareas de proyectos privados que el usuario que está mirando el perfil

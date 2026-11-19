@@ -172,6 +172,28 @@ export default function TaskCommentsModal({ task: taskProp, onClose, onCommentAd
   // Admin/owner del workspace, dueño de la tarea, o quien la delegó (creador)
   const canEdit = user && (user.isAdmin || user.id === task.userId || user.id === task.createdById)
 
+  // Quién la creó, siempre. `createdById` solo se guarda cuando alguien la crea para
+  // OTRA persona (null = la creó su responsable), y `createdByAgent`/`createdByAgentName`
+  // marcan que la creó un agente vía MCP — en nombre de `createdBy` si la delegó, o de
+  // la persona responsable si no. El nombre declarado sobrevive aunque el token se borre.
+  function renderCreator() {
+    const linkClass = 'font-medium hover:text-primary-600 dark:hover:text-primary-400'
+    const ownerId = task.createdBy?.id ?? task.userId
+    const ownerName = task.createdBy?.name ?? task.user?.name ?? allWsMembers.find(m => m.id === task.userId)?.name
+    const isMe = user && ownerId === user.id
+    const person = isMe
+      ? <span className="font-medium">vos</span>
+      : ownerName ? <UserLink userId={ownerId} className={linkClass}>{ownerName}</UserLink> : null
+    if (task.createdByAgent || task.createdByAgentName) {
+      return (
+        <span className="text-gray-500 dark:text-gray-400"> por <span className="inline-flex items-center gap-1 font-medium text-sky-700 dark:text-sky-300 align-bottom"><Icon as={Bot} size={12} />{agentName(task.createdByAgent, task.createdByAgentName)}</span>
+          {person && <>{isMe ? ', tu agente de IA' : <>, agente de IA de {person}</>}</>}
+        </span>
+      )
+    }
+    return person ? <span className="text-gray-500 dark:text-gray-400"> por {person}</span> : null
+  }
+
   // Completar desde el detalle — pensado para la tarea que buscás por número (Cmd+K)
   // en vez de rastrearla en el Dashboard. Solo el responsable (el backend responde 404
   // a cualquier otro). Pendiente y pausada se completan directo, sin pasar por "en
@@ -769,7 +791,7 @@ export default function TaskCommentsModal({ task: taskProp, onClose, onCommentAd
             {task.createdAt && (
               <p className="text-xs text-gray-400 dark:text-gray-500">
                 Creada el {fmtDate(task.createdAt)}
-                {task.createdBy && <span className="text-gray-500 dark:text-gray-400"> · Asignada por <UserLink userId={task.createdBy.id} className="font-medium hover:text-primary-600 dark:hover:text-primary-400">{task.createdBy.name}</UserLink></span>}
+                {renderCreator()}
               </p>
             )}
             {task.completedAt && (

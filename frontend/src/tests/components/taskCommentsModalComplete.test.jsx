@@ -7,7 +7,7 @@ import { MemoryRouter } from 'react-router-dom'
 const patch = vi.fn()
 const get = vi.fn(url => Promise.resolve({ data: String(url).endsWith('/follow') ? { following: false } : [] }))
 vi.mock('../../api/client', () => ({ default: { get: (...a) => get(...a), patch: (...a) => patch(...a), post: vi.fn(), delete: vi.fn() } }))
-vi.mock('../../hooks/useMembers', () => ({ default: () => ({ members: [] }) }))
+vi.mock('../../hooks/useMembers', () => ({ default: () => ({ members: [{ id: 2, name: 'Ana', active: true }] }) }))
 vi.mock('../../context/AuthContext', () => ({ useAuth: () => ({ user: { id: 1, name: 'Yo', isAdmin: false } }) }))
 
 import TaskCommentsModal from '../../components/TaskCommentsModal'
@@ -77,5 +77,39 @@ describe('TaskCommentsModal — Completar', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Completar' }))
 
     expect(await screen.findByText('Desbloqueá la tarea antes de completarla.')).toBeTruthy()
+  })
+})
+
+describe('TaskCommentsModal — quién la creó', () => {
+  const line = () => screen.getByText(/Creada el/).textContent
+
+  it('una propia dice "por vos"', () => {
+    renderModal(base)
+    expect(line()).toMatch(/por vos/)
+  })
+
+  it('una creada por otra persona muestra a esa persona', () => {
+    renderModal({ ...base, createdById: 2, createdBy: { id: 2, name: 'Ana' } })
+    expect(line()).toMatch(/por Ana/)
+  })
+
+  it('una propia de otra persona la nombra aunque la lista no traiga createdBy', () => {
+    renderModal({ ...base, userId: 2 })
+    expect(line()).toMatch(/por Ana/)
+  })
+
+  it('una creada por mi agente muestra el agente', () => {
+    renderModal({ ...base, createdByAgent: { id: 9, label: 'Grok' } })
+    expect(line()).toMatch(/por Grok, tu agente de IA/)
+  })
+
+  it('una creada por el agente de otra persona dice de quién es', () => {
+    renderModal({ ...base, createdById: 2, createdBy: { id: 2, name: 'Ana' }, createdByAgent: { id: 9, label: 'Grok' }, createdByAgentName: 'SEO' })
+    expect(line()).toMatch(/por Grok · SEO, agente de IA de Ana/)
+  })
+
+  it('si el token del agente se borró, queda el nombre declarado', () => {
+    renderModal({ ...base, createdByAgent: null, createdByAgentName: 'SEO' })
+    expect(line()).toMatch(/por SEO/)
   })
 })

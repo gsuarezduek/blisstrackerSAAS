@@ -44,6 +44,7 @@ async function projectTasks(req, res, next) {
           _count:    { select: { comments: true } },
           sessions:  { select: { startedAt: true, endedAt: true } },
           agent:     { select: { id: true, label: true } }, // tarea de agente: la ejecuta un agente de IA de esa persona
+          createdByAgent: { select: { id: true, label: true } }, // la creó un agente (el detalle lo muestra)
         },
         orderBy: [{ status: 'asc' }, { createdAt: 'desc' }],
         take: ACTIVE_LIMIT,
@@ -99,6 +100,8 @@ async function projectCompletedHistory(req, res, next) {
         user: { select: { id: true, name: true, avatar: true } },
         _count: { select: { comments: true } },
         agent: { select: { id: true, label: true } }, // tarea de agente: la ejecutó un agente de IA de esa persona
+        createdBy: { select: { id: true, name: true } },
+        createdByAgent: { select: { id: true, label: true } }, // quién la creó (el detalle lo muestra)
       },
       orderBy: { completedAt: 'desc' },
       skip,
