@@ -10,6 +10,14 @@ const { createAndSendVerificationEmail } = require('../../lib/emailVerification'
 const { normalizeEmail } = require('../../lib/normalizeEmail')
 const { describeBenefit, validateCodeForRedemption } = require('../../lib/invitationCodes')
 
+// Slug de workspace: minúsculas, números y guiones, 2-30. Sin `--`: ese separador
+// lo usa la dirección de PRUEBA del frontend (`<slug>--preview.blisstracker.app`,
+// ver frontend/src/utils/domain.js), y un workspace llamado `bliss--preview` le
+// robaría la dirección a la de prueba de `bliss`.
+function isValidSlug(slug) {
+  return typeof slug === 'string' && /^[a-z0-9-]{2,30}$/.test(slug) && !slug.includes('--')
+}
+
 /**
  * GET /api/workspaces/mine
  * Lista todos los workspaces del usuario autenticado.
@@ -62,8 +70,8 @@ async function createWorkspace(req, res, next) {
     }
 
     // Validar slug: solo lowercase, números y guiones
-    if (!/^[a-z0-9-]{2,30}$/.test(slug)) {
-      return res.status(400).json({ error: 'El slug solo puede contener letras minúsculas, números y guiones (2-30 caracteres)' })
+    if (!isValidSlug(slug)) {
+      return res.status(400).json({ error: 'El slug solo puede contener letras minúsculas, números y guiones (2-30 caracteres, sin dos guiones seguidos)' })
     }
 
     const [trialDays, defaultTokenLimit, defaultStorageLimit] = await Promise.all([
@@ -301,7 +309,7 @@ async function checkInvitationCode(req, res, next) {
 async function checkSlug(req, res, next) {
   try {
     const { slug } = req.query
-    if (!slug || !/^[a-z0-9-]{2,30}$/.test(slug)) {
+    if (!slug || !isValidSlug(slug)) {
       return res.json({ available: false, reason: 'format' })
     }
     const existing = await prisma.workspace.findUnique({ where: { slug }, select: { id: true } })

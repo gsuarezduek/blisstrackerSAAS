@@ -7,12 +7,12 @@ import { useWorkspace } from '../context/WorkspaceContext'
 import BlissLogo from '../components/BlissLogo'
 import PasswordInput from '../components/PasswordInput'
 import MfaCodeInput from '../components/MfaCodeInput'
-import { isWorkspaceSubdomain } from '../utils/domain'
+import { isWorkspaceSubdomain, isPreviewHost } from '../utils/domain'
 import { handoffUrl } from '../utils/authHandoff'
 
 // ── Selector de workspace post-login ──────────────────────────────────────────
 
-function WorkspacePicker({ workspaces }) {
+function WorkspacePicker({ workspaces, preview = false }) {
   const appDomain = import.meta.env.VITE_APP_DOMAIN || 'blisstracker.app'
   const [pending, setPending] = useState(null)
   const [error, setError] = useState('')
@@ -21,7 +21,7 @@ function WorkspacePicker({ workspaces }) {
     setError('')
     setPending(ws.slug)
     try {
-      window.location.assign(await handoffUrl(ws.slug, ws.token))
+      window.location.assign(await handoffUrl(ws.slug, ws.token, { preview }))
     } catch (err) {
       setError(err.response?.data?.error || 'No se pudo abrir el workspace. Intentá de nuevo.')
       setPending(null)
@@ -154,6 +154,9 @@ function MfaStep({ challenge, onVerified, onCancel }) {
 function RootLogin() {
   const appDomain = import.meta.env.VITE_APP_DOMAIN || 'blisstracker.app'
   const fromSlug  = new URLSearchParams(window.location.search).get('from')
+  // Vino desde la dirección de prueba (`<slug>--preview…`): al terminar, volver ahí
+  // y no a producción. Ver PREVIEW_SUFFIX en utils/domain.js.
+  const preview   = new URLSearchParams(window.location.search).get('preview') === '1'
 
   const [email,      setEmail]      = useState('')
   const [password,   setPassword]   = useState('')
@@ -182,7 +185,7 @@ function RootLogin() {
     try {
       // Cruza a <slug>.localhost en local, o al subdominio en producción.
       // En los dos casos la URL lleva el código, no el JWT.
-      window.location.assign(await handoffUrl(target.slug, target.token))
+      window.location.assign(await handoffUrl(target.slug, target.token, { preview }))
     } catch (err) {
       setError(err.response?.data?.error || 'No se pudo abrir el workspace')
     }
@@ -235,7 +238,7 @@ function RootLogin() {
     )
   }
 
-  if (workspaces) return <WorkspacePicker workspaces={workspaces} />
+  if (workspaces) return <WorkspacePicker workspaces={workspaces} preview={preview} />
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 px-6 py-12">
@@ -309,12 +312,13 @@ export default function Login2() {
   // En subdominio de workspace → redirigir al login central. En local ese
   // login es localhost, no el dominio de producción.
   const theme = localStorage.getItem('theme') || 'light'
+  const previewParam = isPreviewHost() ? '&preview=1' : ''
   if (window.location.hostname.endsWith('.localhost')) {
     const port = window.location.port ? `:${window.location.port}` : ''
-    window.location.replace(`http://localhost${port}/login?from=${slug}&theme=${theme}`)
+    window.location.replace(`http://localhost${port}/login?from=${slug}&theme=${theme}${previewParam}`)
     return null
   }
   const appDomain = import.meta.env.VITE_APP_DOMAIN || 'blisstracker.app'
-  window.location.replace(`https://${appDomain}/login?from=${slug}&theme=${theme}`)
+  window.location.replace(`https://${appDomain}/login?from=${slug}&theme=${theme}${previewParam}`)
   return null
 }
