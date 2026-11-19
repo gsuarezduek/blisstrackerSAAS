@@ -11,7 +11,7 @@
 // la tabla ES la cola, y el cron corre con lease en DB (lib/cronLock.js).
 const crypto = require('crypto')
 const prisma = require('../../lib/prisma')
-const { todayString } = require('../../utils/dates')
+const { dateStringInTz } = require('../../utils/dates')
 const { getSetting } = require('../../lib/platformSettings')
 const { getProvider } = require('./providers')
 const { readCredentials, formatFrom, backendBase, frontendBase } = require('./config')
@@ -305,7 +305,9 @@ async function processProject(projectId, now) {
   const tz = config.workspace?.timezone || 'America/Argentina/Buenos_Aires'
   if (!inSendWindow(now, tz, config.sendWindowStart, config.sendWindowEnd)) return { skipped: 'window' }
 
-  const date = todayString(tz)
+  // El día del tope sale del mismo `now` que la ventana y el calentamiento (no
+  // del reloj): un tick que arranca 23:59:59 cuenta en ese día.
+  const date = dateStringInTz(now, tz)
   const usage = await prisma.mailingDailyUsage.findUnique({ where: { projectId_date: { projectId, date } } })
   const remaining = (await dailyCap(config, tz, now)) - (usage?.count || 0)
   if (remaining <= 0) return { skipped: 'cap' }

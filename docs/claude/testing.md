@@ -41,7 +41,7 @@ backend/
       mailingRender.test.js               # Mailing: bloques → HTML de mail sin HTML inyectable, links numerados para tracking (sin mailto ni links con variables), pie de baja siempre, variables escapadas con default
       mailingSchedule.test.js             # Mailing: ventana horaria en la tz del workspace (también cruzando la medianoche) y estimación de días según el tope diario
       mailingAudience.test.js             # Mailing: audiencia = alguna base incluida y ninguna excluida, solo suscriptos, nunca "todos" sin bases
-      mailingDispatcher.test.js           # Mailing: el tope diario (y el techo de plataforma) manda cuántos salen por tick, fuera de la ventana no sale nada, quien se dio de baja en cola no recibe, credencial rechazada no quema intentos, backoff de los errores temporales
+      mailingDispatcher.test.js           # Mailing: el tope diario (y el techo de plataforma) manda cuántos salen por tick, el día del tope es el del workspace y sale de `now` (no del reloj), fuera de la ventana no sale nada, quien se dio de baja en cola no recibe, credencial rechazada no quema intentos, backoff de los errores temporales
       mailingSns.test.js                  # Mailing: firma de SNS (v1/v2, mensaje alterado, certificado fuera del dominio de SNS) y qué errores de SES invalidan la config
       mailingCrmFilter.test.js            # Mailing: qué contactos de Ventas entran según estados/orígenes/contacto principal
       mailingAbTest.test.js               # Mailing: reparto del test A/B (% de prueba mitad y mitad, resto held), ganador por clics y si no por aperturas, y el cierre que libera a los held con el asunto ganador

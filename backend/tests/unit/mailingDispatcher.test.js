@@ -123,3 +123,26 @@ it('un error temporal vuelve a la cola con backoff; uno permanente queda fallido
   expect(prisma.mailingCampaign.update).toHaveBeenCalledWith({ where: { id: 9 }, data: { failedCount: { increment: 1 } } })
   expect(prisma.mailingDailyUsage.upsert).not.toHaveBeenCalled()
 })
+
+it('el día del tope es el del workspace, no el UTC (ni el del reloj)', async () => {
+  // 01:30 UTC del 19 = 22:30 del 18 en Buenos Aires.
+  prisma.mailingConfig.findUnique.mockResolvedValue(config({ sendWindowStart: '00:00', sendWindowEnd: '23:59' }))
+  prisma.mailingDailyUsage.findUnique.mockResolvedValue(null)
+  prisma.mailingSend.findMany.mockResolvedValueOnce([{ id: 1 }]).mockResolvedValueOnce(sends(1))
+  provider.sendBatch.mockResolvedValue([{ ok: true, messageId: 'a' }])
+  await processProject(7, new Date('2026-11-19T01:30:00Z'))
+  const day = { projectId_date: { projectId: 7, date: '2026-11-18' } }
+  expect(prisma.mailingDailyUsage.findUnique).toHaveBeenCalledWith({ where: day })
+  expect(prisma.mailingDailyUsage.upsert).toHaveBeenCalledWith(expect.objectContaining({ where: day }))
+})
+
+it('un error temporal en el último intento deja el envío fallido', async () => {
+  prisma.mailingConfig.findUnique.mockResolvedValue(config())
+  prisma.mailingDailyUsage.findUnique.mockResolvedValue(null)
+  const s = sends(1)
+  s[0].attempts = 2
+  prisma.mailingSend.findMany.mockResolvedValueOnce([{ id: 1 }]).mockResolvedValueOnce(s)
+  provider.sendBatch.mockResolvedValue([{ ok: false, retryable: true, error: '503' }])
+  await processProject(7, NOW)
+  expect(prisma.mailingSend.update.mock.calls[0][0].data).toMatchObject({ status: 'failed', attempts: 3 })
+})
