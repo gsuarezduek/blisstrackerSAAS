@@ -129,20 +129,32 @@ export function createdAtTitle(iso) {
 
 // Fecha de publicación de la pieza de Contenido vinculada a una tarea (ContentPiece.scheduledDate,
 // ya un string "YYYY-MM-DD" denormalizado en la zona del proyecto — se compara tal cual, sin pasar
-// por Date/timezone, para no correrse de día) — "hoy" / "mañana" / "28 oct". `urgent: true` si
-// publica hoy o ya pasó la fecha, para resaltar en el Dashboard qué diseñar más urgente.
+// por Date/timezone, para no correrse de día). Devuelve:
+//   label  — "hoy" / "mañana" / "en 2 días" / "28 oct"
+//   text   — la frase completa para la tarjeta: "publica mañana", o "se publicaba el 28 oct" si ya pasó
+//   urgent — publica hoy o ya pasó la fecha (rojo)
+//   soon   — publica mañana o pasado (naranja): todavía hay margen, pero hay que agarrarla ya
 export function fmtPublishDate(dateStr, now = new Date()) {
   if (!dateStr) return null
   const todayKey = dayKey(now)
-  const tomorrowKey = dayKey(new Date(now.getTime() + 86400000))
+  const days = Math.round((Date.parse(`${dateStr}T00:00:00Z`) - Date.parse(`${todayKey}T00:00:00Z`)) / 86400000)
   let label
-  if (dateStr === todayKey) label = 'hoy'
-  else if (dateStr === tomorrowKey) label = 'mañana'
+  if (days === 0) label = 'hoy'
+  else if (days === 1) label = 'mañana'
+  else if (days === 2) label = 'en 2 días'
   else {
     const sameYear = dateStr.slice(0, 4) === todayKey.slice(0, 4)
     label = new Date(`${dateStr}T12:00:00`).toLocaleDateString('es-AR', { day: 'numeric', month: 'short', ...(sameYear ? {} : { year: 'numeric' }) })
   }
-  return { label, urgent: dateStr <= todayKey }
+  const text = days < 0 ? `se publicaba el ${label}` : `publica ${label}`
+  return { label, text, urgent: days <= 0, soon: days === 1 || days === 2 }
+}
+
+// Clases del link "Contenido · publica …" según la urgencia (TaskCard y NowCard).
+export function publishToneClass(info) {
+  if (info?.urgent) return 'text-red-600 dark:text-red-400 font-medium'
+  if (info?.soon) return 'text-orange-600 dark:text-orange-400 font-medium'
+  return 'text-sky-700 dark:text-sky-300'
 }
 
 // Fracción de meses entre dos fechas "YYYY-MM-DD" (inclusive ambos extremos).

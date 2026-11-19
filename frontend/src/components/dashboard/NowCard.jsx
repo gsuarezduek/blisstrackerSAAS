@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import api from '../../api/client'
-import { activeSeconds, fmtDuration, fmtCreatedAt, createdAtTitle, fmtPublishDate } from '../../utils/format'
+import { activeSeconds, fmtDuration, fmtCreatedAt, createdAtTitle, fmtPublishDate, publishToneClass } from '../../utils/format'
 import { renderRichText } from '../../utils/richText'
 import useMembers from '../../hooks/useMembers'
 import StarButton from './StarButton'
@@ -34,10 +34,10 @@ function Meta({ task, onOpenComments }) {
       {task.contentPiece && (
         <Link
           to={`/contenido?projectId=${task.project.id}&piece=${task.contentPiece.id}`}
-          className={`inline-flex items-center gap-1 hover:underline ${publishInfo?.urgent ? 'text-red-600 dark:text-red-400 font-medium' : 'text-sky-700 dark:text-sky-300'}`}
+          className={`inline-flex items-center gap-1 hover:underline ${publishToneClass(publishInfo)}`}
         >
           <Icon as={CalendarDays} size={14} />
-          {publishInfo ? `Contenido · publica ${publishInfo.label}` : 'Contenido'}
+          {publishInfo ? `Contenido · ${publishInfo.text}` : 'Contenido'}
         </Link>
       )}
       {task.createdBy && <span>De {task.createdBy.name.split(' ')[0]}</span>}

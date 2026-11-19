@@ -2,7 +2,7 @@ import { useState, useRef, memo } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import api from '../api/client'
 import { renderRichText } from '../utils/richText'
-import { fmtMins, activeMinutes, fmtCreatedAt, createdAtTitle, fmtPublishDate } from '../utils/format'
+import { fmtMins, activeMinutes, fmtCreatedAt, createdAtTitle, fmtPublishDate, publishToneClass } from '../utils/format'
 import UserLink from './UserLink'
 import useMembers from '../hooks/useMembers'
 import StarButton from './dashboard/StarButton'
@@ -185,11 +185,11 @@ function TaskCard({ task, onUpdate, onDelete, activeTask, backlog, future, onAdd
           {task.contentPiece && (
             <Link
               to={`/contenido?projectId=${task.project.id}&piece=${task.contentPiece.id}`}
-              className={`inline-flex items-center gap-1 hover:underline ${publishInfo?.urgent ? 'text-red-600 dark:text-red-400 font-medium' : 'text-sky-700 dark:text-sky-300'}`}
+              className={`inline-flex items-center gap-1 hover:underline ${publishToneClass(publishInfo)}`}
               title="Ver pieza de contenido"
             >
               <Icon as={CalendarDays} size={13} />
-              {publishInfo ? `Contenido · publica ${publishInfo.label}` : 'Contenido'}
+              {publishInfo ? `Contenido · ${publishInfo.text}` : 'Contenido'}
             </Link>
           )}
           {task.createdByAgent && (

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { fmtMins, activeMinutes, activeSeconds, fmtDuration, completedDuration, fmtCreatedAt, fmtHours, workedSplit } from '../../utils/format'
+import { fmtMins, activeMinutes, activeSeconds, fmtDuration, completedDuration, fmtCreatedAt, fmtHours, workedSplit, fmtPublishDate, publishToneClass } from '../../utils/format'
 
 // ── fmtMins ───────────────────────────────────────────────────────────────────
 
@@ -200,5 +200,51 @@ describe('workedSplit', () => {
   })
   it('tolera nulos de los dos lados', () => {
     expect(workedSplit(null, null)).toEqual({ person: 0, agent: 0, total: 0, hasAgent: false })
+  })
+})
+
+// ── fmtPublishDate / publishToneClass ─────────────────────────────────────────
+
+describe('fmtPublishDate', () => {
+  // Mediodía en Buenos Aires (15:00 UTC) del 4 dic 2026, para no depender del TZ del runner.
+  const now = new Date('2026-12-04T15:00:00Z')
+
+  it('devuelve null sin fecha', () => expect(fmtPublishDate(null, now)).toBeNull())
+
+  it('hoy → urgente', () => {
+    expect(fmtPublishDate('2026-12-04', now)).toMatchObject({ label: 'hoy', text: 'publica hoy', urgent: true, soon: false })
+  })
+
+  it('mañana y pasado → pronto, no urgente', () => {
+    expect(fmtPublishDate('2026-12-05', now)).toMatchObject({ label: 'mañana', text: 'publica mañana', urgent: false, soon: true })
+    expect(fmtPublishDate('2026-12-06', now)).toMatchObject({ label: 'en 2 días', text: 'publica en 2 días', urgent: false, soon: true })
+  })
+
+  it('3 días o más → fecha corta, sin urgencia', () => {
+    const info = fmtPublishDate('2026-12-07', now)
+    expect(info).toMatchObject({ urgent: false, soon: false })
+    expect(info.text).toBe(`publica ${info.label}`)
+    expect(info.label).toMatch(/7/)
+  })
+
+  it('fecha pasada → urgente y en pasado', () => {
+    const info = fmtPublishDate('2026-12-02', now)
+    expect(info).toMatchObject({ urgent: true, soon: false })
+    expect(info.text).toBe(`se publicaba el ${info.label}`)
+  })
+
+  it('cruza fin de mes', () => {
+    const fin = new Date('2026-11-30T15:00:00Z')
+    expect(fmtPublishDate('2026-12-01', fin).label).toBe('mañana')
+    expect(fmtPublishDate('2026-12-02', fin).label).toBe('en 2 días')
+  })
+})
+
+describe('publishToneClass', () => {
+  it('rojo si es urgente, naranja si es pronto, celeste si no', () => {
+    expect(publishToneClass({ urgent: true, soon: false })).toMatch(/red/)
+    expect(publishToneClass({ urgent: false, soon: true })).toMatch(/orange/)
+    expect(publishToneClass({ urgent: false, soon: false })).toMatch(/sky/)
+    expect(publishToneClass(null)).toMatch(/sky/)
   })
 })

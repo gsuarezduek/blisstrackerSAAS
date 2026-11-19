@@ -686,7 +686,7 @@ export default function TaskCommentsModal({ task: taskProp, onClose, onCommentAd
             </div>
           ) : (
             <div className="group flex items-start gap-2">
-              <p className="text-sm font-medium text-gray-800 dark:text-gray-200 leading-snug flex-1 whitespace-pre-wrap break-words">
+              <p className="text-sm font-medium text-gray-800 dark:text-gray-200 leading-snug flex-1 min-w-0 whitespace-pre-wrap break-words max-h-[35vh] overflow-y-auto pr-1">
                 {renderRichText(currentDesc, { members: wsMembers })}
               </p>
               {canEdit && (

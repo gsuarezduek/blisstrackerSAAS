@@ -38,6 +38,12 @@ function greeting() {
 
 const LATER_TAB_KEY = 'bliss_dashboard_later_tab'
 const BACKLOG_SORT_KEY = 'bliss_dashboard_backlog_sort' // 'desc' (más nuevas primero) | 'asc'
+const TODAY_SORT_KEY = 'bliss_dashboard_today_sort' // 'publish' (default) | 'desc' | 'asc'
+const TODAY_SORT_OPTIONS = [
+  { key: 'publish', label: 'Por publicación' },
+  { key: 'desc', label: 'Más nuevas' },
+  { key: 'asc', label: 'Más antiguas' },
+]
 
 // Sección del foco del día: título + contador + lista en una sola columna (tarjeta con
 // divisores). Reemplaza a la grilla de 2 columnas por estado, que zigzagueaba al leer.
@@ -85,6 +91,17 @@ export default function Dashboard() {
   function setBacklogSort(dir) {
     setBacklogSortState(dir)
     try { localStorage.setItem(BACKLOG_SORT_KEY, dir) } catch { /* sin storage */ }
+  }
+  // Orden de "Para hoy": por publicación más próxima (default) o por fecha de creación.
+  const [todaySort, setTodaySortState] = useState(() => {
+    try {
+      const v = localStorage.getItem(TODAY_SORT_KEY)
+      return TODAY_SORT_OPTIONS.some(o => o.key === v) ? v : 'publish'
+    } catch { return 'publish' }
+  })
+  function setTodaySort(key) {
+    setTodaySortState(key)
+    try { localStorage.setItem(TODAY_SORT_KEY, key) } catch { /* sin storage */ }
   }
   // Panel "Más tarde" (Para hoy / Backlog / Seguimiento / Programadas / Completadas):
   // reemplaza a los 4 acordeones del final. Recuerda la última pestaña por navegador;
@@ -418,7 +435,28 @@ export default function Dashboard() {
   // SIN distinguirlo — también es un compromiso asumido, y esconderlo en el Backlog lo
   // manda al lugar que menos se mira. El backend solo deja volver al Backlog una tarea
   // PENDING, así que una pausada se queda acá: ya está empezada.
-  const todayTasks = useMemo(() => openOutsideFocus.filter(t => !t.isBacklog), [openOutsideFocus])
+  // Pausadas primero siempre (ya tienen trabajo invertido); dentro de cada grupo manda el
+  // orden elegido. "Por publicación" (default): las tareas de Contenido con fecha de
+  // publicación van primero, la más próxima arriba — mismo criterio que el Backlog —, y el
+  // resto newest-first. Sin esto, como las piezas se suelen crear en orden de publicación,
+  // la que sale más tarde quedaba primera. También define la sugerencia de NowCard
+  // (todayTasks[0]): lo que se ve arriba es lo que se sugiere.
+  const todayTasks = useMemo(() => {
+    const today = openOutsideFocus.filter(t => !t.isBacklog)
+    const order = list => {
+      if (todaySort === 'publish') return [
+        ...list.filter(t => t.contentPiece?.scheduledDate)
+          .sort((a, b) => a.contentPiece.scheduledDate.localeCompare(b.contentPiece.scheduledDate)),
+        ...list.filter(t => !t.contentPiece?.scheduledDate),
+      ]
+      const dir = todaySort === 'asc' ? 1 : -1
+      return [...list].sort((a, b) => dir * (new Date(a.createdAt) - new Date(b.createdAt)))
+    }
+    return [
+      ...order(today.filter(t => t.status === 'PAUSED')),
+      ...order(today.filter(t => t.status === 'PENDING')),
+    ]
+  }, [openOutsideFocus, todaySort])
   const allBacklog = useMemo(() => openOutsideFocus.filter(t => t.isBacklog), [openOutsideFocus])
 
   // Backlog agrupado por proyecto. Las tareas de Contenido (vinculadas a una pieza con fecha
@@ -882,6 +920,19 @@ export default function Dashboard() {
                         Lo que te pasaste al día y lo que empezaste y pausaste. Iniciá cuando quieras, o devolvé al Backlog lo que no va a entrar, desde el menú ⋯.
                       </p>
                       <HowToButton topic="dashboard.hoy" />
+                    </div>
+                    <div className="flex items-center gap-2 px-1 text-xs text-gray-500 dark:text-gray-400">
+                      <span>Ordenar:</span>
+                      <div role="group" aria-label="Ordenar la lista de hoy" className="inline-flex rounded-lg border border-gray-200 dark:border-gray-700 p-0.5 bg-white dark:bg-gray-800">
+                        {TODAY_SORT_OPTIONS.map(o => (
+                          <button key={o.key} type="button" onClick={() => setTodaySort(o.key)} aria-pressed={todaySort === o.key}
+                            className={`px-2.5 py-1 rounded-md font-medium transition-colors ${todaySort === o.key
+                              ? 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white'
+                              : 'text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'}`}>
+                            {o.label}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                     <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200/80 dark:border-gray-700 divide-y divide-gray-100 dark:divide-gray-700/70">
                       {todayTasks.map(t => (
