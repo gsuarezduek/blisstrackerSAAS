@@ -636,7 +636,7 @@ GET    /api/marketing/projects/:id/content-gaps/:gapId      # detalle (polling)
 DELETE /api/marketing/projects/:id/content-gaps/:gapId
 
 # Inventario del blog (Contenido SEO → Inventario del blog; ver concepto "Inventario del blog"
-# en docs/claude/marketing.md). Cada nota es una ContentPiece con `publishedUrl`. Piden lo de
+# en docs/claude/marketing-geo-seo.md). Cada nota es una ContentPiece con `publishedUrl`. Piden lo de
 # Marketing (flag + acceso + Project.marketingEnabled), no lo de Contenido. Escrituras: canWrite.
 GET    /api/marketing/projects/:id/blog/inventory          # ?language=(es|en|pt|none)&status=&trend=(sube|baja|estable|nuevo)&alert=1&q=&sort=(clicks|impressions|position|published|title)&dir= — las notas con su cruce de Search Console (28 días + variación contra los 28 anteriores), top 5 consultas, alertas y traducciones
 POST   /api/marketing/projects/:id/blog/refresh            # { force? } — vuelve a pedirle los datos a Search Console (3 queries para todo el blog). Mínimo 10 min entre refrescos salvo force; 400 NO_SEARCH_CONSOLE / NO_SITE_URL

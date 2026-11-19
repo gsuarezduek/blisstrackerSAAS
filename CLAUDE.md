@@ -35,7 +35,7 @@ El detalle de cada tema vive en `docs/claude/`. **Esos archivos NO se cargan aut
 | `docs/claude/deploy.md` | Railway, Vercel, DNS, Stripe webhook, Chromium para PDF, workspace `bliss` |
 | `docs/claude/env-vars.md` | Variables de entorno de backend y frontend |
 | `docs/claude/navegacion.md` | Proyecto fijado entre secciones, barra lateral, avisos por módulo, `FloatingDock`, atajos de teclado, buscador Cmd/Ctrl+K |
-| `docs/claude/marketing.md` | GEO/SEO, RRSS (Instagram/TikTok/LinkedIn/Facebook/YouTube), Ads, Competidores, Informes mensuales, Objetivos de marketing, Domain Rating, SERP, servicios de scraping |
+| `docs/claude/marketing.md` | Índice de Marketing (qué cuentas entran, navegación, SerpAPI, refresco masivo) que apunta a un archivo por área: `marketing-geo-seo.md` (GEO/SEO, Web, Domain Rating, SERP, Inventario del blog), `marketing-canibalizacion.md`, `marketing-enlaces.md`, `marketing-rrss.md` (redes, competidores, scraping), `marketing-anuncios.md`, `marketing-informes.md` (informes mensuales y objetivos) |
 | `docs/claude/mailing.md` | Mailing (Marketing → Mailing): email marketing por proyecto con el Resend/SES/SMTP del cliente, bases e importación CSV o desde Ventas, formulario público con doble opt-in, campañas por bloques, envío con tope diario y ventana horaria, tracking propio, baja one-click, webhook de rebotes |
 | `docs/claude/ventas.md` | CRM: Empresas/Contactos/Leads, Propuestas (documento estructurado), Pipeline Kanban, Métricas/Forecast, Recordatorios |
 | `docs/claude/finanzas.md` | Finanzas: cuentas/saldos/ajustes, movimientos/impuestos/cheques, clientes (cuenta corriente, razón social) y facturación ARCA, Extras (cobros y pagos al equipo), Pendientes, rutas |
