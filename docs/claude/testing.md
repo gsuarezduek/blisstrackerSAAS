@@ -83,7 +83,7 @@ frontend/
   src/tests/
     setup.js
     utils/
-      format.test.js
+      format.test.js                      # incluye fmtPublishDate (hoy/mañana/en 2 días/vencida) y publishToneClass (rojo/naranja/celeste)
       textSearch.test.js                  # búsqueda sin tildes del lado del browser (normalizeText/matchesSearch/matchesAnyField)
       linkify.test.jsx
       webTabDates.test.js                 # getDateParams, formatDateLabel, currentMonthStr, prevMonthStr
@@ -92,6 +92,9 @@ frontend/
       taskCommentsModalComplete.test.jsx # "Completar" en el detalle de la tarea: la pendiente pide duración opcional, en curso/pausada en un click, no aparece en ajenas/bloqueadas/completadas
       projectAccesos.test.jsx           # la fila de un acceso: quién lo cargó y quién lo editó, y que un acceso viejo sin autor no se lo invente
       monthlyTrendChart.test.jsx        # gráfico de 12 meses de Web → Analytics: un mes sin dato es "s/d" y no una barra en cero, el tooltip con visitas/eventos/variación, el aviso del mes en curso, y el espejo del catálogo GA4 (formato de tasa/duración y valores crudos como "202611")
+      laterTabs.test.jsx                # punto de alerta de las pestañas del Dashboard: rojo (true), naranja ('orange') con su texto accesible, y sin punto
+    pages/
+      dashboardOrder.test.js            # orden de Para hoy (pausadas primero, por publicación / más nuevas / más antiguas), grupos del Backlog (el proyecto con la publicación más próxima primero) y publishUrgency (rojo/naranja)
     hooks/
       useRoles.test.js
 ```

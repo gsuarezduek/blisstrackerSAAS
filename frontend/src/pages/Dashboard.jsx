@@ -19,11 +19,12 @@ import AgentsWorkingStrip from '../components/dashboard/AgentsWorkingStrip'
 import TodayEventsCard from '../components/dashboard/TodayEventsCard'
 import useMyAgents from '../hooks/useMyAgents'
 import { useAuth } from '../context/AuthContext'
-import { completedMinutes, fmtMins } from '../utils/format'
+import { completedMinutes, fmtMins, fmtPublishDate } from '../utils/format'
 import WorkedTime from '../components/ui/WorkedTime'
 import {
   SEGUIMIENTO_STATUS_PRIORITY, seguimientoSeenKey, loadSeguimientoSeen, seguimientoSignature, isSeguimientoNew,
   CompletedTaskRow, DailyInsightBlock, SeguimientoSection,
+  TODAY_SORT_OPTIONS, orderTodayTasks, groupBacklogByProject, publishUrgency,
 } from './DashboardParts'
 
 function todayLabel() {
@@ -39,11 +40,6 @@ function greeting() {
 const LATER_TAB_KEY = 'bliss_dashboard_later_tab'
 const BACKLOG_SORT_KEY = 'bliss_dashboard_backlog_sort' // 'desc' (más nuevas primero) | 'asc'
 const TODAY_SORT_KEY = 'bliss_dashboard_today_sort' // 'publish' (default) | 'desc' | 'asc'
-const TODAY_SORT_OPTIONS = [
-  { key: 'publish', label: 'Por publicación' },
-  { key: 'desc', label: 'Más nuevas' },
-  { key: 'asc', label: 'Más antiguas' },
-]
 
 // Sección del foco del día: título + contador + lista en una sola columna (tarjeta con
 // divisores). Reemplaza a la grilla de 2 columnas por estado, que zigzagueaba al leer.
@@ -435,51 +431,48 @@ export default function Dashboard() {
   // SIN distinguirlo — también es un compromiso asumido, y esconderlo en el Backlog lo
   // manda al lugar que menos se mira. El backend solo deja volver al Backlog una tarea
   // PENDING, así que una pausada se queda acá: ya está empezada.
-  // Pausadas primero siempre (ya tienen trabajo invertido); dentro de cada grupo manda el
-  // orden elegido. "Por publicación" (default): las tareas de Contenido con fecha de
-  // publicación van primero, la más próxima arriba — mismo criterio que el Backlog —, y el
-  // resto newest-first. Sin esto, como las piezas se suelen crear en orden de publicación,
-  // la que sale más tarde quedaba primera. También define la sugerencia de NowCard
-  // (todayTasks[0]): lo que se ve arriba es lo que se sugiere.
-  const todayTasks = useMemo(() => {
-    const today = openOutsideFocus.filter(t => !t.isBacklog)
-    const order = list => {
-      if (todaySort === 'publish') return [
-        ...list.filter(t => t.contentPiece?.scheduledDate)
-          .sort((a, b) => a.contentPiece.scheduledDate.localeCompare(b.contentPiece.scheduledDate)),
-        ...list.filter(t => !t.contentPiece?.scheduledDate),
-      ]
-      const dir = todaySort === 'asc' ? 1 : -1
-      return [...list].sort((a, b) => dir * (new Date(a.createdAt) - new Date(b.createdAt)))
-    }
-    return [
-      ...order(today.filter(t => t.status === 'PAUSED')),
-      ...order(today.filter(t => t.status === 'PENDING')),
-    ]
-  }, [openOutsideFocus, todaySort])
+  // Orden elegido en el selector (pausadas primero siempre; ver orderTodayTasks). También
+  // define la sugerencia de NowCard (todayTasks[0]): lo que se ve arriba es lo que se sugiere.
+  const todayTasks = useMemo(
+    () => orderTodayTasks(openOutsideFocus.filter(t => !t.isBacklog), todaySort),
+    [openOutsideFocus, todaySort]
+  )
   const allBacklog = useMemo(() => openOutsideFocus.filter(t => t.isBacklog), [openOutsideFocus])
 
-  // Backlog agrupado por proyecto. Las tareas de Contenido (vinculadas a una pieza con fecha
-  // de publicación) van primero, ordenadas por publicación más próxima — así se ve de un
-  // vistazo qué hay que diseñar más urgente sin entrar al módulo de Contenido. El resto
-  // mantiene el orden por fecha de creación según el toggle elegido (el "pausadas primero"
-  // de allBacklog se mantiene para la sugerencia de NowCard, no para esta lista). El orden
-  // de los grupos sigue la primera aparición en esta lista.
-  const backlogByProject = useMemo(() => {
-    const dir = backlogSort === 'asc' ? 1 : -1
-    const withPublishDate = allBacklog.filter(t => t.contentPiece?.scheduledDate)
-    const rest = allBacklog.filter(t => !t.contentPiece?.scheduledDate)
-    withPublishDate.sort((a, b) => a.contentPiece.scheduledDate.localeCompare(b.contentPiece.scheduledDate))
-    rest.sort((a, b) => dir * (new Date(a.createdAt) - new Date(b.createdAt)))
-    const sorted = [...withPublishDate, ...rest]
-    const map = {}
-    for (const t of sorted) {
-      const pid = t.project.id
-      if (!map[pid]) map[pid] = { project: t.project, tasks: [] }
-      map[pid].tasks.push(t)
+  // Backlog agrupado por proyecto, Contenido primero por publicación más próxima (ver
+  // groupBacklogByProject). El "pausadas primero" de allBacklog se mantiene para la
+  // sugerencia de NowCard, no para esta lista.
+  const backlogByProject = useMemo(() => groupBacklogByProject(allBacklog, backlogSort), [allBacklog, backlogSort])
+
+  // Contenido que publica en 2 días o menos (o ya vencido): pinta el punto de las pestañas
+  // y, si está en el Backlog, levanta un aviso para traerlo a hoy — en el depósito, agrupado
+  // por proyecto, una pieza de mañana podía pasar sin que nadie la viera.
+  const todayUrgency = useMemo(() => publishUrgency(todayTasks), [todayTasks])
+  const backlogUrgency = useMemo(() => publishUrgency(allBacklog), [allBacklog])
+  const [bringingUrgent, setBringingUrgent] = useState(false)
+
+  // De a una, no en paralelo: add-to-today puede crear la jornada de hoy y no conviene
+  // que varias llamadas compitan por crearla.
+  async function bringUrgentToToday() {
+    setBringingUrgent(true)
+    let failed = 0
+    try {
+      for (const t of backlogUrgency.tasks) {
+        try {
+          const { data } = await api.patch(`/tasks/${t.id}/add-to-today`)
+          handleUpdateTask(data)
+        } catch { failed++ }
+      }
+    } finally {
+      setBringingUrgent(false)
     }
-    return Object.values(map)
-  }, [allBacklog, backlogSort])
+    if (failed) alert(failed === 1 ? 'No se pudo traer una de las tareas. Probá de nuevo.' : `No se pudieron traer ${failed} tareas. Probá de nuevo.`)
+  }
+
+  function goToBacklog() {
+    setLaterTab('backlog')
+    setTimeout(() => laterRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0)
+  }
 
   function toggleBacklogProject(pid) {
     setBacklogOpenProjects(prev => {
@@ -874,6 +867,35 @@ export default function Dashboard() {
             </button>
           )}
 
+          {/* Aviso: Contenido que publica en 2 días o menos y sigue en el Backlog */}
+          {backlogUrgency.tasks.length > 0 && (() => {
+            const n = backlogUrgency.tasks.length
+            const red = backlogUrgency.level === 'red'
+            const first = n === 1 ? fmtPublishDate(backlogUrgency.tasks[0].contentPiece.scheduledDate) : null
+            return (
+              <div className={`w-full flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border px-4 py-3 ${red
+                ? 'border-red-200 dark:border-red-900 bg-red-50/70 dark:bg-red-900/20'
+                : 'border-orange-200 dark:border-orange-900 bg-orange-50/70 dark:bg-orange-900/20'}`}>
+                <span className={`w-2 h-2 rounded-full flex-shrink-0 ${red ? 'bg-red-500' : 'bg-orange-500'}`} />
+                <span className={`text-sm flex-1 min-w-[12rem] ${red ? 'text-red-800 dark:text-red-300' : 'text-orange-800 dark:text-orange-300'}`}>
+                  {n === 1
+                    ? `Una pieza de Contenido ${first.text} y sigue en el Backlog`
+                    : `${n} piezas de Contenido publican en 2 días o menos${backlogUrgency.urgent ? ' (o ya se pasaron)' : ''} y siguen en el Backlog`}
+                </span>
+                <span className="flex items-center gap-3">
+                  <button type="button" onClick={goToBacklog}
+                    className={`text-sm font-medium hover:underline ${red ? 'text-red-700 dark:text-red-300' : 'text-orange-700 dark:text-orange-300'}`}>
+                    Ver
+                  </button>
+                  <button type="button" onClick={bringUrgentToToday} disabled={bringingUrgent}
+                    className={`text-sm font-semibold rounded-lg px-3 py-1.5 text-white disabled:opacity-50 ${red ? 'bg-red-600 hover:bg-red-700' : 'bg-orange-600 hover:bg-orange-700'}`}>
+                    {bringingUrgent ? 'Trayendo…' : 'Traer a hoy'}
+                  </button>
+                </span>
+              </div>
+            )
+          })()}
+
           {/* 2. Foco del día (destacadas) */}
           {starredSorted.length > 0 && (
             <TaskSection title="Foco del día" count={starredSorted.length} hint="Tus destacadas, de mayor a menor prioridad">
@@ -894,8 +916,10 @@ export default function Dashboard() {
               value={laterTab}
               onChange={setLaterTab}
               tabs={[
-                { key: 'hoy', label: 'Para hoy', count: todayTasks.length },
-                { key: 'backlog', label: 'Backlog', count: allBacklog.length },
+                { key: 'hoy', label: 'Para hoy', count: todayTasks.length, alert: todayUrgency.level,
+                  alertLabel: todayUrgency.level ? 'Hay contenido que publica pronto' : undefined },
+                { key: 'backlog', label: 'Backlog', count: allBacklog.length, alert: backlogUrgency.level,
+                  alertLabel: backlogUrgency.level ? 'Hay contenido que publica pronto' : undefined },
                 { key: 'programadas', label: 'Programadas', count: future.length },
                 // Solo si tengo agentes conectados o alguno tiene tareas (ej. tokens ya revocados).
                 ...(myAgents.length > 0 || agentTasks.length > 0

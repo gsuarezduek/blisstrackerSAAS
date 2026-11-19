@@ -2,7 +2,7 @@ import { useState, useRef, memo } from 'react'
 import LoadingSpinner from '../components/LoadingSpinner'
 import { avatarUrl } from '../utils/avatarUrl'
 import UserLink from '../components/UserLink'
-import { completedMinutes, fmtMins, completedDuration, fmtCreatedAt, createdAtTitle } from '../utils/format'
+import { completedMinutes, fmtMins, completedDuration, fmtCreatedAt, createdAtTitle, fmtPublishDate } from '../utils/format'
 import { MessageSquare, X, Check, TriangleAlert, Target, CircleCheck, Lightbulb, ThumbsUp, ThumbsDown, ChevronDown } from 'lucide-react'
 import { Icon } from '../components/ui/Icon'
 
@@ -11,6 +11,68 @@ function fmtShortDate(iso) {
   return new Date(iso).toLocaleDateString('es-AR', {
     day: 'numeric', month: 'short', timeZone: 'America/Argentina/Buenos_Aires',
   })
+}
+
+// ── Orden de "Para hoy" y del Backlog ───────────────────────────────────────
+// Funciones puras (sin React) para que el orden se pueda testear sin montar el Dashboard
+// (tests/pages/dashboardOrder.test.js). "Por publicación" = las tareas de Contenido con
+// fecha de publicación (Task.contentPiece.scheduledDate, "YYYY-MM-DD") primero, la más
+// próxima arriba; el resto después, en el orden que se pida.
+const hasPublishDate = t => !!t.contentPiece?.scheduledDate
+const byPublishDate = (a, b) => a.contentPiece.scheduledDate.localeCompare(b.contentPiece.scheduledDate)
+const byCreatedAt = dir => (a, b) => dir * (new Date(a.createdAt) - new Date(b.createdAt))
+
+function publishFirst(list, restSort) {
+  return [...list.filter(hasPublishDate).sort(byPublishDate), ...list.filter(t => !hasPublishDate(t)).sort(restSort)]
+}
+
+export const TODAY_SORT_OPTIONS = [
+  { key: 'publish', label: 'Por publicación' },
+  { key: 'desc', label: 'Más nuevas' },
+  { key: 'asc', label: 'Más antiguas' },
+]
+
+// "Para hoy": pausadas primero siempre (ya tienen trabajo invertido) y, dentro de cada
+// grupo, el orden elegido. Con "publish" el resto va newest-first. Antes mandaba solo el
+// newest-first y, como las piezas se suelen crear en orden de publicación, la que salía
+// más tarde quedaba arriba.
+export function orderTodayTasks(tasks, sort = 'publish') {
+  const order = list => sort === 'publish'
+    ? publishFirst(list, byCreatedAt(-1))
+    : [...list].sort(byCreatedAt(sort === 'asc' ? 1 : -1))
+  return [
+    ...order(tasks.filter(t => t.status === 'PAUSED')),
+    ...order(tasks.filter(t => t.status !== 'PAUSED')),
+  ]
+}
+
+// Backlog agrupado por proyecto. Las tareas de Contenido van primero por publicación más
+// próxima y el resto por creación según el toggle ('desc' | 'asc'). Los grupos salen en
+// el orden de su primera tarea, así que el proyecto con la publicación más cercana queda
+// primero (lo fija un test).
+export function groupBacklogByProject(tasks, sort = 'desc') {
+  const map = new Map()
+  for (const t of publishFirst(tasks, byCreatedAt(sort === 'asc' ? 1 : -1))) {
+    if (!map.has(t.project.id)) map.set(t.project.id, { project: t.project, tasks: [] })
+    map.get(t.project.id).tasks.push(t)
+  }
+  return [...map.values()]
+}
+
+// Contenido que publica pronto: `urgent` = hoy o ya vencida, `soon` = mañana o en 2 días
+// (mismo criterio que fmtPublishDate). `level` es el color del punto de la pestaña.
+export function publishUrgency(tasks, now = new Date()) {
+  const urgentTasks = []
+  let urgent = 0
+  let soon = 0
+  for (const t of tasks) {
+    const info = fmtPublishDate(t.contentPiece?.scheduledDate, now)
+    if (info?.urgent) urgent++
+    else if (info?.soon) soon++
+    else continue
+    urgentTasks.push(t)
+  }
+  return { urgent, soon, tasks: urgentTasks, level: urgent ? 'red' : soon ? 'orange' : null }
 }
 
 const SEGUIMIENTO_STATUS_LABEL = {
