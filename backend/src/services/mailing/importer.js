@@ -43,7 +43,7 @@ async function addMemberships(contactIds, listIds) {
  * @param {Array<{email, firstName?, lastName?, fields?, crmContactId?}>} p.rows
  * @param {number[]} p.listIds  ya validadas como del proyecto
  * @param {boolean} p.dryRun
- * @param {'csv'|'crm'} p.source
+ * @param {'csv'|'crm'|'agent'|'manual'} p.source
  */
 async function importRows({ workspaceId, projectId, rows, listIds, dryRun, source }) {
   const invalid = []

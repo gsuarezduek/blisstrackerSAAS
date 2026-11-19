@@ -202,12 +202,15 @@ Bandeja de WhatsApp del número de la agencia, vinculada al CRM (contacto → le
   mailing: `## Mailing (Marketing → Mailing; requiere el módulo Mailing)
 Email marketing por proyecto: cada cliente manda con su propio proveedor y remitente, a sus bases de contactos.
 - **Vos armás, una persona lanza.** Podés crear y editar borradores, mandar pruebas, calcular la audiencia, leer métricas y pausar. **Lanzar, reanudar y cancelar** devuelven 403 \`HUMAN_ONLY\`: cuando el borrador esté listo, avisale al usuario que lo revise y lo lance desde la app. No lo intentes por otro camino.
-- Flujo de una campaña: \`mailing_lists_list\` (ids de las bases) → \`mailing_campaign_create\` → \`mailing_campaign_update\` (asunto, bloques, bases) → \`mailing_audience_count\` → \`mailing_campaign_test\` a una dirección del usuario → pedirle que la lance.
+- Flujo de una campaña: \`mailing_lists_list\` (ids de las bases) → \`mailing_campaign_create\` → \`mailing_campaign_update\` (asunto, bloques, bases) → \`mailing_campaign_preview\` para revisar → \`mailing_audience_count\` → \`mailing_campaign_test\` a una dirección del usuario → pedirle que la lance. Un borrador que sobra se borra con \`mailing_campaign_delete\`; una programada se frena con \`mailing_campaign_unschedule\`.
 - Antes de armar algo, \`mailing_config_get\`: si \`status\` no es \`active\`, la campaña se puede preparar pero no va a salir hasta que alguien verifique la configuración (credenciales: solo desde la app).
-- Contenido: \`blocks\` reemplaza todo el contenido (leé la campaña antes si vas a cambiar una parte). Para texto usá \`{type:"text", text}\` con párrafos separados por línea en blanco. Imágenes: solo URLs https públicas que ya existan.
+- Contenido: \`blocks\` reemplaza todo el contenido (leé la campaña antes si vas a cambiar una parte). Para texto usá \`{type:"text", text}\` con párrafos separados por línea en blanco. Imágenes: subilas con \`mailing_image_upload\` (base64 o una URL pública) y usá la \`url\` que devuelve; los links de la Nube no sirven en un mail.
 - Las **pruebas** van solo a direcciones del equipo o del usuario, nunca a contactos del cliente.
 - Métricas: las aperturas son estimadas (Apple Mail las infla), los clics son el dato confiable. Un test A/B elige el ganador por tasa de clics (o de apertura si nadie hizo clic). Para insistir con quienes no abrieron: \`mailing_campaign_resend_non_openers\` sobre una campaña terminada, y cambiale el asunto.
-- No se puede por MCP: lanzar/reanudar/cancelar, credenciales y verificación del remitente, dar de alta, importar o editar contactos (declarar el consentimiento de una base es responsabilidad de una persona), el formulario de suscripción.`,
+- **Contactos nuevos:** \`mailing_contacts_add\` (hasta 50 por llamada) los carga suscriptos directamente, así que solo cargá personas que aceptaron recibir mails del cliente (si no estás seguro, preguntale al usuario). A quien se dio de baja, rebotó o marcó spam no se lo re-suscribe.
+- **Bajas:** si alguien pide no recibir más, \`mailing_contact_unsubscribe\` con su email (y el motivo).
+- **Segmentar:** \`mailing_list_create\` + \`mailing_list_members\` con ids de contactos que ya existen (de \`mailing_contacts_list\` o de \`mailing_campaign_recipients\` con \`filter: "clicked"\`). \`mailing_contact_update\` corrige nombre y campos personalizados.
+- No se puede por MCP (403 \`HUMAN_ONLY\`): lanzar/reanudar/cancelar, credenciales y verificación del remitente, importar contactos en masa (CSV o desde Ventas), cambiar el email de un contacto o re-suscribirlo, borrar contactos o una campaña ya lanzada, el formulario de suscripción.`,
 }
 
 const LIMITS = `## Lo que hoy NO está disponible por MCP

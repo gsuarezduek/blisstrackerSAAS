@@ -23,6 +23,15 @@ async function resolveCtx(req, res, { write = false } = {}) {
   }
 }
 
+// Lo que vía MCP queda reservado a una persona (lanzar, declarar consentimiento,
+// borrar en masa…). Se chequea en la API y no solo por la ausencia de una tool:
+// la regla no depende de qué tools existan.
+function rejectAgent(req, res, error) {
+  if (requestAgentId(req) === null) return false
+  res.status(403).json({ error, code: 'HUMAN_ONLY' })
+  return true
+}
+
 function intParam(v) {
   const n = Number(v)
   return Number.isInteger(n) && n > 0 ? n : null
@@ -36,4 +45,4 @@ function sendError(res, next, err) {
   return next(err)
 }
 
-module.exports = { resolveCtx, intParam, sendError }
+module.exports = { resolveCtx, intParam, sendError, rejectAgent }

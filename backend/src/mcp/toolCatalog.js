@@ -2054,10 +2054,11 @@ const tools = [
   },
 
   // ── Mailing (Marketing → Mailing; requiere el flag `mailing`) ───────────
-  // Un agente arma y prueba borradores y lee métricas. LANZAR, reanudar o cancelar
-  // lo hace una persona: la API responde 403 HUMAN_ONLY a esas acciones vía MCP.
-  // Tampoco hay tools de credenciales ni de alta/importación de contactos (declarar
-  // el consentimiento de una base es responsabilidad de una persona).
+  // Un agente arma y prueba borradores, lee métricas, segmenta, da de baja y suma
+  // contactos de a 50 (suscriptos, con consentSource 'agent'). LANZAR, reanudar o
+  // cancelar, las importaciones masivas, cambiar un email o re-suscribir, borrar
+  // contactos y las credenciales los hace una persona: la API responde 403
+  // HUMAN_ONLY a esas acciones vía MCP.
   {
     name: 'mailing_config_get',
     description: 'Cómo manda mails un proyecto: proveedor (resend/ses/smtp), remitente, dirección del pie, tope diario, ventana horaria, calentamiento y si la configuración está verificada (`status: active`). Nunca trae credenciales. Si `status` no es `active`, ninguna campaña puede lanzarse ni salir.',
@@ -2103,7 +2104,7 @@ const tools = [
   },
   {
     name: 'mailing_campaign_recipients',
-    description: 'Destinatarios de una campaña lanzada, uno por uno (email, estado del envío, cuándo abrió / hizo clic, variante A/B, error).',
+    description: 'Destinatarios de una campaña lanzada, uno por uno (contactId, email, estado del envío, cuándo abrió / hizo clic, variante A/B, error). Con `filter: "clicked"` u `"opened"` + mailing_list_members se arma un segmento.',
     inputSchema: {
       ...projectIdParam,
       campaignId: z.number().int(),
@@ -2171,6 +2172,94 @@ const tools = [
     description: 'Pausa una campaña que está saliendo (frenar nunca manda nada, por eso lo puede hacer un agente). Reanudarla la hace una persona desde la app.',
     inputSchema: { ...projectIdParam, campaignId: z.number().int() },
     request: ({ projectId, campaignId }) => ({ method: 'POST', path: `/marketing/projects/${projectId}/mailing/campaigns/${campaignId}/pause` }),
+  },
+  {
+    name: 'mailing_campaign_unschedule',
+    description: 'Desprograma una campaña programada (status scheduled): vuelve a borrador y no sale. Frenar nunca manda nada; volver a programarla la hace una persona.',
+    inputSchema: { ...projectIdParam, campaignId: z.number().int() },
+    request: ({ projectId, campaignId }) => ({ method: 'POST', path: `/marketing/projects/${projectId}/mailing/campaigns/${campaignId}/unschedule` }),
+  },
+  {
+    name: 'mailing_campaign_delete',
+    description: 'Borra una campaña en BORRADOR (una programada, desprogramala primero; una lanzada no: se llevaría sus métricas, eso lo hace una persona). Confirmá con la persona antes de borrar un borrador que no armaste vos.',
+    inputSchema: { ...projectIdParam, campaignId: z.number().int() },
+    request: ({ projectId, campaignId }) => ({ method: 'DELETE', path: `/marketing/projects/${projectId}/mailing/campaigns/${campaignId}` }),
+  },
+  {
+    name: 'mailing_campaign_preview',
+    description: 'El HTML final de la campaña, igual al que sale (con el pie y el link de baja), con datos de ejemplo en las variables (Ana García). Sirve para revisar el contenido antes de mandar una prueba con mailing_campaign_test.',
+    inputSchema: { ...projectIdParam, campaignId: z.number().int() },
+    request: ({ projectId, campaignId }) => ({ method: 'POST', path: `/marketing/projects/${projectId}/mailing/campaigns/${campaignId}/preview`, body: {} }),
+  },
+  {
+    name: 'mailing_image_upload',
+    description: 'Sube una imagen para usar en una campaña y devuelve su `url` pública y permanente (para un bloque {type:"image", url}). PNG, JPG, GIF o WEBP hasta 5MB. Mandá exactamente UNA fuente: `contentBase64` (chica: el request no puede pasar de ~1MB) o `url` (imagen pública descargable). Las de la Nube del proyecto no sirven tal cual: sus links no son públicos.',
+    inputSchema: {
+      ...projectIdParam,
+      name:          z.string().optional().describe('Nombre con extensión, ej. "banner.png"'),
+      contentBase64: z.string().optional().describe('La imagen en base64'),
+      url:           z.string().optional().describe('URL pública http(s) de la imagen a copiar'),
+    },
+    request: ({ projectId, ...body }) => ({ method: 'POST', path: `/marketing/projects/${projectId}/mailing/images/direct`, body }),
+  },
+  {
+    name: 'mailing_contacts_add',
+    description: 'Suma contactos al proyecto (hasta 50 por llamada) SUSCRIPTOS directamente: entran a las próximas campañas de las bases que elijas. Cargalos solo si esas personas aceptaron recibir mails del cliente: el consentimiento queda registrado como declarado por el agente. Un email que ya existe completa los datos que faltan y se suma a las bases, pero conserva su estado (a quien se dio de baja, rebotó o marcó spam no se lo vuelve a suscribir: cuenta en `suppressed`). Devuelve el resumen: new, existing, suppressed, invalid.',
+    inputSchema: {
+      ...projectIdParam,
+      contacts: z.array(z.object({
+        email:     z.string(),
+        firstName: z.string().optional(),
+        lastName:  z.string().optional(),
+        fields:    z.record(z.string()).optional().describe('Campos personalizados, para {{campo.x}}'),
+      })).describe('1 a 50 contactos'),
+      listIds: z.array(z.number().int()).optional().describe('Bases a las que se suman (de mailing_lists_list)'),
+    },
+    request: ({ projectId, contacts, listIds }) => ({ method: 'POST', path: `/marketing/projects/${projectId}/mailing/contacts/batch`, body: { contacts, listIds } }),
+  },
+  {
+    name: 'mailing_contact_unsubscribe',
+    description: 'Da de baja a un contacto del proyecto (por email o id): no recibe más campañas de este cliente. Es el caso de alguien que responde "no me manden más". Dar de baja no se deshace desde acá: volver a suscribirse lo hace la persona desde un formulario.',
+    inputSchema: {
+      ...projectIdParam,
+      email:     z.string().optional(),
+      contactId: z.number().int().optional(),
+      reason:    z.string().optional().describe('Por qué (queda registrado), ej. "Lo pidió respondiendo la campaña de noviembre"'),
+    },
+    request: ({ projectId, ...body }) => ({ method: 'POST', path: `/marketing/projects/${projectId}/mailing/contacts/unsubscribe`, body }),
+  },
+  {
+    name: 'mailing_contact_update',
+    description: 'Corrige nombre, apellido y campos personalizados de un contacto (los que usan {{nombre}} y {{campo.x}}), y opcionalmente sus bases. `fields` REEMPLAZA todos los campos; `listIds` REEMPLAZA sus bases. El email y el estado no se cambian desde acá (para la baja está mailing_contact_unsubscribe).',
+    inputSchema: {
+      ...projectIdParam,
+      contactId: z.number().int(),
+      firstName: z.string().nullable().optional(),
+      lastName:  z.string().nullable().optional(),
+      fields:    z.record(z.string()).optional(),
+      listIds:   z.array(z.number().int()).optional(),
+    },
+    request: ({ projectId, contactId, ...body }) => ({ method: 'PATCH', path: `/marketing/projects/${projectId}/mailing/contacts/${contactId}`, body }),
+  },
+  {
+    name: 'mailing_list_create',
+    description: 'Crea una base (segmento) vacía en el proyecto. Se llena con mailing_list_members (contactos que ya existen) o mailing_contacts_add (nuevos, con confirmación).',
+    inputSchema: { ...projectIdParam, name: z.string(), description: z.string().optional() },
+    request: ({ projectId, name, description }) => ({ method: 'POST', path: `/marketing/projects/${projectId}/mailing/lists`, body: { name, description } }),
+  },
+  {
+    name: 'mailing_list_members',
+    description: 'Suma o saca contactos que ya existen de una base, por id (de mailing_contacts_list o mailing_campaign_recipients). Sirve para segmentar, ej. "los que hicieron clic en la campaña de noviembre". No cambia el estado de nadie: un dado de baja en una base sigue sin recibir.',
+    inputSchema: {
+      ...projectIdParam,
+      listId:     z.number().int(),
+      action:     z.enum(['add', 'remove']),
+      contactIds: z.array(z.number().int()).describe('Hasta 5000'),
+    },
+    request: ({ projectId, listId, action, contactIds }) => ({
+      method: 'POST', path: `/marketing/projects/${projectId}/mailing/contacts/bulk`,
+      body: { action: action === 'add' ? 'add-to-list' : 'remove-from-list', listId, contactIds },
+    }),
   },
 
   // ── Situación de la cuenta (hojas acumulables por proyecto) ─────────────

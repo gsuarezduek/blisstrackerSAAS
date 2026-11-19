@@ -4,12 +4,16 @@ const prisma = require('../../lib/prisma')
 const { backendBase } = require('../../services/mailing/config')
 const { normalizeEmail } = require('../../lib/normalizeEmail')
 const { buildTextSearchFilters } = require('../../lib/textSearch')
-const { resolveCtx, intParam, sendError } = require('./_shared')
+const { resolveCtx, intParam, sendError, rejectAgent } = require('./_shared')
 const { ownListIds } = require('../../services/mailing/audience')
 const { importRows, addMemberships, cleanFields, cleanName, EMAIL_RE } = require('../../services/mailing/importer')
 
 const STATUSES = ['pending', 'subscribed', 'unsubscribed', 'bounced', 'complained']
 const MAX_IMPORT_ROWS = 2000
+const MAX_BATCH = 50
+// Importar (CSV) declara de una vez que miles de personas aceptaron recibir mails:
+// lo hace una persona. Un agente suma de a pocos con /contacts/batch.
+const CONSENT_HUMAN_ONLY = 'Importar contactos lo hace una persona desde la app. Un agente suma contactos de a 50 con mailing_contacts_add.'
 
 // ─── Bases ───────────────────────────────────────────────────────────────────
 
@@ -188,14 +192,66 @@ async function createContact(req, res, next) {
         data: {
           workspaceId: ctx.workspaceId, projectId: ctx.projectId, email,
           firstName: cleanName(req.body?.firstName), lastName: cleanName(req.body?.lastName),
-          fields: cleanFields(req.body?.fields), source: 'manual',
-          consentAt: new Date(), consentSource: 'manual',
+          fields: cleanFields(req.body?.fields), source: ctx.agentId ? 'agent' : 'manual',
+          consentAt: new Date(), consentSource: ctx.agentId ? 'agent' : 'manual',
         },
       })
     }
     await addMemberships([contact.id], listIds)
     const full = await prisma.mailingContact.findUnique({ where: { id: contact.id }, select: CONTACT_SELECT })
     res.status(existing ? 200 : 201).json({ contact: shapeContact(full), existed: !!existing })
+  } catch (err) { next(err) }
+}
+
+/**
+ * POST /projects/:id/mailing/contacts/batch
+ * { contacts: [{ email, firstName?, lastName?, fields? }] (≤50), listIds }
+ * Alta de varios contactos sin pasar por el CSV: la usa el agente por MCP
+ * (`mailing_contacts_add`). Mismas reglas que la importación (importer.js): los
+ * nuevos entran suscriptos, un existente conserva su estado (una baja o un rebote
+ * no se deshacen) y completa los datos que faltan. El consentimiento queda
+ * registrado como declarado por el agente (`consentSource: 'agent'`).
+ */
+async function addContactsHandler(req, res, next) {
+  try {
+    const ctx = await resolveCtx(req, res, { write: true })
+    if (!ctx) return
+    const rows = req.body?.contacts
+    if (!Array.isArray(rows) || !rows.length) return res.status(400).json({ error: 'No hay contactos para agregar' })
+    if (rows.length > MAX_BATCH) return res.status(400).json({ error: `Máximo ${MAX_BATCH} contactos por llamada` })
+    const listIds = await ownListIds(ctx.projectId, req.body?.listIds)
+    const source = ctx.agentId ? 'agent' : 'manual'
+    res.json(await importRows({ workspaceId: ctx.workspaceId, projectId: ctx.projectId, rows, listIds, dryRun: false, source }))
+  } catch (err) { sendError(res, next, err) }
+}
+
+/**
+ * POST /projects/:id/mailing/contacts/unsubscribe { email | contactId, reason? }
+ * Dar de baja por email: el caso típico es alguien que responde "no me manden
+ * más" y el agente lo procesa. Bajar nunca manda nada, así que lo puede hacer un
+ * agente. Un rebote o una queja quedan como están (ya no reciben).
+ */
+async function unsubscribeContact(req, res, next) {
+  try {
+    const ctx = await resolveCtx(req, res, { write: true })
+    if (!ctx) return
+    const contactId = intParam(req.body?.contactId)
+    const email = req.body?.email ? normalizeEmail(String(req.body.email)) : null
+    if (!contactId && !email) return res.status(400).json({ error: 'Mandá el email o el id del contacto' })
+    const contact = await prisma.mailingContact.findFirst({
+      where: { projectId: ctx.projectId, ...(contactId ? { id: contactId } : { email }) },
+    })
+    if (!contact) return res.status(404).json({ error: 'No hay ningún contacto con ese email en este proyecto' })
+    if (!['subscribed', 'pending'].includes(contact.status)) {
+      return res.json({ contact: { id: contact.id, email: contact.email, status: contact.status }, changed: false })
+    }
+    const reason = String(req.body?.reason || '').trim().slice(0, 200) || (ctx.agentId ? 'Baja pedida al agente' : 'Baja manual')
+    const updated = await prisma.mailingContact.update({
+      where: { id: contact.id },
+      data: { status: 'unsubscribed', unsubscribedAt: new Date(), unsubscribeReason: reason, confirmToken: null },
+      select: { id: true, email: true, status: true },
+    })
+    res.json({ contact: updated, changed: true })
   } catch (err) { next(err) }
 }
 
@@ -213,6 +269,11 @@ async function updateContact(req, res, next) {
     const contact = contactId && await prisma.mailingContact.findFirst({ where: { id: contactId, projectId: ctx.projectId } })
     if (!contact) return res.status(404).json({ error: 'Contacto no encontrado' })
     const b = req.body || {}
+    // Un agente corrige datos y bases; cambiar el email (es otro destinatario,
+    // sin consentimiento) o re-suscribir a un rebotado lo hace una persona.
+    if (ctx.agentId && (b.email !== undefined || (b.status !== undefined && b.status !== 'unsubscribed'))) {
+      return res.status(403).json({ error: 'Un agente no cambia el email de un contacto ni lo vuelve a suscribir: lo hace una persona desde la app.', code: 'HUMAN_ONLY' })
+    }
     const data = {}
     if (b.firstName !== undefined) data.firstName = cleanName(b.firstName)
     if (b.lastName !== undefined) data.lastName = cleanName(b.lastName)
@@ -252,6 +313,7 @@ async function deleteContact(req, res, next) {
   try {
     const ctx = await resolveCtx(req, res, { write: true })
     if (!ctx) return
+    if (rejectAgent(req, res, 'Borrar contactos lo hace una persona desde la app.')) return
     const contactId = intParam(req.params.contactId)
     const r = contactId ? await prisma.mailingContact.deleteMany({ where: { id: contactId, projectId: ctx.projectId } }) : { count: 0 }
     if (!r.count) return res.status(404).json({ error: 'Contacto no encontrado' })
@@ -282,6 +344,7 @@ async function bulkContacts(req, res, next) {
         data: { status: 'unsubscribed', unsubscribedAt: new Date(), unsubscribeReason: 'Baja manual' },
       })
     } else if (action === 'delete') {
+      if (rejectAgent(req, res, 'Borrar contactos lo hace una persona desde la app.')) return
       await prisma.mailingContact.deleteMany({ where: { id: { in: own } } })
     } else {
       return res.status(400).json({ error: 'Acción desconocida' })
@@ -311,6 +374,7 @@ async function importContacts(req, res, next) {
     const { rows, dryRun } = req.body || {}
     if (!Array.isArray(rows) || !rows.length) return res.status(400).json({ error: 'No hay filas para importar' })
     if (rows.length > MAX_IMPORT_ROWS) return res.status(400).json({ error: `Máximo ${MAX_IMPORT_ROWS} filas por tanda` })
+    if (!dryRun && rejectAgent(req, res, CONSENT_HUMAN_ONLY)) return
     if (!dryRun && req.body.consent !== true) return res.status(400).json({ error: 'Tenés que confirmar que estos contactos aceptaron recibir mails.' })
     const listIds = await ownListIds(ctx.projectId, req.body.listIds)
 
@@ -321,5 +385,6 @@ async function importContacts(req, res, next) {
 module.exports = {
   listLists, createList, updateList, deleteList, setListForm,
   listContacts, createContact, updateContact, deleteContact, bulkContacts, importContacts,
+  addContacts: addContactsHandler, unsubscribeContact,
   cleanFields, EMAIL_RE,
 }

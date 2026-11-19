@@ -232,13 +232,14 @@ Cada base puede tener un formulario (`POST .../lists/:listId/form { enabled }`).
 
 ## Agentes (MCP)
 
-14 tools `mailing_*` (área "Mailing" en `mcp/guide.js`, sección `mailing` de la guía):
+23 tools `mailing_*` (área "Mailing" en `mcp/guide.js`, sección `mailing` de la guía):
 
 - **Lectura:** config sin credenciales, bases, contactos, campañas, métricas y destinatarios.
-- **Borradores:** crear, editar, duplicar y preparar el reenvío. Un bloque de texto acepta `{ type: 'text', text }` en texto plano (`render.js` `plainTextDoc`), así el agente no arma JSON de TipTap.
-- **Otras acciones:** audiencia, prueba y pausar.
-- **Lanzar, reanudar y cancelar son de una persona.** `campaigns.controller.js` `rejectAgent` responde **403 `HUMAN_ONLY`** si la request trae `mcpTokenId`. Es defensa en profundidad: el catálogo tampoco tiene esas tools.
-- **Sin tools** de credenciales ni de alta, importación o edición de contactos: declarar el consentimiento de una base es responsabilidad de una persona.
+- **Borradores:** crear, editar, duplicar, preparar el reenvío, ver el HTML final (`mailing_campaign_preview`), desprogramar y borrar (solo `draft`). Un bloque de texto acepta `{ type: 'text', text }` en texto plano (`render.js` `plainTextDoc`), así el agente no arma JSON de TipTap.
+- **Imágenes:** `mailing_image_upload` → `POST /images/direct` (JSON con `contentBase64` o `url`, resuelto por `lib/directUpload.js` con `assertPublicUrl` en cada redirect; mismo chequeo de magic bytes y tope de 5MB que la subida multipart). Los links de la Nube no sirven en un mail porque no son públicos.
+- **Otras acciones:** audiencia, prueba, pausar, dar de baja (`POST /contacts/unsubscribe`, por email o id, con motivo), corregir nombre y campos (`PATCH /contacts/:id`), crear bases y sumar o sacar contactos existentes (`/contacts/bulk` con `add-to-list`/`remove-from-list`). `mailing_campaign_recipients` devuelve `contactId` para armar segmentos ("los que hicieron clic").
+- **Alta de contactos** (`mailing_contacts_add` → `POST /contacts/batch`, hasta 50 por llamada): misma lógica que la importación (`importer.js` `importRows`). Los nuevos entran **suscriptos directo**, sin mail de confirmación (decisión del producto), con `source` y `consentSource` en `'agent'` para que quede quién declaró el consentimiento; un `POST /contacts` suelto de un agente también queda en `'agent'`. Un existente conserva su estado: a quien se dio de baja, rebotó o marcó spam no se lo re-suscribe.
+- **Lo que es de una persona** (403 **`HUMAN_ONLY`**, `_shared.js` `rejectAgent`, se chequea en la API y no solo por la ausencia de la tool): lanzar, reanudar y cancelar; importar en masa, CSV o desde Ventas (la vista previa `dryRun` sí); cambiar el email de un contacto o re-suscribirlo; borrar contactos (uno o en masa); borrar una campaña que no sea borrador. Tampoco hay tools de credenciales ni del formulario.
 
 ## Archivos
 

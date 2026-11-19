@@ -10,7 +10,7 @@ const { isFlagEnabledForWorkspace } = require('../../lib/featureFlags')
 const { hasModuleAccess } = require('../../lib/moduleAccess')
 const { LEAD_STATUSES, LEAD_ORIGINS, LEAD_STATUS_KEYS, LEAD_ORIGIN_KEYS } = require('../../lib/salesCatalog')
 const { importRows } = require('../../services/mailing/importer')
-const { resolveCtx, intParam, sendError } = require('./_shared')
+const { resolveCtx, intParam, sendError, rejectAgent } = require('./_shared')
 
 const MAX_CRM_CONTACTS = 20000
 
@@ -82,6 +82,9 @@ async function crmOptions(req, res, next) {
   } catch (err) { next(err) }
 }
 
+// Importar declara que esos contactos aceptaron recibir mails: lo hace una persona.
+const CONSENT_HUMAN_ONLY = 'Importar contactos desde Ventas lo hace una persona desde la app. Un agente suma contactos de a 50 con mailing_contacts_add.'
+
 async function runImport(req, res, next, { listId, filter }) {
   try {
     const ctx = await resolveCtx(req, res, { write: true })
@@ -90,6 +93,7 @@ async function runImport(req, res, next, { listId, filter }) {
     const list = listId && await prisma.mailingList.findFirst({ where: { id: listId, projectId: ctx.projectId } })
     if (!list) return res.status(404).json({ error: 'Elegí la base a la que se importan los contactos' })
     const dryRun = !!req.body?.dryRun
+    if (!dryRun && rejectAgent(req, res, CONSENT_HUMAN_ONLY)) return
     if (!dryRun && req.body?.consent !== true) return res.status(400).json({ error: 'Tenés que confirmar que estos contactos aceptaron recibir mails.' })
 
     const { rows, truncated } = await rowsFor(ctx.workspaceId, filter)

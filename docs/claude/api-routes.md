@@ -554,11 +554,14 @@ POST   /api/marketing/projects/:id/mailing/contacts                 # { email, f
 PATCH  /api/marketing/projects/:id/mailing/contacts/:contactId      # status a mano: → unsubscribed siempre; → subscribed solo desde bounced
 DELETE /api/marketing/projects/:id/mailing/contacts/:contactId
 POST   /api/marketing/projects/:id/mailing/contacts/bulk            # { action: add-to-list|remove-from-list|unsubscribe|delete, contactIds, listId? }
+POST   /api/marketing/projects/:id/mailing/contacts/batch           # { contacts: [{email, firstName, lastName, fields}] ≤50, listIds } — alta directa (suscriptos), mismas reglas que import; source/consentSource 'agent' si viene por MCP
+POST   /api/marketing/projects/:id/mailing/contacts/unsubscribe     # { email | contactId, reason? } → { contact, changed } — rebotados/quejas quedan como están
 POST   /api/marketing/projects/:id/mailing/contacts/import          # { rows: [{email, firstName, lastName, fields}] ≤2000, listIds, consent: true, dryRun } — nunca re-suscribe
 POST   /api/marketing/projects/:id/mailing/lists/:listId/form       # { enabled } — genera/borra el token del formulario público (reactivar = token NUEVO) → base con subscribeUrl
 POST   /api/marketing/projects/:id/mailing/lists/:listId/crm-sync   # { dryRun, consent } — repite la importación de Ventas con el filtro guardado (crmFilter)
 GET    /api/marketing/projects/:id/mailing/crm/options              # { available (flag ventas + acceso), statuses, origins }
 POST   /api/marketing/projects/:id/mailing/crm/import               # { listId, filter: { statuses, origins, onlyPrimary, includeArchived }, dryRun, consent } — 403 sin acceso a Ventas; tope 20.000 (truncated)
+POST   /api/marketing/projects/:id/mailing/images/direct            # JSON { name?, contentBase64 | url } → { url } (para agentes; misma validación que el multipart)
 POST   /api/marketing/projects/:id/mailing/images                   # multipart `file` (PNG/JPG/GIF/WEBP ≤5MB) → R2 con URL pública permanente → { url }; 503 sin R2
 POST   /api/marketing/projects/:id/mailing/audience                 # { includeListIds, excludeListIds } o { resendOfId } → { count, capacity: { dailyLimit, usedToday, queuedAhead, days, finishDate } }
 GET    /api/marketing/projects/:id/mailing/campaigns                # lista con contadores

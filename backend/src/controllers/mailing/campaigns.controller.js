@@ -4,7 +4,7 @@
 const prisma = require('../../lib/prisma')
 const { todayString } = require('../../utils/dates')
 const { getSetting } = require('../../lib/platformSettings')
-const { resolveCtx, intParam, sendError } = require('./_shared')
+const { resolveCtx, intParam, sendError, rejectAgent } = require('./_shared')
 const { sanitizeBlocks, renderCampaignHtml, personalize } = require('../../services/mailing/render')
 const { countAudience, ownListIds, countNonOpeners } = require('../../services/mailing/audience')
 const { estimateFinish, effectiveDailyLimit } = require('../../services/mailing/schedule')
@@ -33,11 +33,7 @@ const LIST_SELECT = {
 // Lanzar (y reanudar o cancelar lo que está saliendo) es una decisión de una
 // persona: un agente puede armar el borrador, probarlo y leer las métricas, pero
 // el botón que manda mails a miles de contactos del cliente no lo aprieta él.
-function rejectAgent(req, res) {
-  if (!req.user?.mcpTokenId) return false
-  res.status(403).json({ error: 'Lanzar, reanudar o cancelar una campaña lo hace una persona desde la app.', code: 'HUMAN_ONLY' })
-  return true
-}
+const LAUNCH_HUMAN_ONLY = 'Lanzar, reanudar o cancelar una campaña lo hace una persona desde la app.'
 
 async function findCampaign(ctx, req, res) {
   const id = intParam(req.params.campaignId)
@@ -176,6 +172,8 @@ async function deleteCampaign(req, res, next) {
     const c = await findCampaign(ctx, req, res)
     if (!c) return
     if (['sending', 'paused'].includes(c.status)) return res.status(409).json({ error: 'Cancelá el envío antes de borrar la campaña.' })
+    // Un agente borra solo borradores: una campaña lanzada se lleva sus métricas.
+    if (c.status !== 'draft' && rejectAgent(req, res, 'Un agente solo puede borrar borradores; una campaña programada se desprograma primero y una lanzada la borra una persona.')) return
     await prisma.mailingCampaign.delete({ where: { id: c.id } })
     res.json({ ok: true })
   } catch (err) { next(err) }
@@ -274,7 +272,7 @@ async function sendTestCampaign(req, res, next) {
  */
 async function launch(req, res, next) {
   try {
-    if (rejectAgent(req, res)) return
+    if (rejectAgent(req, res, LAUNCH_HUMAN_ONLY)) return
     const ctx = await resolveCtx(req, res, { write: true })
     if (!ctx) return
     const c = await findCampaign(ctx, req, res)
@@ -299,7 +297,7 @@ async function launch(req, res, next) {
 
 async function transition(req, res, next, { from, to, extra, humanOnly = false }) {
   try {
-    if (humanOnly && rejectAgent(req, res)) return
+    if (humanOnly && rejectAgent(req, res, LAUNCH_HUMAN_ONLY)) return
     const ctx = await resolveCtx(req, res, { write: true })
     if (!ctx) return
     const c = await findCampaign(ctx, req, res)
@@ -388,7 +386,7 @@ async function recipients(req, res, next) {
       prisma.mailingSend.findMany({
         where, orderBy: { id: 'asc' }, skip: (page - 1) * pageSize, take: pageSize,
         select: {
-          id: true, email: true, status: true, sentAt: true, deliveredAt: true, firstOpenedAt: true, openCount: true,
+          id: true, contactId: true, email: true, status: true, sentAt: true, deliveredAt: true, firstOpenedAt: true, openCount: true,
           firstClickedAt: true, clickCount: true, bouncedAt: true, bounceType: true, unsubscribedAt: true, errorMsg: true, attempts: true, variant: true,
         },
       }),
