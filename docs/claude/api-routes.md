@@ -512,8 +512,9 @@ GET    /api/marketing/projects/:id/insights/:month          # análisis IA del m
 POST   /api/marketing/projects/:id/insights/:month          # genera análisis IA con Claude Haiku (mes en curso: refresca el snapshot y compara contra los mismos días del mes anterior)
 
 # Marketing — PageSpeed Insights
-POST   /api/marketing/projects/:id/pagespeed                # body: { strategy } — dispara análisis async, devuelve { resultId }
-GET    /api/marketing/projects/:id/pagespeed                # ?strategy=mobile&limit=5 — historial de resultados
+POST   /api/marketing/projects/:id/pagespeed                # body: { strategy, url? } — dispara análisis async, devuelve { resultId }. `url` solo puede ser una del propio sitio (home o prioritaria)
+GET    /api/marketing/projects/:id/pagespeed                # ?strategy=mobile&limit=5&url= — historial de resultados
+GET    /api/marketing/projects/:id/pagespeed/urls           # páginas medibles: el home + las prioritarias del brief seo_sem
 GET    /api/marketing/projects/:id/pagespeed/:resultId      # estado y detalle de un análisis
 
 # Marketing — Search Console (SEO)
@@ -614,6 +615,8 @@ POST   /api/marketing/projects/:id/keywords/:kwId/serp/refresh    # fuerza nueva
 # Marketing — Cannibalization (canibalización SEO)
 POST   /api/marketing/projects/:id/cannibal                 # dispara análisis async (body: dateRange?, language?)
 GET    /api/marketing/projects/:id/cannibal                 # lista reportes
+GET    /api/marketing/projects/:id/cannibal/brand-terms     # términos de marca + URL esperada; ?suggest=1 agrega sugerencias desde Search Console (no aplicadas)
+PUT    /api/marketing/projects/:id/cannibal/brand-terms     # body: { terms, brandUrl? } — reemplaza la lista (canWrite)
 GET    /api/marketing/projects/:id/cannibal/protected-urls  # lista URLs protegidas del proyecto (nunca 301/noindex)
 PUT    /api/marketing/projects/:id/cannibal/protected-urls  # reemplaza la lista completa (canWrite: admin/owner o equipo del proyecto)
 GET    /api/marketing/projects/:id/cannibal/resolutions     # conflictos marcados como resueltos (+ los reabiertos, con evidencia)

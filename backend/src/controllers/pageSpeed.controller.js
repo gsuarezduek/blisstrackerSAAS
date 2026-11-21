@@ -1,5 +1,6 @@
 const prisma = require('../lib/prisma')
 const { runPageSpeedAnalysis } = require('../services/pageSpeed.service')
+const { projectPageSpeedUrls, withProtocol } = require('../lib/pageSpeedUrls')
 
 const VALID_STRATEGIES = new Set(['mobile', 'desktop'])
 
@@ -8,6 +9,17 @@ async function verifyProject(projectId, workspaceId) {
     where:  { id: projectId, workspaceId },
     select: { id: true, websiteUrl: true },
   })
+}
+
+// Las URLs analizables de un proyecto: el home + las páginas prioritarias del brief de
+// SEO/SEM. Medir solo el home era una de las quejas reportadas — un 74/100 de la portada
+// no dice nada de la landing que de verdad convierte.
+async function loadUrls(project, projectId, workspaceId) {
+  const brief = await prisma.projectBrief.findUnique({
+    where:  { projectId_type: { projectId, type: 'seo_sem' } },
+    select: { answers: true },
+  }).catch(() => null)
+  return projectPageSpeedUrls(project.websiteUrl, brief?.answers?.urls_prioritarias)
 }
 
 /**
@@ -25,10 +37,16 @@ async function runAnalysis(req, res, next) {
     if (!project) return res.status(404).json({ error: 'Proyecto no encontrado' })
     if (!project.websiteUrl) return res.status(400).json({ error: 'El proyecto no tiene URL configurada. Agregala en la tab Info.' })
 
-    // PageSpeed requiere URL con protocolo
-    const url = /^https?:\/\//i.test(project.websiteUrl)
-      ? project.websiteUrl
-      : `https://${project.websiteUrl}`
+    // Se puede pedir una página puntual, pero solo del propio sitio del proyecto: la URL
+    // la elige un usuario y termina en una llamada a la API de Google, así que no se
+    // acepta un dominio ajeno (mismo criterio que normalizeInternal en el crawler).
+    const urls = await loadUrls(project, projectId, req.workspace.id)
+    let url = urls[0].url
+    if (req.body?.url) {
+      const match = urls.find(u => u.url === withProtocol(req.body.url) || u.url === String(req.body.url).replace(/\/$/, ''))
+      if (!match) return res.status(400).json({ error: 'Esa URL no es del sitio del proyecto ni una de sus páginas prioritarias' })
+      url = match.url
+    }
 
     record = await prisma.pageSpeedResult.create({
       data: { workspaceId: req.workspace.id, projectId, url, strategy, status: 'running' },
@@ -96,7 +114,7 @@ async function listResults(req, res, next) {
     if (!project) return res.status(404).json({ error: 'Proyecto no encontrado' })
 
     const results = await prisma.pageSpeedResult.findMany({
-      where:   { projectId, strategy, status: 'done' },
+      where:   { projectId, strategy, status: 'done', ...(req.query.url ? { url: String(req.query.url) } : {}) },
       orderBy: { createdAt: 'desc' },
       take:    limit,
       select:  { id: true, performanceScore: true, strategy: true, createdAt: true, url: true },
@@ -121,4 +139,18 @@ function tryParse(str, fallback) {
   try { return JSON.parse(str) } catch { return fallback }
 }
 
-module.exports = { runAnalysis, getResult, listResults }
+/**
+ * GET /api/marketing/projects/:id/pagespeed/urls
+ * Las páginas que se pueden medir: el home + las prioritarias del brief de SEO/SEM.
+ */
+async function listUrls(req, res, next) {
+  try {
+    const projectId = Number(req.params.id)
+    const project   = await verifyProject(projectId, req.workspace.id)
+    if (!project) return res.status(404).json({ error: 'Proyecto no encontrado' })
+    if (!project.websiteUrl) return res.json([])
+    res.json(await loadUrls(project, projectId, req.workspace.id))
+  } catch (err) { next(err) }
+}
+
+module.exports = { runAnalysis, getResult, listResults, listUrls }

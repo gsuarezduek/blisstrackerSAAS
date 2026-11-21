@@ -12,7 +12,10 @@
 // a la fecha del arreglo, que es lo que se consulta aparte (una query por conflicto
 // resuelto, filtrada por esa keyword).
 
-const { detectLanguage, normalizeUrlForCompare } = require('./cannibalAnalysis')
+const {
+  detectLanguage, normalizeUrlForCompare,
+  MIN_URL_SHARE: MIN_SHARE, MIN_URL_IMPRESSIONS, competingThreshold,
+} = require('./cannibalAnalysis')
 
 const ACTIONS = ['301', 'canonical', 'noindex', 'diferenciado', 'otro']
 
@@ -24,9 +27,10 @@ const MIN_VERIFY_DAYS = 7
 // Un 301 no borra la URL vieja de Search Console de un día para otro (Google tarda
 // semanas en dejar de servirla), así que "quedó alguna impresión residual" no alcanza
 // como señal de que el conflicto volvió: la URL tiene que seguir llevándose una parte
-// real de la keyword.
-const MIN_SHARE          = 0.10 // 10% de las impresiones de la keyword en la ventana
-const MIN_URL_IMPRESSIONS = 5   // piso absoluto, para keywords de bajo volumen
+// real de la keyword. El umbral (10% con piso de 5) vive en cannibalAnalysis.js y lo
+// comparten detección y reapertura — ver "Qué significa competir" allá: si detectar
+// usara un piso distinto del que reabre, un conflicto podría nacer y reabrirse con
+// definiciones distintas de la misma palabra.
 
 // Mismo corte de volumen que groupConflicts (50 impresiones), prorrateado a la ventana
 // posterior al arreglo: sin esto una ventana de 10 días contra un análisis de 90 nunca
@@ -115,7 +119,7 @@ function verifyResolution({ rows = [], language = 'default', knownUrls = [], win
   const urls = [...byUrl.values()]
   const totalImpressions = urls.reduce((s, u) => s + u.impressions, 0)
   const minImpressions   = proratedMinImpressions(windowDays, rangeDays)
-  const threshold        = Math.max(MIN_URL_IMPRESSIONS, Math.ceil(totalImpressions * MIN_SHARE))
+  const threshold        = competingThreshold(totalImpressions)
 
   const competing = urls
     .filter(u => u.impressions >= threshold)
@@ -153,12 +157,37 @@ function parseJsonObject(value) {
 }
 
 /**
+ * Nombre del agente que hizo el arreglo, si fue un agente.
+ *
+ * El nombre declarado en la tool (`agentName`) manda; si no declaró ninguno se cae al
+ * `label` del token MCP. Pero si ese label es el nombre de la persona que lo creó — muy
+ * común: el token se llama como su dueño —, la línea quedaba "Gastón vía Gastón", que se
+ * lee como si lo hubiera hecho la persona a mano. En ese caso se dice "un agente", que es
+ * lo único que se sabe con certeza.
+ */
+function agentLabel(row) {
+  const declared = row.resolvedByAgentName
+  if (typeof declared === 'string' && declared.trim()) return declared.trim()
+  if (row.resolvedByAgentId == null) return null
+  const label  = row.resolvedByAgent?.label?.trim()
+  const person = row.resolvedBy?.name?.trim()
+  if (label && (!person || label.toLowerCase() !== person.toLowerCase())) return label
+  return 'un agente'
+}
+
+/**
  * Forma pública de una fila de CannibalResolution: los JSON ya parseados y el autor
- * resuelto a un nombre (persona, o "persona vía agente"). Acepta la fila con o sin
- * las relaciones incluidas.
+ * resuelto a un nombre. Acepta la fila con o sin las relaciones incluidas.
+ *
+ * `resolvedByLabel` viene ya armado, con el AGENTE adelante cuando hubo uno: un agente que
+ * leía este JSON mirando `resolvedBy` veía el nombre de la persona y concluía que el
+ * arreglo se lo habían atribuido a ella (caso reportado). Los campos sueltos siguen para
+ * quien quiera componer su propia línea.
  */
 function publicResolution(row) {
   if (!row) return null
+  const agent  = agentLabel(row)
+  const person = row.resolvedBy?.name ?? null
   return {
     id:         row.id,
     query:      row.query,
@@ -169,8 +198,11 @@ function publicResolution(row) {
     resolvedAt: row.resolvedAt,
     mainUrl:    row.mainUrl ?? null,
     urls:       parseJsonArray(row.urls),
-    resolvedBy: row.resolvedBy?.name ?? null,
-    agent:      row.resolvedByAgentName || row.resolvedByAgent?.label || null,
+    resolvedBy: person,
+    agent,
+    resolvedByLabel: agent
+      ? `${agent}${person ? ` (con el token de ${person})` : ''}`
+      : (person ?? 'alguien'),
     lastCheckedAt:  row.lastCheckedAt ?? null,
     reopenedAt:     row.reopenedAt ?? null,
     reopenCount:    row.reopenCount ?? 0,
@@ -204,6 +236,7 @@ function splitByResolution(conflicts = [], resolutions = []) {
 
 module.exports = {
   ACTIONS,
+  agentLabel,
   MIN_VERIFY_DAYS,
   MIN_SHARE,
   MIN_URL_IMPRESSIONS,

@@ -563,6 +563,22 @@ const tools = [
     request: ({ projectId, resolutionId }) => ({ method: 'DELETE', path: `/marketing/projects/${projectId}/cannibal/resolutions/${resolutionId}` }),
   },
   {
+    name: 'marketing_cannibal_brand_terms_get',
+    description: 'Términos de marca del proyecto para el análisis de canibalización (una búsqueda de marca no es canibalización: no se consolida ni se canonicaliza, solo se verifica que gane la URL esperada), más la URL que debería ganarlas. Con `suggest: true` devuelve además sugerencias sacadas de búsquedas reales de Search Console, con sus impresiones y marcadas como dudosas cuando podrían ser genéricas. Las sugerencias NO están aplicadas: las confirma una persona.',
+    inputSchema: { ...projectIdParam, suggest: z.boolean().optional().describe('true para incluir sugerencias desde Search Console (últimos 90 días)') },
+    request: ({ projectId, suggest }) => ({ method: 'GET', path: `/marketing/projects/${projectId}/cannibal/brand-terms`, query: suggest ? { suggest: 1 } : undefined }),
+  },
+  {
+    name: 'marketing_cannibal_brand_terms_set',
+    description: 'Reemplaza la lista de términos de marca del proyecto y, opcionalmente, la URL que debería ganar las búsquedas de marca. **No lo uses por tu cuenta a partir de las sugerencias: la lista la confirma una persona.** Un término mal cargado saca del análisis una búsqueda real — ojo con las palabras que parecen marca y no lo son (una ciudad, un código de aeropuerto, la keyword del rubro).',
+    inputSchema: {
+      ...projectIdParam,
+      terms: z.array(z.string()).describe('Lista completa de términos de marca (reemplaza la anterior)'),
+      brandUrl: z.string().optional().describe('URL que debería ganar las búsquedas de marca (http/https). Omitir o vacío = la home'),
+    },
+    request: ({ projectId, terms, brandUrl }) => ({ method: 'PUT', path: `/marketing/projects/${projectId}/cannibal/brand-terms`, body: { terms, brandUrl } }),
+  },
+  {
     name: 'marketing_cannibal_protected_urls_get',
     description: 'Lista las URLs protegidas de un proyecto: el análisis de canibalización nunca les recomienda 301 ni noindex.',
     inputSchema: { ...projectIdParam },

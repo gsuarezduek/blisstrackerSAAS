@@ -5,6 +5,7 @@ const { MARKETING_PROJECT_WHERE } = require('../lib/projectModules')
 
 const { anthropic, assertTokenBudget } = require('../lib/claude')
 const { logTokens } = require('../lib/logTokens')
+const { buildBusinessFacts, formatBusinessFactsBlock } = require('../lib/businessFacts')
 
 /**
  * POST /api/marketing/geo/audit
@@ -275,7 +276,7 @@ async function generateSchemaOrg(req, res, next) {
 
     const audit = await prisma.geoAudit.findFirst({
       where:  { id, workspaceId, status: 'completed' },
-      select: { id: true, rawData: true, url: true },
+      select: { id: true, rawData: true, url: true, projectId: true },
     })
     if (!audit) return res.status(404).json({ error: 'Audit no encontrado o no completado' })
 
@@ -287,8 +288,12 @@ async function generateSchemaOrg(req, res, next) {
       return res.json({ schemas: raw.generatedSchemas })
     }
 
-    const schemasMissing = raw.schemasMissing || []
-    const schemasPresent = raw.schemasPresent || []
+    // `schemasMissingAnyPage` mira todas las páginas rastreadas y resuelve subtipos
+    // (lib/schemaOrgTypes.js); `schemasMissing` es solo del home y queda como fallback
+    // para los audits guardados antes de este cambio. Generar un schema que el sitio ya
+    // tiene en otra página era una de las quejas reportadas.
+    const schemasMissing = raw.schemasMissingAnyPage || raw.schemasMissing || []
+    const schemasPresent = raw.schemasPresentAnyPage || raw.schemasPresent || []
     const title          = raw.meta?.title       || ''
     const description    = raw.meta?.description || ''
     const url            = audit.url
@@ -296,6 +301,21 @@ async function generateSchemaOrg(req, res, next) {
     if (!schemasMissing.length) {
       return res.json({ schemas: [] })
     }
+
+    // Datos reales del negocio: sin esto la IA no tenía de dónde sacar un teléfono o una
+    // dirección, y el prompt le pedía inventarlos (ver lib/businessFacts.js).
+    const [project, briefs] = await Promise.all([
+      prisma.project.findFirst({ where: { id: audit.projectId, workspaceId }, select: { name: true, websiteUrl: true } }),
+      prisma.projectBrief.findMany({
+        where:  { projectId: audit.projectId, workspaceId, type: { in: ['marca', 'seo_sem'] } },
+        select: { type: true, answers: true },
+      }),
+    ])
+    const facts = buildBusinessFacts({
+      project:  project || {},
+      briefs,
+      napRows:  Array.isArray(raw.napRows) ? raw.napRows : [],
+    })
 
     await assertTokenBudget(workspaceId) // 429 si el workspace agotó su presupuesto mensual de IA
     const message = await anthropic.messages.create({
@@ -308,18 +328,30 @@ async function generateSchemaOrg(req, res, next) {
 URL: ${url}
 Título: ${title}
 Descripción: ${description}
-Schemas ya presentes: ${schemasPresent.join(', ') || 'ninguno'}
+Schemas ya presentes en el sitio (NO los generes de nuevo, incluidos sus subtipos): ${schemasPresent.join(', ') || 'ninguno'}
 Schemas faltantes a generar: ${schemasMissing.join(', ')}
+
+${formatBusinessFactsBlock(facts)}
+
+NUNCA generes aggregateRating, reviewCount ni Review. Google exige que esos datos sean
+reales y verificables en la página: inventarlos (o dejar un ejemplo que alguien publique
+tal cual) expone al sitio a una acción manual por datos estructurados engañosos. Si el
+negocio tiene reseñas reales, el markup lo tiene que armar alguien con los números a la
+vista, no este generador. Lo mismo con openingHours y price: placeholder o nada.
 
 Respondé SOLO con un JSON array válido y completo. Cada elemento tiene esta estructura:
 [
   {
     "type": "Organization",
-    "jsonLd": "<script type=\\"application/ld+json\\">{ ...JSON-LD minificado en una sola línea... }</script>"
+    "jsonLd": "<script type=\\"application/ld+json\\">{ ...JSON-LD minificado en una sola línea... }</script>",
+    "placeholders": ["HORARIO"]
   }
 ]
 
-IMPORTANTE: El JSON-LD dentro de "jsonLd" debe estar en UNA SOLA LÍNEA (sin saltos de línea) para evitar errores de parseo. Usá datos reales del sitio donde sea posible. Para campos desconocidos usá valores de ejemplo realistas.`,
+"placeholders" lista los campos que dejás en {{MAYÚSCULAS}} para que los complete una
+persona (array vacío si no dejaste ninguno).
+
+IMPORTANTE: El JSON-LD dentro de "jsonLd" debe estar en UNA SOLA LÍNEA (sin saltos de línea) para evitar errores de parseo.`,
       }],
     })
     logTokens('geoSchema', req.user.userId, message.usage, workspaceId).catch(() => {})

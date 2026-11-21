@@ -438,6 +438,7 @@ model User {
   taskRecurrences                   TaskRecurrence[]            @relation("RecurrenceAssignee")
   taskRecurrencesCreated            TaskRecurrence[]            @relation("RecurrenceCreatedBy")
   taskComments                      TaskComment[]
+  taskChecklistItemsDone            TaskChecklistItem[]         @relation("ChecklistDoneBy")
   situationEntriesCreated           ProjectSituationEntry[]     @relation("SituationEntryCreatedBy")
   situationEntriesUpdated           ProjectSituationEntry[]     @relation("SituationEntryUpdatedBy")
   cannibalResolutions               CannibalResolution[]
@@ -730,6 +731,8 @@ model Project {
   connections           String    @default("{}") // JSON: { instagram, facebook, ... }
   integrationDefaults   String    @default("{}") // JSON: IDs recordados por tipo para reconexión, ej { google_ads: { customerId, propertyId, country }, google_analytics: { propertyId } }
   cannibalProtectedUrls String    @default("[]") // JSON: array de URLs que el análisis de canibalización nunca recomienda redirigir (301) ni noindexar
+  cannibalBrandTerms    String    @default("[]") // JSON: array de términos de marca confirmados por el equipo. Una búsqueda de marca no es canibalización (ver docs/claude/marketing-canibalizacion.md)
+  cannibalBrandUrl      String? // URL que debe ganar las búsquedas de marca. null = la home del sitio
   domainRating          Float? // Ahrefs Domain Rating (0-100), valor actual cacheado
   domainRatingAt        DateTime? // última actualización del Domain Rating
   reportSections        String? // JSON: array de claves de sección habilitadas para el informe de este proyecto (ej: ["analytics","instagram"]). null = sin restricción (todas las disponibles, comportamiento legacy)

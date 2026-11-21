@@ -1,6 +1,7 @@
 const prisma = require('../lib/prisma')
 const { DEFAULT_TZ } = require('../utils/dates')
 const { splitByResolution } = require('../lib/cannibalResolution')
+const { splitByLive } = require('../lib/cannibalLive')
 
 const PRIORITY_WEIGHT = { high: 3, medium: 2, low: 1 }
 
@@ -123,7 +124,10 @@ async function computeSeoActionItems({ projectId, workspaceId }) {
   if (cannibal?.conflicts) {
     let conflicts = []
     try { conflicts = JSON.parse(cannibal.conflicts) } catch {}
-    openCannibal = splitByResolution(conflicts, cannibalResolutions).open
+    // Igual que en el detalle del reporte: fuera los resueltos a mano Y los que el sitio
+    // ya resolvió (301/canonical/noindex verificados en vivo). Prioridades es la lista de
+    // lo que falta hacer; una URL que ya redirige no es trabajo pendiente.
+    openCannibal = splitByLive(splitByResolution(conflicts, cannibalResolutions).open).pending
     openCannibal
       .slice()
       .sort((a, b) => (b.severityScore || 0) - (a.severityScore || 0))

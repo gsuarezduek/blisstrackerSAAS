@@ -20,6 +20,24 @@ export default function WebPerformanceTab({ projectId, projects, onSelectProject
   const [psHistory,  setPsHistory]  = useState([])   // historial de scores
   const [psRunning,  setPsRunning]  = useState(false)
   const [psPollId,   setPsPollId]   = useState(null)
+  // Qué página se mide: el home o una de las prioritarias del brief de SEO/SEM. Medir
+  // solo la portada no dice nada de la landing que convierte.
+  const [psUrls,     setPsUrls]     = useState([])
+  const [psUrl,      setPsUrl]      = useState(null)
+
+  useEffect(() => {
+    if (!projectId) return
+    const controller = new AbortController()
+    setPsUrls([])
+    setPsUrl(null)
+    api.get(`/marketing/projects/${projectId}/pagespeed/urls`, { signal: controller.signal })
+      .then(r => {
+        setPsUrls(r.data)
+        setPsUrl(r.data[0]?.url ?? null)
+      })
+      .catch(e => { if (e.name !== 'CanceledError' && e.code !== 'ERR_CANCELED') console.error('[PageSpeed] Error al cargar URLs:', e.message) })
+    return () => controller.abort()
+  }, [projectId])
 
   // Cargar último resultado PageSpeed + historial cuando cambia proyecto o estrategia
   useEffect(() => {
@@ -27,7 +45,8 @@ export default function WebPerformanceTab({ projectId, projects, onSelectProject
     const controller = new AbortController()
     setPsResult(null)
     setPsHistory([])
-    api.get(`/marketing/projects/${projectId}/pagespeed?strategy=${psStrategy}&limit=6`, { signal: controller.signal })
+    const urlQuery = psUrl ? `&url=${encodeURIComponent(psUrl)}` : ''
+    api.get(`/marketing/projects/${projectId}/pagespeed?strategy=${psStrategy}&limit=6${urlQuery}`, { signal: controller.signal })
       .then(r => {
         setPsHistory(r.data)
         if (r.data.length > 0) {
@@ -38,7 +57,7 @@ export default function WebPerformanceTab({ projectId, projects, onSelectProject
       })
       .catch(e => { if (e.name !== 'CanceledError' && e.code !== 'ERR_CANCELED') console.error('[PageSpeed] Error al cargar historial:', e.message) })
     return () => controller.abort()
-  }, [projectId, psStrategy])
+  }, [projectId, psStrategy, psUrl])
 
   // Limpiar polling al desmontar
   useEffect(() => () => { if (psPollId) clearInterval(psPollId) }, [psPollId])
@@ -48,7 +67,7 @@ export default function WebPerformanceTab({ projectId, projects, onSelectProject
     setPsRunning(true)
     setPsResult(null)
     try {
-      const { data } = await api.post(`/marketing/projects/${projectId}/pagespeed`, { strategy: psStrategy })
+      const { data } = await api.post(`/marketing/projects/${projectId}/pagespeed`, { strategy: psStrategy, url: psUrl ?? undefined })
       const resultId = data.resultId
       // Polling cada 3s hasta que el análisis termine
       const intervalId = setInterval(async () => {
@@ -88,9 +107,12 @@ export default function WebPerformanceTab({ projectId, projects, onSelectProject
 
       <ObjectiveProgressBars objectives={objectives} title="Objetivos de performance" />
       <PageSpeedSection
-        websiteUrl={selectedProject?.websiteUrl}
+        websiteUrl={psUrl ?? selectedProject?.websiteUrl}
         strategy={psStrategy}
         onStrategyChange={s => setPsStrategy(s)}
+        urls={psUrls}
+        url={psUrl}
+        onUrlChange={u => setPsUrl(u)}
         result={psResult}
         history={psHistory}
         running={psRunning}

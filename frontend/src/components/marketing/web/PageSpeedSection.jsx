@@ -2,16 +2,60 @@ import { useState } from 'react'
 import { Monitor, Smartphone } from 'lucide-react'
 import { Icon } from '../../ui/Icon'
 import CreateTaskModal from './CreateTaskModal'
-import { PS_SCORE_COLOR, PS_SCORE_BG, RATING_DOT, METRIC_LABELS } from './webTabHelpers'
+import {
+  PS_SCORE_COLOR, PS_SCORE_BG, RATING_DOT, METRIC_LABELS,
+  FIELD_METRIC_LABELS, fmtFieldValue, fmtMs, fmtBytes, shortResource,
+} from './webTabHelpers'
 import FunLoader from '../networks/FunLoader'
 import { PAGESPEED_LOADING_MESSAGES } from '../networks/loadingMessages'
 
-export default function PageSpeedSection({ websiteUrl, strategy, onStrategyChange, result, history, running, onRun, projectId, projectName }) {
+// Lo que Google devuelve adentro de cada hallazgo: el recurso, el elemento o el tercero
+// que frena la página. Sin esto el informe deca "74/100" y no qué tocar.
+function CulpritList({ items }) {
+  if (!items?.length) return null
+  return (
+    <ul className="mt-2 space-y-1">
+      {items.map((it, i) => {
+        const peso  = fmtBytes(it.wastedBytes ?? it.totalBytes)
+        const tiempo = fmtMs(it.wastedMs ?? it.blockingTime)
+        return (
+          <li key={i} className="flex items-baseline gap-2 text-[11px]">
+            <span className="text-gray-300 dark:text-gray-600">•</span>
+            <span
+              className="font-mono text-gray-600 dark:text-gray-300 truncate"
+              title={it.snippet || it.label}
+            >
+              {shortResource(it.label) || it.snippet}
+            </span>
+            {(peso || tiempo) && (
+              <span className="text-gray-400 flex-shrink-0 whitespace-nowrap">
+                {[tiempo, peso].filter(Boolean).join(' · ')}
+              </span>
+            )}
+          </li>
+        )
+      })}
+    </ul>
+  )
+}
+
+// Una tarea útil nombra el archivo, no solo el título genérico del audit.
+function taskTitleFor(finding) {
+  const first = finding.items?.[0]
+  const label = first ? shortResource(first.label).split('  ·  ')[0] : null
+  return label ? `${finding.title} — ${label}` : finding.title
+}
+
+export default function PageSpeedSection({ websiteUrl, strategy, onStrategyChange, result, history, running, onRun, projectId, projectName, urls = [], url, onUrlChange }) {
   const metrics       = result?.metrics       ?? {}
   const opportunities = result?.opportunities ?? []
   const diagnostics   = result?.diagnostics   ?? []
   const score         = result?.performanceScore
   const [taskModal, setTaskModal] = useState(null)
+
+  // De la URL analizada, o del origen si esa URL no tiene tráfico suficiente en CrUX.
+  const field       = metrics.field ?? metrics.fieldOrigin ?? null
+  const fieldIsOrigin = !metrics.field && !!metrics.fieldOrigin
 
   return (
     <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-5 space-y-5">
@@ -29,6 +73,19 @@ export default function PageSpeedSection({ websiteUrl, strategy, onStrategyChang
           )}
         </div>
         <div className="flex items-center gap-2">
+          {/* Qué página medir — solo si el brief de SEO/SEM declara páginas prioritarias */}
+          {urls.length > 1 && (
+            <select
+              value={url ?? ''}
+              onChange={e => onUrlChange?.(e.target.value)}
+              className="text-xs rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 px-2 py-1.5 max-w-[180px]"
+              title="Página a medir (el home y las prioritarias del brief de SEO/SEM)"
+            >
+              {urls.map(u => (
+                <option key={u.url} value={u.url}>{u.label}</option>
+              ))}
+            </select>
+          )}
           {/* Toggle mobile/desktop */}
           <div className="flex rounded-lg border border-gray-200 dark:border-gray-600 overflow-hidden text-xs">
             {['mobile', 'desktop'].map(s => (
@@ -121,6 +178,37 @@ export default function PageSpeedSection({ websiteUrl, strategy, onStrategyChang
             <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-500" /> Crítico</span>
           </div>
 
+          {/* Datos de campo (CrUX): usuarios reales, no laboratorio */}
+          {field && (
+            <div className="rounded-xl border border-gray-200 dark:border-gray-700 p-3">
+              <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">
+                Usuarios reales · últimos 28 días
+                {fieldIsOrigin && (
+                  <span className="ml-2 normal-case font-normal text-[11px] text-gray-400">
+                    (de todo el sitio: esta URL no tiene suficiente tráfico para medirse sola)
+                  </span>
+                )}
+              </p>
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                {Object.entries(FIELD_METRIC_LABELS).map(([key, { label, title }]) => {
+                  const m = field[key]
+                  if (!m) return null
+                  return (
+                    <div key={key} className="flex items-center gap-2 bg-gray-50 dark:bg-gray-700/50 rounded-xl px-3 py-2">
+                      <span className={`w-2 h-2 rounded-full flex-shrink-0 ${RATING_DOT(m.rating)}`} />
+                      <div className="min-w-0">
+                        <p className="text-[10px] text-gray-400 font-medium" title={title}>{label}</p>
+                        <p className="text-sm font-semibold text-gray-800 dark:text-gray-200 truncate">
+                          {fmtFieldValue(key, m.numericValue)}
+                        </p>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
           {/* Oportunidades + Diagnósticos */}
           {(opportunities.length > 0 || diagnostics.length > 0) && (
             <div className="space-y-4">
@@ -137,6 +225,7 @@ export default function PageSpeedSection({ websiteUrl, strategy, onStrategyChang
                           {op.description && (
                             <p className="text-[11px] text-gray-400 mt-0.5 line-clamp-2">{op.description}</p>
                           )}
+                          <CulpritList items={op.items} />
                         </div>
                         <div className="flex items-center gap-2 flex-shrink-0">
                           {op.savingsMs > 0 && (
@@ -145,7 +234,7 @@ export default function PageSpeedSection({ websiteUrl, strategy, onStrategyChang
                             </span>
                           )}
                           <button
-                            onClick={() => setTaskModal({ title: op.title })}
+                            onClick={() => setTaskModal({ title: taskTitleFor(op) })}
                             title="Crear tarea"
                             className="flex-shrink-0 text-xs text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 border border-gray-200 dark:border-gray-600 hover:border-primary-400 rounded-lg px-2 py-0.5 transition-all"
                           >
@@ -167,13 +256,19 @@ export default function PageSpeedSection({ websiteUrl, strategy, onStrategyChang
                     {diagnostics.map((d, i) => (
                       <div key={i} className="flex items-start justify-between gap-3 p-3 bg-gray-50 dark:bg-gray-700/40 rounded-xl">
                         <div className="min-w-0 flex-1">
-                          <p className="text-xs font-medium text-gray-700 dark:text-gray-300">{d.title}</p>
+                          <p className="text-xs font-medium text-gray-700 dark:text-gray-300">
+                            {d.title}
+                            {d.displayValue && (
+                              <span className="ml-2 font-normal text-gray-400">{d.displayValue}</span>
+                            )}
+                          </p>
                           {d.description && (
                             <p className="text-[11px] text-gray-400 mt-0.5 line-clamp-2">{d.description}</p>
                           )}
+                          <CulpritList items={d.items} />
                         </div>
                         <button
-                          onClick={() => setTaskModal({ title: d.title })}
+                          onClick={() => setTaskModal({ title: taskTitleFor(d) })}
                           title="Crear tarea"
                           className="flex-shrink-0 text-xs text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 border border-gray-200 dark:border-gray-600 hover:border-primary-400 rounded-lg px-2 py-0.5 transition-all"
                         >

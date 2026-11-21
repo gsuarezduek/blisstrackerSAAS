@@ -203,6 +203,8 @@ router.post('/projects/:id/insights/:month',      analyticsSnapshot.createInsigh
 // PageSpeed Insights
 router.post('/projects/:id/pagespeed',            pageSpeed.runAnalysis)
 router.get('/projects/:id/pagespeed',             pageSpeed.listResults)
+// Antes de la ruta con :resultId, o "urls" entraría como un id.
+router.get('/projects/:id/pagespeed/urls',        pageSpeed.listUrls)
 router.get('/projects/:id/pagespeed/:resultId',   pageSpeed.getResult)
 
 // Informes mensuales
@@ -230,6 +232,8 @@ router.delete('/projects/:id/objectives/:oid',    objectives.deleteObjective)
 // Canibalización SEO
 router.post('/projects/:id/cannibal',                     cannibalization.runAnalysis)
 router.get('/projects/:id/cannibal',                      cannibalization.listReports)
+router.get('/projects/:id/cannibal/brand-terms',          cannibalization.getBrandTerms)
+router.put('/projects/:id/cannibal/brand-terms',          cannibalization.setBrandTerms)
 router.get('/projects/:id/cannibal/protected-urls',       cannibalization.getProtectedUrls)
 router.put('/projects/:id/cannibal/protected-urls',       cannibalization.setProtectedUrls)
 // Antes de /:rid, que si no se come "resolutions" como id de reporte.

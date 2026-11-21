@@ -25,3 +25,6 @@ Mailing fase 3: `MailingConfig.warmupEnabled`/`warmupStartedAt` (calentamiento d
 
 ### `finanzas_tarjetas_resumenes`
 Finanzas → importar el resumen de la tarjeta: `FinanceCard` (nombre, últimos 4, cuentas de pesos y de dólares que pagan el resumen, `SetNull`), `FinanceCardStatement` (un resumen importado: cierre, vencimiento, PDF en R2 con `fileExpiresAt` a un año, `summary` Json con el control de saldos, soft-delete = importación deshecha), `FinanceCardStatementLine` (cada renglón importado con su `fingerprint` y el `movementId` que lo contiene, `SetNull`) y `FinanceCardRule` (memoria: UNIQUE `cardId`+`merchantKey`+`type` → item + categoría, `Cascade`). Solo tablas nuevas, sin backfill. Ver `docs/claude/finanzas.md`.
+
+### `cannibal_brand_terms`
+Canibalización → búsquedas de marca: `Project.cannibalBrandTerms` (JSON array, default `'[]'`) y `Project.cannibalBrandUrl` (nullable). Solo dos columnas con default, sin backfill: un proyecto sin términos cargados se comporta igual que antes (ninguna búsqueda se trata como de marca). Los términos los confirma una persona a partir de sugerencias de Search Console — no se derivan del dominio. Ver `docs/claude/marketing-canibalizacion.md`.

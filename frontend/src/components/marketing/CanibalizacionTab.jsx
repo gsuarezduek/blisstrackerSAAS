@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef } from 'react'
 import api from '../../api/client'
-import { Search, Trash2, ShieldCheck, Languages, AlertTriangle, FileWarning, CheckCircle2, RotateCcw, Bot, Globe } from 'lucide-react'
+import { Search, Trash2, ShieldCheck, Languages, AlertTriangle, FileWarning, CheckCircle2, RotateCcw, Bot, Globe, Tag } from 'lucide-react'
 import { Icon } from '../ui/Icon'
 import LoadingSpinner from '../LoadingSpinner'
 import FunLoader from './networks/FunLoader'
 import { CANNIBALIZATION_LOADING_MESSAGES } from './networks/loadingMessages'
 import ProtectedUrlsModal from './ProtectedUrlsModal'
+import BrandTermsModal from './BrandTermsModal'
 import ResolveConflictModal, { ACTION_LABEL } from './ResolveConflictModal'
 import { matchesSearch } from '../../utils/textSearch'
 
@@ -49,7 +50,10 @@ function keyOf(c) {
 
 // "301 hecho · 4 nov · Gastón" — el pie de un conflicto resuelto.
 function resolutionLine(r) {
-  const autor = r.agent ? `${r.resolvedBy ?? 'alguien'} vía ${r.agent}` : r.resolvedBy
+  // `resolvedByLabel` lo arma el backend (ver agentLabel en lib/cannibalResolution.js):
+  // el agente va adelante, y si no declaró nombre dice "un agente" en vez del label del
+  // token — que suele ser el nombre de su dueño y se leía como si lo hubiera hecho él.
+  const autor = r.resolvedByLabel ?? (r.agent ? `${r.resolvedBy ?? 'alguien'} vía ${r.agent}` : r.resolvedBy)
   return [ACTION_LABEL[r.action] ?? r.action, fmtDay(r.resolvedAt), autor].filter(Boolean).join(' · ')
 }
 
@@ -75,6 +79,39 @@ function SeverityBadge({ label }) {
     <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold border ${SEVERITY_COLORS[label] ?? ''}`}>
       <span className={`w-1.5 h-1.5 rounded-full ${SEVERITY_DOT[label] ?? 'bg-gray-400'}`} />
       {label}
+    </span>
+  )
+}
+
+// Lo que la URL respondió cuando se la pidió durante el análisis. Sin esto, el reporte
+// recomendaba trabajar sobre URLs que redirigen desde hace semanas: Search Console mira
+// hacia atrás y sigue mostrando los datos de antes del arreglo.
+const LIVE_LABEL = {
+  redirect_to_other:  { text: 'redirige a la principal', tone: 'green' },
+  redirect_elsewhere: { text: 'redirige',                tone: 'green' },
+  gone:               { text: 'ya no existe',            tone: 'green' },
+  noindex:            { text: 'noindex',                 tone: 'green' },
+  canonical_to_other: { text: 'canonical a la principal', tone: 'green' },
+  canonical_elsewhere:{ text: 'canonical a otra',        tone: 'amber' },
+  server_error:       { text: 'error del servidor',      tone: 'red' },
+}
+
+const LIVE_TONE = {
+  green: 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400',
+  amber: 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400',
+  red:   'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400',
+}
+
+function LiveBadge({ live }) {
+  if (!live) return null
+  const meta = LIVE_LABEL[live.state]
+  if (!meta) return null
+  return (
+    <span
+      title={live.note || ''}
+      className={`flex-shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${LIVE_TONE[meta.tone]}`}
+    >
+      {live.status ? `${live.status} · ` : ''}{meta.text}
     </span>
   )
 }
@@ -164,6 +201,7 @@ function ConflictCard({ conflict, expanded, onToggle, onResolve }) {
                             <Icon as={ShieldCheck} size={11} /> protegida
                           </span>
                         )}
+                        <LiveBadge live={u.live} />
                       </div>
                     </td>
                     <td className="text-right px-3 py-2 font-medium text-gray-700 dark:text-gray-300">
@@ -187,6 +225,12 @@ function ConflictCard({ conflict, expanded, onToggle, onResolve }) {
           {/* Recomendación */}
           {recommendation ? (
             <div className="text-xs text-gray-600 dark:text-gray-300 space-y-1.5">
+              {conflict.live?.warning && (
+                <p className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50/60 dark:bg-amber-900/10 p-2.5 text-amber-800 dark:text-amber-300 flex items-start gap-1.5">
+                  <Icon as={AlertTriangle} size={13} className="flex-shrink-0 mt-0.5" />
+                  <span>{conflict.live.warning}</span>
+                </p>
+              )}
               {recommendation.geoNote && (
                 <p className="rounded-lg border border-sky-200 dark:border-sky-800 bg-sky-50/60 dark:bg-sky-900/10 p-2.5 text-sky-800 dark:text-sky-300 flex items-start gap-1.5">
                   <Icon as={Globe} size={13} className="flex-shrink-0 mt-0.5" />
@@ -288,6 +332,9 @@ export default function CanibalizacionTab({ projectId }) {
   const [protectedModalOpen, setProtectedModalOpen] = useState(false)
   const [resolveTarget,  setResolveTarget]  = useState(null)   // conflicto a marcar resuelto
   const [showResolved,   setShowResolved]   = useState(false)
+  const [showFixedLive,  setShowFixedLive]  = useState(false)
+  const [showBrandModal, setShowBrandModal] = useState(false)
+  const [showBrandQueries, setShowBrandQueries] = useState(false)
   const [undoing,        setUndoing]        = useState(false)
   const pollRef = useRef(null)
 
@@ -404,6 +451,12 @@ export default function CanibalizacionTab({ projectId }) {
   const conflicts = activeReport?.conflicts ?? []
   const resolvedConflicts = activeReport?.resolvedConflicts ?? []
   const hreflangIssues = activeReport?.hreflangIssues ?? []
+  // Conflictos que el propio sitio ya resolvió (301/canonical/noindex/404 verificados en
+  // vivo). No son pendientes, pero se muestran: un chequeo puede equivocarse.
+  const fixedLiveConflicts = activeReport?.fixedLiveConflicts ?? []
+  // Búsquedas de marca: no son canibalización, pero se muestran para poder corregir una
+  // mala clasificación (el bucket se recalcula en cada lectura con los términos vigentes).
+  const brandQueries = activeReport?.brandQueries ?? []
   const indexedByMistake = activeReport?.indexedByMistake ?? []
   const availableLanguages = [...new Set(conflicts.map(c => c.language).filter(Boolean))]
   const filteredConflicts = conflicts
@@ -469,6 +522,14 @@ export default function CanibalizacionTab({ projectId }) {
           <Icon as={ShieldCheck} size={15} /> URLs protegidas
         </button>
 
+        <button
+          onClick={() => setShowBrandModal(true)}
+          disabled={!projectId}
+          className="px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 text-sm text-gray-600 dark:text-gray-400 hover:border-primary-400 hover:text-primary-600 dark:hover:text-primary-400 transition-colors flex items-center gap-1.5 disabled:opacity-50"
+        >
+          <Icon as={Tag} size={15} /> Términos de marca
+        </button>
+
         {/* Historial compacto */}
         {reports.length > 1 && (
           <div className="flex items-center gap-2 ml-auto">
@@ -495,6 +556,16 @@ export default function CanibalizacionTab({ projectId }) {
 
       {protectedModalOpen && (
         <ProtectedUrlsModal projectId={projectId} onClose={() => setProtectedModalOpen(false)} />
+      )}
+
+      {showBrandModal && (
+        <BrandTermsModal
+          projectId={projectId}
+          onClose={() => setShowBrandModal(false)}
+          // La clasificación de marca se recalcula en cada lectura, así que basta con
+          // volver a pedir el reporte para que el cambio se vea.
+          onSaved={() => { if (activeReport?.id) loadReport(activeReport.id) }}
+        />
       )}
 
       {/* Estado running */}
@@ -713,15 +784,53 @@ export default function CanibalizacionTab({ projectId }) {
             </div>
           )}
 
-          {/* Posible problema de hreflang */}
+          {/* Ya arreglado en el sitio: el 301/canonical está puesto y Search Console todavía
+              no se puso al día. No se cuenta como pendiente, pero se deja a la vista. */}
+          {fixedLiveConflicts.length > 0 && (
+            <div className="space-y-2">
+              <button
+                onClick={() => setShowFixedLive(v => !v)}
+                className="text-sm font-semibold text-gray-700 dark:text-gray-300 flex items-center gap-1.5 hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
+              >
+                <Icon as={CheckCircle2} size={16} className="text-emerald-500" />
+                Ya arreglados en el sitio ({fixedLiveConflicts.length})
+                <span className="text-gray-400 dark:text-gray-500 text-xs">{showFixedLive ? '▲' : '▼'}</span>
+              </button>
+              {showFixedLive && (
+                <>
+                  <p className="text-xs text-gray-400 dark:text-gray-500">
+                    Se pidieron estas URLs durante el análisis y ya redirigen, no existen o están
+                    noindex: el arreglo está hecho. Siguen en los datos porque la ventana analizada
+                    incluye días anteriores al cambio. No hace falta marcarlos a mano.
+                  </p>
+                  <div className="space-y-2">
+                    {fixedLiveConflicts.map(c => (
+                      <div key={keyOf(c)} className="border border-emerald-200 dark:border-emerald-900 rounded-xl p-3 bg-emerald-50/40 dark:bg-emerald-900/10">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-sm text-gray-800 dark:text-gray-100">{c.query}</span>
+                          <span className="text-[11px] text-gray-400 ml-auto">{fmtNum(c.totalImpressions)} imp.</span>
+                        </div>
+                        <p className="text-xs text-emerald-800 dark:text-emerald-300 mt-1">{c.live?.reason}</p>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* Problemas de hreflang — verificados contra las etiquetas reales */}
           {hreflangIssues.length > 0 && (
             <div className="space-y-2">
               <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 flex items-center gap-1.5">
                 <Icon as={Languages} size={16} className="text-purple-500" />
-                Posible problema de hreflang ({hreflangIssues.length})
+                Problemas de hreflang ({hreflangIssues.length})
               </h3>
               <p className="text-xs text-gray-400 dark:text-gray-500">
-                Google devuelve URLs de distinto idioma para la misma búsqueda — no se cuenta como canibalización.
+                Google devuelve URLs de distinto idioma para la misma búsqueda — no se cuenta como
+                canibalización. Solo figuran los casos donde cada idioma se lleva una parte real de
+                la búsqueda <strong>y</strong> las etiquetas hreflang de las páginas tienen un
+                problema real al leerlas en vivo.
               </p>
               <div className="space-y-2">
                 {hreflangIssues.map(issue => (
@@ -741,9 +850,61 @@ export default function CanibalizacionTab({ projectId }) {
                       ))}
                     </div>
                     <p className="text-xs text-gray-500 dark:text-gray-400 italic">{issue.suggestion}</p>
+                    {issue.verified === false && (
+                      <p className="text-[11px] text-amber-700 dark:text-amber-400 mt-1 inline-flex items-start gap-1">
+                        <Icon as={AlertTriangle} size={12} className="flex-shrink-0 mt-0.5" />
+                        Sin verificar en vivo: no se pudieron leer las etiquetas de estas páginas.
+                      </p>
+                    )}
                   </div>
                 ))}
               </div>
+            </div>
+          )}
+
+          {/* Búsquedas de marca: no son canibalización. Visible para poder corregir una
+              mala clasificación (se recalcula con los términos vigentes en cada lectura). */}
+          {brandQueries.length > 0 && (
+            <div className="space-y-2">
+              <button
+                onClick={() => setShowBrandQueries(v => !v)}
+                className="text-sm font-semibold text-gray-700 dark:text-gray-300 flex items-center gap-1.5 hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
+              >
+                <Icon as={Tag} size={16} className="text-primary-500" />
+                Búsquedas de marca ({brandQueries.length})
+                <span className="text-gray-400 dark:text-gray-500 text-xs">{showBrandQueries ? '▲' : '▼'}</span>
+              </button>
+              {showBrandQueries && (
+                <>
+                  <p className="text-xs text-gray-400 dark:text-gray-500">
+                    Alguien buscó el nombre del negocio: que aparezcan dos páginas del sitio no es
+                    canibalización y no hay nada que consolidar. Lo único que se verifica es que gane
+                    la URL esperada. Si alguna no debería estar acá, saca el término en{' '}
+                    <button onClick={() => setShowBrandModal(true)} className="underline hover:text-primary-600">
+                      Términos de marca
+                    </button>.
+                  </p>
+                  <div className="space-y-2">
+                    {brandQueries.map(b => (
+                      <div
+                        key={`${b.query}-${b.language}`}
+                        className={`border rounded-xl p-3 ${
+                          b.ok === false
+                            ? 'border-amber-200 dark:border-amber-800 bg-amber-50/40 dark:bg-amber-900/10'
+                            : 'border-gray-200 dark:border-gray-700'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          {b.ok === false && <Icon as={AlertTriangle} size={13} className="text-amber-500 flex-shrink-0" />}
+                          <span className="font-medium text-sm text-gray-800 dark:text-gray-100">{b.query}</span>
+                          <span className="text-[11px] text-gray-400 ml-auto">{fmtNum(b.totalImpressions)} imp.</span>
+                        </div>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{b.note}</p>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
             </div>
           )}
 

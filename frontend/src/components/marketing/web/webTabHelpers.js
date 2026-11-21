@@ -130,6 +130,49 @@ export const METRIC_LABELS = {
   ttfb: { label: 'TTFB', title: 'Time to First Byte' },
 }
 
+// ─── Qué arreglar: items de PageSpeed ───────────────────────────────
+
+// Datos de campo (CrUX, usuarios reales de los últimos 28 días). Se muestran al lado del
+// score de laboratorio porque responden preguntas distintas: el score es una simulación
+// con red y CPU fijas, esto es lo que de verdad le pasó a la gente.
+export const FIELD_METRIC_LABELS = {
+  lcp:  { label: 'LCP',  title: 'Largest Contentful Paint (usuarios reales)',  unit: 'ms' },
+  inp:  { label: 'INP',  title: 'Interaction to Next Paint (usuarios reales)', unit: 'ms' },
+  cls:  { label: 'CLS',  title: 'Cumulative Layout Shift (usuarios reales)',   unit: '' },
+  fcp:  { label: 'FCP',  title: 'First Contentful Paint (usuarios reales)',    unit: 'ms' },
+  ttfb: { label: 'TTFB', title: 'Time to First Byte (usuarios reales)',        unit: 'ms' },
+}
+
+export function fmtFieldValue(key, value) {
+  if (value == null) return '—'
+  if (key === 'cls') return value.toFixed(2)
+  return value >= 1000 ? `${(value / 1000).toFixed(1)} s` : `${Math.round(value)} ms`
+}
+
+export function fmtMs(ms) {
+  if (!ms) return null
+  return ms >= 1000 ? `${(ms / 1000).toFixed(1)} s` : `${Math.round(ms)} ms`
+}
+
+export function fmtBytes(bytes) {
+  if (!bytes) return null
+  if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`
+  return `${Math.round(bytes / 1024)} KB`
+}
+
+// Una URL de recurso completa es ilegible en una fila de 3 líneas: lo que importa es el
+// archivo y de qué host viene (un script de terceros vs uno propio).
+export function shortResource(label) {
+  if (!label) return ''
+  try {
+    const u = new URL(label)
+    const file = u.pathname.split('/').filter(Boolean).pop() || u.pathname
+    return `${file}  ·  ${u.host}`
+  } catch {
+    return label.length > 70 ? `${label.slice(0, 70)}…` : label
+  }
+}
+
 // ─── CrossProject panels ──────────────────────────────────────────────────────
 
 export function fmtK(n) {

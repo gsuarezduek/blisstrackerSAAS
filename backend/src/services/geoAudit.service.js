@@ -5,6 +5,8 @@ const { logTokens } = require('../lib/logTokens')
 const { assertPublicUrl, fetchPublicUrl } = require('../lib/safeUrl')
 const { normalizeInternal, crawlSite } = require('../lib/siteCrawler')
 const { parseLooseJson } = require('../lib/jsonRepair')
+const { isOrgLikeSchema, missingSchemaTypes } = require('../lib/schemaOrgTypes')
+const { buildBusinessFacts, formatBusinessFactsBlock } = require('../lib/businessFacts')
 
 const { anthropic } = require('../lib/claude')
 
@@ -135,10 +137,10 @@ function extractPageData(html, url) {
   // no existían (bug real detectado en producción: mdzrentacar.com tiene los 4 campos
   // completos y el análisis igual reportó "incompleto"). Extraemos presencia real de
   // campos clave para que la IA solo pueda afirmar lo que efectivamente está ausente.
-  const orgLikeSchema = schemas.find(s => {
-    const types = Array.isArray(s['@type']) ? s['@type'] : [s['@type']]
-    return types.includes('Organization') || types.includes('LocalBusiness')
-  })
+  // Por subtipo, no por igualdad exacta (ver lib/schemaOrgTypes.js): un `AutoRental`
+  // ES un LocalBusiness, y comparar contra el nombre exacto hacía que el análisis
+  // concluyera que el sitio no tenía schema de negocio.
+  const orgLikeSchema = schemas.find(isOrgLikeSchema)
   const orgFields = orgLikeSchema ? {
     name:            !!orgLikeSchema.name,
     logo:            !!orgLikeSchema.logo,
@@ -284,8 +286,7 @@ function extractNapSignals(pages) {
   for (const p of pages) {
     if (p.error) continue
     for (const s of p.schemas ?? []) {
-      const types = Array.isArray(s['@type']) ? s['@type'] : [s['@type']]
-      if (!types.includes('Organization') && !types.includes('LocalBusiness')) continue
+      if (!isOrgLikeSchema(s)) continue // subtipos incluidos, ver lib/schemaOrgTypes.js
       const addr = s.address
       rows.push({
         url:       p.url,
@@ -441,10 +442,29 @@ Analizás el contenido de una página web y devolvés un análisis estructurado 
 
 IMPORTANTE: Responde ÚNICAMENTE con JSON válido, sin texto adicional, sin markdown, sin bloques de código. Solo el objeto JSON. El JSON debe ser estrictamente válido: sin comas colgantes antes de "}" o "]", con las comillas internas de los strings escapadas (\\"), y sin saltos de línea literales dentro de un string (usá \\n si hace falta).`
 
-function buildPrompt(url, pageData, robotsData, llmsData, aiDiscovery, previousRunContext = '', project = null, extraPages = [], napRows = []) {
+function buildPrompt(url, pageData, robotsData, llmsData, aiDiscovery, previousRunContext = '', project = null, extraPages = [], napRows = [], briefs = []) {
   const blockedCitation = robotsData.citation.filter(c => c.blocked)
   const blockedTraining = robotsData.training.filter(c => c.blocked)
   const allowedCitation = robotsData.citation.filter(c => !c.blocked)
+
+  // Un schema puede estar perfecto y vivir en otra página: Article en las notas,
+  // BreadcrumbList y FAQPage en las internas. Decir "falta Article" mirando solo el home
+  // es un dato falso, y era una de las quejas reportadas ("dice que falta schema que sí
+  // está"). Lo que se rastreó aparte va explícito, con la aclaración de qué se puede
+  // concluir de ahí y qué no (3 páginas no son el sitio entero).
+  // Datos duros del negocio (brief de Marca + brief de SEO/SEM + el NAP del JSON-LD en
+  // vivo) y la regla de que lo que no esté ahí no se inventa — ver lib/businessFacts.js.
+  // Antes el prompt no recibía NI UN dato del negocio: de ahí las reseñas y los horarios
+  // inventados que se reportaron.
+  const businessFacts = formatBusinessFactsBlock(buildBusinessFacts({ project: project || {}, briefs, napRows }))
+
+  const otherPagesTypes = [...new Set(extraPages.flatMap(p => p.schemaTypes ?? []))]
+    .filter(t => !(pageData.schemaTypes ?? []).includes(t))
+  const otherPagesSchemaNote = extraPages.length === 0
+    ? 'Solo se rastreó esta página: hablá de los tipos ausentes EN ESTA PÁGINA, nunca "el sitio no tiene" un schema que podría estar en otra.'
+    : otherPagesTypes.length
+      ? `Tipos presentes en OTRAS páginas rastreadas (y por lo tanto NO ausentes del sitio, no los reportes como faltantes): ${otherPagesTypes.join(', ')}. Si un tipo falta en el home pero está en otra página, el hallazgo — si corresponde — es "falta en el home", no "el sitio no lo tiene".`
+      : `En las otras ${extraPages.length} página(s) rastreada(s) no apareció ningún tipo adicional. Igual son ${extraPages.length + 1} página(s) de todo el sitio: un tipo que suele vivir en las notas del blog o en las internas (Article, BreadcrumbList, FAQPage) puede estar sin que se haya visto acá, así que no afirmes que el sitio no lo tiene.`
 
   return `Analizá el siguiente sitio web para GEO y devolvé un JSON con este formato exacto:
 
@@ -550,7 +570,8 @@ ${pageData.bodyText}
 
 SCHEMAS JSON-LD: ${pageData.schemas.length} detectados
 Tipos presentes: ${pageData.schemaTypes.join(', ') || 'ninguno'}
-Tipos GEO importantes ausentes: ${['Organization','WebSite','Article','FAQPage','BreadcrumbList'].filter(t => !pageData.schemaTypes.includes(t)).join(', ') || 'ninguno'}
+Tipos GEO importantes ausentes EN ESTA PÁGINA: ${missingSchemaTypes(pageData.schemaTypes, ['Organization','WebSite','Article','FAQPage','BreadcrumbList']).join(', ') || 'ninguno'}
+${otherPagesSchemaNote}
 ${pageData.orgFields
   ? `Campos del schema Organization/LocalBusiness detectado (SOLO podés decir que un campo falta si acá dice "ausente" — no inventes otros campos faltantes, no tenés visibilidad de ningún otro):
 ${Object.entries(pageData.orgFields).map(([k, v]) => `  • ${k}: ${v ? 'presente' : 'ausente'}`).join('\n')}`
@@ -588,12 +609,9 @@ ${extraPages.map(p => p.error
   : `  • ${p.url} — título: "${p.title || '(sin título)'}" | ${p.wordCount} palabras | schemas: ${p.schemaTypes.join(', ') || 'ninguno'}${p.isNoindex ? ' | ⛔ NOINDEX' : ''}`
 ).join('\n')}
 
-CONSISTENCIA DE ENTIDAD (NAP — nombre/dirección/teléfono, schema Organization/LocalBusiness) encontrada en el home + estas páginas:
-${napRows.length
-  ? napRows.map(r => `  • ${r.url} → nombre: "${r.name ?? '(sin dato)'}" | teléfono: "${r.telephone ?? '(sin dato)'}" | dirección: "${r.address ?? '(sin dato)'}"`).join('\n')
-  : '  Ningún schema Organization/LocalBusiness con estos datos encontrado en ninguna de las páginas rastreadas.'}
-Si hay más de una fila y los datos difieren entre páginas (nombre, teléfono o dirección distintos, más allá de formato), reportalo como hallazgo de inconsistencia de entidad (afecta eeat/brandAuthority) — pero si son el mismo dato escrito distinto (ej. "Av. Corrientes 1234" vs "Avenida Corrientes 1234, CABA"), NO lo reportes como inconsistencia.
+CONSISTENCIA DE ENTIDAD: el NAP (nombre/dirección/teléfono) leído del JSON-LD de cada página está en el bloque DATOS DEL NEGOCIO de más abajo. Si hay más de una fila y los datos difieren entre páginas (nombre, teléfono o dirección distintos, más allá de formato), reportalo como hallazgo de inconsistencia de entidad (afecta eeat/brandAuthority) — pero si son el mismo dato escrito distinto (ej. "Av. Corrientes 1234" vs "Avenida Corrientes 1234, CABA"), NO lo reportes como inconsistencia.
 ` : ''}
+${businessFacts}
 ${previousRunContext}
 
 ═══ INSTRUCCIONES PARA EL ANÁLISIS ═══
@@ -639,12 +657,22 @@ async function runGeoAnalysis(auditId, workspaceId, projectId, url, userId, { ma
     // 2. Fetch todo en paralelo
     await assertPublicUrl(url)
     const origin = new URL(url).origin
-    const [html, robotsTxt, llmsData, aiDiscovery, project] = await Promise.all([
+    const [html, robotsTxt, llmsData, aiDiscovery, project, briefs] = await Promise.all([
       fetchPage(url),
       fetchRobotsTxt(origin),
       fetchLlmsTxt(origin),
       fetchAiDiscovery(origin),
-      prisma.project.findUnique({ where: { id: projectId }, select: { domainRating: true, domainRatingAt: true } }),
+      prisma.project.findUnique({
+        where:  { id: projectId },
+        select: { name: true, websiteUrl: true, domainRating: true, domainRatingAt: true },
+      }),
+      // Datos duros del negocio para el prompt (ver lib/businessFacts.js): el análisis
+      // leía solo el domainRating, así que la IA no tenía ningún dato real con el que
+      // trabajar — y los inventaba.
+      prisma.projectBrief.findMany({
+        where:  { projectId, workspaceId, type: { in: ['marca', 'seo_sem'] } },
+        select: { type: true, answers: true },
+      }),
     ])
 
     // 3. Extract structured data
@@ -687,7 +715,7 @@ async function runGeoAnalysis(auditId, workspaceId, projectId, url, userId, { ma
     // comillas sin escapar) se reintenta UNA vez antes de marcar el audit como fallido.
     await setStep(auditId, 'Analizando con IA (esto puede tardar unos segundos)…')
     const previousRunContext = await buildPreviousRunContext(projectId, workspaceId, auditId)
-    const prompt = buildPrompt(url, pageData, robotsData, llmsData, aiDiscovery, previousRunContext, project, extraPages, napRows)
+    const prompt = buildPrompt(url, pageData, robotsData, llmsData, aiDiscovery, previousRunContext, project, extraPages, napRows, briefs)
 
     // Suficiente para 5-10 items con descripción/acción/impacto + negativeSignals sin
     // truncar a mitad del JSON (4096 se quedaba corto y producía "Unexpected end of
@@ -728,11 +756,20 @@ async function runGeoAnalysis(auditId, workspaceId, projectId, url, userId, { ma
     // Enrich rawData with page metadata needed for schema generation
     const IMPORTANT_SCHEMA_TYPES = ['Organization', 'WebSite', 'Article', 'FAQPage', 'BreadcrumbList', 'LocalBusiness', 'Product']
     const schemasPresent = pageData.schemaTypes ?? []
-    const schemasMissing = IMPORTANT_SCHEMA_TYPES.filter(t => !schemasPresent.includes(t))
+    const schemasAnyPage = [...new Set([...schemasPresent, ...extraPages.flatMap(p => p.schemaTypes ?? [])])]
+    // `schemasMissing` sigue acotado al home (hay audits viejos guardados con ese campo y
+    // esa semántica), aunque ahora resuelve subtipos; lo que el generador usa es
+    // `schemasMissingAnyPage`, que mira TODAS las páginas rastreadas. Antes el generador
+    // proponía crear Article/BreadcrumbList/FAQPage porque no estaban en el home, aunque
+    // estuvieran en las notas y en las internas — y un LocalBusiness que ya existía como
+    // AutoRental.
+    const schemasMissing        = missingSchemaTypes(schemasPresent, IMPORTANT_SCHEMA_TYPES)
+    const schemasMissingAnyPage = missingSchemaTypes(schemasAnyPage, IMPORTANT_SCHEMA_TYPES)
     const enrichedRaw = JSON.stringify({
       ...result,
       schemasPresent,
       schemasMissing,
+      schemasMissingAnyPage,
       meta: { title: pageData.title, description: pageData.description, h2: pageData.h2 },
       // v1 = metodología original (llms.txt/endpoints inventados como alta prioridad, % fijos
       // de Princeton KDD 2024); v2 = reponderada 2026 (ver METODOLOGÍA GEO en buildPrompt).
@@ -742,7 +779,10 @@ async function runGeoAnalysis(auditId, workspaceId, projectId, url, userId, { ma
       // home a propósito (generateLlmsTxt/generateSchemaOrg asumen esa página semilla) — esto
       // es aparte, el agregado de todas las páginas rastreadas.
       pagesCrawled: 1 + extraPages.length,
-      schemasPresentAnyPage: [...new Set([...schemasPresent, ...extraPages.flatMap(p => p.schemaTypes ?? [])])],
+      schemasPresentAnyPage: schemasAnyPage,
+      // El NAP leído del JSON-LD en vivo: lo reusa el generador de Schema.org para no
+      // tener que inventar nombre/teléfono/dirección (ver lib/businessFacts.js).
+      napRows,
       // El frontend mostraba el botón "Generar llms.txt" buscando la palabra "llms" en
       // cualquier finding — pero desde la metodología v2 la IA puede mencionar llms.txt
       // aunque YA exista (de baja prioridad, ver sección LLMS.TXT del prompt), disparando

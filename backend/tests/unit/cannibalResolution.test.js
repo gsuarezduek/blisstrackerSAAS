@@ -264,3 +264,55 @@ describe('MIN_VERIFY_DAYS', () => {
     expect(MIN_VERIFY_DAYS).toBeGreaterThanOrEqual(7)
   })
 })
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Atribución del arreglo: persona vs agente
+// ─────────────────────────────────────────────────────────────────────────────
+
+const { agentLabel: agentLabelFn, publicResolution: publicRes } = require('../../src/lib/cannibalResolution')
+
+describe('agentLabel / resolvedByLabel', () => {
+  const base = { id: 1, query: 'mdz', language: 'default', action: '301', status: 'resolved', resolvedAt: new Date(), urls: '[]' }
+
+  it('sin agente, el autor es la persona', () => {
+    const r = publicRes({ ...base, resolvedBy: { name: 'Gastón' }, resolvedByAgentId: null })
+    expect(r.agent).toBeNull()
+    expect(r.resolvedByLabel).toBe('Gastón')
+  })
+
+  it('con nombre declarado, el agente va adelante', () => {
+    const r = publicRes({
+      ...base, resolvedBy: { name: 'Gastón' },
+      resolvedByAgentId: 7, resolvedByAgentName: 'Agente SEO', resolvedByAgent: { label: 'Gastón' },
+    })
+    expect(r.agent).toBe('Agente SEO')
+    expect(r.resolvedByLabel).toBe('Agente SEO (con el token de Gastón)')
+  })
+
+  it('un agente que no declaró nombre y cuyo token se llama igual que su dueño dice "un agente"', () => {
+    // El caso reportado: la línea quedaba "Gastón vía Gastón", indistinguible de un
+    // arreglo hecho a mano por la persona.
+    const r = publicRes({
+      ...base, resolvedBy: { name: 'Gastón' },
+      resolvedByAgentId: 7, resolvedByAgentName: null, resolvedByAgent: { label: 'Gastón' },
+    })
+    expect(r.agent).toBe('un agente')
+    expect(r.resolvedByLabel).toBe('un agente (con el token de Gastón)')
+  })
+
+  it('si el label del token es distinto del nombre de la persona, se usa el label', () => {
+    const r = publicRes({
+      ...base, resolvedBy: { name: 'Gastón' },
+      resolvedByAgentId: 7, resolvedByAgentName: null, resolvedByAgent: { label: 'Claude Code' },
+    })
+    expect(r.agent).toBe('Claude Code')
+  })
+
+  it('un agentName vacío no cuenta como nombre declarado', () => {
+    expect(agentLabelFn({ resolvedByAgentId: 7, resolvedByAgentName: '   ', resolvedByAgent: { label: 'Bot' } })).toBe('Bot')
+  })
+
+  it('sin persona ni agente, el autor es "alguien"', () => {
+    expect(publicRes({ ...base, resolvedByAgentId: null }).resolvedByLabel).toBe('alguien')
+  })
+})

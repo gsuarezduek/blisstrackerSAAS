@@ -121,18 +121,76 @@ function significantTerms(query) {
   )]
 }
 
+// Un término de marca escrito en un slug puede venir con cualquier separador
+// ("mdz-rent-a-car", "mdz_rent_a_car"), así que se busca por tokens.
+function brandTermRegex(term) {
+  const tokens = String(term || '')
+    .toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean)
+  if (tokens.length === 0) return null
+  return new RegExp(tokens.join('[^a-z0-9]*'), 'g')
+}
+
 /**
  * Cuántas palabras de la búsqueda aparecen en la RUTA de la URL — la señal de
  * intención que los datos de Search Console no dan: para "car hire mendoza airport",
  * /en/car-rental-mendoza-airport/ matchea 3 (car, mendoza, airport) y la home 0.
  * Se mira solo el pathname: el dominio repetiría la marca en todas las URLs.
+ *
+ * El nombre de marca que aparezca en la ruta se **borra antes de medir**, por la misma
+ * razón por la que no se mira el dominio: la marca está en rutas de todo el sitio y no
+ * dice nada sobre qué página responde la búsqueda. Sin esto, para la query "mdz" la
+ * página `/politica-de-cancelacion-mdz-rent-a-car/` puntuaba 1 y le ganaba a la home.
  */
-function slugMatchScore(url, query) {
+function slugMatchScore(url, query, brandTerms = []) {
   let path
   try { path = new URL(url).pathname } catch { path = String(url || '') }
-  const haystack = path.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  let haystack = path.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  for (const term of brandTerms) {
+    const re = brandTermRegex(term)
+    if (re) haystack = haystack.replace(re, ' ')
+  }
   const terms = significantTerms(query)
   return terms.filter(t => haystack.includes(t)).length
+}
+
+// ─── Qué significa "competir" por una keyword ──────────────────────────
+// El único corte de volumen que había era por QUERY (50 impresiones sumando todas
+// sus URLs); no había ninguno por URL. Así, una página que se lleva 7 de 300
+// impresiones entraba al conflicto como si estuviera peleando el ranking, y una vez
+// adentro podía incluso ganar el desempate de intención de pickMainUrl (el caso
+// reportado: "mdz" eligió /politica-de-cancelacion-mdz-rent-a-car/ sobre la home,
+// porque el slug contiene "mdz"). Una impresión de cola larga no es canibalización.
+//
+// El criterio ya existía en el repo, pero solo del otro lado: lib/cannibalResolution.js
+// lo usa para decidir si un conflicto VOLVIÓ. Detectar y reabrir con definiciones
+// distintas de "competir" es un bug en sí mismo, así que vive acá (el módulo de abajo
+// en la cadena de dependencias) y lo importan los dos.
+//
+// Nota: con este piso, "si una URL se lleva >90% de las impresiones no hay conflicto"
+// sale solo — todas las demás quedan por debajo del 10% y no llegan a 2 competidoras.
+const MIN_URL_SHARE       = 0.10 // 10% de las impresiones de la keyword
+const MIN_URL_IMPRESSIONS = 5    // piso absoluto, para keywords de bajo volumen
+
+function competingThreshold(totalImpressions) {
+  return Math.max(MIN_URL_IMPRESSIONS, Math.ceil((totalImpressions || 0) * MIN_URL_SHARE))
+}
+
+/**
+ * Parte un conjunto de URLs (de una misma keyword) en las que compiten de verdad y las
+ * que solo tienen impresiones residuales. El total se calcula sobre el conjunto que se
+ * pasa — mismo criterio que usa la verificación de resoluciones, donde el conjunto ya
+ * viene acotado al idioma del conflicto.
+ */
+function splitCompeting(urls = []) {
+  const total = urls.reduce((s, u) => s + (u.impressions || 0), 0)
+  const threshold = competingThreshold(total)
+  const competing = []
+  const residual  = []
+  for (const u of urls) ((u.impressions || 0) >= threshold ? competing : residual).push(u)
+  return { competing, residual, threshold, total }
 }
 
 /**
@@ -147,8 +205,8 @@ function slugMatchScore(url, query) {
  *
  * Devuelve { url, reason }.
  */
-function pickMainUrl(urls, query = '') {
-  const scored = urls.map(u => ({ ...u, slugScore: slugMatchScore(u.url, query) }))
+function pickMainUrl(urls, query = '', brandTerms = []) {
+  const scored = urls.map(u => ({ ...u, slugScore: slugMatchScore(u.url, query, brandTerms) }))
   const nobodyHasClicks = scored.every(u => !u.clicks)
 
   const sorted = [...scored].sort((a, b) => {
@@ -207,8 +265,8 @@ function geoSplitNote(mainUrl, urlsSorted) {
 
 // Recomendación no destructiva, en orden de prioridad: diferenciar intención →
 // enlazado interno → canonical → 301/noindex (solo sobre URLs no protegidas).
-function buildRecommendation(urlsSorted, query, protectedSet) {
-  const { url: mainUrl, reason: mainUrlReason } = pickMainUrl(urlsSorted, query)
+function buildRecommendation(urlsSorted, query, protectedSet, brandTerms = []) {
+  const { url: mainUrl, reason: mainUrlReason } = pickMainUrl(urlsSorted, query, brandTerms)
   const secondary = urlsSorted.filter(u => u.url !== mainUrl)
   const protectedUrls = secondary.filter(u => protectedSet.has(normalizeUrlForCompare(u.url))).map(u => u.url)
   const actionableUrls = secondary.filter(u => !protectedSet.has(normalizeUrlForCompare(u.url))).map(u => u.url)
@@ -231,14 +289,14 @@ function buildRecommendation(urlsSorted, query, protectedSet) {
   return { mainUrl, mainUrlReason, steps, protectedUrls, geoNote: geoSplitNote(mainUrl, urlsSorted) }
 }
 
-function buildConflict(query, urls, protectedSet) {
+function buildConflict(query, urls, protectedSet, brandTerms = []) {
   const totalImpressions = urls.reduce((s, u) => s + u.impressions, 0)
   const totalClicks = urls.reduce((s, u) => s + u.clicks, 0)
   const positions = urls.map(u => u.position).filter(Boolean)
   const positionSpread = positions.length >= 2 ? Math.max(...positions) - Math.min(...positions) : 0
   const { label: severity, score: severityScore } = calcSeverity(urls, totalImpressions)
   const urlsSorted = [...urls].sort((a, b) => b.impressions - a.impressions)
-  const recommendation = buildRecommendation(urlsSorted, query, protectedSet)
+  const recommendation = buildRecommendation(urlsSorted, query, protectedSet, brandTerms)
 
   // País de la búsqueda: viene de la dimensión `country` de Search Console, agregado
   // por URL en groupConflicts. Se expone por URL (dónde gana cada una — ahí se ve una
@@ -290,7 +348,7 @@ function summarizeConflicts(conflicts = []) {
  * @param {Array<{query,page,country,clicks,impressions,ctr,position}>} rows
  * @param {{protectedUrls?: string[], languageFilter?: string|null, languageOverrides?: Map<string,string>}} opts
  */
-function groupConflicts(rows, { protectedUrls = [], languageFilter = null, languageOverrides = new Map() } = {}) {
+function groupConflicts(rows, { protectedUrls = [], languageFilter = null, languageOverrides = new Map(), brandTerms = [] } = {}) {
   const protectedSet = new Set(protectedUrls.map(normalizeUrlForCompare))
 
   // 1. URLs basura — sobre TODAS las filas, independiente de query/idioma.
@@ -357,35 +415,50 @@ function groupConflicts(rows, { protectedUrls = [], languageFilter = null, langu
     const totalImpressions = urls.reduce((s, u) => s + u.impressions, 0)
     if (totalImpressions < 50) continue // descarta queries con muy poco volumen
 
+    // Un conflicto se arma SOLO con las URLs que compiten de verdad (ver splitCompeting),
+    // dentro de cada idioma: es el mismo conjunto contra el que después se verifica si el
+    // conflicto volvió (lib/cannibalResolution.js).
+    const byLang = new Map()
+    for (const u of urls) {
+      if (!byLang.has(u.language)) byLang.set(u.language, [])
+      byLang.get(u.language).push(u)
+    }
+
     if (languageFilter) {
-      const filtered = urls.filter(u => u.language === languageFilter)
-      if (filtered.length >= 2) conflicts.push(buildConflict(query, filtered, protectedSet))
+      const { competing } = splitCompeting(byLang.get(languageFilter) ?? [])
+      if (competing.length >= 2) conflicts.push(buildConflict(query, competing, protectedSet, brandTerms))
       continue // con filtro de idioma activo no se evalúa hreflang
     }
 
-    const languages = [...new Set(urls.map(u => u.language))]
+    // Un hallazgo de hreflang exige que CADA idioma se lleve una parte real de la
+    // keyword, con el mismo piso. Sin esto, 2 impresiones de la versión en inglés
+    // contra 293 de la española se reportaban como "problema de hreflang": el caso de
+    // los hallazgos falsos (búsquedas en otro idioma con 1 a 4 impresiones).
+    const langThreshold = competingThreshold(totalImpressions)
+    const realLangs = [...byLang.entries()]
+      .map(([language, langUrls]) => ({
+        language,
+        langUrls,
+        impressions: langUrls.reduce((s, u) => s + u.impressions, 0),
+      }))
+      .filter(l => l.impressions >= langThreshold)
 
-    if (languages.length > 1) {
+    if (realLangs.length > 1) {
       hreflangIssues.push({
         query,
         totalImpressions,
-        urls: urls.map(u => ({
+        urls: realLangs.flatMap(l => l.langUrls).map(u => ({
           url: u.url, language: u.language, clicks: u.clicks, impressions: u.impressions,
           position: u.position != null ? Math.round(u.position * 10) / 10 : null,
+          share: totalImpressions > 0 ? Math.round((u.impressions / totalImpressions) * 100) / 100 : 0,
         })),
         suggestion: 'Google está devolviendo URLs de distinto idioma para la misma búsqueda. Revisar el emparejamiento hreflang entre estas versiones.',
       })
+    }
 
-      const byLang = new Map()
-      for (const u of urls) {
-        if (!byLang.has(u.language)) byLang.set(u.language, [])
-        byLang.get(u.language).push(u)
-      }
-      for (const langUrls of byLang.values()) {
-        if (langUrls.length >= 2) conflicts.push(buildConflict(query, langUrls, protectedSet))
-      }
-    } else if (urls.length >= 2) {
-      conflicts.push(buildConflict(query, urls, protectedSet))
+    for (const langUrls of byLang.values()) {
+      const { competing } = splitCompeting(langUrls)
+      if (competing.length >= 2) conflicts.push(buildConflict(query, competing, protectedSet, brandTerms))
     }
   }
 
@@ -402,6 +475,10 @@ function groupConflicts(rows, { protectedUrls = [], languageFilter = null, langu
 
 module.exports = {
   KNOWN_LANGS,
+  MIN_URL_SHARE,
+  MIN_URL_IMPRESSIONS,
+  competingThreshold,
+  splitCompeting,
   detectLanguage,
   classifyJunkUrl,
   calcSeverity,
@@ -410,6 +487,7 @@ module.exports = {
   buildRecommendation,
   significantTerms,
   slugMatchScore,
+  brandTermRegex,
   topCountries,
   geoSplitNote,
   summarizeConflicts,

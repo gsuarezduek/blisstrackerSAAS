@@ -1,6 +1,7 @@
 const {
   detectLanguage, classifyJunkUrl, pickMainUrl, normalizeUrlForCompare,
   calcSeverity, groupConflicts, slugMatchScore, topCountries, geoSplitNote,
+  competingThreshold, splitCompeting,
 } = require('../../src/lib/cannibalAnalysis')
 
 describe('detectLanguage', () => {
@@ -212,6 +213,27 @@ describe('groupConflicts — escenario MDZ (ES default + /en/ + /pt/)', () => {
 
 const SITE = 'https://mdzrentacar.com'
 
+describe('slugMatchScore — la marca en el slug no cuenta', () => {
+  it('borra el nombre de marca de la ruta antes de medir intención', () => {
+    // Con "mdz" como query, esta ruta puntuaba 1 solo porque la marca está en el slug
+    // — y con eso le ganaba a la home. La marca está en rutas de todo el sitio: no dice
+    // nada sobre qué página responde la búsqueda (misma razón por la que no se mira el dominio).
+    const url = `${SITE}/politica-de-cancelacion-mdz-rent-a-car/`
+    expect(slugMatchScore(url, 'mdz')).toBe(1)
+    expect(slugMatchScore(url, 'mdz', ['mdz rent a car'])).toBe(0)
+  })
+
+  it('matchea el término de marca con cualquier separador', () => {
+    expect(slugMatchScore(`${SITE}/mdz_rent_a_car/precios`, 'mdz', ['mdz rent a car'])).toBe(0)
+    expect(slugMatchScore(`${SITE}/mdzrentacar/precios`, 'mdz', ['mdzrentacar'])).toBe(0)
+  })
+
+  it('no toca las palabras que SÍ son intención', () => {
+    const url = `${SITE}/mdz-rent-a-car-aeropuerto-mendoza/`
+    expect(slugMatchScore(url, 'aeropuerto mendoza', ['mdz rent a car'])).toBe(2)
+  })
+})
+
 describe('slugMatchScore', () => {
   it('cuenta las palabras de la búsqueda que están en la ruta', () => {
     expect(slugMatchScore(`${SITE}/en/car-rental-mendoza-airport/`, 'car hire mendoza airport')).toBe(3)
@@ -320,5 +342,97 @@ describe('groupConflicts — país en el resultado', () => {
     expect(conflicts).toHaveLength(1)
     expect(conflicts[0].countries.map(c => c.code)).toEqual(['ARG', 'USA'])
     expect(conflicts[0].urls[0].countries[0]).toEqual({ code: 'ARG', impressions: 400, share: 0.89 })
+  })
+})
+
+
+// ──────────────────────────────────────────────────────────────────────
+//  Piso por URL: qué significa "competir" por una keyword
+// ──────────────────────────────────────────────────────────────────────
+
+describe('competingThreshold / splitCompeting', () => {
+  it('10% de las impresiones de la keyword, con piso absoluto de 5', () => {
+    expect(competingThreshold(300)).toBe(30)
+    expect(competingThreshold(20)).toBe(5)   // el 10% sería 2: manda el piso
+    expect(competingThreshold(0)).toBe(5)
+  })
+
+  it('deja afuera la URL con impresiones residuales', () => {
+    const home   = { url: 'https://x.com/',        impressions: 293 }
+    const policy = { url: 'https://x.com/pol/',    impressions: 7 }
+    const { competing, residual } = splitCompeting([home, policy])
+    expect(competing.map(u => u.url)).toEqual([home.url])
+    expect(residual.map(u => u.url)).toEqual([policy.url])
+  })
+})
+
+describe('groupConflicts — piso por URL (casos reportados en MDZ)', () => {
+  const BASE = 'https://mdzrentacar.com'
+
+  it('"mdz": la página con 7 impresiones no entra al conflicto contra la home con 293', () => {
+    // El bug reportado tenía DOS capas: sin piso por URL, la política de cancelación
+    // entraba al conflicto con 7 de 300 impresiones y, ya adentro, ganaba el desempate
+    // de intención de pickMainUrl porque su slug contiene "mdz". Con el piso ni siquiera
+    // llega a ser una competidora, así que no hay conflicto que resolver.
+    const rows = [
+      row('mdz', `${BASE}/`,                                   { clicks: 0, impressions: 293, position: 12 }),
+      row('mdz', `${BASE}/politica-de-cancelacion-mdz-rent-a-car/`, { clicks: 0, impressions: 7, position: 40 }),
+    ]
+    const { conflicts } = groupConflicts(rows)
+    expect(conflicts).toHaveLength(0)
+  })
+
+  it('una URL con más del 90% de las impresiones no genera conflicto (sale del mismo piso)', () => {
+    const rows = [
+      row('alquiler autos mendoza', `${BASE}/autos`, { clicks: 5, impressions: 950, position: 3 }),
+      row('alquiler autos mendoza', `${BASE}/notas`, { clicks: 0, impressions: 40,  position: 35 }),
+    ]
+    const { conflicts } = groupConflicts(rows)
+    expect(conflicts).toHaveLength(0)
+  })
+
+  it('la landing específica con una parte real de las impresiones SÍ sigue compitiendo', () => {
+    // El caso que motivó el desempate por intención: 120 de 1020 = 11.8%, arriba del piso.
+    const rows = [
+      row('car hire mendoza airport', `${BASE}/en/`,                          { clicks: 0, impressions: 900, position: 18 }),
+      row('car hire mendoza airport', `${BASE}/en/car-rental-mendoza-airport/`, { clicks: 0, impressions: 120, position: 12 }),
+    ]
+    const { conflicts } = groupConflicts(rows)
+    expect(conflicts).toHaveLength(1)
+    expect(conflicts[0].recommendation.mainUrl).toBe(`${BASE}/en/car-rental-mendoza-airport/`)
+  })
+
+  it('las impresiones residuales no inflan el conflicto cuando SÍ hay dos competidoras', () => {
+    const rows = [
+      row('alquiler de autos mendoza', `${BASE}/autos`,  { clicks: 30, impressions: 400, position: 3 }),
+      row('alquiler de autos mendoza', `${BASE}/flota`,  { clicks: 10, impressions: 300, position: 6 }),
+      row('alquiler de autos mendoza', `${BASE}/contacto`, { clicks: 0, impressions: 4, position: 60 }),
+    ]
+    const { conflicts } = groupConflicts(rows)
+    expect(conflicts).toHaveLength(1)
+    expect(conflicts[0].urls.map(u => u.url)).toEqual([`${BASE}/autos`, `${BASE}/flota`])
+    expect(conflicts[0].totalImpressions).toBe(700) // sin las 4 de /contacto
+  })
+
+  it('hreflang: 2 impresiones en inglés contra 293 en español no son un hallazgo', () => {
+    // Los 26 hallazgos falsos reportados: búsquedas en otro idioma con 1 a 4 impresiones.
+    const rows = [
+      row('alquiler de autos', `${BASE}/autos`,   { clicks: 10, impressions: 293, position: 4 }),
+      row('alquiler de autos', `${BASE}/en/cars`, { clicks: 0,  impressions: 2,   position: 70 }),
+    ]
+    const { hreflangIssues, conflicts } = groupConflicts(rows)
+    expect(hreflangIssues).toHaveLength(0)
+    expect(conflicts).toHaveLength(0)
+  })
+
+  it('hreflang: dos idiomas con parte real de la keyword siguen siendo un hallazgo, con su share', () => {
+    const rows = [
+      row('car rental mendoza', `${BASE}/autos`,   { clicks: 15, impressions: 300, position: 4 }),
+      row('car rental mendoza', `${BASE}/en/cars`, { clicks: 25, impressions: 350, position: 2 }),
+    ]
+    const { hreflangIssues } = groupConflicts(rows)
+    expect(hreflangIssues).toHaveLength(1)
+    expect(hreflangIssues[0].urls.map(u => u.language).sort()).toEqual(['default', 'en'])
+    expect(hreflangIssues[0].urls.every(u => u.share > 0.1)).toBe(true)
   })
 })

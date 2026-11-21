@@ -3,10 +3,14 @@ const { runCannibalizationAnalysis } = require('../services/cannibalization.serv
 const { canWrite } = require('../lib/projectAccess')
 const { summarizeConflicts } = require('../lib/cannibalAnalysis')
 const { ACTIONS, splitByResolution, publicResolution } = require('../lib/cannibalResolution')
+const { splitByLive } = require('../lib/cannibalLive')
+const { splitBrandConflicts, suggestBrandTerms } = require('../lib/cannibalBrand')
 const { requestAgentId, requestAgentName } = require('./tasks/_shared')
 
 const VALID_RANGES = ['30d', '90d', '180d']
 const MAX_PROTECTED_URLS = 200
+const MAX_BRAND_TERMS    = 50
+const MAX_BRAND_TERM_LENGTH = 120
 const MAX_URL_LENGTH = 2048
 const MAX_QUERY_LENGTH = 300
 const MAX_NOTE_LENGTH  = 500
@@ -17,6 +21,9 @@ const RESOLUTION_INCLUDE = {
   resolvedBy:      { select: { name: true } },
   resolvedByAgent: { select: { label: true } },
 }
+// (`resolvedByAgentId`/`resolvedByAgentName` no hacen falta acá: con `include`, Prisma ya
+// devuelve todos los escalares de la fila. agentLabel los necesita para distinguir "no fue
+// un agente" de "fue un agente cuyo token se llama igual que su dueño".)
 
 /**
  * POST /api/marketing/projects/:id/cannibal
@@ -104,16 +111,38 @@ async function getReport(req, res, next) {
     const resolutions = await prisma.cannibalResolution.findMany({
       where: { projectId, workspaceId }, include: RESOLUTION_INCLUDE,
     })
-    const { open, resolved } = splitByResolution(conflicts, resolutions)
+
+    // Búsquedas de marca: se separan con los términos VIGENTES, no con los que había
+    // cuando corrió el análisis — así confirmar o borrar un término se ve al instante y
+    // una mala clasificación se corrige sin re-correr nada.
+    const brandProject = await prisma.project.findFirst({
+      where:  { id: projectId, workspaceId },
+      select: { cannibalBrandTerms: true, cannibalBrandUrl: true },
+    })
+    let brandTerms = []
+    try { brandTerms = JSON.parse(brandProject?.cannibalBrandTerms || '[]') } catch { /* ignore */ }
+    const { conflicts: nonBrand, brandQueries } = splitBrandConflicts(conflicts, {
+      brandTerms, brandUrl: brandProject?.cannibalBrandUrl ?? null,
+    })
+
+    const { open, resolved } = splitByResolution(nonBrand, resolutions)
+    // Lo que el propio sitio ya resolvió (301, canonical, noindex, 404 verificados en
+    // vivo durante el run) sale de los pendientes igual que una resolución manual, y por
+    // el mismo motivo: se aplica en lectura, así que nada queda escondido para siempre.
+    const { pending, fixedLive } = splitByLive(open)
 
     res.json({
       ...report,
-      ...summarizeConflicts(open),
-      totalConflicts:     open.length,
+      ...summarizeConflicts(pending),
+      totalConflicts:     pending.length,
       detectedConflicts:  conflicts.length,
       resolvedCount:      resolved.length,
-      conflicts:          open,
+      fixedLiveCount:     fixedLive.length,
+      brandQueryCount:    brandQueries.length,
+      conflicts:          pending,
       resolvedConflicts:  resolved,
+      fixedLiveConflicts: fixedLive,
+      brandQueries,
       hreflangIssues,
       indexedByMistake,
     })
@@ -136,6 +165,122 @@ async function deleteReport(req, res, next) {
 
     await prisma.cannibalReport.delete({ where: { id: rid } })
     res.json({ ok: true })
+  } catch (err) { next(err) }
+}
+
+/**
+ * GET /api/marketing/projects/:id/cannibal/brand-terms
+ * Los términos de marca confirmados + la URL que debería ganarlas, y — si se pide
+ * `?suggest=1` — sugerencias sacadas de búsquedas REALES de Search Console.
+ *
+ * Nada se aplica sin confirmación: esto solo propone. Los términos no se derivan del
+ * dominio porque un token del dominio puede ser la keyword genérica del rubro
+ * ("car" está dentro de "mdzrentacar") o un sinónimo de la ciudad ("mdz" es el código
+ * IATA del aeropuerto de Mendoza) — ver lib/cannibalBrand.js.
+ */
+async function getBrandTerms(req, res, next) {
+  try {
+    const projectId   = Number(req.params.id)
+    const workspaceId = req.workspace.id
+
+    const project = await prisma.project.findFirst({
+      where:  { id: projectId, workspaceId },
+      select: { name: true, websiteUrl: true, cannibalBrandTerms: true, cannibalBrandUrl: true },
+    })
+    if (!project) return res.status(404).json({ error: 'Proyecto no encontrado' })
+
+    let terms = []
+    try { terms = JSON.parse(project.cannibalBrandTerms || '[]') } catch { /* ignore */ }
+
+    const payload = { terms, brandUrl: project.cannibalBrandUrl ?? null, suggestions: [] }
+    if (req.query.suggest) {
+      // Best-effort: sin Search Console conectado (o si falla) se devuelven los términos
+      // cargados y `suggestions: []`, nunca un error — la pantalla sigue siendo usable.
+      try {
+        payload.suggestions = await loadBrandSuggestions(projectId, workspaceId, project, terms)
+      } catch (err) {
+        console.error('[Cannibalization] No se pudieron sugerir términos de marca:', err.message)
+        payload.suggestionsError = 'No se pudieron leer las búsquedas de Search Console para sugerir términos.'
+      }
+    }
+    res.json(payload)
+  } catch (err) { next(err) }
+}
+
+// Últimos 90 días de queries de Search Console → sugerencias de términos de marca.
+async function loadBrandSuggestions(projectId, workspaceId, project, existing) {
+  const integration = await prisma.projectIntegration.findUnique({
+    where:  { projectId_type: { projectId, type: 'google_search_console' } },
+  })
+  if (!integration) return []
+
+  const { getValidAccessToken } = require('../services/tokenRefresh.service')
+  const { querySearchConsole }  = require('../services/googleSearchConsole.service')
+  const { normalizeSiteUrl }    = require('../utils/seo')
+
+  const accessToken = await getValidAccessToken(integration)
+  // Misma fuente que el análisis (ver cannibalization.service.js): la propiedad de GSC y,
+  // si no hay, la web del proyecto.
+  const siteUrl     = normalizeSiteUrl(integration.propertyId || project.websiteUrl || '')
+  if (!siteUrl) return []
+
+  const end   = new Date()
+  const start = new Date()
+  start.setDate(start.getDate() - 90)
+
+  const rows = await querySearchConsole(accessToken, siteUrl, {
+    startDate:  start.toISOString().slice(0, 10),
+    endDate:    end.toISOString().slice(0, 10),
+    type:       'web',
+    dimensions: ['query'],
+    rowLimit:   2000,
+  })
+
+  return suggestBrandTerms(
+    (rows || []).map(r => ({ query: r.keys[0], impressions: r.impressions })),
+    { projectName: project.name, websiteUrl: project.websiteUrl, existing },
+  )
+}
+
+/**
+ * PUT /api/marketing/projects/:id/cannibal/brand-terms
+ * Body: { terms: string[], brandUrl?: string|null } — reemplaza la lista completa.
+ * Config sensible (saca búsquedas del análisis): mismo `canWrite` que las URLs protegidas.
+ */
+async function setBrandTerms(req, res, next) {
+  try {
+    const projectId   = Number(req.params.id)
+    const workspaceId = req.workspace.id
+
+    const project = await prisma.project.findFirst({
+      where: { id: projectId, workspaceId }, select: { id: true },
+    })
+    if (!project) return res.status(404).json({ error: 'Proyecto no encontrado' })
+    if (!(await canWrite(req, projectId))) {
+      return res.status(403).json({ error: 'No tenés acceso a este proyecto' })
+    }
+
+    const body = Array.isArray(req.body?.terms) ? req.body.terms : []
+    const terms = [...new Set(body.map(t => String(t || '').trim()).filter(Boolean))].slice(0, MAX_BRAND_TERMS)
+    for (const t of terms) {
+      if (t.length > MAX_BRAND_TERM_LENGTH) {
+        return res.status(400).json({ error: `Término demasiado largo: ${t.slice(0, 40)}...` })
+      }
+    }
+
+    let brandUrl = null
+    if (typeof req.body?.brandUrl === 'string' && req.body.brandUrl.trim()) {
+      brandUrl = req.body.brandUrl.trim().slice(0, MAX_URL_LENGTH)
+      if (!/^https?:\/\//i.test(brandUrl)) {
+        return res.status(400).json({ error: 'La URL de marca tiene que empezar con http:// o https://' })
+      }
+    }
+
+    await prisma.project.update({
+      where: { id: projectId },
+      data:  { cannibalBrandTerms: JSON.stringify(terms), cannibalBrandUrl: brandUrl },
+    })
+    res.json({ terms, brandUrl })
   } catch (err) { next(err) }
 }
 
@@ -328,5 +473,6 @@ async function unresolveConflict(req, res, next) {
 
 module.exports = {
   runAnalysis, listReports, getReport, deleteReport, getProtectedUrls, setProtectedUrls,
+  getBrandTerms, setBrandTerms,
   listResolutions, resolveConflict, unresolveConflict,
 }

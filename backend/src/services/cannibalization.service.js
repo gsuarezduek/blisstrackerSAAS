@@ -9,6 +9,11 @@ const { detectLanguage, classifyJunkUrl, groupConflicts, summarizeConflicts } = 
 const {
   conflictKey, postFixWindow, verifyResolution, splitByResolution, MIN_VERIFY_DAYS,
 } = require('../lib/cannibalResolution')
+const { checkUrlsLive } = require('../lib/urlLiveCheck')
+const {
+  annotateConflictsWithLive, splitByLive, urlsToCheck, verifyHreflangIssues,
+} = require('../lib/cannibalLive')
+const { splitBrandConflicts } = require('../lib/cannibalBrand')
 
 const { anthropic, assertTokenBudget } = require('../lib/claude')
 
@@ -66,6 +71,13 @@ async function resolveLanguageOverrides(rows, junkUrls) {
   }
   return overrides
 }
+
+// Chequeo en vivo de las URLs de los conflictos: acotado como el resto (es un paso
+// dentro de un análisis, no un crawler) y best-effort — si falla, el reporte sale como
+// salía antes, con todo abierto.
+const LIVE_CHECK_MAX_URLS    = 40
+const LIVE_CHECK_CONCURRENCY = 5
+const LIVE_CHECK_TIMEOUT_MS  = 10000
 
 const VERIFY_MAX_PER_RUN  = 25 // tope de consultas extra a GSC por run (latencia acotada)
 const VERIFY_CONCURRENCY  = 5
@@ -185,7 +197,7 @@ async function runCannibalizationAnalysis(reportId, projectId, workspaceId, date
 
     const project = await prisma.project.findUnique({
       where:  { id: projectId },
-      select: { websiteUrl: true, name: true, cannibalProtectedUrls: true },
+      select: { websiteUrl: true, name: true, cannibalProtectedUrls: true, cannibalBrandTerms: true, cannibalBrandUrl: true },
     })
     const siteUrl = normalizeSiteUrl(integration.propertyId || project?.websiteUrl || '')
     if (!siteUrl) {
@@ -198,6 +210,8 @@ async function runCannibalizationAnalysis(reportId, projectId, workspaceId, date
 
     let protectedUrls = []
     try { protectedUrls = JSON.parse(project?.cannibalProtectedUrls || '[]') } catch { /* ignore */ }
+    let brandTerms = []
+    try { brandTerms = JSON.parse(project?.cannibalBrandTerms || '[]') } catch { /* ignore */ }
 
     const accessToken = await getValidAccessToken(integration)
     const { startDate, endDate } = dateRangeBounds(dateRange)
@@ -231,7 +245,42 @@ async function runCannibalizationAnalysis(reportId, projectId, workspaceId, date
     const {
       conflicts, hreflangIssues, indexedByMistake,
       hreflangCount, indexedByMistakeCount,
-    } = groupConflicts(rows, { protectedUrls, languageFilter: language || null, languageOverrides })
+    } = groupConflicts(rows, { protectedUrls, languageFilter: language || null, languageOverrides, brandTerms })
+
+    // ── 4a. Búsquedas de marca ───────────────────────────────────
+    // Que el sitio aparezca dos veces cuando alguien busca su propio nombre no es
+    // canibalización. Se separan acá para que no gasten chequeos en vivo ni entren a los
+    // conteos, pero se guardan junto con el resto: el split se vuelve a aplicar en cada
+    // lectura con los términos vigentes (ver cannibalization.controller.js `getReport`),
+    // así que agregar o quitar un término tiene efecto al instante.
+    const { conflicts: nonBrandConflicts, brandQueries } = splitBrandConflicts(conflicts, {
+      brandTerms, brandUrl: project?.cannibalBrandUrl ?? null,
+    })
+
+    // ── 4b. Mirar el sitio en vivo ─────────────────────────────────
+    // Search Console mira hacia atrás, así que un 301 de hace 40 días sigue produciendo
+    // el conflicto. Se piden las URLs de los conflictos (y las de los hallazgos de
+    // hreflang, para leer sus etiquetas de verdad) y se anota qué respondió cada una.
+    let liveConflicts   = conflicts
+    let liveHreflang    = hreflangIssues
+    let hreflangOkCount = 0
+    try {
+      const targets = [
+        ...urlsToCheck(nonBrandConflicts, LIVE_CHECK_MAX_URLS),
+        ...hreflangIssues.flatMap(i => (i.urls ?? []).map(u => u.url)),
+      ]
+      const checks = await checkUrlsLive(targets, {
+        concurrency: LIVE_CHECK_CONCURRENCY,
+        limit:       LIVE_CHECK_MAX_URLS,
+        timeout:     LIVE_CHECK_TIMEOUT_MS,
+      })
+      liveConflicts = annotateConflictsWithLive(conflicts, checks)
+      const verified = verifyHreflangIssues(hreflangIssues, checks)
+      liveHreflang    = verified.hreflangIssues
+      hreflangOkCount = verified.hreflangOkCount
+    } catch (err) {
+      console.error('[Cannibalization] Chequeo en vivo falló, se sigue sin él:', err.message)
+    }
 
     // ── 5. Verificar lo que ya se arregló ─────────────────────────────────────
     // Los conflictos marcados como resueltos salen de los conteos y del resumen IA:
@@ -240,7 +289,7 @@ async function runCannibalizationAnalysis(reportId, projectId, workspaceId, date
     // re-correr el análisis (el split se vuelve a aplicar en cada lectura, ver
     // cannibalization.controller.js `getReport`).
     const resolutions = await verifyResolutions({
-      projectId, workspaceId, accessToken, siteUrl, conflicts, endDate,
+      projectId, workspaceId, accessToken, siteUrl, conflicts: liveConflicts, endDate,
       rangeDays: parseInt(dateRange) || 90,
     }).catch(err => {
       // Un problema verificando lo ya arreglado no vale perder el análisis entero:
@@ -248,7 +297,14 @@ async function runCannibalizationAnalysis(reportId, projectId, workspaceId, date
       console.error('[Cannibalization] Error verificando resoluciones:', err.message)
       return []
     })
-    const { open: openConflicts, resolved: resolvedConflicts } = splitByResolution(conflicts, resolutions)
+    // Los conteos y el resumen IA van sobre los NO de marca; `liveConflicts` guarda todo.
+    const { conflicts: nonBrandLive } = splitBrandConflicts(liveConflicts, {
+      brandTerms, brandUrl: project?.cannibalBrandUrl ?? null,
+    })
+    const { open, resolved: resolvedConflicts } = splitByResolution(nonBrandLive, resolutions)
+    // Lo que el sitio ya resolvió tampoco es un pendiente, aunque nadie lo haya marcado
+    // a mano: sale de los conteos y del resumen IA, pero se guarda igual (ver cannibalLive).
+    const { pending: openConflicts, fixedLive } = splitByLive(open)
     const { criticalCount, warningCount, lowCount, trafficAtRisk } = summarizeConflicts(openConflicts)
 
     // ── 6. Análisis IA (solo si hay conflictos abiertos) ──────────────────────
@@ -278,7 +334,7 @@ Total de conflictos abiertos: ${openConflicts.length} (Alta: ${criticalCount}, M
 Además hay ${resolvedConflicts.length} conflicto(s) que el equipo ya marcó como resueltos (301/canonical aplicado) y que todavía aparecen en los datos porque la ventana analizada incluye días previos al arreglo — no los menciones como pendientes.` : ''}
 Impresiones involucradas en esos conflictos: ${trafficAtRisk}
 Período analizado: últimos ${dateRange}
-Además se detectaron ${hreflangCount} posibles problemas de hreflang y ${indexedByMistakeCount} URLs indexadas por error (fuera de este conteo de conflictos).
+Además se detectaron ${liveHreflang.length} problemas de hreflang verificados contra las etiquetas reales de las páginas${brandQueries.length ? ` y ${brandQueries.length} búsqueda(s) de marca (que NO son canibalización y no hay que consolidar — no las menciones como conflictos)` : ''} y ${indexedByMistakeCount} URLs indexadas por error (fuera de este conteo de conflictos).
 
 Top 5 conflictos más críticos:
 ${top5}
@@ -312,10 +368,10 @@ Reglas de contenido:
         lowCount,
         trafficAtRisk,
         languageFilter:        language || 'all',
-        conflicts:             JSON.stringify(conflicts),
-        hreflangIssues:        JSON.stringify(hreflangIssues),
+        conflicts:             JSON.stringify(liveConflicts),
+        hreflangIssues:        JSON.stringify(liveHreflang),
         indexedByMistake:      JSON.stringify(indexedByMistake),
-        hreflangCount,
+        hreflangCount:         liveHreflang.length,
         indexedByMistakeCount,
         resumenGeneral,
         errorMsg:              null,
@@ -323,7 +379,7 @@ Reglas de contenido:
       },
     })
 
-    console.log(`[Cannibalization] Completado reportId=${reportId}: ${openConflicts.length} conflictos abiertos (${resolvedConflicts.length} resueltos), ${hreflangCount} hreflang, ${indexedByMistakeCount} indexadas por error`)
+    console.log(`[Cannibalization] Completado reportId=${reportId}: ${openConflicts.length} conflictos abiertos (${resolvedConflicts.length} resueltos a mano, ${fixedLive.length} ya arreglados en el sitio), ${liveHreflang.length} hreflang con problema real (${hreflangOkCount} revisados y OK), ${brandQueries.length} de marca, ${indexedByMistakeCount} indexadas por error`)
   } catch (err) {
     console.error('[Cannibalization] Error fatal:', err.message)
     await prisma.cannibalReport.update({
