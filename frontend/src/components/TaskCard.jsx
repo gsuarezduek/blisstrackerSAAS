@@ -2,17 +2,18 @@ import { useState, useRef, memo } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import api from '../api/client'
 import { renderRichText } from '../utils/richText'
-import { fmtMins, activeMinutes, fmtCreatedAt, createdAtTitle, fmtPublishDate, publishToneClass } from '../utils/format'
+import { fmtMins, activeMinutes, fmtCreatedAt, createdAtTitle, fmtPublishDate, publishToneClass, checklistProgress, checklistToneClass } from '../utils/format'
 import UserLink from './UserLink'
 import useMembers from '../hooks/useMembers'
 import StarButton from './dashboard/StarButton'
 import ReasonModal from './ventas/ReasonModal'
-import { Repeat, CalendarDays, MessageSquare, Paperclip, Bot } from 'lucide-react'
+import { Repeat, CalendarDays, MessageSquare, Paperclip, Bot, ListChecks } from 'lucide-react'
 import { Icon } from './ui/Icon'
 import { OverflowMenu } from './ui/OverflowMenu'
 import useMyAgents, { agentName } from '../hooks/useMyAgents'
 import DelegateAgentModal from './dashboard/DelegateAgentModal'
 import DelegatePersonModal from './dashboard/DelegatePersonModal'
+import TaskChecklist from './dashboard/TaskChecklist'
 
 // Fila de tarea del Dashboard (foco del día, Backlog y Programadas). Una sola acción
 // principal visible según el estado — el resto (mover al Backlog, eliminar) vive en
@@ -35,6 +36,10 @@ function TaskCard({ task, onUpdate, onDelete, activeTask, backlog, future, onAdd
   const [showBlock, setShowBlock] = useState(false)
   const [showDelegate, setShowDelegate] = useState(false)
   const [showDelegatePerson, setShowDelegatePerson] = useState(false)
+  // El checklist arranca plegado: la fila es compacta a propósito y el Dashboard ya
+  // está cargado. El badge "2/4" alcanza para saber cómo viene; el que quiere tildar
+  // lo abre sin salir de la lista ni abrir el detalle.
+  const [showChecklist, setShowChecklist] = useState(false)
 
   async function patch(endpoint) {
     const { data } = await api.patch(`/tasks/${task.id}/${endpoint}`)
@@ -156,6 +161,7 @@ function TaskCard({ task, onUpdate, onDelete, activeTask, backlog, future, onAdd
 
   const comments = task._count?.comments ?? 0
   const files = task._count?.files ?? 0
+  const progress = checklistProgress(task)
 
   return (
     <div className={`group flex items-start gap-3 px-4 py-3.5 transition-colors hover:bg-gray-50/70 dark:hover:bg-gray-800/60 ${loading ? 'opacity-60' : ''}`}>
@@ -216,7 +222,21 @@ function TaskCard({ task, onUpdate, onDelete, activeTask, backlog, future, onAdd
               <Icon as={Paperclip} size={13} />{files}
             </button>
           )}
+          {progress && (
+            <button
+              type="button"
+              onClick={() => setShowChecklist(v => !v)}
+              className={`inline-flex items-center gap-1 hover:underline ${checklistToneClass(progress)}`}
+              title={showChecklist ? 'Ocultar subtareas' : 'Ver subtareas'}
+            >
+              <Icon as={ListChecks} size={13} />{progress.label}
+            </button>
+          )}
         </div>
+
+        {showChecklist && progress && (
+          <TaskChecklist task={task} onUpdate={onUpdate} variant="compact" />
+        )}
 
         {isBlocked && task.blockedReason && (
           <p className="mt-2 text-sm text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-900/20 rounded-lg px-3 py-2">

@@ -1,4 +1,5 @@
 const prisma = require('../lib/prisma')
+const { parseChecklistTemplate, checklistCreateData } = require('../lib/taskChecklist')
 
 // ─── Helpers de fecha puros (trabajan con strings "YYYY-MM-DD" en UTC) ────────
 // Las fechas de recurrencia son fechas de calendario (sin hora), así que se parsean
@@ -139,6 +140,10 @@ async function spawnInstance(client, rec, scheduledFor, workDayId) {
         createdByAgentId:      rec.createdByAgentId ?? null,
         agentName:             rec.agentName ?? null,
         createdByAgentName:    rec.createdByAgentName ?? null,
+        // Subtareas plantilla de la serie: cada ocurrencia nace con el checklist sin
+        // tildar. Sin esto una recurrencia tipo "publicar newsletter" arrancaría vacía
+        // todas las semanas y habría que reescribir los pasos a mano.
+        checklist:             checklistCreateData(parseChecklistTemplate(rec.checklist)),
       },
     })
   } catch (err) {

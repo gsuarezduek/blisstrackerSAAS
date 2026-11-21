@@ -28,3 +28,6 @@ Finanzas → importar el resumen de la tarjeta: `FinanceCard` (nombre, últimos 
 
 ### `cannibal_brand_terms`
 Canibalización → búsquedas de marca: `Project.cannibalBrandTerms` (JSON array, default `'[]'`) y `Project.cannibalBrandUrl` (nullable). Solo dos columnas con default, sin backfill: un proyecto sin términos cargados se comporta igual que antes (ninguna búsqueda se trata como de marca). Los términos los confirma una persona a partir de sugerencias de Search Console — no se derivan del dominio. Ver `docs/claude/marketing-canibalizacion.md`.
+
+### `task_checklist`
+Subtareas de una tarea: `TaskChecklistItem` (`taskId` `Cascade`, `text`, `done`, `doneAt`/`doneById` `SetNull`, `order`, índice `(taskId, order)`) y `TaskRecurrence.checklist` (TEXT nullable, JSON de strings: la plantilla que cada ocurrencia copia sin tildar). Solo una tabla nueva y una columna nullable, sin backfill — una tarea sin subtareas se comporta igual que antes. **A propósito no se tocó `Task`:** una subtarea no es una `Task`, para no tener que excluirla de cada consulta que lista o cuenta tareas. Ver `docs/claude/tareas.md`.

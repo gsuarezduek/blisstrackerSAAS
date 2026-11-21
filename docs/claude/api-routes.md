@@ -95,6 +95,12 @@ POST   /api/tasks/:id/attachments/presign            # { name, mimeType, sizeByt
 POST   /api/tasks/:id/attachments/direct             # { name, content | contentBase64 | url, mimeType? } — sube desde el servidor (agentes vía MCP), hasta 25MB por url
 POST   /api/tasks/:id/attachments/:fileId/confirm    # valida tamaño real + magic bytes, crea el vínculo TaskFile
 DELETE /api/tasks/:id/attachments/:fileId            # saca el vínculo (el archivo sigue en Archivos del proyecto)
+GET    /api/tasks/:id/checklist                      # subtareas (TaskChecklistItem) — el detalle las pide acá porque no todo taskInclude las trae
+POST   /api/tasks/:id/checklist                      # { text } — un text de varias líneas entra como varias subtareas (tope 20 por tarea)
+PATCH  /api/tasks/:id/checklist/reorder              # { ids: [...] } — orden manual (sin consumidores todavía: el drag es fase 2)
+PATCH  /api/tasks/:id/checklist/:itemId              # { done? , text? } — tildar/destildar o editar el texto
+DELETE /api/tasks/:id/checklist/:itemId              # borra la subtarea
+POST   /api/tasks/:id/checklist/:itemId/to-task      # "Convertir en tarea": crea una Task real en el mismo proyecto y saca el ítem
 
 # Agentes IA — tokens de MCP (self-service, cada uno gestiona SOLO los propios)
 GET    /api/mcp-tokens

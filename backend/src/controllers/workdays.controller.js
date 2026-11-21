@@ -8,6 +8,12 @@ const taskInclude = {
   createdBy: { select: { id: true, name: true } },
   _count: { select: { comments: true, files: { where: { file: { status: 'ready', deletedAt: null } } } } },
   sessions: { select: { startedAt: true, endedAt: true } },
+  // Subtareas: se traen los ítems, no un _count — el badge necesita DOS números
+  // ("2 de 4") y Prisma no deja contar dos veces el mismo relation con filtros
+  // distintos. Además, con los ítems en mano el checklist se expande en la tarjeta
+  // y se tilda desde NowCard sin pedir nada al servidor. El tope de 20 por tarea
+  // (ver tasks/checklist.controller.js) acota el costo.
+  checklist: { select: { id: true, text: true, done: true, order: true }, orderBy: [{ order: 'asc' }, { id: 'asc' }] },
   // Pieza de Contenido vinculada (si la tarea vino de "Enviar al dashboard") — el id arma
   // el deep-link a /contenido?projectId=&piece= desde TaskCard; scheduledDate deja mostrar
   // la fecha de publicación en la tarjeta y ordenar el Backlog por urgencia de publicación.

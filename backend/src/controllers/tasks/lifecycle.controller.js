@@ -12,6 +12,7 @@ const { loadEvent } = require('../../lib/calendarEvents')
 const { startMeetingCore } = require('../calendar.controller')
 const { statusSideEffects, logEvent, loadPiece, formatPiece, emitPieceUpdated } = require('../content/_shared')
 const { taskInclude, assertNoActiveTask, handleActiveTaskConflict, requestAgentId, requestAgentName, assertOwnAgent } = require('./_shared')
+const { parseChecklistInput, checklistCreateData } = require('../../lib/taskChecklist')
 const { formatAgentName } = require('../../lib/agentTasks')
 const { getOrCreateWorkDay, rehomeToTodayData } = require('../../lib/workDay')
 const { sendPushToUser } = require('../../services/pushNotification.service')
@@ -110,6 +111,9 @@ async function create(req, res, next) {
     // ── Validación de opciones de tarea futura / recurrente ──────────────────
     const isYMD = s => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s)
     const recurrence = req.body.recurrence || null
+    // Subtareas opcionales al crear (campo "una por línea" del AddTaskModal). En una
+    // recurrencia se guardan como plantilla y spawnInstance las copia a cada ocurrencia.
+    const checklistTexts = parseChecklistInput(req.body.checklist)
     let scheduledFor = req.body.scheduledFor || null
 
     if (scheduledFor && !isYMD(scheduledFor)) {
@@ -261,6 +265,7 @@ async function create(req, res, next) {
           endDate:     recurrence.endDate || null,
           scheduledTime,
           scheduledDurationMins,
+          checklist: checklistTexts.length > 0 ? JSON.stringify(checklistTexts) : null,
           ...agentFields,
         },
       })
@@ -284,6 +289,7 @@ async function create(req, res, next) {
           scheduledFor: scheduledFor || null,
           scheduledTime,
           scheduledDurationMins,
+          checklist: checklistCreateData(checklistTexts),
           ...agentFields,
         },
         include: taskInclude,

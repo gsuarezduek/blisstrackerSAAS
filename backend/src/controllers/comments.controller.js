@@ -210,4 +210,7 @@ async function toggleReaction(req, res, next) {
   } catch (err) { next(err) }
 }
 
-module.exports = { listComments, addComment, toggleReaction }
+// getTaskWithAccess se exporta para el checklist de subtareas (tasks/checklist.controller.js),
+// que usa el mismo criterio de acceso que los comentarios — mismo motivo por el que
+// projectFiles.controller.js exporta shapeItem/assertWithinQuota.
+module.exports = { listComments, addComment, toggleReaction, getTaskWithAccess }

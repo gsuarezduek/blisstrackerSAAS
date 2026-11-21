@@ -157,6 +157,26 @@ export function publishToneClass(info) {
   return 'text-sky-700 dark:text-sky-300'
 }
 
+// Progreso del checklist de subtareas de una tarea: "2 de 4". Los ítems vienen en el
+// taskInclude del backend (no hay contadores desnormalizados), así que el cálculo es
+// local. Devuelve null si la tarea no tiene subtareas — el badge simplemente no se
+// renderiza, igual que donde el include no trae `checklist`.
+export function checklistProgress(task) {
+  const items = task?.checklist
+  if (!Array.isArray(items) || items.length === 0) return null
+  const done = items.filter(i => i.done).length
+  return { done, total: items.length, complete: done === items.length, label: `${done}/${items.length}` }
+}
+
+// Clases del badge de progreso: gris sin empezar, ámbar en curso, verde completo —
+// mismo criterio de "el color dice el estado" que publishToneClass.
+export function checklistToneClass(p) {
+  if (!p) return ''
+  if (p.complete) return 'text-green-700 dark:text-green-400 font-medium'
+  if (p.done > 0) return 'text-amber-700 dark:text-amber-400 font-medium'
+  return 'text-gray-500 dark:text-gray-400'
+}
+
 // Fracción de meses entre dos fechas "YYYY-MM-DD" (inclusive ambos extremos).
 // Usa 30.4375 días/mes (365.25 / 12) para que la proporción sea estable.
 export function monthsInRange(from, to) {

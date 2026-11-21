@@ -4,12 +4,13 @@ import { renderRichText } from '../utils/richText'
 import { useAuth } from '../context/AuthContext'
 import useMembers from '../hooks/useMembers'
 import LoadingSpinner from './LoadingSpinner'
-import { fmtMins, activeMinutes, completedDuration } from '../utils/format'
+import { fmtMins, activeMinutes, completedDuration, checklistProgress } from '../utils/format'
 import { avatarUrl } from '../utils/avatarUrl'
 import UserLink from './UserLink'
 import MessageReactionPicker from './chat/MessageReactionPicker'
 import { groupReactions } from './chat/reactions'
 import { useTaskFileUpload } from './taskFileUpload'
+import TaskChecklist from './dashboard/TaskChecklist'
 import { fmtBytes, iconFor } from '../lib/fileIcons'
 
 // Miniatura de un adjunto: la liviana que generó el browser al subirlo a la
@@ -49,7 +50,12 @@ export default function TaskCommentsModal({ task: taskProp, onClose, onCommentAd
   // mostrarla completada sin depender de que quien lo abrió le pase la versión nueva
   // (lo abren 5 pantallas y no todas actualizan su copia).
   const [completedData, setCompletedData] = useState(null)
-  const task = completedData?.id === taskProp.id ? { ...taskProp, ...completedData } : taskProp
+  // El checklist editado desde acá se superpone por el mismo motivo que `completedData`:
+  // el modal lo abren varias pantallas y no todas refrescan su copia de la tarea. Al
+  // padre se le avisa con onTaskEdited, que es lo que actualiza el badge "2/4" de su lista.
+  const [localChecklist, setLocalChecklist] = useState(null)
+  const taskBase = completedData?.id === taskProp.id ? { ...taskProp, ...completedData } : taskProp
+  const task = localChecklist ? { ...taskBase, checklist: localChecklist } : taskBase
   const [comments, setComments]   = useState([])
   const [loading, setLoading]     = useState(true)
   const [text, setText]           = useState('')
@@ -206,8 +212,28 @@ export default function TaskCommentsModal({ task: taskProp, onClose, onCommentAd
   const [completeSaving, setCompleteSaving] = useState(false)
   const [completeError, setCompleteError]   = useState('')
 
+  // El checklist se pide al abrir el detalle en vez de confiar en `task.checklist`: el
+  // modal lo abren varias pantallas y solo el Dashboard arma un include que lo trae.
+  useEffect(() => {
+    api.get(`/tasks/${taskProp.id}/checklist`)
+      .then(r => setLocalChecklist(r.data))
+      .catch(() => {})
+  }, [taskProp.id])
+
+  function handleChecklistUpdate(updated) {
+    setLocalChecklist(updated.checklist)
+    onTaskEdited?.(updated)
+  }
+
   async function handleComplete() {
     if (completeSaving) return
+    // Subtareas sin tildar: avisa, no bloquea (mismo criterio que NowCard — un checklist
+    // que impide cerrar la tarea se vuelve un trámite y se deja de usar).
+    const p = checklistProgress(task)
+    if (p && !p.complete) {
+      const left = p.total - p.done
+      if (!window.confirm(`Queda${left === 1 ? '' : 'n'} ${left} subtarea${left === 1 ? '' : 's'} sin tildar. ¿Completar la tarea igual?`)) return
+    }
     let body
     if (task.status === 'PENDING') {
       const h = completeHours.trim() === '' ? 0 : Number(completeHours)
@@ -799,6 +825,11 @@ export default function TaskCommentsModal({ task: taskProp, onClose, onCommentAd
                 Completada el {fmtDate(task.completedAt)}
               </p>
             )}
+          </div>
+
+          {/* Subtareas (checklist) — ver TaskChecklist.jsx: no son Task, son texto + tilde */}
+          <div className="mt-4">
+            <TaskChecklist task={task} onUpdate={handleChecklistUpdate} />
           </div>
 
           {/* Adjuntos — viven en Archivos del proyecto, solo se linkean acá */}

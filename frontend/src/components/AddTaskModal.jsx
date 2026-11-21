@@ -7,7 +7,7 @@ import { avatarUrl } from '../utils/avatarUrl'
 import HowToButton from './HowToButton'
 import { useTaskFileUpload, MAX_FILE_BYTES, fmtMb } from './taskFileUpload'
 import { fmtBytes, iconFor } from '../lib/fileIcons'
-import { TriangleAlert, Lightbulb, Paperclip, Repeat, CalendarDays } from 'lucide-react'
+import { TriangleAlert, Lightbulb, Paperclip, Repeat, CalendarDays, ListChecks } from 'lucide-react'
 import { Icon } from './ui/Icon'
 import { matchesSearch } from '../utils/textSearch'
 
@@ -168,6 +168,11 @@ export default function AddTaskModal({ onAdd, onClose, lockedProject, defaultPro
 
   // Opciones de tarea recurrente / futura (mutuamente excluyentes con la tarea normal)
   const [taskMode, setTaskMode] = useState('normal') // 'normal' | 'recurring' | 'future'
+  // Subtareas opcionales, una por línea. Se escriben acá porque el checklist se piensa
+  // junto con la tarea, no después de crearla. En una tarea recurrente quedan como
+  // plantilla de la serie y cada ocurrencia nace con ellas sin tildar.
+  const [showChecklist, setShowChecklist] = useState(false)
+  const [checklistText, setChecklistText] = useState('')
   const [frequency, setFrequency] = useState('weekly') // daily | weekly | monthly | annual
   const [weekdays, setWeekdays] = useState([]) // 0=domingo … 6=sábado (solo weekly)
   const [recurDate, setRecurDate] = useState(() => new Date().toLocaleDateString('en-CA')) // calendario: monthly usa el día, annual usa día+mes
@@ -338,6 +343,9 @@ export default function AddTaskModal({ onAdd, onClose, lockedProject, defaultPro
         body.scheduledTime = scheduledTime
         body.scheduledDurationMins = scheduledDurationMins
       }
+      // El backend parte por líneas y limpia viñetas (lib/taskChecklist.js), así que
+      // se manda el texto crudo.
+      if (checklistText.trim()) body.checklist = checklistText
       if (taskMode === 'future') {
         body.scheduledFor = scheduledDate
       } else if (taskMode === 'recurring') {
@@ -590,6 +598,37 @@ export default function AddTaskModal({ onAdd, onClose, lockedProject, defaultPro
                   </div>
                 ))}
               </div>
+            )}
+          </div>
+
+          {/* Subtareas (checklist) — ver TaskChecklist.jsx: no son Task, son texto + tilde */}
+          <div>
+            {showChecklist ? (
+              <>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Subtareas <span className="font-normal text-gray-400 dark:text-gray-500">(una por línea)</span>
+                </label>
+                <textarea
+                  rows={3}
+                  value={checklistText}
+                  onChange={e => setChecklistText(e.target.value)}
+                  placeholder={'Escribir el borrador\nRevisar con el cliente\nPublicar'}
+                  className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none"
+                />
+                <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1">
+                  {taskMode === 'recurring'
+                    ? 'Cada ocurrencia de la serie nace con estas subtareas sin tildar.'
+                    : 'Se ven como checklist en la tarea, con el progreso en el Dashboard.'}
+                </p>
+              </>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setShowChecklist(true)}
+                className="inline-flex items-center gap-1 text-sm text-gray-500 dark:text-gray-400 hover:text-primary-600 dark:hover:text-primary-400"
+              >
+                <Icon as={ListChecks} size={14} />Agregar subtareas
+              </button>
             )}
           </div>
 

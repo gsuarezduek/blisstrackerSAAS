@@ -438,6 +438,7 @@ model User {
   taskRecurrences                   TaskRecurrence[]            @relation("RecurrenceAssignee")
   taskRecurrencesCreated            TaskRecurrence[]            @relation("RecurrenceCreatedBy")
   taskComments                      TaskComment[]
+  taskChecklistItemsDone            TaskChecklistItem[]         @relation("ChecklistDoneBy")
   situationEntriesCreated           ProjectSituationEntry[]     @relation("SituationEntryCreatedBy")
   situationEntriesUpdated           ProjectSituationEntry[]     @relation("SituationEntryUpdatedBy")
   cannibalResolutions               CannibalResolution[]
@@ -1145,6 +1146,11 @@ model Task {
   comments                 TaskComment[]
   sessions                 TaskSession[]
   followers                TaskFollow[]
+  // Subtareas (checklist). Ítems de texto con tilde, a propósito NO son Task: una
+  // subtarea no tiene jornada, estado, tiempo ni responsable, y si lo fuera la
+  // contarían dos veces el resumen del día, Reportes/Productividad, el insight
+  // diario y el tiempo de agente que se le cobra al cliente.
+  checklist                TaskChecklistItem[]
   eosTodo                  EOSTodo? // To-Do de L10 vinculado (uno a uno); completar la tarea lo tilda
   eosMeetingParticipant    EOSMeetingParticipant? // Tarea auto-creada por una reunión L10 (uno a uno); su tiempo es la participación en la reunión
   meetingTodo              ProjectMeetingTodo? // To-Do de reunión de proyecto vinculado (uno a uno); completar la tarea lo tilda
@@ -1175,6 +1181,27 @@ model Task {
   @@index([contentPieceId])
 }
 
+// Subtarea de una tarea: un ítem de checklist. Modelo liviano a propósito (ver Task.checklist):
+// texto + tilde, sin estado, tiempo, proyecto ni jornada. El progreso "2 de 4" se calcula en el
+// frontend sobre los ítems que ya vienen en el taskInclude — no hay contadores desnormalizados.
+// Tildar un ítem no notifica a nadie (4 ítems serían 4 campanazos) y lo puede hacer cualquier
+// miembro activo del workspace, mismo criterio "equipo = etiqueta, no barrera" que los comentarios.
+model TaskChecklistItem {
+  id        Int       @id @default(autoincrement())
+  taskId    Int
+  task      Task      @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  text      String
+  done      Boolean   @default(false)
+  doneAt    DateTime?
+  doneById  Int? // quién lo tildó (null = nunca se tildó, o el usuario se borró)
+  doneBy    User?     @relation("ChecklistDoneBy", fields: [doneById], references: [id], onDelete: SetNull)
+  order     Int       @default(0) // orden manual (asc); a igualdad, id asc
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([taskId, order])
+}
+
 // Plantilla de tarea recurrente. Genera instancias Task (con scheduledFor + recurrenceId) que
 // se materializan de a una por adelantado (sin backfill de ocurrencias perdidas).
 model TaskRecurrence {
@@ -1198,6 +1225,10 @@ model TaskRecurrence {
   // Bloqueo horario opcional (ver Task.scheduledTime) — se copia a cada instancia generada.
   scheduledTime         String?
   scheduledDurationMins Int?
+  // Subtareas plantilla: JSON de strings (mismo patrón que weekdays, no un Json nativo).
+  // spawnInstance las crea como TaskChecklistItem sin tildar en cada ocurrencia — sin esto
+  // una recurrencia tipo "publicar newsletter" nacería con el checklist vacío todas las semanas.
+  checklist             String?
   // Agentes IA — se copian a cada instancia generada (ver Task.isAgentTask/agentId/createdByAgentId).
   isAgentTask           Boolean   @default(false)
   agentId               Int?

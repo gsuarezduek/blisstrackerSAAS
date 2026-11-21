@@ -10,6 +10,7 @@ backend/
     unit/
       auth.middleware.test.js
       assertNoActiveTask.test.js
+      taskChecklist.test.js               # criterio único de las subtareas (lib/taskChecklist.js): parte por líneas y limpia viñetas/tildes de una lista pegada, tope de 20 ítems y 200 caracteres, plantilla de recurrencia que exige un array (un JSON escalar no genera un ítem basura), y nested create undefined si no hay subtareas
       analyticsSnapshot.helpers.test.js   # monthBounds, prevMonth, delta helpers
       analyticsPartialMonth.test.js       # el mes EN CURSO no se compara contra el mes anterior completo: días transcurridos en la tz del workspace, la ventana equivalente del mes anterior (13 días contra 13, recortada en febrero) y la proyección a fin de mes
       analyticsInsightPeriod.test.js      # que el prompt del análisis IA de Web use ese criterio: refresca el snapshot antes de analizar, compara contra 1–13 de octubre (-7%) y nunca contra octubre completo (-58%), y no inventa comparación el 1° del mes ni con GA4 vencido
@@ -69,6 +70,7 @@ backend/
       mfaLogin.test.js                    # login con 2FA no entrega sesión, el mfaToken no sirve como Bearer, verify con TOTP/código de recuperación, desafío quemado a los 5 intentos, reset de contraseña exige el código
       mfaSetup.test.js                    # setup/confirm/disable/regenerate: el secret se guarda cifrado y nunca sale en GET /profile, confirm valida el primer código, disable pide contraseña Y código
       agentTasks.test.js                  # tareas de agente: crear/iniciar/delegar/borrar vía MCP, la bandeja de novedades (las dos fuentes), y el desbloqueo desde la app (PAUSED + respuesta como comentario + disparo de los canales de salida), los filtros de la cola (por bot y por fecha) y el cierre con fecha hacia atrás (`logged-at`: jornada + completedAt juntos, tope del mes en curso)
+      taskChecklist.test.js               # subtareas (checklist): agregar de a una y pegando varias líneas sin viñetas, tope de 20, tildar guarda quién/cuándo y destildar lo borra, un ítem de otra tarea → 404, sin acceso → 403, convertir en tarea (mismo proyecto/responsable, hereda isBacklog, el ítem se borra)
       taskCompleteDirect.test.js          # completar directo una pendiente/pausada: no toca la tarea en curso, conserva lo trabajado de la pausada, duración opcional solo en la pendiente, sale de Backlog/Programadas, bloqueada → 400, vía MCP la tarea sigue siendo de quien era y la delegada a "cualquiera" queda del agente que la cierra
       taskSearch.test.js                  # búsqueda de tareas: filas recortadas, atajo "open", admin para ver las de otra persona, proyectos privados afuera
       cannibalResolution.test.js          # marcar/desmarcar un conflicto como resuelto (persona y agente), el split abierto/resuelto en la lectura del reporte con los conteos recalculados, y los permisos (canWrite)
@@ -99,6 +101,7 @@ frontend/
       projectAccesos.test.jsx           # la fila de un acceso: quién lo cargó y quién lo editó, y que un acceso viejo sin autor no se lo invente
       monthlyTrendChart.test.jsx        # gráfico de 12 meses de Web → Analytics: un mes sin dato es "s/d" y no una barra en cero, el tooltip con visitas/eventos/variación, el aviso del mes en curso, y el espejo del catálogo GA4 (formato de tasa/duración y valores crudos como "202611")
       laterTabs.test.jsx                # punto de alerta de las pestañas del Dashboard: rojo (true), naranja ('orange') con su texto accesible, y sin punto
+      taskChecklist.test.jsx            # subtareas: progreso "1/2" y su color (gris/ámbar/verde), null sin subtareas, tilde optimista + rollback si el servidor falla, agregar deja el campo listo para la siguiente, variant compact sin agregar/convertir, y el badge de TaskCard que despliega la lista
     pages/
       dashboardOrder.test.js            # orden de Para hoy (pausadas primero, por publicación / más nuevas / más antiguas), grupos del Backlog (el proyecto con la publicación más próxima primero) y publishUrgency (rojo/naranja)
     hooks/

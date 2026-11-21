@@ -1,12 +1,13 @@
 import { useState, useEffect, useRef } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import api from '../../api/client'
-import { activeSeconds, fmtDuration, fmtCreatedAt, createdAtTitle, fmtPublishDate, publishToneClass } from '../../utils/format'
+import { activeSeconds, fmtDuration, fmtCreatedAt, createdAtTitle, fmtPublishDate, publishToneClass, checklistProgress } from '../../utils/format'
 import { renderRichText } from '../../utils/richText'
 import useMembers from '../../hooks/useMembers'
 import StarButton from './StarButton'
 import { Repeat, CalendarDays, MessageSquare, Paperclip } from 'lucide-react'
 import { Icon } from '../ui/Icon'
+import TaskChecklist from './TaskChecklist'
 
 // Tarjeta "Ahora" — arriba de todo del Dashboard. Responde la primera pregunta del
 // día: ¿en qué estoy trabajando? Con una tarea en curso muestra el cronómetro en vivo
@@ -58,8 +59,24 @@ export default function NowCard({ activeTask, suggestion, onUpdate, onOpenCommen
   const [reason, setReason] = useState('')
   const reasonRef = useRef(null)
 
+  // Subtareas de la tarea en curso: acá el checklist no es un adorno sino la guía de
+  // lo que se está haciendo, así que va desplegado y no detrás de un click.
+  const progress = checklistProgress(activeTask)
+
   useEffect(() => { if (blocking) reasonRef.current?.focus() }, [blocking])
   useEffect(() => { setBlocking(false); setReason('') }, [activeTask?.id])
+
+  // Completar con subtareas sin tildar avisa, pero no bloquea: si el checklist frenara
+  // el cierre de la tarea se volvería un trámite y la gente dejaría de usarlo. A veces
+  // un paso simplemente no hizo falta.
+  async function completeActive() {
+    const p = checklistProgress(activeTask)
+    if (p && !p.complete) {
+      const left = p.total - p.done
+      if (!window.confirm(`Queda${left === 1 ? '' : 'n'} ${left} subtarea${left === 1 ? '' : 's'} sin tildar. ¿Completar la tarea igual?`)) return
+    }
+    call(activeTask, 'complete')
+  }
 
   // "Empezar" sobre la Task "reserva" de una invitación de Calendario ya aceptada
   // arranca la reunión real para todos los que aceptaron (ver tasks/lifecycle.controller.js
@@ -122,6 +139,7 @@ export default function NowCard({ activeTask, suggestion, onUpdate, onOpenCommen
                 {renderRichText(activeTask.description, { members })}
               </p>
               <div className="mt-2"><Meta task={activeTask} onOpenComments={onOpenComments} /></div>
+              <div className="mt-3"><TaskChecklist task={activeTask} onUpdate={onUpdate} /></div>
             </div>
           </div>
 
@@ -143,8 +161,10 @@ export default function NowCard({ activeTask, suggestion, onUpdate, onOpenCommen
             </div>
           ) : (
             <div className="mt-5 flex flex-wrap items-center gap-2">
-              <button onClick={() => call(activeTask, 'complete')} disabled={!!busy}
-                className="flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold bg-primary-600 hover:bg-primary-700 text-white shadow-sm disabled:opacity-50">
+              {/* Tildar la última subtarea NO completa la tarea sola (cortaría el cronómetro
+                  sin que la persona lo decida): solo resalta el botón que ya estaba ahí. */}
+              <button onClick={completeActive} disabled={!!busy}
+                className={`flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold bg-primary-600 hover:bg-primary-700 text-white shadow-sm disabled:opacity-50 ${progress?.complete ? 'ring-2 ring-green-400 dark:ring-green-500 ring-offset-2 dark:ring-offset-gray-800' : ''}`}>
                 <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4"><path fillRule="evenodd" d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.05-.143Z" clipRule="evenodd" /></svg>
                 {busy === 'complete' ? 'Completando…' : 'Completar'}
               </button>
