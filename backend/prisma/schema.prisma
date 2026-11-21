@@ -438,7 +438,6 @@ model User {
   taskRecurrences                   TaskRecurrence[]            @relation("RecurrenceAssignee")
   taskRecurrencesCreated            TaskRecurrence[]            @relation("RecurrenceCreatedBy")
   taskComments                      TaskComment[]
-  taskChecklistItemsDone            TaskChecklistItem[]         @relation("ChecklistDoneBy")
   situationEntriesCreated           ProjectSituationEntry[]     @relation("SituationEntryCreatedBy")
   situationEntriesUpdated           ProjectSituationEntry[]     @relation("SituationEntryUpdatedBy")
   cannibalResolutions               CannibalResolution[]
