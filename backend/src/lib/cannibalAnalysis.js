@@ -444,14 +444,24 @@ function groupConflicts(rows, { protectedUrls = [], languageFilter = null, langu
       .filter(l => l.impressions >= langThreshold)
 
     if (realLangs.length > 1) {
+      // UNA URL por idioma, la de más impresiones. Un hallazgo de hreflang es sobre el
+      // emparejamiento ENTRE idiomas; dos URLs del mismo idioma no son traducciones entre
+      // sí y mandarlas juntas hacía que la verificación les exigiera declararse
+      // mutuamente — el falso positivo reportado ("/en/car-rental-mendoza/ no declara
+      // /en/mendoza-airport-car-rental/"). Que esas dos compitan es canibalización, y se
+      // resuelve en el conflicto de ese idioma.
       hreflangIssues.push({
         query,
         totalImpressions,
-        urls: realLangs.flatMap(l => l.langUrls).map(u => ({
-          url: u.url, language: u.language, clicks: u.clicks, impressions: u.impressions,
-          position: u.position != null ? Math.round(u.position * 10) / 10 : null,
-          share: totalImpressions > 0 ? Math.round((u.impressions / totalImpressions) * 100) / 100 : 0,
-        })),
+        urls: realLangs.map(l => {
+          const top = [...l.langUrls].sort((a, b) => b.impressions - a.impressions)[0]
+          return {
+            url: top.url, language: top.language, clicks: top.clicks, impressions: top.impressions,
+            position: top.position != null ? Math.round(top.position * 10) / 10 : null,
+            share: totalImpressions > 0 ? Math.round((l.impressions / totalImpressions) * 100) / 100 : 0,
+            urlsInLanguage: l.langUrls.length,
+          }
+        }),
         suggestion: 'Google está devolviendo URLs de distinto idioma para la misma búsqueda. Revisar el emparejamiento hreflang entre estas versiones.',
       })
     }

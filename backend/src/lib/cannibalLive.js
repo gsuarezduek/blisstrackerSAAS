@@ -136,9 +136,15 @@ function verifyHreflangIssues(issues = [], checks = new Map(), verdictFn = requi
       ...issue,
       verified: verdict.checked,
       problems: verdict.problems ?? [],
+      // `notes` son observaciones que NO son errores (ej. declara el idioma pero hacia
+      // otra URL: no son par de traducción) y `skipped`, las páginas que no se le exigen
+      // porque canonicalizan a otra. Van aparte a propósito: meterlas entre los problemas
+      // fue el falso positivo reportado.
+      notes:   verdict.notes ?? [],
+      skipped: verdict.skipped ?? [],
       suggestion: verdict.checked
         ? `Las etiquetas hreflang de estas URLs tienen problemas reales: ${(verdict.problems ?? []).map(p => `${p.url} → ${p.detail}`).join(' · ')}`
-        : 'No se pudieron leer las etiquetas hreflang de estas páginas en vivo (timeout, bloqueo al bot o error del servidor). Revisalas a mano antes de tocar nada.',
+        : `${verdict.note ?? 'No se pudieron leer las etiquetas hreflang de estas páginas en vivo'}. Revisalas a mano antes de tocar nada.`,
     })
   }
 

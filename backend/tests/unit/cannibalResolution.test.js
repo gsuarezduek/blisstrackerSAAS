@@ -316,3 +316,48 @@ describe('agentLabel / resolvedByLabel', () => {
     expect(publicRes({ ...base, resolvedByAgentId: null }).resolvedByLabel).toBe('alguien')
   })
 })
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Por qué una resolución NO reabrió (lo que antes era silencio)
+// ─────────────────────────────────────────────────────────────────────────────
+
+const { verifyResolution: verify } = require('../../src/lib/cannibalResolution')
+
+describe('verifyResolution — el motivo del veredicto', () => {
+  const B = 'https://mdzrentacar.com'
+  const rows = [
+    { url: `${B}/en/car-rental-mendoza-airport/`, impressions: 83, clicks: 2 },
+    { url: `${B}/en/car-rental-mendoza/`,         impressions: 25, clicks: 0 },
+    { url: `${B}/en/mendoza-airport-car-rental/`, impressions: 14, clicks: 0 },
+  ]
+  const win = { windowDays: 51, rangeDays: 90 }
+
+  it('con el idioma correcto, reabre', () => {
+    const r = verify({ rows, language: 'en', knownUrls: [], ...win })
+    expect(r.decision).toBe('reopen')
+    expect(r.reason).toBeNull()
+  })
+
+  it('el caso reportado: resolución guardada con otro idioma y sin urls → no reabre, y lo dice', () => {
+    // 9 conflictos quedaban ocultos sin ninguna señal de por qué: el filtro de idioma
+    // descartaba todas las filas y el total quedaba en 0.
+    const r = verify({ rows, language: 'default', knownUrls: [], ...win })
+    expect(r.decision).toBe('holds')
+    expect(r.discardedByLanguage).toBe(3)
+    expect(r.reason).toMatch(/otro idioma/)
+  })
+
+  it('con las urls del conflicto como fallback, el idioma deja de importar', () => {
+    const r = verify({ rows, language: 'default', knownUrls: rows.map(x => x.url), ...win })
+    expect(r.decision).toBe('reopen')
+  })
+
+  it('distingue "no hay datos" de "poco volumen" y de "ya no compiten"', () => {
+    expect(verify({ rows: [], language: 'en', ...win }).reason).toMatch(/ninguna fila/)
+    expect(verify({ rows: [{ url: `${B}/en/a/`, impressions: 8 }, { url: `${B}/en/b/`, impressions: 3 }], language: 'en', ...win }).reason)
+      .toMatch(/hacen falta/)
+    expect(verify({ rows: [{ url: `${B}/en/a/`, impressions: 120 }, { url: `${B}/en/b/`, impressions: 2 }], language: 'en', ...win }).reason)
+      .toMatch(/ya no compiten/)
+  })
+})

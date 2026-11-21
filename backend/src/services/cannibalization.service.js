@@ -100,7 +100,7 @@ async function verifyResolutions({ projectId, workspaceId, accessToken, siteUrl,
 
   // Solo lo que todavía aparece detectado: si el conflicto ya no está en los datos,
   // no hay nada que reabrir.
-  const detected = new Set(conflicts.map(c => conflictKey(c.query, c.language)))
+  const detected = new Map(conflicts.map(c => [conflictKey(c.query, c.language), c]))
   const pending = resolutions
     .filter(r => r.status === 'resolved' && detected.has(conflictKey(r.query, r.language)))
     .slice(0, VERIFY_MAX_PER_RUN)
@@ -116,7 +116,15 @@ async function verifyResolutions({ projectId, workspaceId, accessToken, siteUrl,
         // decide nada (y no se gasta la consulta), el conflicto sigue resuelto.
         if (!window || window.days < MIN_VERIFY_DAYS) {
           const updated = await prisma.cannibalResolution.update({
-            where: { id: row.id }, data: { lastCheckedAt: new Date() },
+            where: { id: row.id },
+            data: {
+              lastCheckedAt: new Date(),
+              lastCheckEvidence: JSON.stringify({
+                decision: 'pending',
+                days: window?.days ?? 0,
+                reason: `Hacen falta ${MIN_VERIFY_DAYS} días de datos posteriores al arreglo para poder decidir; hay ${window?.days ?? 0}`,
+              }),
+            },
           })
           byId.set(row.id, updated)
           return
@@ -133,6 +141,15 @@ async function verifyResolutions({ projectId, workspaceId, accessToken, siteUrl,
 
         let knownUrls = []
         try { knownUrls = JSON.parse(row.urls || '[]') } catch { /* ignore */ }
+        // Fallback: `urls` es opcional al marcar resuelto (y la tool de MCP tampoco lo
+        // exige), así que una resolución guardada sin ellas quedaba sin con qué comparar
+        // — si además el idioma no coincidía con el de las URLs, el filtro descartaba
+        // TODAS las filas, el total quedaba en 0 y el conflicto no reabría nunca. Las URLs
+        // del conflicto que seguimos detectando sirven igual: son las que compiten.
+        if (knownUrls.length === 0) {
+          const conflict = detected.get(conflictKey(row.query, row.language))
+          knownUrls = (conflict?.urls ?? []).map(u => u.url).filter(Boolean)
+        }
 
         const result = verifyResolution({
           rows: (rawRows || []).map(r => ({ url: r.keys[0], impressions: r.impressions, clicks: r.clicks })),
@@ -153,12 +170,27 @@ async function verifyResolutions({ projectId, workspaceId, accessToken, siteUrl,
                 totalImpressions: result.totalImpressions, urls: result.urls,
               }),
             }
-          : { lastCheckedAt: new Date() }
+          : {
+              lastCheckedAt: new Date(),
+              lastCheckEvidence: JSON.stringify({
+                decision: 'holds',
+                from: window.startDate, to: window.endDate, days: window.days,
+                totalImpressions:     result.totalImpressions,
+                minImpressions:       result.minImpressions,
+                threshold:            result.threshold,
+                competing:            result.urls.length,
+                rowsReturned:         result.rowsReturned,
+                discardedByLanguage:  result.discardedByLanguage,
+                reason:               result.reason,
+              }),
+            }
 
         const updated = await prisma.cannibalResolution.update({ where: { id: row.id }, data })
         byId.set(row.id, updated)
         if (result.decision === 'reopen') {
           console.log(`[Cannibalization] Reabierto "${row.query}" (${row.language}) — ${result.urls.length} URLs compiten desde ${window.startDate}`)
+        } else {
+          console.log(`[Cannibalization] Sigue resuelto "${row.query}" (${row.language}) — ${result.reason}`)
         }
       } catch (err) {
         console.error(`[Cannibalization] Error verificando resolución ${row.id}:`, err.message)

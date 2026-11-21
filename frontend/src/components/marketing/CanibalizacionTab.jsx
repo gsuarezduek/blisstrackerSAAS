@@ -303,6 +303,18 @@ function ResolvedRow({ conflict, onUndo, undoing }) {
           {r.reopenCount > 0 && <span className="text-orange-500">· volvió {r.reopenCount}x antes</span>}
         </p>
         {r.note && <p className="text-xs text-gray-500 dark:text-gray-400 italic mt-0.5 break-words">“{r.note}”</p>}
+        {/* Por qué la última verificación no lo reabrió. Sin esto, un conflicto que la
+            verificación nunca pudo evaluar — porque faltan días de datos, porque no llega
+            al piso de volumen, o porque la resolución se guardó con otro idioma — se veía
+            igual que uno bien resuelto. */}
+        {r.lastCheckEvidence?.reason && (
+          <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-0.5 break-words">
+            Verificado{r.lastCheckedAt ? ` el ${new Date(r.lastCheckedAt).toLocaleDateString('es-AR')}` : ''}: {r.lastCheckEvidence.reason}
+            {r.lastCheckEvidence.discardedByLanguage > 0 && r.lastCheckEvidence.competing === 0 && (
+              <span className="text-amber-600 dark:text-amber-400"> — desmarcalo y volvelo a marcar desde el conflicto para que se guarden sus URLs.</span>
+            )}
+          </p>
+        )}
       </div>
       <button
         onClick={() => onUndo(r.id)}
@@ -846,10 +858,35 @@ export default function CanibalizacionTab({ projectId }) {
                           <a href={u.url} target="_blank" rel="noopener noreferrer" className="text-gray-600 dark:text-gray-300 hover:underline break-all">
                             {u.url.replace(/^https?:\/\/[^/]+/, '') || '/'}
                           </a>
+                          {u.urlsInLanguage > 1 && (
+                            <span
+                              className="text-[10px] text-gray-400"
+                              title={`Hay ${u.urlsInLanguage} URLs en este idioma para esta búsqueda; se muestra la de más impresiones. Que compitan entre sí es canibalización, no hreflang.`}
+                            >
+                              +{u.urlsInLanguage - 1}
+                            </span>
+                          )}
                         </span>
                       ))}
                     </div>
                     <p className="text-xs text-gray-500 dark:text-gray-400 italic">{issue.suggestion}</p>
+                    {/* Observaciones que NO son errores: declara el idioma pero hacia otra
+                        URL (no son par de traducción), o la página canonicaliza a otra y
+                        por eso no se le exige hreflang. Van separadas a propósito. */}
+                    {(issue.notes?.length > 0 || issue.skipped?.length > 0) && (
+                      <ul className="mt-1.5 space-y-0.5">
+                        {(issue.notes ?? []).map((n, i) => (
+                          <li key={`n${i}`} className="text-[11px] text-gray-400">
+                            {n.url.replace(/^https?:\/\/[^/]+/, '') || '/'}: {n.detail}
+                          </li>
+                        ))}
+                        {(issue.skipped ?? []).map((sk, i) => (
+                          <li key={`s${i}`} className="text-[11px] text-gray-400">
+                            {sk.url.replace(/^https?:\/\/[^/]+/, '') || '/'}: {sk.reason}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                     {issue.verified === false && (
                       <p className="text-[11px] text-amber-700 dark:text-amber-400 mt-1 inline-flex items-start gap-1">
                         <Icon as={AlertTriangle} size={12} className="flex-shrink-0 mt-0.5" />

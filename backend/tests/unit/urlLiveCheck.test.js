@@ -1,5 +1,5 @@
 const {
-  parseHtmlSignals, sameTarget, liveVerdict, hreflangVerdict,
+  parseHtmlSignals, sameTarget, liveVerdict, hreflangVerdict, selfDeclaredLang, readHeadFromStream,
 } = require('../../src/lib/urlLiveCheck')
 
 const BASE = 'https://mdzrentacar.com'
@@ -99,8 +99,8 @@ describe('liveVerdict', () => {
 })
 
 describe('hreflangVerdict', () => {
-  function page(url, language, hreflang) {
-    return { url, language, check: { url, status: 200, error: null, hreflang } }
+  function page(url, language, hreflang, canonical) {
+    return { url, language, check: { url, status: 200, error: null, hreflang, canonical: canonical ?? url } }
   }
 
   const es = `${BASE}/autos`
@@ -145,5 +145,99 @@ describe('hreflangVerdict', () => {
     const v = hreflangVerdict([page(es, 'default', []), { url: en, language: 'en', check: { error: 'timeout' } }])
     expect(v.checked).toBe(false)
     expect(v.problems).toEqual([])
+  })
+})
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  hreflang: los falsos positivos reportados
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('hreflangVerdict — falsos positivos reportados', () => {
+  const ES  = `${BASE}/alquiler-autos-mendoza/`
+  const EN1 = `${BASE}/en/car-rental-mendoza/`
+  const EN2 = `${BASE}/en/mendoza-airport-car-rental/`
+  const TAGS = [{ lang: 'es', href: ES }, { lang: 'en', href: EN1 }]
+
+  function page(url, language, hreflang, canonical) {
+    return { url, language, check: { url, status: 200, error: null, hreflang, canonical: canonical ?? url } }
+  }
+
+  it('dos URLs del MISMO idioma no se exigen hreflang entre sí', () => {
+    // El caso reportado: decía que /en/car-rental-mendoza/ no declara
+    // /en/mendoza-airport-car-rental/ — y no tiene por qué: no son traducciones entre sí,
+    // son dos páginas en inglés. Que compitan por la keyword es canibalización.
+    const v = hreflangVerdict([
+      page(ES, 'default', TAGS),
+      page(EN1, 'en', TAGS),
+      page(EN2, 'en', [{ lang: 'en', href: EN2 }]),
+    ])
+    expect(v.checked).toBe(true)
+    expect(v.ok).toBe(true)
+    expect(v.problems).toEqual([])
+  })
+
+  it('una página con canonical hacia otra URL se saltea, con el motivo', () => {
+    // El otro caso reportado: /alquilar-autos-en-mendoza/ tiene canonical a / a propósito,
+    // así que no es la versión canónica y no se le exige hreflang.
+    const v = hreflangVerdict([
+      page(ES, 'default', TAGS),
+      page(`${BASE}/alquilar-autos-en-mendoza/`, 'default', [], `${BASE}/`),
+    ])
+    expect(v.problems).toEqual([])
+    expect(v.skipped).toHaveLength(1)
+    expect(v.skipped[0].reason).toMatch(/canonical/)
+  })
+
+  it('declarar el idioma del otro pero hacia otra URL es una nota, no un problema', () => {
+    const otraEn = `${BASE}/en/otra-pagina/`
+    const v = hreflangVerdict([
+      page(ES, 'default', TAGS),
+      page(otraEn, 'en', [{ lang: 'en', href: otraEn }, { lang: 'es', href: `${BASE}/otra/` }]),
+    ])
+    expect(v.problems.filter(p => p.type === 'lang_not_declared')).toEqual([])
+    expect(v.notes.some(n => n.type === 'points_elsewhere')).toBe(true)
+  })
+
+  it('un problema real sigue saliendo: no declara ninguna versión en ese idioma', () => {
+    const v = hreflangVerdict([
+      page(ES, 'default', TAGS),
+      page(EN1, 'en', [{ lang: 'fr', href: `${BASE}/fr/` }]),
+    ])
+    expect(v.ok).toBe(false)
+    expect(v.problems.map(p => p.type)).toContain('lang_not_declared')
+  })
+
+  it('el idioma del grupo "default" se deduce de su propia autorreferencia', () => {
+    expect(selfDeclaredLang(page(ES, 'default', TAGS))).toBe('es')
+    expect(selfDeclaredLang(page(ES, 'default', [{ lang: 'x-default', href: ES }]))).toBeNull()
+  })
+})
+
+
+describe('readHeadFromStream — por qué no se usa maxContentLength', () => {
+  const { Readable } = require('stream')
+
+  it('corta en </head> sin esperar el resto del documento', async () => {
+    // De la red el cuerpo llega en varios chunks, y el corte pasa entre chunks: con el
+    // documento entero en uno solo no hay nada que cortar.
+    const head = '<html><head><link rel="canonical" href="/x"></head>'
+    const resto = Array.from({ length: 20 }, () => 'a'.repeat(1000))
+    const out = await readHeadFromStream(Readable.from([head, ...resto]))
+    expect(out).toContain('</head>')
+    expect(out.length).toBeLessThan(head.length + 20_000)
+  })
+
+  it('un documento más grande que el tope NO lanza: devuelve lo leído', async () => {
+    // maxContentLength de axios lanza en vez de truncar: con un tope de 400 KB la home
+    // de 452 KB fallaba siempre y quedaba como status null → veredicto unknown.
+    const big = '<html><body>' + 'b'.repeat(900) // sin </head>
+    const out = await readHeadFromStream(Readable.from([big]), 500)
+    expect(out.length).toBeGreaterThan(0)
+  })
+
+  it('un stream que falla a mitad no pierde lo ya leído', async () => {
+    const stream = new Readable({ read() { this.push('<html><head>'); this.destroy(new Error('socket')) } })
+    await expect(readHeadFromStream(stream)).resolves.toContain('<head>')
   })
 })

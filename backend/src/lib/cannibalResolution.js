@@ -107,9 +107,11 @@ function verifyResolution({ rows = [], language = 'default', knownUrls = [], win
   // Agregar por URL: con dimensions:['page'] ya viene una fila por página, pero el
   // agregado deja la función a salvo de que la llamen con una dimensión extra.
   const byUrl = new Map()
+  let discardedByLanguage = 0
   for (const row of rows) {
     const url = row?.url
-    if (!url || !belongsToLanguage(url, language, known)) continue
+    if (!url) continue
+    if (!belongsToLanguage(url, language, known)) { discardedByLanguage++; continue }
     const e = byUrl.get(url) || { url, impressions: 0, clicks: 0 }
     e.impressions += row.impressions || 0
     e.clicks      += row.clicks || 0
@@ -132,11 +134,27 @@ function verifyResolution({ rows = [], language = 'default', knownUrls = [], win
     }))
 
   const back = totalImpressions >= minImpressions && competing.length >= 2
+
+  // Por qué NO reabrió. Antes esto no se guardaba y un conflicto que la verificación
+  // nunca podía evaluar quedaba oculto para siempre, indistinguible de uno bien
+  // resuelto. `discardedByLanguage > 0 && urls.length === 0` es la señal de que el
+  // problema es la resolución en sí (guardada con otro idioma y sin `urls`), no el sitio.
+  let reason = null
+  if (!back) {
+    if (rows.length === 0) reason = 'Search Console no devolvió ninguna fila para esta keyword después del arreglo'
+    else if (urls.length === 0) reason = `Las ${discardedByLanguage} fila(s) devueltas son de otro idioma que el del conflicto ("${language}") y la resolución no guardó sus URLs, así que no hay nada que comparar`
+    else if (totalImpressions < minImpressions) reason = `${totalImpressions} impresiones en la ventana, hacen falta ${minImpressions} para decidir`
+    else reason = `Solo ${competing.length} URL(s) se lleva(n) más del umbral de ${threshold} impresiones: ya no compiten`
+  }
+
   return {
     decision: back ? 'reopen' : 'holds',
     totalImpressions,
     minImpressions,
     threshold,
+    discardedByLanguage,
+    rowsReturned: rows.length,
+    reason,
     urls: competing,
   }
 }
@@ -207,6 +225,7 @@ function publicResolution(row) {
     reopenedAt:     row.reopenedAt ?? null,
     reopenCount:    row.reopenCount ?? 0,
     reopenEvidence: parseJsonObject(row.reopenEvidence),
+    lastCheckEvidence: parseJsonObject(row.lastCheckEvidence),
   }
 }
 

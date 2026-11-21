@@ -425,6 +425,27 @@ describe('groupConflicts — piso por URL (casos reportados en MDZ)', () => {
     expect(conflicts).toHaveLength(0)
   })
 
+  it('hreflang: el hallazgo lista UNA URL por idioma, no las hermanas del mismo idioma', () => {
+    // El falso positivo reportado nacía acá: el hallazgo mandaba las dos URLs /en/ juntas
+    // y la verificación les exigía declararse hreflang entre sí, cuando no son
+    // traducciones una de otra. Que esas dos compitan es canibalización del idioma 'en'.
+    const rows = [
+      row('car rental mendoza', `${BASE}/autos`,                      { clicks: 10, impressions: 300, position: 4 }),
+      row('car rental mendoza', `${BASE}/en/car-rental-mendoza`,       { clicks: 20, impressions: 250, position: 2 }),
+      row('car rental mendoza', `${BASE}/en/mendoza-airport-rental`,   { clicks: 2,  impressions: 150, position: 9 }),
+    ]
+    const { hreflangIssues, conflicts } = groupConflicts(rows)
+    expect(hreflangIssues).toHaveLength(1)
+    expect(hreflangIssues[0].urls).toHaveLength(2) // una por idioma, no 3
+    expect(hreflangIssues[0].urls.map(u => u.language).sort()).toEqual(['default', 'en'])
+    // La representante de 'en' es la de más impresiones, y se informa cuántas hay
+    const en = hreflangIssues[0].urls.find(u => u.language === 'en')
+    expect(en.url).toBe(`${BASE}/en/car-rental-mendoza`)
+    expect(en.urlsInLanguage).toBe(2)
+    // Y las dos /en/ siguen siendo un conflicto de canibalización aparte
+    expect(conflicts.filter(c => c.language === 'en')).toHaveLength(1)
+  })
+
   it('hreflang: dos idiomas con parte real de la keyword siguen siendo un hallazgo, con su share', () => {
     const rows = [
       row('car rental mendoza', `${BASE}/autos`,   { clicks: 15, impressions: 300, position: 4 }),

@@ -19,6 +19,7 @@ backend/
       pageSpeed.helpers.test.js           # URL normalization, scoreRating, parseAudit
       monthUtils.test.js                  # periodMonths, periodLabel (períodos calendario de objetivos)
       marketingObjectives.service.test.js # computeObjectives: flujo vs stock, posición invertida, orphaned, head-to-head competidor
+      marketingSections.test.js           # isMarketingSectionHidden: lo oculto en el código (para todos) + lo apagado por el workspace, y que los ids ocultos existan en el NAV
       legajoCatalog.test.js               # resolve/sanitize de campos de legajo (builtins blindados, customs, completitud)
       lateNotification.test.js            # lateMinutes (regla de tardanza con tolerancia) + default template
       attendance.test.js                  # inArrivalWindow (ventana ±2h) + laborableDays (regla del >50%) + loginMinsFromMidnight
@@ -31,7 +32,7 @@ backend/
       cannibalResolution.test.js          # conflictos de canibalización resueltos: identidad (query+idioma), ventana posterior al arreglo, corte de volumen prorrateado, la regla de reapertura (impresiones residuales de un 301 ≠ "volvió") y la atribución del arreglo (agente adelante; "un agente" cuando el token se llama igual que su dueño)
       cannibalLive.test.js                # cruce con el estado en vivo: un 301 de hace meses cierra el conflicto, dos URLs vivas lo dejan abierto, un 500/timeout no da nada por arreglado, aviso si la principal sugerida es la que redirige, y los hallazgos de hreflang que se caen al verificar las etiquetas
       cannibalBrand.test.js               # búsquedas de marca: sugerencias desde queries reales (frases completas primero, genéricas nunca, "mdz" no se sugiere — es el código del aeropuerto), clasificación marca vs marca+intención, y que ahí no se recomiende consolidar ni canonical
-      urlLiveCheck.test.js                # chequeo en vivo: canonical/noindex/hreflang del <head>, comparación de URLs sin esquema/www/barra, veredictos por status y reciprocidad de hreflang
+      urlLiveCheck.test.js                # chequeo en vivo: canonical/noindex/hreflang del <head>, comparación de URLs sin esquema/www/barra, veredictos por status, y los falsos positivos de hreflang que se reportaron (dos URLs del mismo idioma no son par de traducción; una página con canonical a otra se saltea; declarar el idioma hacia otra URL es nota, no problema) + readHeadFromStream (por qué no se usa maxContentLength: axios lanza en vez de truncar y la home de 452 KB fallaba siempre)
       schemaOrgTypes.test.js              # jerarquía de Schema.org: AutoRental ES un LocalBusiness (y una Organization), BlogPosting es Article, Car es Product — para no reportar como ausente un schema puesto con el subtipo correcto
       businessFacts.test.js               # datos duros del negocio para la IA: qué sale de cada brief, horarios/reseñas en null mientras no exista Google Mi Negocio (y por dónde entran cuando exista), y que el bloque prohíba inventar
       pageSpeedParse.test.js              # PageSpeed: el recurso/elemento/tercero culpable de cada hallazgo (`details.items` con sus nombres de campo distintos), datos de campo de CrUX con INP y el CLS ×100, el elemento del LCP que se perdía por venir como lista, y que un audit no salga duplicado

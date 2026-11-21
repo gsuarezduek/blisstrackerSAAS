@@ -18,8 +18,40 @@ const { assertPublicUrl } = require('./safeUrl')
 
 const DEFAULT_TIMEOUT  = 10000
 const MAX_REDIRECTS    = 5
-const MAX_HTML_BYTES   = 400_000 // alcanza de sobra para el <head>
+const MAX_HTML_BYTES   = 400_000
 const USER_AGENT       = 'BlissTrackerBot/1.0 (+https://blisstracker.app)'
+
+// ─── Por qué se lee la respuesta como stream ───────────────────────────
+// `maxContentLength` de axios **no trunca: lanza**. Con un tope de 400 KB, la home de
+// mdzrentacar.com (452 KB) fallaba SIEMPRE con ERR_BAD_RESPONSE y quedaba como
+// `status: null` → veredicto `unknown`, así que ningún conflicto donde estuviera la home
+// podía darse por arreglado. Las internas, más chicas, pasaban — de ahí que pareciera un
+// bloqueo al bot y no un tope propio.
+//
+// Subir el número solo mueve el problema al próximo sitio más pesado. Acá solo hace
+// falta el `<head>` (canonical, meta robots, hreflang), así que se lee de a chunks y se
+// corta al encontrar `</head>`: nunca lanza por tamaño, y de paso baja la transferencia
+// (del home de MDZ se leen ~40 KB en vez de 452 KB).
+
+function readHeadFromStream(stream, maxBytes = MAX_HTML_BYTES) {
+  return new Promise(resolve => {
+    let html = ''
+    let done = false
+    const finish = () => {
+      if (done) return
+      done = true
+      stream.destroy() // cortar la descarga: no necesitamos el resto del documento
+      resolve(html)
+    }
+    stream.on('data', chunk => {
+      html += chunk.toString('utf8')
+      if (html.length >= maxBytes || /<\/head>/i.test(html)) finish()
+    })
+    stream.on('end', finish)
+    stream.on('error', finish) // un corte a mitad del body no invalida lo ya leído
+    stream.on('close', finish)
+  })
+}
 
 // ─── Lectura del HTML (pura) ──────────────────────────────────────────────────
 
@@ -79,12 +111,12 @@ async function checkUrlLive(url, { timeout = DEFAULT_TIMEOUT, readHtml = true } 
         timeout,
         maxRedirects:   0,
         validateStatus: () => true,
-        responseType:   'text',
-        maxContentLength: MAX_HTML_BYTES,
-        maxBodyLength:    MAX_HTML_BYTES,
+        responseType:   'stream',
+        // Infinity a propósito: el tamaño se acota leyendo el stream, no haciendo que
+        // axios lance a mitad de camino (ver el comentario de readHeadFromStream).
+        maxContentLength: Infinity,
+        maxBodyLength:    Infinity,
         headers: { 'User-Agent': USER_AGENT, Accept: 'text/html,*/*' },
-        // Un 304 sin cuerpo o un HTML gigante no deben romper el chequeo.
-        transformResponse: [d => d],
       })
 
       // El status que importa es el PRIMERO: es el que dice si la URL se mudó.
@@ -92,6 +124,7 @@ async function checkUrlLive(url, { timeout = DEFAULT_TIMEOUT, readHtml = true } 
 
       const location = res.headers?.location
       if (res.status >= 300 && res.status < 400 && location) {
+        res.data?.destroy?.() // no hace falta el cuerpo de un redirect
         let next
         try { next = new URL(location, current).toString() } catch { break }
         base.chain.push({ status: res.status, to: next })
@@ -100,8 +133,11 @@ async function checkUrlLive(url, { timeout = DEFAULT_TIMEOUT, readHtml = true } 
       }
 
       base.finalUrl = current
-      if (readHtml && typeof res.data === 'string' && /text\/html/i.test(res.headers?.['content-type'] ?? 'text/html')) {
-        Object.assign(base, parseHtmlSignals(res.data, current))
+      const isHtml = /text\/html|application\/xhtml/i.test(res.headers?.['content-type'] ?? 'text/html')
+      if (readHtml && isHtml && res.data) {
+        Object.assign(base, parseHtmlSignals(await readHeadFromStream(res.data), current))
+      } else {
+        res.data?.destroy?.()
       }
       break
     }
@@ -189,27 +225,80 @@ function liveVerdict(check, { otherUrls = [] } = {}) {
   return { state: 'live', fixed: false, note: null }
 }
 
+// El código con el que una página se nombra a sí misma, leído de su propia
+// autorreferencia (`<link rel="alternate" hreflang="es" href="<ella misma>">`). Sirve
+// para saber qué código representa al idioma `default` (una URL sin prefijo de ruta no
+// dice si es "es", "pt" o lo que sea) sin tener que suponerlo.
+function selfDeclaredLang(page) {
+  const tags = page?.check?.hreflang ?? []
+  const own = tags.find(t => t.lang !== 'x-default' && sameTarget(t.href, page.url))
+  return own ? own.lang.split('-')[0] : null
+}
+
+// ¿Alguna etiqueta declara el idioma de `other`? `x-default` no cuenta: no es un idioma,
+// es el fallback.
+function declaresLanguageOf(tags, other) {
+  const code = selfDeclaredLang(other) ?? (other.language === 'default' ? null : other.language)
+  if (!code) return null // no se puede saber qué código le corresponde — no se afirma nada
+  return tags.some(t => t.lang !== 'x-default' && t.lang.split('-')[0] === code)
+}
+
 /**
  * ¿Las etiquetas hreflang entre estas páginas están bien puestas?
  *
- * El hallazgo de hreflang se emitía mirando SOLO datos de Search Console: decía "revisar
- * el emparejamiento hreflang" sin haber pedido una sola página, y por eso marcaba
- * problemas en sitios donde las etiquetas estaban perfectas. Acá se verifica lo que la
- * especificación realmente pide: que cada versión se autorreferencie y que el vínculo sea
- * recíproco (si A declara B, B tiene que declarar A).
+ * El hallazgo se emitía mirando solo datos de Search Console — decía "revisar el
+ * emparejamiento hreflang" sin haber pedido una página. Ahora se leen las etiquetas y se
+ * chequea lo que la especificación realmente pide. Tres reglas que evitan los falsos
+ * positivos que se reportaron:
+ *
+ *  1. **Solo se comparan páginas de idiomas DISTINTOS, una por idioma.** Dos URLs del
+ *     mismo idioma (`/en/car-rental-mendoza/` y `/en/mendoza-airport-car-rental/`) no son
+ *     traducciones entre sí: exigirles que se declaren mutuamente daba "falta la etiqueta"
+ *     en un sitio donde estaban perfectas. Que dos URLs del mismo idioma compitan por una
+ *     keyword es canibalización, y eso se resuelve del otro lado.
+ *  2. **Una página con canonical hacia otra URL se saltea.** Google pide hreflang en la
+ *     versión canónica; una página que declara "la buena es aquella" no tiene por qué
+ *     declarar nada (el caso reportado: `/alquilar-autos-en-mendoza/` con canonical a `/`).
+ *  3. **Declarar el idioma del otro pero apuntando a OTRA URL no es un error**, es que
+ *     esas dos páginas no son par de traducción. Va como nota informativa, no como
+ *     problema: afirmar un error acá era justamente el falso positivo más caro, porque
+ *     salía con `verified: true`.
  *
  * @param {Array<{url: string, language: string, check: object}>} pages
- * @returns {{ok: boolean, checked: boolean, problems: Array<{type, url, detail}>}}
  */
 function hreflangVerdict(pages = []) {
-  const usable = pages.filter(p => p.check && !p.check.error && p.check.status === 200)
-  if (usable.length < 2) {
-    return { ok: false, checked: false, problems: [], note: 'No se pudieron leer las dos versiones en vivo' }
+  const problems = []
+  const notes    = []
+  const skipped  = []
+
+  const readable = pages.filter(p => p.check && !p.check.error && p.check.status === 200)
+
+  // (2) fuera las que canonicalizan a otra URL
+  const canonicalOnes = readable.filter(p => {
+    const c = p.check.canonical
+    if (c && !sameTarget(c, p.url)) {
+      skipped.push({ url: p.url, reason: `Su canonical apunta a ${c}: no es la versión canónica, no se le exige hreflang` })
+      return false
+    }
+    return true
+  })
+
+  // (1) una página por idioma, la primera que venga (groupConflicts ya las manda
+  // ordenadas por impresiones, así que es la que más pesa en esa búsqueda)
+  const byLang = new Map()
+  for (const p of canonicalOnes) if (!byLang.has(p.language)) byLang.set(p.language, p)
+  const reps = [...byLang.values()]
+
+  if (reps.length < 2) {
+    return {
+      ok: false, checked: false, problems: [], notes, skipped,
+      note: skipped.length
+        ? 'Las páginas de los otros idiomas canonicalizan a otra URL o no se pudieron leer en vivo'
+        : 'No se pudieron leer dos versiones de idiomas distintos en vivo',
+    }
   }
 
-  const problems = []
-
-  for (const page of usable) {
+  for (const page of reps) {
     const tags = page.check.hreflang ?? []
     if (tags.length === 0) {
       problems.push({ type: 'missing', url: page.url, detail: 'No declara ninguna etiqueta hreflang' })
@@ -218,30 +307,52 @@ function hreflangVerdict(pages = []) {
     if (!tags.some(t => sameTarget(t.href, page.url))) {
       problems.push({ type: 'no_self', url: page.url, detail: 'No se autorreferencia (le falta su propio hreflang)' })
     }
-    for (const other of usable) {
+
+    for (const other of reps) {
       if (other.url === page.url) continue
-      const declares = tags.some(t => sameTarget(t.href, other.url))
-      if (!declares) {
-        problems.push({ type: 'not_declared', url: page.url, detail: `No declara la versión ${other.language}: ${other.url}` })
+
+      if (tags.some(t => sameTarget(t.href, other.url))) {
+        // La declara: lo único que queda por chequear es que el vínculo vuelva.
+        const otherTags = other.check.hreflang ?? []
+        if (otherTags.length && !otherTags.some(t => sameTarget(t.href, page.url))) {
+          problems.push({
+            type: 'not_reciprocal', url: other.url,
+            detail: `Declara ${page.url} sin que esa página lo devuelva`,
+          })
+        }
         continue
       }
-      const otherTags = other.check.hreflang ?? []
-      if (otherTags.length && !otherTags.some(t => sameTarget(t.href, page.url))) {
-        problems.push({ type: 'not_reciprocal', url: other.url, detail: `Declara ${page.url} sin que esa página lo devuelva` })
+
+      const declaresLang = declaresLanguageOf(tags, other)
+      if (declaresLang === false) {
+        problems.push({
+          type: 'lang_not_declared', url: page.url,
+          detail: `No declara ninguna versión en el idioma de ${other.url}`,
+        })
+      } else {
+        // (3) declara ese idioma pero hacia otra URL — o no se puede saber qué código le
+        // corresponde. En ninguno de los dos casos se afirma un error.
+        notes.push({
+          type: 'points_elsewhere', url: page.url,
+          detail: `Declara su versión en ese idioma, pero apuntando a otra URL que la que Google devolvió para esta búsqueda (${other.url}): probablemente no son par de traducción`,
+        })
       }
     }
   }
 
-  return { ok: problems.length === 0, checked: true, problems }
+  return { ok: problems.length === 0, checked: true, problems, notes, skipped }
 }
 
 module.exports = {
   DEFAULT_TIMEOUT,
   MAX_REDIRECTS,
+  MAX_HTML_BYTES,
+  readHeadFromStream,
   parseHtmlSignals,
   checkUrlLive,
   checkUrlsLive,
   sameTarget,
+  selfDeclaredLang,
   liveVerdict,
   hreflangVerdict,
 }

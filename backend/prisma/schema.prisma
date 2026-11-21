@@ -3478,6 +3478,12 @@ model CannibalResolution {
   reopenedAt     DateTime?
   reopenCount    Int       @default(0)
   reopenEvidence String? // JSON: { from, to, days, totalImpressions, urls:[{url,impressions,clicks,share}] }
+  // Por qué la última verificación NO reabrió. Antes un "no reabre" no dejaba rastro, así
+  // que un conflicto oculto para siempre era indistinguible de uno bien resuelto: no se
+  // podía saber si faltaban días de datos, si no llegaba al piso de volumen o si el
+  // filtro de idioma estaba descartando todas las filas.
+  // JSON: { decision, from, to, days, totalImpressions, minImpressions, threshold, competing, discardedByLanguage, reason }
+  lastCheckEvidence String?
 
   resolvedById        Int?
   resolvedBy          User?     @relation(fields: [resolvedById], references: [id], onDelete: SetNull)
