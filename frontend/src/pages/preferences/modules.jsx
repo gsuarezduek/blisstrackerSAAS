@@ -5,7 +5,7 @@ import { useWorkspace } from '../../context/WorkspaceContext'
 import { moduleMeta } from '../../lib/moduleCatalog'
 import ModuleAccessEditor from '../../components/ModuleAccessEditor'
 import { invalidateFeatureFlag, useFeatureFlag } from '../../hooks/useFeatureFlag'
-import { NAV, SECTION_DESCRIPTIONS } from '../../components/marketing/marketingNav'
+import { NAV, SECTION_DESCRIPTIONS, HIDDEN_SECTIONS } from '../../components/marketing/marketingNav'
 import { Toggle } from './shared'
 
 // Toda la configuración de un módulo opcional en un solo lugar: encendido/apagado,
@@ -38,9 +38,11 @@ export default function ModulesTab({ loaded }) {
   // Marketing: configuración propia del módulo
   const [globalSettings,      setGlobalSettings]      = useState(null)
   const [sectionsErr,         setSectionsErr]         = useState('')
-  // Mailing tiene flag propio: si el workspace no lo tiene, no se ofrece acá.
+  // Mailing tiene flag propio: si el workspace no lo tiene, no se ofrece acá. Las
+  // secciones con `hidden` están apagadas en el código para todos los workspaces
+  // (ver marketingNav.js): ofrecer el checkbox sería una opción que no hace nada.
   const { enabled: mailingFlag } = useFeatureFlag('mailing')
-  const navShown = NAV.filter(n => n.id !== 'mailing' || mailingFlag)
+  const navShown = NAV.filter(n => !n.hidden && (n.id !== 'mailing' || mailingFlag))
   const [marketingDigestTest, setMarketingDigestTest] = useState({ sending: false, msg: '', error: false })
 
   useEffect(() => {
@@ -404,7 +406,7 @@ export default function ModulesTab({ loaded }) {
                       <div className="flex items-start justify-between gap-4 pb-3 border-b border-gray-200/70 dark:border-gray-700">
                         <div className="flex-1">
                           <p className="text-xs font-medium text-gray-800 dark:text-gray-200">Análisis automático de Ads (IA)</p>
-                          <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">Cada lunes analiza con IA las cuentas de Meta Ads / Google Ads conectadas de todos los proyectos y guarda el diagnóstico para "Prioridades". Solo corre en proyectos con una cuenta de ads conectada.</p>
+                          <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">Cada lunes analiza con IA las cuentas de Meta Ads / Google Ads conectadas de todos los proyectos y deja el diagnóstico en la pestaña de cada cuenta. Solo corre en proyectos con una cuenta de ads conectada.</p>
                         </div>
                         <Toggle on={globalSettings.adsAdvisorAutoEnabled !== false} onToggle={() => handleGlobalSetting({ adsAdvisorAutoEnabled: !(globalSettings.adsAdvisorAutoEnabled !== false) })} disabled={!loaded} />
                       </div>
@@ -412,34 +414,39 @@ export default function ModulesTab({ loaded }) {
                       <div className="flex items-start justify-between gap-4 pb-3 border-b border-gray-200/70 dark:border-gray-700">
                         <div className="flex-1">
                           <p className="text-xs font-medium text-gray-800 dark:text-gray-200">Análisis automático de RRSS (IA)</p>
-                          <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">Cada lunes analiza con IA las redes sociales conectadas de todos los proyectos (tendencia, competencia, objetivos y brief) y guarda el diagnóstico para "Prioridades". Solo corre en proyectos con alguna red social conectada.</p>
+                          <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">Cada lunes analiza con IA las redes sociales conectadas de todos los proyectos (tendencia, competencia, objetivos y brief) y deja el diagnóstico en la pestaña de cada red. Solo corre en proyectos con alguna red social conectada.</p>
                         </div>
                         <Toggle on={globalSettings.rrssAdvisorAutoEnabled !== false} onToggle={() => handleGlobalSetting({ rrssAdvisorAutoEnabled: !(globalSettings.rrssAdvisorAutoEnabled !== false) })} disabled={!loaded} />
                       </div>
 
-                      <div className="pb-3 border-b border-gray-200/70 dark:border-gray-700">
-                        <div className="flex items-start justify-between gap-4">
-                          <div className="flex-1">
-                            <p className="text-xs font-medium text-gray-800 dark:text-gray-200">Aviso semanal de Prioridades por email</p>
-                            <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">Todos los lunes, si hay proyectos con recomendaciones de alta prioridad pendientes (SEO/GEO, objetivos, RRSS, Ads, informes), se manda un resumen a los admins/owners.</p>
+                      {/* El aviso es el contenido de "Prioridades" por mail: con la pestaña
+                          oculta (`hidden` en marketingNav.js) el backend tampoco lo manda
+                          (MARKETING_HIDDEN_SECTIONS), así que no se ofrece el toggle. */}
+                      {!HIDDEN_SECTIONS.includes('hoy') && (
+                        <div className="pb-3 border-b border-gray-200/70 dark:border-gray-700">
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="flex-1">
+                              <p className="text-xs font-medium text-gray-800 dark:text-gray-200">Aviso semanal de Prioridades por email</p>
+                              <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">Todos los lunes, si hay proyectos con recomendaciones de alta prioridad pendientes (SEO/GEO, objetivos, RRSS, Ads, informes), se manda un resumen a los admins/owners.</p>
+                            </div>
+                            <Toggle on={globalSettings.marketingDigestEnabled !== false} onToggle={() => handleGlobalSetting({ marketingDigestEnabled: !(globalSettings.marketingDigestEnabled !== false) })} disabled={!loaded} />
                           </div>
-                          <Toggle on={globalSettings.marketingDigestEnabled !== false} onToggle={() => handleGlobalSetting({ marketingDigestEnabled: !(globalSettings.marketingDigestEnabled !== false) })} disabled={!loaded} />
+                          {globalSettings.marketingDigestEnabled !== false && (
+                            <div className="mt-3 flex items-center gap-3 flex-wrap">
+                              <button
+                                onClick={handleSendMarketingDigestNow}
+                                disabled={marketingDigestTest.sending}
+                                className="text-xs font-medium px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-white dark:hover:bg-gray-700 disabled:opacity-50 transition-colors"
+                              >
+                                {marketingDigestTest.sending ? 'Enviando…' : 'Enviar ahora a mi correo'}
+                              </button>
+                              {marketingDigestTest.msg && (
+                                <span className={`text-xs ${marketingDigestTest.error ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>{marketingDigestTest.msg}</span>
+                              )}
+                            </div>
+                          )}
                         </div>
-                        {globalSettings.marketingDigestEnabled !== false && (
-                          <div className="mt-3 flex items-center gap-3 flex-wrap">
-                            <button
-                              onClick={handleSendMarketingDigestNow}
-                              disabled={marketingDigestTest.sending}
-                              className="text-xs font-medium px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-white dark:hover:bg-gray-700 disabled:opacity-50 transition-colors"
-                            >
-                              {marketingDigestTest.sending ? 'Enviando…' : 'Enviar ahora a mi correo'}
-                            </button>
-                            {marketingDigestTest.msg && (
-                              <span className={`text-xs ${marketingDigestTest.error ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>{marketingDigestTest.msg}</span>
-                            )}
-                          </div>
-                        )}
-                      </div>
+                      )}
 
                       <div className="flex items-start justify-between gap-4">
                         <div className="flex-1">

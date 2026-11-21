@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { NAV, LEGACY_SUB_MAP } from '../../components/marketing/marketingNav'
+import { NAV, LEGACY_SUB_MAP, HIDDEN_SECTIONS, VALID_TABS } from '../../components/marketing/marketingNav'
 import { resolveConnections } from '../../components/marketing/ConnectionsPanel'
 
 describe('marketingNav', () => {
@@ -16,6 +16,21 @@ describe('marketingNav', () => {
       if (dest.view) expect(sub.views.some(v => v.id === dest.view), old).toBe(true)
     }
     expect(LEGACY_SUB_MAP['geo-seo'].plan).toEqual({ tab: 'hoy' })
+  })
+
+  // "Prioridades" está oculta en el código (nov 2026). Sigue en el NAV a propósito:
+  // `VALID_TABS` tiene que reconocer `?tab=hoy` para que Marketing.jsx lo redirija a
+  // la primera pestaña visible en vez de ignorarlo.
+  it('Prioridades sale de la navegación pero su id sigue siendo un tab válido', () => {
+    expect(HIDDEN_SECTIONS).toContain('hoy')
+    expect(VALID_TABS.has('hoy')).toBe(true)
+    expect(NAV.find(n => n.id === 'hoy').hidden).toBe(true)
+  })
+
+  it('las secciones ocultas salen de HIDDEN_SECTIONS y no de otro lado', () => {
+    expect(NAV.filter(n => n.hidden).map(n => n.id)).toEqual(HIDDEN_SECTIONS)
+    // Con todas ocultas no habría a dónde caer: siempre tiene que quedar una visible.
+    expect(NAV.some(n => !n.hidden)).toBe(true)
   })
 })
 

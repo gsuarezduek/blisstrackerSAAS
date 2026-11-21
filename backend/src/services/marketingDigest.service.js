@@ -6,6 +6,7 @@
 const prisma = require('../lib/prisma')
 const { computeWorkspacePendingSummary } = require('./marketingPending.service')
 const { enabledWorkspaceIds } = require('../lib/featureFlags')
+const { isMarketingSectionHidden, MARKETING_HIDDEN_SECTIONS } = require('../lib/marketingSections')
 const { sendMarketingDigestEmail } = require('./email.service')
 const { DEFAULT_TZ } = require('../utils/dates')
 
@@ -34,7 +35,9 @@ async function sendWorkspaceDigest(workspace) {
 }
 
 // Envío de prueba bajo demanda: manda el digest al email indicado SIEMPRE (incluso sin
-// pendientes, con la variante "todo al día"), para que el admin pueda ver cómo queda el mail.
+// pendientes, con la variante "todo al día"), para que el admin pueda ver cómo queda el
+// mail. A diferencia del cron, NO mira si la sección está oculta: es una acción manual y
+// explícita de un admin (con Prioridades oculta el botón no se ofrece en Preferencias).
 async function sendTestDigest(workspace, email) {
   const digest = await buildWorkspaceDigest(workspace)
   const appUrl = `https://${workspace.slug}.${process.env.APP_DOMAIN || 'blisstracker.app'}/marketing?tab=hoy`
@@ -43,13 +46,28 @@ async function sendTestDigest(workspace, email) {
 }
 
 // Cron: recorre los workspaces con Marketing habilitado + el digest prendido y envía donde haya pendientes.
+//
+// El aviso es el contenido de la pestaña "Prioridades" por mail, así que sigue su
+// visibilidad: si está oculta en el código (MARKETING_HIDDEN_SECTIONS) no se manda a
+// nadie, y si un workspace la apagó en Preferencias se lo saltea. Sin esto, ocultar la
+// pestaña dejaba a los admins recibiendo todos los lunes un resumen con un link a una
+// sección que ya no existe.
 async function sendAllMarketingDigests() {
+  if (MARKETING_HIDDEN_SECTIONS.includes('hoy')) {
+    console.log('[MarketingDigest] "Prioridades" está oculta — no se envía el aviso semanal.')
+    return 0
+  }
   const enabled = await enabledWorkspaceIds('marketing')
   if (enabled.size === 0) { console.log('[MarketingDigest] Sin workspaces con Marketing habilitado.'); return 0 }
 
-  const workspaces = await prisma.workspace.findMany({
+  const all = await prisma.workspace.findMany({
     where: { id: { in: [...enabled] }, status: { in: ['active', 'trialing'] }, marketingDigestEnabled: true },
-    select: { id: true, name: true, slug: true, timezone: true },
+    select: { id: true, name: true, slug: true, timezone: true, marketingDisabledSections: true },
+  })
+  const workspaces = all.filter(ws => {
+    let disabled = []
+    try { disabled = JSON.parse(ws.marketingDisabledSections || '[]') } catch { disabled = [] }
+    return !isMarketingSectionHidden('hoy', disabled)
   })
   let sent = 0
   for (const ws of workspaces) {

@@ -4,7 +4,7 @@ import Navbar from '../components/Navbar'
 import LoadingSpinner from '../components/LoadingSpinner'
 import HowToButton from '../components/HowToButton'
 import PrioridadesTab from '../components/marketing/PrioridadesTab'
-import { NAV, LEGACY_MAP, LEGACY_SUB_MAP, VALID_TABS } from '../components/marketing/marketingNav'
+import { NAV, LEGACY_MAP, LEGACY_SUB_MAP, VALID_TABS, HIDDEN_SECTIONS } from '../components/marketing/marketingNav'
 import GeoTab      from '../components/marketing/GeoTab'
 import WebTab      from '../components/marketing/WebTab'
 import SeoTab      from '../components/marketing/SeoTab'
@@ -27,6 +27,7 @@ import MetaAdsTab    from '../components/marketing/MetaAdsTab'
 import GoogleAdsTab  from '../components/marketing/GoogleAdsTab'
 import ChatGptAdsTab from '../components/marketing/ChatGptAdsTab'
 import MailingTab    from '../components/marketing/mailing/MailingTab'
+import ConnectionsPanel from '../components/marketing/ConnectionsPanel'
 import ProjectSearchSelect from '../components/marketing/ProjectSearchSelect'
 import SocialIcon from '../components/marketing/SocialIcon'
 import { useFeatureFlag } from '../hooks/useFeatureFlag'
@@ -83,9 +84,17 @@ export default function Marketing() {
   }, [projectId, projects]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const disabledSections = workspace?.marketingDisabledSections || []
-  // Mailing es la única sección con flag propio (opt-in por workspace): sin él no
-  // existe, igual que si estuviera apagada en "Pestañas visibles".
-  const hiddenSections = mailingEnabled ? disabledSections : [...disabledSections, 'mailing']
+  // Tres motivos para no mostrar una sección, en un solo array (así `normalize` tiene
+  // un único lugar al que mirar para caerse a la primera visible):
+  //   - `HIDDEN_SECTIONS`: apagada en el código para todos los workspaces (`hidden`
+  //     en el NAV), sin forma de prenderla desde la UI.
+  //   - `disabledSections`: apagada por este workspace en "Pestañas visibles".
+  //   - Mailing es la única con flag propio (opt-in por workspace): sin él no existe.
+  const hiddenSections = [
+    ...HIDDEN_SECTIONS,
+    ...disabledSections,
+    ...(mailingEnabled ? [] : ['mailing']),
+  ]
   const visibleNav = NAV.filter(n => !hiddenSections.includes(n.id))
 
   function resolveNav() {
@@ -198,10 +207,12 @@ export default function Marketing() {
       : normalize(destTab, destSub, destView))
   }
 
-  const activeNav = NAV.find(n => n.id === tab) ?? NAV[0]
+  const activeNav = NAV.find(n => n.id === tab) ?? visibleNav[0] ?? NAV[0]
   const activeSub = activeNav.subs.find(s => s.id === sub) ?? activeNav.subs[0]
 
   function renderContent() {
+    // Prioridades está oculta (`hidden` en el NAV): `normalize` nunca devuelve 'hoy',
+    // así que esta rama hoy no se alcanza. Queda para que borrar el flag la reviva.
     if (tab === 'hoy')      return <PrioridadesTab projectId={projectId} projects={projects} onSelectProject={handleProjectChange} onNavigate={handleNavigateTo} />
     if (tab === 'informes') return <InformesTab projectId={projectId} onSelectProject={handleProjectChange} projects={projects} />
 
@@ -303,6 +314,22 @@ export default function Marketing() {
           </div>
         ) : (
           <>
+            {/* ── Conexiones: fija arriba de las pestañas, no dentro de una ──
+                Vivía dentro de "Prioridades"; al ocultarse esa pestaña se subió acá,
+                donde además se ve desde cualquier sección (una conexión vencida corta
+                los datos de todas). Solo con un proyecto elegido: sin proyecto no hay
+                integraciones que mostrar. */}
+            {projectId && (
+              <div className="mb-4">
+                <ConnectionsPanel
+                  projectId={projectId}
+                  websiteUrl={projects.find(p => String(p.id) === String(projectId))?.websiteUrl}
+                  disabledSections={hiddenSections}
+                  onNavigate={handleNavigateTo}
+                />
+              </div>
+            )}
+
             {/* ── Secciones: subrayado, con scroll horizontal en mobile ── */}
             <nav aria-label="Secciones de Marketing"
               className="-mx-4 px-4 sm:mx-0 sm:px-0 mb-1 border-b border-gray-200 dark:border-gray-700 overflow-x-auto scrollbar-none">

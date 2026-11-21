@@ -4,8 +4,17 @@
 // visibles", Preferencias → Módulos → Marketing).
 export const NAV = [
   {
+    // OCULTA EN CÓDIGO (nov 2026, decisión de producto: el panel no se usa por ahora).
+    // `hidden` la saca de la navegación, del buscador Cmd+K y del selector de
+    // "Pestañas visibles" en TODOS los workspaces, y manda `?tab=hoy` (o `?sub=plan`)
+    // a la primera pestaña visible. El componente, los endpoints y el cálculo de
+    // hallazgos quedan enteros: para volver a prenderla, borrar `hidden` acá Y
+    // `MARKETING_HIDDEN_SECTIONS` en backend/src/lib/marketingSections.js (que es lo
+    // que apaga el aviso semanal por email). Sigue en el array —y no borrada— para
+    // que `VALID_TABS` reconozca `?tab=hoy` y lo redirija en vez de ignorarlo.
     id: 'hoy',
     label: 'Prioridades',
+    hidden: true,
     subs: [],
   },
   {
@@ -108,7 +117,8 @@ export const LEGACY_MAP = {
 }
 
 // Sub-pestañas viejas de GEO / SEO (antes eran 8 sueltas) → dónde viven ahora.
-// "Plan de acción" se fusionó en Prioridades (mismos hallazgos, ya agregados ahí).
+// "Plan de acción" se fusionó en Prioridades (mismos hallazgos, ya agregados ahí);
+// con Prioridades oculta, el destino cae solo en la primera pestaña visible.
 export const LEGACY_SUB_MAP = {
   'geo-seo': {
     geo:            { sub: 'diagnostico', view: 'geo' },
@@ -121,3 +131,10 @@ export const LEGACY_SUB_MAP = {
 }
 
 export const VALID_TABS = new Set(NAV.map(n => n.id))
+
+// Secciones ocultas en el código (`hidden` en el NAV): fuente única para la
+// navegación (Marketing.jsx), el buscador (useNavDestinations.js) y el selector de
+// "Pestañas visibles" (preferences/modules.jsx). Son distintas de las que apaga cada
+// workspace en Preferencias (`Workspace.marketingDisabledSections`): estas no se
+// pueden prender desde la UI.
+export const HIDDEN_SECTIONS = NAV.filter(n => n.hidden).map(n => n.id)

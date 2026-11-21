@@ -6,8 +6,9 @@ import { Globe, ChartColumn, Search, Megaphone, Sparkles } from 'lucide-react'
 import { Icon } from '../ui/Icon'
 
 // Fuentes de datos de Marketing de un proyecto, en el orden en que se recorren las
-// secciones. `section` = id del NAV (para ocultar las fuentes de secciones apagadas
-// en Preferencias); `link` = pestaña donde vive el flujo de conexión de esa fuente.
+// secciones. `section` = id del NAV (para ocultar las fuentes de las secciones que no
+// se ven: apagadas en Preferencias u ocultas en el código); `link` = pestaña donde
+// vive el flujo de conexión de esa fuente.
 export const CONNECTION_SOURCES = [
   { type: 'website',               label: 'Sitio web',       icon: Globe, section: null },
   { type: 'google_analytics',      label: 'Google Analytics', icon: ChartColumn, section: 'web',      link: { tab: 'web', sub: 'analytics' } },
@@ -44,9 +45,10 @@ export function resolveConnections({ integrations, websiteUrl, disabledSections 
 }
 
 /**
- * Panel "Conexiones" arriba de Prioridades: una pastilla por fuente de datos del
- * proyecto con su estado. Lo vencido se muestra primero y en rojo (es lo que corta
- * datos de informes y hallazgos); click lleva a la pestaña donde se conecta.
+ * Panel "Conexiones", fijo arriba de las pestañas de Marketing (lo monta
+ * Marketing.jsx; antes vivía dentro de "Prioridades"): una pastilla por fuente de
+ * datos del proyecto con su estado. Lo vencido se muestra primero y en rojo (es lo
+ * que corta datos de informes y hallazgos); click lleva a la pestaña donde se conecta.
  */
 export default function ConnectionsPanel({ projectId, websiteUrl, disabledSections, onNavigate }) {
   const [integrations, setIntegrations] = useState(null)

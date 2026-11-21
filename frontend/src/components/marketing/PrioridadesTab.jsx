@@ -4,8 +4,6 @@ import api from '../../api/client'
 import LoadingSpinner from '../LoadingSpinner'
 import CreateTaskModal from './CreateTaskModal'
 import BulkCreateTaskModal from './BulkCreateTaskModal'
-import ConnectionsPanel from './ConnectionsPanel'
-import { useWorkspace } from '../../context/WorkspaceContext'
 import { CircleCheck, PartyPopper, TriangleAlert } from 'lucide-react'
 import { Icon } from '../ui/Icon'
 
@@ -27,8 +25,12 @@ const SOURCE_LABEL = {
  * backlog agrupado por sección con tope de 3 por grupo (`data.groups`, calculado en
  * marketingPending.service.js), con selección múltiple + creación de tareas en masa.
  * Absorbió al viejo "Plan de acción" de GEO / SEO (sus hallazgos ya venían acá) —
- * cada grupo se puede expandir para ver todo, no solo el top 3. Arriba, el panel de
- * Conexiones muestra qué fuentes de datos del proyecto están activas o vencidas.
+ * cada grupo se puede expandir para ver todo, no solo el top 3.
+ *
+ * OJO: esta pestaña está OCULTA (`hidden` en marketingNav.js, nov 2026) y hoy no se
+ * monta desde ningún lado; el componente y sus endpoints quedan enteros para cuando
+ * se vuelva a prender. El panel de Conexiones, que vivía arriba de este, se mudó a
+ * Marketing.jsx (fijo arriba de las pestañas) para no irse con ella.
  */
 export default function PrioridadesTab({ projectId, projects, onSelectProject, onNavigate }) {
   if (!projectId) return <WorkspacePending onSelectProject={onSelectProject} />
@@ -159,7 +161,6 @@ function ProjectPending({ projectId, projects, onNavigate }) {
   const [showDismissed, setShowDismissed] = useState(false)
   const [dismissedList, setDismissedList] = useState(null)
   const [expandedGroups, setExpandedGroups] = useState(() => new Set())
-  const { workspace } = useWorkspace()
 
   const selectedProject = (projects ?? []).find(p => String(p.id) === String(projectId))
 
@@ -235,23 +236,11 @@ function ProjectPending({ projectId, projects, onNavigate }) {
     } catch {}
   }
 
-  const connections = (
-    <ConnectionsPanel
-      projectId={projectId}
-      websiteUrl={selectedProject?.websiteUrl}
-      disabledSections={workspace?.marketingDisabledSections || []}
-      onNavigate={onNavigate}
-    />
-  )
-
-  if (loading) return <div className="space-y-5">{connections}<LoadingSpinner size="lg" /></div>
+  if (loading) return <LoadingSpinner size="lg" />
   if (err) return (
-    <div className="space-y-5">
-      {connections}
-      <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-8 text-center">
-        <div className="mb-3"><Icon as={TriangleAlert} size={28} className="inline-block text-amber-500" /></div>
-        <p className="text-sm text-gray-600 dark:text-gray-300">{err}</p>
-      </div>
+    <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-8 text-center">
+      <div className="mb-3"><Icon as={TriangleAlert} size={28} className="inline-block text-amber-500" /></div>
+      <p className="text-sm text-gray-600 dark:text-gray-300">{err}</p>
     </div>
   )
   if (!data) return null
@@ -264,7 +253,6 @@ function ProjectPending({ projectId, projects, onNavigate }) {
 
   return (
     <div className="space-y-5">
-      {connections}
       {items.length === 0 ? (
         <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-8 text-center">
           <div className="mb-2"><Icon as={CircleCheck} size={28} className="inline-block text-green-500" /></div>

@@ -1014,7 +1014,7 @@ Seguimiento de posiciones por keyword, heatmap, sugerencias y snapshots SERP (po
 
 Detecta páginas del mismo sitio que compiten por la misma keyword.
 
-Cuando arreglás uno (301, canonical, noindex o diferenciando el contenido), marcalo como **resuelto** con la fecha real del cambio: sale de la lista y de Prioridades sin tener que esperar un análisis nuevo. Ojo con algo que confunde: el análisis mira hasta 180 días hacia atrás, así que el conflicto va a seguir apareciendo en los datos un tiempo después del arreglo — eso es normal. Solo vuelve a la lista (marcado "Volvió") si Search Console muestra que las URLs compitieron de nuevo **después** de esa fecha.
+Cuando arreglás uno (301, canonical, noindex o diferenciando el contenido), marcalo como **resuelto** con la fecha real del cambio: sale de la lista sin tener que esperar un análisis nuevo. Ojo con algo que confunde: el análisis mira hasta 180 días hacia atrás, así que el conflicto va a seguir apareciendo en los datos un tiempo después del arreglo — eso es normal. Solo vuelve a la lista (marcado "Volvió") si Search Console muestra que las URLs compitieron de nuevo **después** de esa fecha.
 
 ## Redes sociales
 

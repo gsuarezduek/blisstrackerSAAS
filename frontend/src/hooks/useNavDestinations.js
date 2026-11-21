@@ -86,7 +86,9 @@ export default function useNavDestinations() {
   if (marketingAllowed) {
     const disabledSections = workspace?.marketingDisabledSections || []
     for (const group of MARKETING_NAV) {
-      if (disabledSections.includes(group.id)) continue
+      // `hidden` = oculta en el código para todos los workspaces (ver marketingNav.js);
+      // `disabledSections` = apagada por este workspace en Preferencias.
+      if (group.hidden || disabledSections.includes(group.id)) continue
       if (group.subs.length === 0) {
         destinations.push({ to: `/marketing?tab=${group.id}`, label: `Marketing · ${group.label}` })
       } else {
