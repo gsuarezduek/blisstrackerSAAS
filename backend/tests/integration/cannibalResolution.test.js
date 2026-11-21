@@ -270,6 +270,55 @@ describe('GET /cannibal/resolutions', () => {
     expect(res.body.resolutions[0].resolvedBy).toBe('Gastón')
   })
 
+  // Lo que el agente LEE de vuelta, que es donde estaba el síntoma reportado: el circuito
+  // de escritura ya estaba bien (los tests de arriba), pero quien leía el JSON veía
+  // `resolvedBy: "Gastón"` y concluía que el arreglo se le había atribuido a la persona.
+  describe('quién figura como autor', () => {
+    async function listAs(row) {
+      mockWorkspace()
+      prisma.cannibalResolution.findMany.mockResolvedValue([resolutionRow(row)])
+      const res = await request(app).get(`${BASE}/resolutions`)
+        .set('Authorization', authHeader()).set('X-Workspace', WORKSPACE_SLUG)
+      expect(res.status).toBe(200)
+      return res.body.resolutions[0]
+    }
+
+    it('sin agente, el autor es la persona', async () => {
+      const r = await listAs({})
+      expect(r.agent).toBeNull()
+      expect(r.resolvedByLabel).toBe('Gastón')
+    })
+
+    it('con nombre declarado, el agente va adelante', async () => {
+      const r = await listAs({
+        resolvedByAgentId: AGENT_TOKEN_ID, resolvedByAgentName: 'SEO',
+        resolvedByAgent: { label: 'Grok' },
+      })
+      expect(r.agent).toBe('SEO')
+      expect(r.resolvedByLabel).toBe('SEO (con el token de Gastón)')
+    })
+
+    it('el caso reportado: agente sin nombre declarado y token que se llama como su dueño', async () => {
+      // Antes la línea quedaba "Gastón vía Gastón", indistinguible de un arreglo hecho a
+      // mano por la persona. Ahora se dice lo único que se sabe con certeza.
+      const r = await listAs({
+        resolvedByAgentId: AGENT_TOKEN_ID, resolvedByAgentName: null,
+        resolvedByAgent: { label: 'Gastón' },
+      })
+      expect(r.agent).toBe('un agente')
+      expect(r.resolvedByLabel).toBe('un agente (con el token de Gastón)')
+    })
+
+    it('si el token tiene su propio nombre, se usa ese', async () => {
+      const r = await listAs({
+        resolvedByAgentId: AGENT_TOKEN_ID, resolvedByAgentName: null,
+        resolvedByAgent: { label: 'Claude Code' },
+      })
+      expect(r.agent).toBe('Claude Code')
+      expect(r.resolvedByLabel).toBe('Claude Code (con el token de Gastón)')
+    })
+  })
+
   it('"resolutions" no se confunde con el id de un reporte', async () => {
     mockWorkspace()
     prisma.cannibalResolution.findMany.mockResolvedValue([])
