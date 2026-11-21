@@ -481,7 +481,7 @@ const tools = [
   },
   {
     name: 'marketing_geo_audit_schema',
-    description: 'Genera JSON-LD de Schema.org sugerido para los tipos de schema que la auditoría GEO detectó como faltantes. El resultado queda cacheado en la auditoría — llamadas repetidas no vuelven a consumir tokens.',
+    description: 'Genera JSON-LD de Schema.org sugerido para los tipos que faltan en TODAS las páginas rastreadas por la auditoría GEO (resolviendo subtipos: un sitio con `AutoRental` ya tiene LocalBusiness y Organization). El resultado queda cacheado en la auditoría — llamadas repetidas no vuelven a consumir tokens. **Los datos duros salen del brief del proyecto o no salen**: lo que el equipo no cargó viene como placeholder `{{ASI}}` para que lo complete una persona, y `aggregateRating`/`reviewCount`/`Review` no se generan nunca (Google exige que las reseñas sean reales y verificables; inventarlas expone al sitio a una acción manual). Un placeholder no es un error del generador: es un dato que falta cargar.',
     inputSchema: { auditId: z.number().int() },
     request: ({ auditId }) => ({ method: 'POST', path: `/marketing/geo/audits/${auditId}/schema` }),
   },
@@ -521,7 +521,7 @@ const tools = [
   },
   {
     name: 'marketing_cannibal_get',
-    description: 'Detalle de un reporte de canibalización SEO: conflictos (con recomendación no destructiva y URL principal sugerida), hallazgos de hreflang y URLs indexadas por error.',
+    description: 'Detalle de un reporte de canibalización SEO. `conflicts` son los que siguen PENDIENTES; aparte vienen `resolvedConflicts` (los que el equipo marcó a mano), `fixedLiveConflicts` (los que el sitio ya resolvió: se pidieron las URLs durante el análisis y redirigen, dan 404 o están noindex — no hay nada que hacer, solo falta que Search Console se ponga al día), `brandQueries` (búsquedas de marca: NO son canibalización, ahí no se consolida ni se canonicaliza), `hreflangIssues` (ya verificados contra las etiquetas reales de las páginas) y `indexedByMistake`. Cada URL de un conflicto trae su estado en vivo en `live` (`status`, `state`, `fixed`, `target`): **si una URL dice `fixed`, no la recomiendes como trabajo pendiente**. Y si el conflicto trae `live.warning`, la URL principal sugerida es justo la que redirige — revisá hacia dónde consolidar antes de actuar.',
     inputSchema: { ...projectIdParam, reportId: z.number().int() },
     request: ({ projectId, reportId }) => ({ method: 'GET', path: `/marketing/projects/${projectId}/cannibal/${reportId}` }),
   },
@@ -942,20 +942,30 @@ const tools = [
 
   // ── PageSpeed Insights ───────────────────────────────────────────────────
   {
+    name: 'marketing_pagespeed_urls',
+    description: 'Las páginas del proyecto que se pueden medir con PageSpeed: el home más las páginas prioritarias declaradas en el brief de SEO/SEM (`urls_prioritarias`). Usá esto para saber qué pasarle a `url` en marketing_pagespeed_run — el score del home no dice nada de la landing que convierte.',
+    inputSchema: { ...projectIdParam },
+    request: ({ projectId }) => ({ method: 'GET', path: `/marketing/projects/${projectId}/pagespeed/urls` }),
+  },
+  {
     name: 'marketing_pagespeed_run',
-    description: 'Dispara un análisis de PageSpeed Insights (Core Web Vitals) del sitio del proyecto. Consume cuota real de la API de Google — no lo repitas sin necesidad. Async: devuelve un resultId para consultar con marketing_pagespeed_get. Requiere websiteUrl configurado.',
-    inputSchema: { ...projectIdParam, strategy: z.enum(['mobile', 'desktop']).optional().describe('Default mobile') },
-    request: ({ projectId, strategy }) => ({ method: 'POST', path: `/marketing/projects/${projectId}/pagespeed`, body: { strategy } }),
+    description: 'Dispara un análisis de PageSpeed Insights (Core Web Vitals) de una página del proyecto. Consume cuota real de la API de Google — no lo repitas sin necesidad. Async: devuelve un resultId para consultar con marketing_pagespeed_get. Requiere websiteUrl configurado. Sin `url` mide el home; con `url` mide esa página, que tiene que ser una de las que lista marketing_pagespeed_urls (no se aceptan dominios ajenos).',
+    inputSchema: {
+      ...projectIdParam,
+      strategy: z.enum(['mobile', 'desktop']).optional().describe('Default mobile'),
+      url: z.string().optional().describe('Página a medir, tal como la devuelve marketing_pagespeed_urls. Omitir = el home'),
+    },
+    request: ({ projectId, strategy, url }) => ({ method: 'POST', path: `/marketing/projects/${projectId}/pagespeed`, body: { strategy, url } }),
   },
   {
     name: 'marketing_pagespeed_list',
-    description: 'Lista los análisis de PageSpeed ya corridos y terminados (sin el detalle completo de métricas — para eso usar marketing_pagespeed_get).',
-    inputSchema: { ...projectIdParam, strategy: z.enum(['mobile', 'desktop']).optional(), limit: z.number().int().optional().describe('Default 10, tope 20') },
-    request: ({ projectId, strategy, limit }) => ({ method: 'GET', path: `/marketing/projects/${projectId}/pagespeed`, query: { strategy, limit } }),
+    description: 'Lista los análisis de PageSpeed ya corridos y terminados (sin el detalle completo de métricas — para eso usar marketing_pagespeed_get). Con `url` devuelve solo el historial de esa página.',
+    inputSchema: { ...projectIdParam, strategy: z.enum(['mobile', 'desktop']).optional(), url: z.string().optional().describe('Filtra el historial por página'), limit: z.number().int().optional().describe('Default 10, tope 20') },
+    request: ({ projectId, strategy, url, limit }) => ({ method: 'GET', path: `/marketing/projects/${projectId}/pagespeed`, query: { strategy, url, limit } }),
   },
   {
     name: 'marketing_pagespeed_get',
-    description: 'Detalle completo de un resultado de PageSpeed: score, métricas, oportunidades y diagnósticos. Útil para hacer polling mientras status=running.',
+    description: 'Detalle completo de un resultado de PageSpeed. Útil para hacer polling mientras status=running. Además del score, cada oportunidad y cada diagnóstico trae `items`: QUÉ arreglar — el recurso, el elemento del DOM o el tercero culpable, con su peso y los ms que cuesta (ej. el audit `largest-contentful-paint-element` dice cuál es el elemento LCP). Y `metrics.field` / `metrics.fieldOrigin` son los datos de USUARIOS REALES de los últimos 28 días (CrUX, con INP): un score de laboratorio con buenos datos de campo no pide lo mismo que uno con malos. Si `metrics.field` es null, esa URL no tiene tráfico suficiente y hay que mirar `fieldOrigin` (todo el sitio).',
     inputSchema: { ...projectIdParam, resultId: z.number().int() },
     request: ({ projectId, resultId }) => ({ method: 'GET', path: `/marketing/projects/${projectId}/pagespeed/${resultId}` }),
   },
