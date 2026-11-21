@@ -1342,6 +1342,33 @@ const tools = [
     request: ({ taskId, ...body }) => ({ method: 'POST', path: `/tasks/${taskId}/attachments/direct`, body }),
   },
   {
+    name: 'task_checklist_list',
+    description: 'Subtareas de una tarea (su checklist): los pasos en que está partida, con `done` y el orden. Las tools que devuelven la tarea ya la traen en `checklist` — usá esta solo si la tenés sin ese campo (ej. después de `tasks_search`).',
+    inputSchema: { taskId: z.number().int() },
+    request: ({ taskId }) => ({ method: 'GET', path: `/tasks/${taskId}/checklist` }),
+  },
+  {
+    name: 'task_checklist_set',
+    description: 'Tilda (o destilda) una subtarea: `itemId` sale del `checklist` de la tarea. Tildá cada paso APENAS lo terminás, no todos juntos al final: así la persona ve el progreso ("2 de 4") en vivo en su dashboard mientras trabajás, en vez de enterarse solo cuando cerrás la tarea. Devuelve el checklist completo actualizado. Tildar el último paso NO completa la tarea: cerrala vos con `task_complete`.',
+    inputSchema: {
+      taskId: z.number().int(),
+      itemId: z.number().int().describe('Id de la subtarea, del `checklist` de la tarea'),
+      done: z.boolean().optional().describe('true (default) = hecha; false = destildar algo que habías marcado por error'),
+    },
+    request: ({ taskId, itemId, done }) => ({
+      method: 'PATCH', path: `/tasks/${taskId}/checklist/${itemId}`, body: { done: done !== false },
+    }),
+  },
+  {
+    name: 'task_checklist_add',
+    description: 'Agrega subtareas a una tarea: un `text` de varias líneas entra como varias (una por línea). Sirve para dejar anotados los pasos que descubrís al arrancar algo grande, de forma que la persona vea en qué está partido el trabajo. Hasta 20 por tarea: si no alcanzan, la tarea era en realidad varias. Devuelve el checklist completo.',
+    inputSchema: {
+      taskId: z.number().int(),
+      text: z.string().describe('Una subtarea, o varias separadas por saltos de línea'),
+    },
+    request: ({ taskId, text }) => ({ method: 'POST', path: `/tasks/${taskId}/checklist`, body: { text } }),
+  },
+  {
     name: 'task_delete',
     description: 'Elimina una tarea de agente abierta de tu lista de trabajo (las tuyas o las delegadas a "cualquiera de mis agentes"). No sirve para tareas de personas ni para tareas ya completadas. scope "series" en una tarea recurrente elimina la serie y sus instancias abiertas (las completadas quedan en el historial).',
     inputSchema: {
