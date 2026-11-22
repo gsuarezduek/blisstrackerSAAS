@@ -77,3 +77,34 @@ export function StatusBadge({ status }) {
 export function EmptyNote({ children }) {
   return <p className="px-4 pb-4 text-sm text-gray-400 dark:text-gray-500">{children}</p>
 }
+
+// ── Recorrer las tareas de la ficha ───────────────────────────────────────────
+// `GET /projects/:id/tasks` devuelve las tareas en DOS grupos: `byUser` (las de las
+// personas) y `byAgent` (las de los agentes de IA, que antes caían dentro de la tarjeta
+// de su dueño y se perdían ahí).
+//
+// Todo lo que recorre o actualiza tareas en la ficha pasa por estos dos helpers y no por
+// `data.byUser` directo. ProjectDetail.jsx solo tenía seis lugares que caminaban
+// `byUser` —un lookup, dos contadores y tres actualizaciones optimistas (comentario,
+// edición, borrado)—, y con un segundo grupo cada uno se duplicaba: alcanzaba con
+// olvidar uno para que editar o borrar la tarea de un agente no se reflejara hasta
+// recargar la página.
+
+// Lista plana de todas las tareas de la ficha, de personas y de agentes.
+export function allProjectTasks(data) {
+  const fromUsers  = (data?.byUser  ?? []).flatMap(g => g.tasks)
+  const fromAgents = (data?.byAgent ?? []).flatMap(g => g.tasks)
+  return [...fromUsers, ...fromAgents]
+}
+
+// Devuelve un `data` nuevo con `fn` aplicada a cada tarea de los dos grupos. `fn` puede
+// devolver `null` para sacar la tarea (es lo que usa el borrado).
+export function mapProjectTasks(data, fn) {
+  if (!data) return data
+  const mapGroup = g => ({ ...g, tasks: g.tasks.map(fn).filter(Boolean) })
+  return {
+    ...data,
+    byUser:  (data.byUser  ?? []).map(mapGroup),
+    byAgent: (data.byAgent ?? []).map(mapGroup),
+  }
+}

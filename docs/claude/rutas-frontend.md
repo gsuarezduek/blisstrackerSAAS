@@ -18,6 +18,7 @@ La fuente es `frontend/src/App.jsx`.
 /reportes       → Reportes.jsx        (PrivateRoute)
 /proyectos      → Proyectos.jsx       (PrivateRoute)
 /proyectos/:id  → ProjectDetail.jsx    (PrivateRoute)
+/agentes/:id      → AgentProfile.jsx     (PrivateRoute) — ficha de un agente de IA: identidad, dueño, proyectos, lo que hizo hoy/semana/mes, tareas abiertas y el estado de sus canales (solo para su dueño o un admin)
 /profile          → MyProfile.jsx        (PrivateRoute)
 /preferences      → Preferences.jsx      (PrivateRoute)
 /realtime         → RealTime.jsx         (PrivateRoute)

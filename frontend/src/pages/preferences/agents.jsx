@@ -86,6 +86,7 @@ export default function AgentsTab() {
   const [revealed,   setRevealed]   = useState(null) // { token, label }
   const [error,      setError]      = useState('')
   const [revokingId, setRevokingId] = useState(null)
+  const [rotatingId, setRotatingId] = useState(null)
   const [savingId,   setSavingId]   = useState(null)
 
   function load() {
@@ -119,6 +120,25 @@ export default function AgentsTab() {
       load()
     } finally {
       setRevokingId(null)
+    }
+  }
+
+  // Rotar ≠ revocar: la credencial cambia pero el agente sigue siendo el mismo (mismo
+  // nombre, mismos proyectos, mismo historial). Es la opción correcta para un token que
+  // se filtró; revocar es para dar de baja al agente.
+  async function handleRotate(t) {
+    const nombre = t.label || 'este agente'
+    if (!confirm(`¿Generar un token nuevo para «${nombre}»?\n\nEl token actual deja de funcionar de inmediato y vas a tener que pegar el nuevo en tu cliente MCP. El agente conserva su nombre, sus proyectos y su historial.`)) return
+    setRotatingId(t.id)
+    setError('')
+    try {
+      const { data } = await api.post(`/agents/${t.id}/rotate`)
+      setRevealed({ token: data.token, label: data.label })
+      load()
+    } catch (err) {
+      setError(err.response?.data?.error || 'No se pudo rotar el token.')
+    } finally {
+      setRotatingId(null)
     }
   }
 
@@ -212,6 +232,11 @@ export default function AgentsTab() {
                   ) : (
                     <>
                       <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400">Activo</span>
+                      <button onClick={() => handleRotate(t)} disabled={rotatingId === t.id}
+                        title="Le da una credencial nueva sin perder su nombre, sus proyectos ni su historial"
+                        className="text-xs px-2.5 py-1 rounded-lg font-medium bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors disabled:opacity-50">
+                        {rotatingId === t.id ? '...' : 'Rotar token'}
+                      </button>
                       <button onClick={() => handleRevoke(t.id)} disabled={revokingId === t.id}
                         className="text-xs px-2.5 py-1 rounded-lg font-medium bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/50 transition-colors disabled:opacity-50">
                         {revokingId === t.id ? '...' : 'Revocar'}

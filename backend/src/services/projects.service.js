@@ -21,14 +21,19 @@ const { PROJECT_MODULE_FIELD, PROJECT_MODULE_OFF_BY_DEFAULT_ON_CREATE } = requir
  * @param {object}   [p.include]          include de Prisma para el objeto devuelto
  * @returns el proyecto creado
  */
-async function createProject({ workspaceId, name, creatorId, serviceIds = [], memberIds = [], websiteUrl, connections, settings = {}, include }) {
+async function createProject({ workspaceId, name, creatorId, serviceIds = [], memberIds = [], agentIds = [], websiteUrl, connections, settings = {}, include }) {
   const uniqueMemberIds = [...new Set([creatorId, ...memberIds.map(Number)].filter(Boolean))]
+  // A diferencia de las personas, acá NO se agrega a nadie por default: el creador queda
+  // en el equipo porque es quien va a trabajar el proyecto, pero sus agentes solo entran
+  // si los eligió — un agente de IA no "participa" de una cuenta por herencia.
+  const uniqueAgentIds = [...new Set(agentIds.map(Number).filter(Boolean))]
 
   const data = {
     workspaceId,
     name,
     services: { create: serviceIds.map(serviceId => ({ serviceId: Number(serviceId) })) },
     members:  { create: uniqueMemberIds.map(userId => ({ userId: Number(userId) })) },
+    agents:   { create: uniqueAgentIds.map(agentId => ({ agentId })) },
   }
   if (websiteUrl) data.websiteUrl = websiteUrl
   if (connections != null) data.connections = typeof connections === 'string' ? connections : JSON.stringify(connections)

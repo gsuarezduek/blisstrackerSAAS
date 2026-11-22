@@ -743,6 +743,7 @@ model Project {
   taskRecurrences          TaskRecurrence[]
   services                 ProjectService[]
   members                  ProjectMember[]
+  agents                   ProjectAgent[]
   stars                    ProjectStar[]
   notifications            Notification[]
   links                    ProjectLink[]
@@ -933,6 +934,24 @@ model ProjectMember {
   user      User    @relation(fields: [userId], references: [id])
 
   @@id([projectId, userId])
+}
+
+// Agentes IA en el equipo de un proyecto. Espeja ProjectMember y, como él, es una
+// ETIQUETA y no una barrera (ver "Modelo de acceso" en docs/claude/proyectos.md): el
+// agente puede seguir trabajando en cualquier proyecto. Lo que da es aparecer en el
+// equipo del proyecto, poder filtrar por él, y que whoami le diga cuáles son SUS cuentas.
+//
+// Cascade en las dos puntas, a diferencia del Restrict que ProjectMember tiene por
+// default: McpToken.user ya es onDelete Cascade, así que un Restrict acá bloquearía el
+// borrado de un User.
+model ProjectAgent {
+  projectId Int
+  agentId   Int
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  agent     McpToken @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@id([projectId, agentId])
+  @@index([agentId])
 }
 
 // Proyectos destacados por usuario (preferencia personal en "Mis Proyectos").
@@ -5219,6 +5238,22 @@ model McpToken {
   userId            Int
   tokenHash         String    @unique
   label             String? // nombre legible, ej. "Grok - Gaston"
+  // ── Identidad del agente ───────────────────────────────────────────────────
+  // Esta fila ES el agente (ver docs/claude/agentes-ia.md): `label` es su nombre y
+  // `tokenHash` su credencial actual, rotable en el lugar sin perder el historial.
+  //
+  // Color para distinguir un agente de OTRO agente de un vistazo. El glifo Bot ya lo
+  // distingue de una persona, así que acá no va un avatar: darle cara de persona
+  // empeora justo la confusión que esto viene a resolver. null = se deriva del nombre
+  // por hash (frontend/src/utils/agentColor.js), así los que ya existían salen con
+  // colores distintos sin backfill ni un paso de configuración.
+  color             String?
+  // Rol de equipo, misma convención que WorkspaceMember.teamRole: referencia a
+  // UserRole.name, así RoleBadge y useRoles().labelFor funcionan sin catálogo nuevo.
+  teamRole          String    @default("")
+  // Qué hace este agente. Además del roster y la ficha, viaja en `whoami` — es como el
+  // agente mismo sabe cuál es su trabajo.
+  description       String?
   createdAt         DateTime  @default(now())
   lastUsedAt        DateTime?
   revokedAt         DateTime? // soft-revoke: no se borra la fila, se conserva el historial
@@ -5270,6 +5305,7 @@ model McpToken {
   backlinkReadingsCreated  BacklinkProfileReading[] @relation("BacklinkReadingCreatedByAgent")
   cannibalResolutions      CannibalResolution[]
   authFailures             McpAuthFailure[]
+  projects                 ProjectAgent[]
 
   @@index([workspaceId])
 }

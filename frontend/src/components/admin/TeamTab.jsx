@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import api from '../../api/client'
 import UserLink from '../UserLink'
 import RoleBadge from '../RoleBadge'
+import AgentsTeamBlock from './AgentsTeamBlock'
 
 const emptyInvite = { email: '', memberRole: 'member', teamRole: '' }
 
@@ -480,6 +481,9 @@ export default function TeamTab() {
           </div>
         </div>
       )}
+
+      {/* ── Agentes de IA ─────────────────────────────────────────────────── */}
+      <AgentsTeamBlock roles={roles} />
 
       {/* ── Historial de usuarios inactivos ──────────────────────────────── */}
       {users.some(u => !u.active) && (

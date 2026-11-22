@@ -14,6 +14,76 @@ import { Lock, Palmtree, Bot } from 'lucide-react'
 import { Icon } from '../components/ui/Icon'
 import WorkedTime from '../components/ui/WorkedTime'
 import { matchesSearch } from '../utils/textSearch'
+import AgentAvatar from '../components/ui/AgentAvatar'
+import AgentLink from '../components/AgentLink'
+import UserLink from '../components/UserLink'
+import RoleBadge from '../components/RoleBadge'
+
+// Tarjeta de un agente de IA en Actividad. Deliberadamente más chica que UserCard: un
+// agente no abre jornada, así que no tiene punto de estado, ni "jornada iniciada hace
+// X", ni pendientes/bloqueadas propias (sus bloqueos los atiende su dueño, en el panel
+// "Agentes" del Dashboard). Lo que importa acá es qué está haciendo ahora.
+function AgentCard({ row, now, onOpenTask }) {
+  const { agent, owner, currentTasks, stats } = row
+  const working = currentTasks.length > 0
+
+  return (
+    <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-5">
+      <div className="flex items-center gap-3.5">
+        <AgentLink agentId={agent?.id}>
+          <AgentAvatar agent={agent} size="md" />
+        </AgentLink>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <AgentLink agentId={agent?.id}>
+              <p className="font-semibold text-gray-900 dark:text-white truncate hover:text-primary-600 dark:hover:text-primary-400 transition-colors">
+                {agent ? (agent.label || `Agente #${agent.id}`) : `Agentes de ${owner.name.split(' ')[0]}`}
+              </p>
+            </AgentLink>
+            {agent?.teamRole && <RoleBadge role={agent.teamRole} />}
+          </div>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+            de <UserLink userId={owner.id} className="hover:text-primary-600 dark:hover:text-primary-400">{owner.name}</UserLink>
+          </p>
+        </div>
+        <span className={`text-xs font-medium flex-shrink-0 ${working ? 'text-primary-600 dark:text-primary-400' : 'text-gray-400 dark:text-gray-500'}`}>
+          {working ? `${currentTasks.length} en curso` : 'En reposo'}
+        </span>
+      </div>
+
+      {currentTasks.length > 0 && (
+        <ul className="mt-3 space-y-2">
+          {currentTasks.map((t, i) => (
+            <li key={t.id ?? `m${i}`} className="bg-gray-50 dark:bg-gray-700/40 rounded-xl px-3 py-2">
+              {t.masked ? (
+                <p className="text-sm text-gray-400 dark:text-gray-500 inline-flex items-center gap-1.5">
+                  <Icon as={Lock} size={13} />Trabajando en un proyecto privado
+                </p>
+              ) : (
+                <p
+                  onClick={() => onOpenTask(t)}
+                  className="text-sm text-gray-700 dark:text-gray-300 leading-snug break-words cursor-pointer hover:text-primary-600 dark:hover:text-primary-400 line-clamp-2"
+                >
+                  {linkify(t.description)}
+                </p>
+              )}
+              <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
+                {t.project?.name}
+                {t.startedAt && <> · hace {fmtDuration(activeSeconds(t, now))}</>}
+              </p>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {stats.completedToday > 0 && (
+        <p className="text-xs text-gray-500 dark:text-gray-400 mt-3">
+          ✓ {stats.completedToday} completada{stats.completedToday !== 1 ? 's' : ''} hoy · {fmtMins(stats.minutesToday)}
+        </p>
+      )}
+    </div>
+  )
+}
 
 const REFRESH_INTERVAL = 30 // seconds
 
@@ -202,6 +272,7 @@ export default function RealTime() {
   const [entries, setEntries] = useState([])
   const [notStarted, setNotStarted] = useState([])
   const [onLeave, setOnLeave] = useState([])
+  const [agents, setAgents] = useState([])
   const [loading, setLoading] = useState(true)
   const [countdown, setCountdown] = useState(REFRESH_INTERVAL)
   const [lastUpdate, setLastUpdate] = useState(null)
@@ -229,6 +300,7 @@ export default function RealTime() {
       setEntries(sorted)
       setNotStarted(res.notStarted)
       setOnLeave(res.onLeave ?? [])
+      setAgents(res.agents ?? [])
       setLastUpdate(new Date())
     } finally {
       setLoading(false)
@@ -256,6 +328,9 @@ export default function RealTime() {
   const finished = entries.filter(e => e.workDay.endedAt && matchUser(e.user.name))
   const filteredNotStarted = notStarted.filter(u => matchUser(u.name))
   const filteredOnLeave = onLeave.filter(u => matchUser(u.name))
+  // El buscador matchea por nombre del agente O de su dueño: buscar a una persona tiene
+  // que mostrar también lo que están haciendo sus agentes.
+  const filteredAgents = agents.filter(a => matchUser(a.agent?.label ?? '') || matchUser(a.owner?.name ?? ''))
   const workingNow = active.filter(e => e.currentTask).length
 
   const fmtLeaveEnd = iso =>
@@ -377,6 +452,18 @@ export default function RealTime() {
                   onOpenTask={setCommentTask}
                   ownUserId={authUser?.id}
                 />
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* Agentes trabajando — filas propias, no un contador dentro de su dueño. */}
+        {filteredAgents.length > 0 && (
+          <section className="mb-8">
+            <h2 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-4">Agentes de IA</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+              {filteredAgents.map(a => (
+                <AgentCard key={a.key} row={a} now={now} onOpenTask={setCommentTask} />
               ))}
             </div>
           </section>

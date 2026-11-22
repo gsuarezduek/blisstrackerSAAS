@@ -95,6 +95,7 @@ const VerifyEmailChange = lazyWithReload(() => import('./pages/VerifyEmailChange
 const VerifyEmail       = lazyWithReload(() => import('./pages/VerifyEmail'))
 const MyProfile        = lazyWithReload(() => import('./pages/MyProfile'))
 const UserProfile      = lazyWithReload(() => import('./pages/UserProfile'))
+const AgentProfile     = lazyWithReload(() => import('./pages/AgentProfile'))
 const Preferences      = lazyWithReload(() => import('./pages/Preferences'))
 const Docs             = lazyWithReload(() => import('./pages/Docs'))
 const SuperAdmin       = lazyWithReload(() => import('./pages/SuperAdmin'))
@@ -246,6 +247,7 @@ export default function App() {
           <Route path="/my-projects/:id" element={<RedirectProject />} />
           <Route path="/profile"      element={<PrivateRoute><MyProfile    /></PrivateRoute>} />
           <Route path="/users/:id"    element={<PrivateRoute><UserProfile  /></PrivateRoute>} />
+          <Route path="/agentes/:id" element={<PrivateRoute><AgentProfile /></PrivateRoute>} />
           <Route path="/preferences"  element={<PrivateRoute><Preferences  /></PrivateRoute>} />
           <Route path="/docs"         element={<PrivateRoute><Docs         /></PrivateRoute>} />
           <Route path="/realtime"   element={<PrivateRoute><RealTime  /></PrivateRoute>} />

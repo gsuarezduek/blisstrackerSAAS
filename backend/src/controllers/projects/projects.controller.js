@@ -158,7 +158,7 @@ async function listAll(req, res, next) {
 
 async function create(req, res, next) {
   try {
-    const { name, serviceIds = [], memberIds = [], websiteUrl } = req.body
+    const { name, serviceIds = [], memberIds = [], agentIds = [], websiteUrl } = req.body
     if (!name) return res.status(400).json({ error: 'Nombre requerido' })
 
     // Lo que se personaliza en el popup de alta: qué secciones usa la cuenta, si
@@ -176,6 +176,7 @@ async function create(req, res, next) {
       creatorId: req.user.userId, // el creador siempre queda como miembro
       serviceIds,
       memberIds,
+      agentIds,
       websiteUrl: typeof websiteUrl === 'string' && websiteUrl.trim() ? websiteUrl.trim() : undefined,
       settings: { marketingEnabled, contenidoEnabled, briefsEnabled, isPrivate, hoursEnabled, monthlyHours },
       include: includeDetails,
@@ -192,7 +193,7 @@ async function update(req, res, next) {
     const workspaceId = req.workspace.id
     const projectId = await resolveProjectId(req.params.id, workspaceId)
     if (!projectId) return res.status(404).json({ error: 'Proyecto no encontrado' })
-    const { name, active, serviceIds, memberIds, websiteUrl, connections, monthlyHours } = req.body
+    const { name, active, serviceIds, memberIds, agentIds, websiteUrl, connections, monthlyHours } = req.body
     const data = {}
     if (name        !== undefined) data.name       = name
 
@@ -262,6 +263,26 @@ async function update(req, res, next) {
 
       await prisma.projectMember.deleteMany({ where: { projectId } })
       data.members = { create: memberIds.map(userId => ({ userId: Number(userId) })) }
+    }
+
+    // Agentes del equipo: mismo patrón de reemplazo completo que `memberIds` (la lista
+    // que llega ES el equipo, no un delta). Sin notificación de "te agregaron al
+    // proyecto": un agente no tiene campana — se entera por whoami, que le dice cuáles
+    // son sus proyectos la próxima vez que se conecte.
+    if (agentIds !== undefined) {
+      // Se valida que cada agente sea de ESTE workspace y no esté revocado: el id viene
+      // del body y un id de otro workspace crearía una fila que después aparece en el
+      // equipo del proyecto.
+      // Entero POSITIVO, no solo entero: Number(null) es 0 y se colaba como id.
+      const ids = [...new Set((agentIds ?? []).map(Number).filter(n => Number.isInteger(n) && n > 0))]
+      const valid = ids.length
+        ? await prisma.mcpToken.findMany({
+            where: { id: { in: ids }, workspaceId, revokedAt: null },
+            select: { id: true },
+          })
+        : []
+      await prisma.projectAgent.deleteMany({ where: { projectId } })
+      data.agents = { create: valid.map(a => ({ agentId: a.id })) }
     }
 
     const projectUpdate = prisma.project.update({

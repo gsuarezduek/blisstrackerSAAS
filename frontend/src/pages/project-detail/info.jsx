@@ -6,6 +6,8 @@ import UserLink from '../../components/UserLink'
 import { avatarUrl } from '../../utils/avatarUrl'
 import RoleBadge from '../../components/RoleBadge'
 import { matchesSearch } from '../../utils/textSearch'
+import AgentAvatar from '../../components/ui/AgentAvatar'
+import AgentLink from '../../components/AgentLink'
 
 // Pestaña "Ajustes" — configuración del proyecto: servicios, equipo, portal del
 // cliente y datos del proyecto (sitio web, redes). Links y accesos viven en su
@@ -143,6 +145,28 @@ export default function InfoTab({
             ))}
           </div>
         )}
+
+        {(data.project.agents?.length ?? 0) > 0 && (
+          <>
+            <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide mt-4 mb-2">
+              Agentes de IA · {data.project.agents.length}
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {data.project.agents.map(pa => (
+                <AgentLink
+                  key={pa.agent.id}
+                  agentId={pa.agent.id}
+                  as="div"
+                  className="flex items-center gap-2 pl-1 pr-3 py-1 rounded-full border border-gray-200 dark:border-gray-700 hover:border-primary-300 dark:hover:border-primary-700 cursor-pointer transition-colors"
+                >
+                  <AgentAvatar agent={pa.agent} size="sm" />
+                  <span className="text-sm font-medium text-gray-800 dark:text-gray-200">{pa.agent.label || `Agente #${pa.agent.id}`}</span>
+                  {pa.agent.teamRole && <RoleBadge role={pa.agent.teamRole} />}
+                </AgentLink>
+              ))}
+            </div>
+          </>
+        )}
       </div>
 
       {/* Info del proyecto */}
@@ -152,8 +176,10 @@ export default function InfoTab({
 }
 
 export function TeamModal({
-  data, allUsers, teamQuery, setTeamQuery, syncTeam, teamSaving, onClose,
+  data, allUsers, allAgents, teamQuery, setTeamQuery, syncTeam, syncAgents, teamSaving, onClose,
 }) {
+  const projectAgents = data.project.agents ?? []
+  const agentIds = projectAgents.map(pa => pa.agent.id)
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md flex flex-col max-h-[80vh]">
@@ -253,6 +279,62 @@ export function TeamModal({
                       </svg>
                     </button>
                   </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Agentes de IA del proyecto.
+              Bloque aparte y no mezclado con las personas: es la misma etiqueta de
+              equipo, pero un agente no es una persona y la lista de arriba lleva el rol
+              de equipo de cada uno resuelto por userId. */}
+          <div>
+            <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">
+              Agentes de IA · {projectAgents.length}
+            </p>
+            {projectAgents.length > 0 && (
+              <div className="border border-gray-200 dark:border-gray-600 rounded-xl overflow-hidden mb-2">
+                {projectAgents.map(pa => (
+                  <div key={pa.agent.id} className="flex items-center justify-between px-4 py-2.5 border-b dark:border-gray-600 last:border-b-0">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <AgentAvatar agent={pa.agent} size="sm" />
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-gray-800 dark:text-gray-200 truncate">{pa.agent.label || `Agente #${pa.agent.id}`}</p>
+                        {pa.agent.user && <p className="text-xs text-gray-400 dark:text-gray-500">de {pa.agent.user.name}</p>}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => syncAgents(agentIds.filter(id => id !== pa.agent.id))}
+                      disabled={teamSaving}
+                      title="Quitar del proyecto"
+                      className="text-gray-300 dark:text-gray-600 hover:text-red-500 transition-colors disabled:opacity-50 ml-3 flex-shrink-0"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+                        <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z" />
+                      </svg>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            {(allAgents ?? []).filter(a => !agentIds.includes(a.id)).length === 0 ? (
+              <p className="text-xs text-gray-400 dark:text-gray-500">
+                {(allAgents ?? []).length === 0
+                  ? 'Todavía no hay agentes de IA en el workspace.'
+                  : 'Todos los agentes ya están en este proyecto.'}
+              </p>
+            ) : (
+              <div className="flex flex-wrap gap-1.5">
+                {(allAgents ?? []).filter(a => !agentIds.includes(a.id)).map(a => (
+                  <button
+                    key={a.id}
+                    onClick={() => syncAgents([...agentIds, a.id])}
+                    disabled={teamSaving}
+                    className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-full border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:border-primary-400 hover:text-primary-700 dark:hover:text-primary-400 transition-colors disabled:opacity-50"
+                  >
+                    <AgentAvatar agent={a} size="xs" />
+                    + {a.label || `Agente #${a.id}`}
+                  </button>
                 ))}
               </div>
             )}

@@ -9,9 +9,11 @@ import { fmtMins, activeMinutes } from '../../utils/format'
 import { deriveBudget, budgetColor } from '../../utils/budget'
 import WorkedTime from '../../components/ui/WorkedTime'
 import { Card, CardHeader, TextButton, Avatar, EmptyNote } from './ui'
-import { Repeat, Bot } from 'lucide-react'
+import { Repeat } from 'lucide-react'
 import { Icon } from '../../components/ui/Icon'
-import { agentName } from '../../hooks/useMyAgents'
+import AgentTag from '../../components/ui/AgentTag'
+import AgentAvatar from '../../components/ui/AgentAvatar'
+import AgentLink from '../../components/AgentLink'
 
 // Pestaña "Resumen" — lo primero que se ve al entrar a un proyecto. Responde
 // "¿cómo está esta cuenta?" sin recorrer pestañas: la situación escrita por el
@@ -38,9 +40,7 @@ function TaskLine({ task, user, onOpen, tone = 'default' }) {
         <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
           {user.name}
           {/* Tarea de agente: la ejecuta un agente de IA de esa persona, no ella. */}
-          {task.isAgentTask && (
-            <span className="inline-flex items-center gap-1 ml-1.5"><Icon as={Bot} size={12} />{task.agent ? agentName(task.agent, task.agentName) : 'su agente'}</span>
-          )}
+          <AgentTag task={task} size={12} fallback="su agente" className="ml-1.5 align-middle" />
         </p>
         {tone === 'danger' && task.blockedReason && (
           <p className="mt-1 text-xs text-red-700 dark:text-red-400 border-l-2 border-red-300 dark:border-red-700 pl-2">{task.blockedReason}</p>
@@ -267,10 +267,19 @@ function ContentCard({ projectId }) {
 
 export default function OverviewTab({ data, encodedId, authUser, onOpenComments, goTab, contentEnabled, calendarEnabled, onOpenTeamEdit }) {
   const project = data.project
-  const rows = data.byUser.flatMap(({ user, tasks }) => tasks.map(task => ({ task, user })))
+  // Personas Y agentes: el Resumen cuenta todo lo que pasa en el proyecto. Si leyera
+  // solo `byUser`, "Trabajando ahora" dejaría de mostrar justo a los agentes trabajando
+  // y el pie de la tarjeta de Horas informaría "agentes 0".
+  const rows = [
+    ...data.byUser.flatMap(({ user, tasks }) => tasks.map(task => ({ task, user }))),
+    ...(data.byAgent ?? []).flatMap(({ owner, tasks }) => tasks.map(task => ({ task, user: owner }))),
+  ]
   const blocked = rows.filter(r => r.task.status === 'BLOCKED')
   const working = rows.filter(r => r.task.status === 'IN_PROGRESS')
   const members = (project.members ?? []).map(pm => pm.user)
+  // Agentes del proyecto (ProjectAgent). Van en la misma tarjeta que las personas pero
+  // en su propio bloque: son parte del equipo, no son personas.
+  const agents  = (project.agents ?? []).map(pa => pa.agent)
   const links = project.linksEnabled !== false ? (project.links ?? []) : []
   const services = (project.services ?? []).map(ps => ps.service)
   // Tiempo que todavía no se registró (se registra al completar), partido en las dos
@@ -354,10 +363,10 @@ export default function OverviewTab({ data, encodedId, authUser, onOpenComments,
         <Card>
           <CardHeader
             title="Equipo"
-            count={members.length || null}
+            count={(members.length + agents.length) || null}
             action={authUser?.isAdmin ? <TextButton onClick={onOpenTeamEdit}>Editar</TextButton> : null}
           />
-          {members.length === 0 ? (
+          {members.length === 0 && agents.length === 0 ? (
             <EmptyNote>Sin equipo asignado. Cualquiera del workspace puede igual sumar tareas acá.</EmptyNote>
           ) : (
             <ul className="px-2 pb-2">
@@ -368,6 +377,23 @@ export default function OverviewTab({ data, encodedId, authUser, onOpenComments,
                     <span className="text-sm text-gray-800 dark:text-gray-200 truncate flex-1">{u.name}</span>
                     <RoleBadge userId={u.id} />
                   </UserLink>
+                </li>
+              ))}
+              {agents.length > 0 && (
+                <li className="px-2 pt-2 pb-1 text-[11px] uppercase tracking-wide text-gray-400 dark:text-gray-500">
+                  Agentes de IA
+                </li>
+              )}
+              {agents.map(a => (
+                <li key={`a${a.id}`}>
+                  <AgentLink agentId={a.id} as="div" className="flex items-center gap-2.5 px-2 py-1.5 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700/60 cursor-pointer">
+                    <AgentAvatar agent={a} size="sm" />
+                    <span className="text-sm text-gray-800 dark:text-gray-200 truncate flex-1">
+                      {a.label || `Agente #${a.id}`}
+                      {a.user && <span className="text-xs text-gray-400 dark:text-gray-500"> · de {a.user.name.split(' ')[0]}</span>}
+                    </span>
+                    {a.teamRole && <RoleBadge role={a.teamRole} />}
+                  </AgentLink>
                 </li>
               ))}
             </ul>

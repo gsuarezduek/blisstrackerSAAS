@@ -1,9 +1,14 @@
 import { useState, useEffect } from 'react'
 import api from '../api/client'
 
-// Mis agentes de IA = mis McpToken activos (Preferencias → Agentes IA); el `label`
-// es el nombre del agente. Cache a nivel módulo, como useRoles: se pide una vez por
-// sesión. Preferencias llama a invalidateMyAgents() al generar/revocar un token.
+// Mis agentes de IA. Sale de /agents?mine=true (la ENTIDAD) y no de /mcp-tokens (la
+// CREDENCIAL): lo único que necesitan sus cuatro consumidores es id, nombre y color para
+// poblar un selector o preguntar "¿tengo agentes?", y /mcp-tokens devuelve además el
+// `webhookSecret` de cada uno — se estaba trayendo a la memoria del browser en cada
+// sesión sin que nadie lo usara.
+//
+// Cache a nivel módulo, como useRoles: se pide una vez por sesión. Preferencias llama a
+// invalidateMyAgents() al generar, editar o revocar un agente.
 let cache = null
 let cachePromise = null
 
@@ -29,8 +34,10 @@ export default function useMyAgents() {
   useEffect(() => {
     if (cache) { setAgents(cache); return }
     if (!cachePromise) {
-      cachePromise = api.get('/mcp-tokens').then(r => {
-        cache = r.data.filter(t => !t.revokedAt)
+      // El endpoint ya excluye los revocados (un agente dado de baja no es parte del
+      // equipo), así que acá no hace falta filtrar.
+      cachePromise = api.get('/agents', { params: { mine: true } }).then(r => {
+        cache = r.data
         return cache
       }).catch(() => { cachePromise = null })
     }

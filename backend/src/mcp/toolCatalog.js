@@ -214,7 +214,7 @@ const tools = [
   // aparte en server.js a partir de mcp/guide.js)
   {
     name: 'whoami',
-    description: 'Quién es la persona dueña del token (nombre, email, rol de equipo), si es admin/owner del workspace y a qué módulos tiene acceso (moduleAccess: marketing, contenido, ventas, rrhh, eos, gamification). Llamala al empezar para saber qué tools vas a poder usar.',
+    description: 'Quién sos VOS como agente (`agent`: tu nombre, tu rol, qué hace tu trabajo y en qué proyectos te sumaron al equipo) y quién es la persona dueña de tu token (nombre, email, rol de equipo), si es admin/owner del workspace y a qué módulos tiene acceso (moduleAccess: marketing, contenido, ventas, rrhh, eos, gamification). Llamala al empezar: te dice tu identidad, tus cuentas y qué tools vas a poder usar.',
     inputSchema: {},
     request: () => ({ method: 'GET', path: '/auth/me' }),
   },

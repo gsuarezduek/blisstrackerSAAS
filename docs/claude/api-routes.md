@@ -102,7 +102,15 @@ PATCH  /api/tasks/:id/checklist/:itemId              # { done? , text? } — til
 DELETE /api/tasks/:id/checklist/:itemId              # borra la subtarea
 POST   /api/tasks/:id/checklist/:itemId/to-task      # "Convertir en tarea": crea una Task real en el mismo proyecto y saca el ítem
 
-# Agentes IA — tokens de MCP (self-service, cada uno gestiona SOLO los propios)
+# Agentes IA — la ENTIDAD (lectura para cualquier miembro del workspace; nunca devuelve
+# credenciales: ni tokenHash ni webhookUrl/webhookSecret — ver agentes-ia.md)
+GET    /api/agents                       # roster del workspace (no revocados). ?mine=true → solo los propios
+GET    /api/agents/:id                   # ficha: identidad, dueño, proyectos, summary día/semana/mes, tareas abiertas, canales como booleanos (solo dueño/admin)
+GET    /api/agents/:id/completed         # ?period=day|week|month&date=YYYY-MM-DD
+PATCH  /api/agents/:id                   # dueño o admin/owner. body { label?, color?, teamRole?, description? } — campos independientes; color '' vuelve al derivado del nombre
+POST   /api/agents/:id/rotate            # solo el dueño: credencial nueva en la MISMA fila (conserva nombre, proyectos e historial). Devuelve el token en claro UNA sola vez
+
+# Agentes IA — la CREDENCIAL y sus canales (self-service, cada uno gestiona SOLO los propios)
 GET    /api/mcp-tokens
 POST   /api/mcp-tokens                   # body { label? } — devuelve el token en claro UNA sola vez
 PATCH  /api/mcp-tokens/:id/revoke
@@ -111,11 +119,11 @@ GET    /api/mcp-tokens/wake-config       # { configured, model, defaultModel, ca
 PUT    /api/mcp-tokens/wake-config       # admin/owner. body { apiKey?, model? } — apiKey '' borra la guardada (se guarda cifrada)
 
 GET    /api/projects                     # todos los proyectos activos del workspace (incluye starred del usuario)
-PUT    /api/projects/:id                 # admin: editar nombre, websiteUrl, connections, serviceIds, memberIds
+PUT    /api/projects/:id                 # admin: editar nombre, websiteUrl, connections, serviceIds, memberIds, agentIds (agentes de IA del equipo; reemplazo completo, como memberIds)
 PATCH  /api/projects/:id/star            # toggle destacado del proyecto para el usuario actual (preferencia personal)
 GET    /api/projects/:id/members
-GET    /api/projects/:id/tasks
-GET    /api/projects/:id/completed       # ?skip=N
+GET    /api/projects/:id/tasks           # { project, byUser, byAgent, activeCount, activeLimit } — las tareas de agente van en byAgent, NO dentro de byUser
+GET    /api/projects/:id/completed       # ?skip=N&from=&to=&userId=&agentId= (agentId filtra por EJECUTOR)
 PATCH  /api/projects/:id/modules                          # prende/apaga Marketing, Contenido y Briefs PARA ESTE PROYECTO { marketingEnabled?, contenidoEnabled?, briefsEnabled? } — clave ausente = sin cambios, devuelve las tres; admin/owner o miembro del proyecto
 PUT    /api/projects/:id/links                            # reemplaza la lista completa (alta, edición y baja de un link pasan por acá) — admin/owner o miembro del proyecto
 GET    /api/projects/:id/accesos                          # credenciales del proyecto, sin password/2FA (hasPassword/hasTwofa) + createdBy/updatedBy — cualquier miembro del workspace

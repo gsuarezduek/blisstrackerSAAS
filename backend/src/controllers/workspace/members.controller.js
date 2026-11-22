@@ -357,6 +357,13 @@ async function toggleMemberActive(req, res, next) {
           where: { userId, workspaceId, revokedAt: null },
           data: { revokedAt: new Date() },
         })
+
+        // ...y sus agentes salen del equipo de los proyectos, igual que sale ella
+        // (ProjectAgent espeja ProjectMember). Si no, el equipo de un proyecto seguiría
+        // mostrando agentes que ya no pueden conectarse.
+        await tx.projectAgent.deleteMany({
+          where: { agent: { userId, workspaceId } },
+        })
       }
       await tx.workspaceMember.update({
         where: { workspaceId_userId: { workspaceId, userId } },

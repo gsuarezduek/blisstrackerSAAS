@@ -27,4 +27,27 @@ async function canWrite(req, projectId) {
   return isProjectMember(projectId, req.user.userId)
 }
 
-module.exports = { isAdmin, canWrite, isProjectMember }
+// Filtra tareas de proyectos privados que QUIEN MIRA no puede ver — ver concepto
+// "Proyectos privados". Nació en users.controller.js para el perfil de una persona y se
+// movió acá cuando la ficha del agente pasó a necesitar la misma defensa: una ficha que
+// lista tareas es un atajo para leer lo que Actividad ya enmascara, y tener dos copias
+// de este filtro es tener una que algún día se olvida de actualizar.
+//
+// `taskLists` es un array de listas (se filtran todas con una sola consulta de
+// membresías) y devuelve las mismas listas filtradas, en el mismo orden. Las tareas
+// necesitan traer `project: { isPrivate }` y `projectId` en el select.
+async function filterVisibleTasks(req, taskLists) {
+  if (isAdmin(req)) return taskLists
+  const all = taskLists.flat()
+  const privateIds = [...new Set(all.filter(t => t.project?.isPrivate).map(t => t.projectId))]
+  if (privateIds.length === 0) return taskLists
+  const memberships = await prisma.projectMember.findMany({
+    where: { projectId: { in: privateIds }, userId: req.user.userId },
+    select: { projectId: true },
+  })
+  const accessibleIds = new Set(memberships.map(m => m.projectId))
+  const canSee = t => !t.project?.isPrivate || accessibleIds.has(t.projectId)
+  return taskLists.map(list => list.filter(canSee))
+}
+
+module.exports = { isAdmin, canWrite, isProjectMember, filterVisibleTasks }

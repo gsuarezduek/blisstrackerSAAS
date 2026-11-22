@@ -1,33 +1,10 @@
 const prisma = require('../lib/prisma')
-const { taskMins, tzOffsetStr } = require('../lib/timeMetrics')
-const { isAdmin } = require('../lib/projectAccess')
+const { taskMins } = require('../lib/timeMetrics')
+const { filterVisibleTasks } = require('../lib/projectAccess')
 const { HUMAN_TASK_WHERE } = require('../lib/agentTasks')
-
-// Filtro Prisma { gte, lte } para un intervalo de días [startStr, endStr] (YYYY-MM-DD), en la TZ dada.
-function utcRange(startStr, endStr, tz) {
-  const off = tzOffsetStr(tz) // ej "-03:00"
-  return {
-    gte: new Date(`${startStr}T00:00:00.000${off}`),
-    lte: new Date(`${endStr}T23:59:59.999${off}`),
-  }
-}
-
-// Lunes (YYYY-MM-DD) de la semana que contiene `dateStr`.
-function mondayOf(dateStr) {
-  const [y, m, d] = dateStr.split('-').map(Number)
-  const dt = new Date(Date.UTC(y, m - 1, d))
-  const dow = dt.getUTCDay()
-  const daysToMonday = dow === 0 ? 6 : dow - 1
-  dt.setUTCDate(dt.getUTCDate() - daysToMonday)
-  return dt.toISOString().slice(0, 10)
-}
-
-// Suma n días a una fecha YYYY-MM-DD (n puede ser negativo).
-function shiftDay(dateStr, n) {
-  const [y, m, d] = dateStr.split('-').map(Number)
-  const dt = new Date(Date.UTC(y, m - 1, d + n))
-  return dt.toISOString().slice(0, 10)
-}
+// Los períodos de una ficha (día/semana/mes en la TZ del workspace) vivían acá; se
+// movieron a lib/ cuando la ficha del agente pasó a necesitar los mismos límites.
+const { utcRange, mondayOf, periodBounds, readPeriodQuery, todayIn } = require('../lib/profilePeriods')
 
 const memberUserSelect = {
   id: true, name: true, email: true, avatar: true, createdAt: true,
@@ -116,24 +93,6 @@ const profileTaskInclude = {
   createdByAgent: { select: { id: true, label: true } }, // quién la creó (el detalle lo muestra)
 }
 
-// Filtra tareas de proyectos privados que el usuario que está mirando el perfil
-// (no necesariamente el dueño del perfil) no puede ver — ver concepto "Proyectos
-// privados". Sin esto, el perfil de una persona sería un atajo para leer el
-// contenido que Actividad ya enmascara.
-async function filterVisibleTasks(req, taskLists) {
-  if (isAdmin(req)) return taskLists
-  const all = taskLists.flat()
-  const privateIds = [...new Set(all.filter(t => t.project?.isPrivate).map(t => t.projectId))]
-  if (privateIds.length === 0) return taskLists
-  const memberships = await prisma.projectMember.findMany({
-    where: { projectId: { in: privateIds }, userId: req.user.userId },
-    select: { projectId: true },
-  })
-  const accessibleIds = new Set(memberships.map(m => m.projectId))
-  const canSee = t => !t.project?.isPrivate || accessibleIds.has(t.projectId)
-  return taskLists.map(list => list.filter(canSee))
-}
-
 /**
  * GET /api/users/:id/profile
  * Perfil público de una persona del workspace (accesible a cualquier miembro).
@@ -154,7 +113,7 @@ async function getUserProfile(req, res, next) {
     })
     if (!member) return res.status(404).json({ error: 'Usuario no encontrado en este workspace' })
 
-    const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: TZ })
+    const todayStr = todayIn(TZ)
     const monthStart = `${todayStr.slice(0, 7)}-01`
     const weekStart = mondayOf(todayStr)
 
@@ -271,22 +230,9 @@ async function getUserCompleted(req, res, next) {
     const workspaceId = req.workspace.id
     const TZ = req.workspace.timezone
 
-    const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: TZ })
-    const period = ['day', 'week', 'month'].includes(req.query.period) ? req.query.period : 'day'
-    const date = /^\d{4}-\d{2}-\d{2}$/.test(req.query.date || '') ? req.query.date : todayStr
-
-    let startStr, endStr
-    if (period === 'week') {
-      startStr = mondayOf(date)
-      endStr = shiftDay(startStr, 6)
-    } else if (period === 'month') {
-      startStr = `${date.slice(0, 7)}-01`
-      const [y, m] = date.split('-').map(Number)
-      endStr = new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10)
-    } else {
-      startStr = date
-      endStr = date
-    }
+    const todayStr = todayIn(TZ)
+    const { period, date } = readPeriodQuery(req.query, todayStr)
+    const { startStr, endStr } = periodBounds(period, date)
 
     // Sin filtro de ejecutor: la lista trae también lo que completaron sus agentes de IA,
     // rotulado por fila (isAgentTask/agent) y totalizado aparte en `total`.

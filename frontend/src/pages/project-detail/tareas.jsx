@@ -7,8 +7,9 @@ import UserLink from '../../components/UserLink'
 import { Card, Avatar, StatusBadge, STATUS_META } from './ui'
 import { Repeat, MessageSquare, Pencil } from 'lucide-react'
 import { Icon } from '../../components/ui/Icon'
-import { agentName } from '../../hooks/useMyAgents'
 import AgentTag from '../../components/ui/AgentTag'
+import AgentAvatar from '../../components/ui/AgentAvatar'
+import AgentLink from '../../components/AgentLink'
 
 // Pestaña "Tareas" — el tablero completo del proyecto. Filtro por estado arriba
 // (con conteo, así "Bloqueadas" se ve de un vistazo), tareas activas agrupadas
@@ -28,7 +29,7 @@ const FILTERS = [
   { key: 'PENDING',     label: 'Pendientes' },
 ]
 
-function TaskRow({ task, onOpenComments }) {
+function TaskRow({ task, onOpenComments, hideAgentTag = false }) {
   const comments = task._count?.comments ?? 0
   const blocked = task.status === 'BLOCKED'
   return (
@@ -40,7 +41,7 @@ function TaskRow({ task, onOpenComments }) {
           </p>
           <div className="mt-1 flex items-center gap-x-3 gap-y-1 flex-wrap text-xs text-gray-500 dark:text-gray-400">
             <StatusBadge status={task.status} />
-            <AgentTag task={task} />
+            {!hideAgentTag && <AgentTag task={task} />}
             {task.recurrenceId && <span className="inline-flex items-center gap-1"><Icon as={Repeat} size={13} />Recurrente</span>}
             {task.createdBy && <span>De {task.createdBy.name.split(' ')[0]}</span>}
             {task.createdAt && <span title={createdAtTitle(task.createdAt)}>Creada {fmtCreatedAt(task.createdAt)}</span>}
@@ -56,35 +57,84 @@ function TaskRow({ task, onOpenComments }) {
   )
 }
 
+// Cabecera de una tarjeta de agente: su color, su nombre, su rol y de quién es. Las
+// tareas siguen siendo responsabilidad del dueño, así que el dueño se nombra siempre.
+function AgentCardHeader({ group }) {
+  const { agent, owner, tasks } = group
+  return (
+    <AgentLink agentId={agent?.id} as="div"
+      className="flex items-center gap-3 px-4 py-2.5 border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/40 cursor-pointer">
+      <AgentAvatar agent={agent} size="sm" />
+      <p className="font-semibold text-gray-900 dark:text-white text-sm">{agentLabelOf(group)}</p>
+      {agent?.teamRole && <RoleBadge role={agent.teamRole} />}
+      <span className="text-xs text-gray-400 dark:text-gray-500">de {owner.name.split(' ')[0]}</span>
+      <span className="ml-auto text-xs text-gray-500 dark:text-gray-400">{tasks.length} tarea{tasks.length !== 1 ? 's' : ''}</span>
+    </AgentLink>
+  )
+}
+
+// Nombre visible de un agente de un grupo de `byAgent` (sin agente = delegada a
+// "cualquiera de los agentes" de esa persona y todavía sin tomar).
+function agentLabelOf(g) {
+  if (!g.agent) return `Agentes de ${g.owner.name.split(' ')[0]}`
+  return g.agent.label || `Agente #${g.agent.id}`
+}
+
+// Nombre con el que se ordenan las tarjetas, sea de persona o de agente.
+function labelOf(g) {
+  return g.kind === 'agent' ? agentLabelOf(g) : g.user.name
+}
+
 export default function TareasTab({
   data, onOpenComments, statusFilter, setStatusFilter,
-  archive, archiveSkip, hasMore, archiveLoading, archiveFrom, archiveTo, archiveUserId,
-  workspaceMembers, onArchiveUserChange, onArchiveDateSearch, setArchiveFrom, setArchiveTo,
+  archive, archiveSkip, hasMore, archiveLoading, archiveFrom, archiveTo, archiveUserId, archiveAgentId,
+  workspaceMembers, onArchiveUserChange, onArchiveAgentChange, onArchiveDateSearch, setArchiveFrom, setArchiveTo,
   onLoadMore,
 }) {
+  // Los agentes del EQUIPO del proyecto, para el filtro del historial: un agente que
+  // trabajó acá una vez sin estar en el equipo igual aparece rotulado por fila.
+  const projectAgents = (data.project.agents ?? []).map(pa => pa.agent)
   const [showCompleted, setShowCompleted] = useState(true)
+  // Filtro por ejecutor. El valor es `u:<id>` o `a:<key del grupo>` para que una persona
+  // y un agente no puedan colisionar por id.
+  const [ownerFilter, setOwnerFilter] = useState('')
 
-  const all = data.byUser.flatMap(u => u.tasks)
+  const agentGroups = data.byAgent ?? []
+  const all = [...data.byUser.flatMap(u => u.tasks), ...agentGroups.flatMap(g => g.tasks)]
   const counts = all.reduce((acc, t) => ({ ...acc, [t.status]: (acc[t.status] || 0) + 1 }), {})
 
-  // Dentro de cada estado: primero las tareas propias de la persona, después agrupadas
-  // por agente (alfabético por nombre declarado) — así con varios agentes activos sus
-  // tareas quedan juntas en vez de intercaladas por fecha de creación.
-  const agentSortKey = t => t.isAgentTask ? (t.agent ? agentName(t.agent, t.agentName) : 'Agente') : ''
+  // Las tareas de agente ya no se ordenan dentro de la tarjeta de la persona: tienen
+  // tarjeta propia. Por eso desapareció el `agentSortKey` que las mantenía juntas acá
+  // dentro — era el parche de que estuvieran mezcladas.
+  const byStatusThenNew = (a, b) =>
+    STATUS_META[a.status].order - STATUS_META[b.status].order
+    || new Date(b.createdAt) - new Date(a.createdAt)
 
-  const groups = data.byUser
-    .map(({ user, tasks }) => ({
-      user,
-      tasks: tasks
-        .filter(t => !statusFilter || t.status === statusFilter)
-        .sort((a, b) =>
-          STATUS_META[a.status].order - STATUS_META[b.status].order
-          || agentSortKey(a).localeCompare(agentSortKey(b))
-          || new Date(b.createdAt) - new Date(a.createdAt)
-        ),
-    }))
+  const visible = tasks => tasks.filter(t => !statusFilter || t.status === statusFilter).sort(byStatusThenNew)
+
+  const userGroups = data.byUser
+    .map(({ user, tasks }) => ({ kind: 'user', id: `u:${user.id}`, user, tasks: visible(tasks) }))
     .filter(g => g.tasks.length > 0)
-    .sort((a, b) => STATUS_META[a.tasks[0].status].order - STATUS_META[b.tasks[0].status].order || a.user.name.localeCompare(b.user.name))
+
+  const agentCards = agentGroups
+    .map(g => ({ kind: 'agent', id: `a:${g.key}`, agent: g.agent, owner: g.owner, tasks: visible(g.tasks) }))
+    .filter(g => g.tasks.length > 0)
+
+  // Un solo orden para las dos clases de tarjeta: lo más urgente arriba, sin que las de
+  // agente queden siempre relegadas al final.
+  const groups = [...userGroups, ...agentCards]
+    .filter(g => !ownerFilter || g.id === ownerFilter)
+    .sort((a, b) =>
+      STATUS_META[a.tasks[0].status].order - STATUS_META[b.tasks[0].status].order
+      || labelOf(a).localeCompare(labelOf(b))
+    )
+
+  // Opciones del filtro: se arman de los grupos SIN filtrar por estado, así elegir un
+  // responsable no hace desaparecer su propia opción de la lista.
+  const ownerOptions = [
+    ...data.byUser.map(({ user }) => ({ value: `u:${user.id}`, label: user.name })),
+    ...agentGroups.map(g => ({ value: `a:${g.key}`, label: agentLabelOf(g) })),
+  ]
 
   return (
     <div className="space-y-6">
@@ -109,6 +159,23 @@ export default function TareasTab({
         })}
       </div>
 
+      {/* Filtro por responsable: personas y agentes como opciones propias. Solo aparece
+          si hay más de un ejecutor; con uno solo no filtra nada. */}
+      {ownerOptions.length > 1 && (
+        <div className="flex items-center gap-2 -mt-3">
+          <label htmlFor="tareas-owner-filter" className="text-xs text-gray-500 dark:text-gray-400">Responsable</label>
+          <select
+            id="tareas-owner-filter"
+            value={ownerFilter}
+            onChange={e => setOwnerFilter(e.target.value)}
+            className="text-sm border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary-500"
+          >
+            <option value="">Todos</option>
+            {ownerOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+        </div>
+      )}
+
       {data?.activeCount > data?.activeLimit && (
         <div className="px-4 py-2.5 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-xl text-xs text-amber-700 dark:text-amber-400">
           Mostrando las primeras {data.activeLimit} tareas activas de {data.activeCount} totales. Completá o mové tareas al backlog para ver el resto.
@@ -125,17 +192,25 @@ export default function TareasTab({
         <p className="text-sm text-gray-400 text-center py-6">No hay tareas con ese estado.</p>
       ) : (
         <div className="space-y-3">
-          {groups.map(({ user, tasks }) => (
-            <Card key={user.id} className="overflow-hidden">
-              <UserLink userId={user.id} as="div"
-                className="flex items-center gap-3 px-4 py-2.5 border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/40 cursor-pointer">
-                <Avatar user={user} size="sm" />
-                <p className="font-semibold text-gray-900 dark:text-white text-sm">{user.name}</p>
-                <RoleBadge userId={user.id} />
-                <span className="ml-auto text-xs text-gray-500 dark:text-gray-400">{tasks.length} tarea{tasks.length !== 1 ? 's' : ''}</span>
-              </UserLink>
+          {groups.map(g => (
+            <Card key={g.id} className="overflow-hidden">
+              {g.kind === 'agent' ? (
+                <AgentCardHeader group={g} />
+              ) : (
+                <UserLink userId={g.user.id} as="div"
+                  className="flex items-center gap-3 px-4 py-2.5 border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/40 cursor-pointer">
+                  <Avatar user={g.user} size="sm" />
+                  <p className="font-semibold text-gray-900 dark:text-white text-sm">{g.user.name}</p>
+                  <RoleBadge userId={g.user.id} />
+                  <span className="ml-auto text-xs text-gray-500 dark:text-gray-400">{g.tasks.length} tarea{g.tasks.length !== 1 ? 's' : ''}</span>
+                </UserLink>
+              )}
               <ul className="divide-y divide-gray-100 dark:divide-gray-700">
-                {tasks.map(task => <TaskRow key={task.id} task={task} onOpenComments={onOpenComments} />)}
+                {g.tasks.map(task => (
+                  // Dentro de la tarjeta de un agente el rótulo sería redundante: ya
+                  // dice de quién es la tarjeta.
+                  <TaskRow key={task.id} task={task} onOpenComments={onOpenComments} hideAgentTag={g.kind === 'agent'} />
+                ))}
               </ul>
             </Card>
           ))}
@@ -154,11 +229,22 @@ export default function TareasTab({
             Completadas
           </button>
           {showCompleted && (
-            <select value={archiveUserId} onChange={onArchiveUserChange}
-              className="text-sm border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary-500">
-              <option value="">Todas las personas</option>
-              {workspaceMembers.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-            </select>
+            <div className="flex items-center gap-2">
+              <select value={archiveUserId} onChange={onArchiveUserChange}
+                className="text-sm border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary-500">
+                <option value="">Todas las personas</option>
+                {workspaceMembers.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+              </select>
+              {/* Filtro por agente, aparte del de persona: filtra por EJECUTOR. Solo
+                  aparece si el proyecto tiene agentes en el equipo. */}
+              {(projectAgents.length > 0) && (
+                <select value={archiveAgentId ?? ''} onChange={onArchiveAgentChange}
+                  className="text-sm border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary-500">
+                  <option value="">Todos los agentes</option>
+                  {projectAgents.map(a => <option key={a.id} value={a.id}>{a.label || `Agente #${a.id}`}</option>)}
+                </select>
+              )}
+            </div>
           )}
         </div>
 
@@ -180,14 +266,25 @@ export default function TareasTab({
                   const dur = completedDuration(task)
                   return (
                     <div key={task.id} className="flex items-start gap-3 px-4 py-3">
-                      <Avatar user={task.user} size="sm" />
+                      {/* La cara de quien la hizo: el agente si fue un agente. Antes
+                          toda fila llevaba el avatar del dueño y el agente quedaba como
+                          texto entre paréntesis. */}
+                      {task.isAgentTask
+                        ? <AgentAvatar agent={task.agent} size="sm" />
+                        : <Avatar user={task.user} size="sm" />}
                       <div className="min-w-0 flex-1">
                         <p onClick={() => onOpenComments(task)}
                           className="text-sm text-gray-700 dark:text-gray-300 leading-snug whitespace-pre-wrap break-words cursor-pointer hover:text-primary-600 dark:hover:text-primary-400">
                           {linkify(task.description)}
                         </p>
                         <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
-                          {task.isAgentTask ? `Agente de ${task.user.name.split(' ')[0]}${task.agent ? ` (${agentName(task.agent, task.agentName)})` : ''}` : task.user.name} · Completada {fmtDate(task.completedAt, data?.project?.timezone)}
+                          {task.isAgentTask ? (
+                            <>
+                              <AgentTag task={task} size={12} fallback={`Agente de ${task.user.name.split(' ')[0]}`} />
+                              {task.agent && <span> · de {task.user.name.split(' ')[0]}</span>}
+                            </>
+                          ) : task.user.name}
+                          {' · '}Completada {fmtDate(task.completedAt, data?.project?.timezone)}
                           {task.createdAt && <span title={createdAtTitle(task.createdAt)}> · Creada {fmtCreatedAt(task.createdAt)}</span>}
                         </p>
                       </div>

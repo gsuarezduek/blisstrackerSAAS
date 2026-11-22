@@ -5,7 +5,7 @@ import api from '../../api/client'
 import { Icon } from '../ui/Icon'
 import { OverflowMenu } from '../ui/OverflowMenu'
 import UnblockAgentTaskModal from './UnblockAgentTaskModal'
-import { agentName } from '../../hooks/useMyAgents'
+import AgentTag from '../ui/AgentTag'
 import { fmtMins, activeMinutes, completedMinutes, fmtCreatedAt, createdAtTitle } from '../../utils/format'
 
 // Pestaña "Agentes" del Dashboard: las tareas que ejecutan mis agentes de IA
@@ -105,7 +105,8 @@ function AgentTaskRow({ task, today, onChanged, onReturned, onOpenComments }) {
           <Link to={`/proyectos/${task.project.id}`} className="font-medium text-gray-600 dark:text-gray-300 hover:text-primary-600 dark:hover:text-primary-400">
             {task.project.name}
           </Link>
-          <span>{task.agent ? agentName(task.agent, task.agentName) : 'Cualquiera de mis agentes'}</span>
+          {/* Sin ícono: el Bot ya está a la izquierda de la fila. */}
+          <AgentTag task={task} fallback="Cualquiera de mis agentes" withIcon={false} />
           {scheduledLabel && <span className="text-indigo-600 dark:text-indigo-300 capitalize">Aparece el {scheduledLabel}</span>}
           {task.recurrenceId && <span className="inline-flex items-center gap-1" title="Tarea recurrente"><Icon as={Repeat} size={13} />Recurrente</span>}
           {task.createdAt && <span title={createdAtTitle(task.createdAt)}>Creada {fmtCreatedAt(task.createdAt)}</span>}

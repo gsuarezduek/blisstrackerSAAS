@@ -34,3 +34,9 @@ Subtareas de una tarea: `TaskChecklistItem` (`taskId` `Cascade`, `text`, `done`,
 
 ### `cannibal_last_check_evidence`
 Canibalización → `CannibalResolution.lastCheckEvidence` (TEXT nullable, JSON). Por qué la última verificación NO reabrió el conflicto: antes "no reabre" era silencio y una resolución que la verificación nunca podía evaluar (días de datos insuficientes, volumen bajo el piso prorrateado, o el filtro de idioma descartando todas las filas) ocultaba su conflicto para siempre, indistinguible de una bien resuelta. Una columna con default null, sin backfill. Ver `docs/claude/marketing-canibalizacion.md`.
+
+### `agent_identity`
+Identidad del agente IA → `McpToken.color` (TEXT nullable), `.teamRole` (TEXT NOT NULL default `''`) y `.description` (TEXT nullable). La fila ya ERA el agente; faltaba poder nombrarlo (el `label` se escribía una vez al crearlo y no se podía cambiar), distinguirlo de los demás de un vistazo y decir qué hace. `color` null = se deriva del nombre por hash, así los agentes que ya existían se distinguen sin backfill. Ver "Identidad del agente" en `docs/claude/agentes-ia.md`.
+
+### `project_agents`
+Tabla `ProjectAgent` (`projectId` + `agentId`, PK compuesta, índice por `agentId`): agentes de IA en el equipo de un proyecto. Espeja `ProjectMember` y, como él, es una **etiqueta y no una barrera** — el agente puede seguir trabajando en cualquier proyecto. `Cascade` en las dos puntas, a diferencia del `Restrict` por default de `ProjectMember`: `McpToken.user` ya es `Cascade` y un `Restrict` acá bloquearía el borrado de un `User`. Sin backfill.

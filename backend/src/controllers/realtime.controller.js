@@ -176,7 +176,76 @@ async function snapshot(req, res, next) {
       id: l.user.id, name: l.user.name, avatar: l.user.avatar, endDate: l.endDate,
     }))
 
-    res.json({ entries: result, notStarted, onLeave })
+    // ── Agentes trabajando ───────────────────────────────────────────────────
+    // Hasta acá un agente era solo un contador dentro de la fila de su dueño
+    // (`stats.agentInProgress`): se veía que "tiene 2 en curso" pero no cuál agente ni
+    // en qué. Esta lista los pone como filas propias, sin sacarle el contador a la
+    // persona (ese sigue siendo su "mis agentes").
+    const agentTasks = await prisma.task.findMany({
+      where: {
+        isAgentTask: true,
+        workDay: { workspaceId, date },
+        OR: [
+          { status: 'IN_PROGRESS' },
+          { status: 'COMPLETED' },
+        ],
+      },
+      include: {
+        user:    { select: { id: true, name: true, avatar: true } },
+        agent:   { select: { id: true, label: true, color: true, teamRole: true } },
+        project: { select: { id: true, name: true, isPrivate: true } },
+        sessions: { select: { startedAt: true, endedAt: true } },
+      },
+      orderBy: { startedAt: 'asc' },
+    })
+
+    // Mismo enmascarado que `currentTask`: un agente trabajando en un proyecto privado
+    // no puede filtrar la descripción a quien no tiene acceso a ese proyecto.
+    let accessibleForAgents = null
+    if (!viewerIsAdmin) {
+      const privateIds = [...new Set(agentTasks.filter(t => t.project?.isPrivate).map(t => t.projectId))]
+      const memberships = privateIds.length
+        ? await prisma.projectMember.findMany({ where: { projectId: { in: privateIds }, userId }, select: { projectId: true } })
+        : []
+      accessibleForAgents = new Set(memberships.map(m => m.projectId))
+    }
+    const shapeAgentTask = t => {
+      const hidden = accessibleForAgents && t.project?.isPrivate && !accessibleForAgents.has(t.projectId)
+      if (hidden) {
+        return { masked: true, status: t.status, startedAt: t.startedAt, sessions: t.sessions, project: { id: t.project.id, name: t.project.name } }
+      }
+      return {
+        id: t.id, description: t.description, status: t.status, startedAt: t.startedAt,
+        sessions: t.sessions, project: { id: t.project.id, name: t.project.name },
+      }
+    }
+
+    const agentMap = {}
+    for (const t of agentTasks) {
+      // Sin agente tomado (`agentId` null) se agrupa por dueño: no hay a quién
+      // atribuirla todavía.
+      const key = t.agent ? `a:${t.agent.id}` : `any:${t.userId}`
+      agentMap[key] ??= {
+        key,
+        agent: t.agent,
+        owner: t.user,
+        currentTasks: [],
+        stats: { completedToday: 0, minutesToday: 0 },
+      }
+      const row = agentMap[key]
+      if (t.status === 'IN_PROGRESS') row.currentTasks.push(shapeAgentTask(t))
+      else {
+        row.stats.completedToday += 1
+        row.stats.minutesToday += taskWorkedMinutes(t)
+      }
+    }
+    // Los que están trabajando primero; después por nombre.
+    const agents = Object.values(agentMap).sort((a, b) =>
+      (b.currentTasks.length > 0) - (a.currentTasks.length > 0)
+      || (a.agent?.label ?? '').localeCompare(b.agent?.label ?? '')
+    )
+
+    res.json({ entries: result, notStarted, onLeave, agents })
   } catch (err) { next(err) }
 }
 

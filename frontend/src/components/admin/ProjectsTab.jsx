@@ -2,14 +2,21 @@ import { useState, useEffect, useRef } from 'react'
 import api from '../../api/client'
 import RoleBadge from '../RoleBadge'
 import { matchesSearch } from '../../utils/textSearch'
+import AgentAvatar from '../ui/AgentAvatar'
 
 // ── Team Modal ─────────────────────────────────────────────────────────────────
 
 function TeamModal({ project, allUsers, onClose, onUpdate }) {
   const [members, setMembers]   = useState(project.members.map(pm => pm.user))
+  const [agents,  setAgents]    = useState((project.agents ?? []).map(pa => pa.agent))
+  const [allAgents, setAllAgents] = useState([])
   const [query,   setQuery]     = useState('')
   const [saving,  setSaving]    = useState(false)
   const inputRef = useRef(null)
+
+  // Los agentes del workspace entero: el equipo de un proyecto puede incluir el agente
+  // de otra persona, igual que incluye a esa persona.
+  useEffect(() => { api.get('/agents').then(r => setAllAgents(r.data)).catch(() => {}) }, [])
 
   useEffect(() => { inputRef.current?.focus() }, [])
 
@@ -24,6 +31,21 @@ function TeamModal({ project, allUsers, onClose, onUpdate }) {
     try {
       const { data } = await api.put(`/projects/${project.id}`, {
         memberIds: nextMembers.map(u => u.id),
+      })
+      onUpdate(data)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // Personas y agentes se guardan por separado: el PUT reemplaza la lista completa de
+  // la clave que recibe.
+  async function syncAgents(nextAgents) {
+    setAgents(nextAgents)
+    setSaving(true)
+    try {
+      const { data } = await api.put(`/projects/${project.id}`, {
+        agentIds: nextAgents.map(a => a.id),
       })
       onUpdate(data)
     } finally {
@@ -139,6 +161,58 @@ function TeamModal({ project, allUsers, onClose, onUpdate }) {
                       </svg>
                     </button>
                   </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Agentes de IA — bloque aparte: es la misma etiqueta de equipo, pero un
+              agente no es una persona (la lista de arriba resuelve el rol por userId). */}
+          <div>
+            <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">
+              Agentes de IA · {agents.length}
+            </p>
+            {agents.length > 0 && (
+              <div className="border border-gray-200 dark:border-gray-600 rounded-xl overflow-hidden mb-2">
+                {agents.map(a => (
+                  <div key={a.id} className="flex items-center justify-between px-4 py-2.5 border-b dark:border-gray-600 last:border-b-0">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <AgentAvatar agent={a} size="sm" />
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-gray-800 dark:text-gray-200 truncate">{a.label || `Agente #${a.id}`}</p>
+                        {(a.user || a.owner) && <p className="text-xs text-gray-400 dark:text-gray-500">de {(a.user ?? a.owner).name}</p>}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => syncAgents(agents.filter(x => x.id !== a.id))}
+                      disabled={saving}
+                      title="Quitar del proyecto"
+                      className="text-gray-300 dark:text-gray-600 hover:text-red-500 transition-colors disabled:opacity-50 ml-3 flex-shrink-0"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+                        <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z" />
+                      </svg>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            {allAgents.filter(a => !agents.some(x => x.id === a.id)).length === 0 ? (
+              <p className="text-xs text-gray-400 dark:text-gray-500">
+                {allAgents.length === 0 ? 'Todavía no hay agentes de IA en el workspace.' : 'Todos los agentes ya están en este proyecto.'}
+              </p>
+            ) : (
+              <div className="flex flex-wrap gap-1.5">
+                {allAgents.filter(a => !agents.some(x => x.id === a.id)).map(a => (
+                  <button
+                    key={a.id}
+                    onClick={() => syncAgents([...agents, a])}
+                    disabled={saving}
+                    className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-full border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:border-primary-400 hover:text-primary-700 dark:hover:text-primary-400 transition-colors disabled:opacity-50"
+                  >
+                    <AgentAvatar agent={a} size="xs" />
+                    + {a.label || `Agente #${a.id}`}
+                  </button>
                 ))}
               </div>
             )}

@@ -16,7 +16,7 @@ import TareasTab from './project-detail/tareas'
 import InfoTab, { TeamModal } from './project-detail/info'
 import OverviewTab from './project-detail/overview'
 import AccesosTab from './project-detail/accesos'
-import { AvatarStack } from './project-detail/ui'
+import { AvatarStack, allProjectTasks, mapProjectTasks } from './project-detail/ui'
 import { TriangleAlert, Lock } from 'lucide-react'
 import { Icon } from '../components/ui/Icon'
 import { notifyProjectStarChanged } from '../hooks/useStarredProjects'
@@ -64,6 +64,7 @@ export default function ProjectDetail() {
   // Admin: edición de equipo
   const [showTeamModal,  setShowTeamModal]  = useState(false)
   const [allUsers,       setAllUsers]       = useState(null)
+  const [allAgents,      setAllAgents]      = useState(null)
   const [teamQuery,      setTeamQuery]      = useState('')
   const [teamSaving,     setTeamSaving]     = useState(false)
 
@@ -81,6 +82,7 @@ export default function ProjectDetail() {
   const [archiveFrom,  setArchiveFrom]  = useState(defaultArchiveFrom)
   const [archiveTo,    setArchiveTo]    = useState(defaultArchiveTo)
   const [archiveUserId, setArchiveUserId] = useState('')
+  const [archiveAgentId, setArchiveAgentId] = useState('')
 
   const encodedId = encodeURIComponent(id)
   // Cambiar de proyecto dispara otro GET. Si la respuesta del anterior llega
@@ -162,16 +164,12 @@ export default function ProjectDetail() {
   useEffect(() => {
     const taskId = Number(searchParams.get('task'))
     if (!taskId || !data) return
-    let found = null
-    for (const u of data.byUser ?? []) {
-      found = u.tasks.find(t => t.id === taskId)
-      if (found) break
-    }
+    const found = allProjectTasks(data).find(t => t.id === taskId)
     if (found) setCommentTask(found)
   }, [data, searchParams])
 
   const loadArchive = useCallback(async (skip = 0, filters = {}) => {
-    const { from = archiveFrom, to = archiveTo, userId = archiveUserId } = filters
+    const { from = archiveFrom, to = archiveTo, userId = archiveUserId, agentId = archiveAgentId } = filters
     const gen = ++archiveGen.current
     setArchiveLoading(true)
     try {
@@ -179,6 +177,7 @@ export default function ProjectDetail() {
       if (from) params.set('from', from)
       if (to) params.set('to', to)
       if (userId) params.set('userId', userId)
+      if (agentId) params.set('agentId', agentId)
       const { data: res } = await api.get(`/projects/${encodedId}/completed?${params}`)
       if (gen !== archiveGen.current) return
       setArchive(prev => skip === 0 ? res.tasks : [...prev, ...res.tasks])
@@ -188,14 +187,14 @@ export default function ProjectDetail() {
       if (gen === archiveGen.current) setArchiveLoading(false)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [encodedId, archiveFrom, archiveTo, archiveUserId])
+  }, [encodedId, archiveFrom, archiveTo, archiveUserId, archiveAgentId])
 
   useEffect(() => { setArchive([]); loadArchive(0) }, [encodedId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function handleArchiveDateSearch(from, to) {
     setArchiveFrom(from)
     setArchiveTo(to)
-    loadArchive(0, { from, to, userId: archiveUserId })
+    loadArchive(0, { from, to, userId: archiveUserId, agentId: archiveAgentId })
   }
 
   function handleArchiveUserChange(e) {
@@ -204,14 +203,17 @@ export default function ProjectDetail() {
     loadArchive(0, { from: archiveFrom, to: archiveTo, userId })
   }
 
-  const totalPending = data?.byUser.reduce((s, u) => s + u.tasks.length, 0) ?? 0
+  function handleArchiveAgentChange(e) {
+    const agentId = e.target.value
+    setArchiveAgentId(agentId)
+    loadArchive(0, { from: archiveFrom, to: archiveTo, agentId })
+  }
+
+  const totalPending = allProjectTasks(data).length
 
   function handleCommentAdded(taskId, newCount) {
     const bump = t => t.id === taskId ? { ...t, _count: { ...t._count, comments: newCount } } : t
-    setData(prev => ({
-      ...prev,
-      byUser: prev.byUser.map(u => ({ ...u, tasks: u.tasks.map(bump) })),
-    }))
+    setData(prev => mapProjectTasks(prev, bump))
     setArchive(prev => prev.map(bump))
   }
 
@@ -239,10 +241,19 @@ export default function ProjectDetail() {
       const { data: users } = await api.get('/users')
       setAllUsers(users.filter(u => u.active))
     }
+    // Los agentes del workspace entero (no solo los míos): el equipo de un proyecto
+    // puede incluir el agente de otra persona, igual que incluye a esa persona.
+    if (!allAgents) {
+      const { data: agents } = await api.get('/agents')
+      setAllAgents(agents)
+    }
     setTeamQuery('')
     setShowTeamModal(true)
   }
 
+  // Personas y agentes se guardan por separado para no pisarse: el PUT reemplaza la
+  // lista COMPLETA de la clave que recibe, así que mandar las dos juntas obligaría a
+  // recalcular ambas en cada click.
   async function syncTeam(nextUsers) {
     setTeamSaving(true)
     try {
@@ -250,6 +261,16 @@ export default function ProjectDetail() {
         memberIds: nextUsers.map(u => u.id),
       })
       setData(prev => ({ ...prev, project: { ...prev.project, members: updated.members } }))
+    } finally {
+      setTeamSaving(false)
+    }
+  }
+
+  async function syncAgents(nextAgentIds) {
+    setTeamSaving(true)
+    try {
+      const { data: updated } = await api.put(`/projects/${data.project.id}`, { agentIds: nextAgentIds })
+      setData(prev => ({ ...prev, project: { ...prev.project, agents: updated.agents } }))
     } finally {
       setTeamSaving(false)
     }
@@ -302,7 +323,7 @@ export default function ProjectDetail() {
     }
   }
 
-  const allTasks = data?.byUser.flatMap(u => u.tasks) ?? []
+  const allTasks = allProjectTasks(data)
   const blockedCount = allTasks.filter(t => t.status === 'BLOCKED').length
   const inProgressCount = allTasks.filter(t => t.status === 'IN_PROGRESS').length
   const canEditProject = authUser?.isAdmin || (data?.project.members ?? []).some(pm => pm.user.id === authUser?.id)
@@ -516,8 +537,10 @@ export default function ProjectDetail() {
                   archiveFrom={archiveFrom}
                   archiveTo={archiveTo}
                   archiveUserId={archiveUserId}
+                  archiveAgentId={archiveAgentId}
                   workspaceMembers={workspaceMembers}
                   onArchiveUserChange={handleArchiveUserChange}
+                  onArchiveAgentChange={handleArchiveAgentChange}
                   onArchiveDateSearch={handleArchiveDateSearch}
                   setArchiveFrom={setArchiveFrom}
                   setArchiveTo={setArchiveTo}
@@ -593,9 +616,11 @@ export default function ProjectDetail() {
         <TeamModal
           data={data}
           allUsers={allUsers}
+          allAgents={allAgents}
           teamQuery={teamQuery}
           setTeamQuery={setTeamQuery}
           syncTeam={syncTeam}
+          syncAgents={syncAgents}
           teamSaving={teamSaving}
           onClose={() => setShowTeamModal(false)}
         />
@@ -608,22 +633,11 @@ export default function ProjectDetail() {
           onCommentAdded={count => handleCommentAdded(commentTask.id, count)}
           onTaskEdited={updated => {
             setCommentTask(prev => ({ ...prev, description: updated.description }))
-            setData(prev => ({
-              ...prev,
-              byUser: prev.byUser.map(u => ({
-                ...u,
-                tasks: u.tasks.map(t => t.id === updated.id ? { ...t, description: updated.description } : t),
-              })),
-            }))
+            setData(prev => mapProjectTasks(prev, t => t.id === updated.id ? { ...t, description: updated.description } : t))
           }}
           onTaskDeleted={id => {
-            setData(prev => ({
-              ...prev,
-              byUser: prev.byUser.map(u => ({
-                ...u,
-                tasks: u.tasks.filter(t => t.id !== id),
-              })),
-            }))
+            // mapProjectTasks saca la tarea cuando fn devuelve null.
+            setData(prev => mapProjectTasks(prev, t => t.id === id ? null : t))
           }}
         />
       )}

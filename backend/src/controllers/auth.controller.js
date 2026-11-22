@@ -226,6 +226,38 @@ async function me(req, res, next) {
 
     const member = req.workspaceMember
 
+    // Si la request viene por MCP, quien pregunta "¿quién soy?" es un AGENTE, no la
+    // persona: `whoami` es la primera tool que la guía le pide llamar. Sin esto, lo
+    // único que recibía era la identidad de su dueño — podía decir de quién era pero no
+    // quién era él, ni cuál era su trabajo, ni en qué cuentas trabaja.
+    //
+    // Es la mitad de "darle entidad" que mira hacia adentro: el equipo lo ve en el
+    // roster y en su ficha, y él se ve acá.
+    let agent
+    if (req.user.mcpTokenId) {
+      const row = await prisma.mcpToken.findUnique({
+        where: { id: req.user.mcpTokenId },
+        select: {
+          id: true, label: true, teamRole: true, description: true,
+          projects: { select: { project: { select: { id: true, name: true } } } },
+        },
+      })
+      if (row) {
+        agent = {
+          id: row.id,
+          name: row.label || `Agente #${row.id}`,
+          teamRole: row.teamRole || null,
+          description: row.description || null,
+          owner: { id: user.id, name: user.name },
+          // Sus proyectos son una PRIORIDAD, no un permiso: puede trabajar en cualquiera
+          // (ver "ProjectAgent es una etiqueta" en docs/claude/agentes-ia.md). Se dice
+          // explícito acá para que no reporte un 403 que no existe.
+          projects: row.projects.map(p => p.project),
+          projectsNote: 'Son las cuentas en las que te sumaron al equipo: priorizalas. No es un permiso — podés trabajar en cualquier proyecto del workspace si te lo piden.',
+        }
+      }
+    }
+
     res.json({
       ...user,
       role: member?.teamRole ?? '',
@@ -234,6 +266,7 @@ async function me(req, res, next) {
       moduleAccess: getAllModuleAccess(req), // { rrhh, gamification, ventas, marketing, contenido, eos }
       dailyInsightEnabled: member?.dailyInsightEnabled ?? true,
       notesBoardEnabled: member?.notesBoardEnabled ?? true,
+      ...(agent ? { agent } : {}),
     })
   } catch (err) { next(err) }
 }

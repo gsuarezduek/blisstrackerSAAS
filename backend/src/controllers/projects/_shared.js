@@ -16,6 +16,16 @@ const includeDetails = {
     include: { user: { select: { id: true, name: true, avatar: true } } },
     orderBy: { user: { name: 'asc' } },
   },
+  // Agentes IA del equipo del proyecto (ProjectAgent). Es una etiqueta igual que
+  // `members`, no una barrera: el agente puede trabajar igual en cualquier proyecto.
+  agents: {
+    include: {
+      agent: {
+        select: { id: true, label: true, color: true, teamRole: true, user: { select: { id: true, name: true } } },
+      },
+    },
+    orderBy: { agent: { label: 'asc' } },
+  },
   links: { orderBy: { createdAt: 'asc' } },
   integrations: {
     where:  { status: 'active' },

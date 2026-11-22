@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { Bot } from 'lucide-react'
 import { Icon } from '../ui/Icon'
+import AgentTag from '../ui/AgentTag'
+import AgentAvatar from '../ui/AgentAvatar'
 import { activeSeconds, fmtDuration } from '../../utils/format'
-import { agentName } from '../../hooks/useMyAgents'
 
 // Franja "Tus agentes trabajando ahora", debajo de la tarjeta "Ahora": las tareas que
 // tus agentes de IA tienen EN CURSO, con agente, tarea, proyecto y cronómetro en vivo.
@@ -43,10 +43,10 @@ export default function AgentsWorkingStrip({ tasks, onOpenComments, onSeeAll }) 
       <ul className="divide-y divide-sky-100 dark:divide-sky-900/60">
         {running.map(t => (
           <li key={t.id} className="flex items-center gap-3 px-4 py-2">
-            <Icon as={Bot} size={16} className="flex-shrink-0 text-sky-600 dark:text-sky-400" />
-            <span className="hidden sm:inline text-xs font-semibold text-sky-800 dark:text-sky-200 flex-shrink-0 max-w-[8rem] truncate">
-              {t.agent ? agentName(t.agent, t.agentName) : 'Agente'}
-            </span>
+            {/* Con varios agentes en la franja, el color es lo que deja ver de quién
+                es cada fila sin leer el nombre (que en mobile ni se muestra). */}
+            <AgentAvatar agent={t.agent} size="xs" />
+            <AgentTag task={t} withIcon={false} className="hidden sm:inline-flex text-xs font-semibold flex-shrink-0 max-w-[8rem] truncate" />
             <button
               type="button"
               onClick={() => onOpenComments?.(t)}

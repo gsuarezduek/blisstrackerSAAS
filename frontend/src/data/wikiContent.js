@@ -1370,12 +1370,21 @@ Desde Clientes se emiten **facturas electrónicas AFIP/ARCA**, con PDF oficial y
 Apenas se conecta, el servidor le manda instrucciones de uso y le pide que lea dos cosas antes de actuar:
 
 - **\`bliss_guide\`** — la guía completa: qué puede y qué no puede hacer, las reglas del negocio y los flujos recomendados.
-- **\`whoami\`** — en nombre de quién actúa, si es admin y a qué módulos tiene acceso.
+- **\`whoami\`** — quién es él (su nombre, su rol, qué hace y en qué proyectos lo sumaste al equipo), en nombre de quién actúa, si es admin y a qué módulos tiene acceso.
 
-Así el agente sabe sus límites desde el primer mensaje, sin que tengas que explicarle nada.`,
+Así el agente sabe quién es y cuáles son sus límites desde el primer mensaje, sin que tengas que explicarle nada.
+
+## Cada agente es parte del equipo
+
+Un agente no es solo un token: tiene **nombre, color, rol de equipo y una ficha propia** (la abrís desde cualquier lugar donde aparezca su nombre). Ahí ves de quién es, en qué proyectos trabaja, qué hizo hoy / esta semana / este mes y qué tiene trabado esperándote.
+
+- Se editan su nombre, su color, su rol y la descripción de qué hace desde **Panel → Equipo**, en el bloque "Agentes de IA" (o desde Preferencias → Agentes IA si es tuyo).
+- Se suman al **equipo de un proyecto** igual que una persona, desde el botón "Editar" del equipo en la ficha del proyecto. Es una etiqueta para ordenar: el agente igual puede trabajar en cualquier proyecto si se lo pedís.
+- En la pestaña **Tareas** de cada proyecto, lo que hace cada agente sale en su propia tarjeta en vez de mezclado con las tareas de su dueño, y podés filtrar por responsable.
+- Si necesitás cambiarle el token (porque se filtró, por ejemplo), usá **Rotar token**: le das una credencial nueva sin perder su nombre, sus proyectos ni su historial.`,
         tips: [
           'Si el agente no parece conocer las reglas, pedile: "leé bliss_guide y whoami antes de seguir".',
-          'Un token por agente o dispositivo: así podés revocar uno sin cortar los demás.',
+          'Un token por agente o dispositivo: así podés revocar uno sin cortar los demás, y cada uno aparece con su propio nombre y color en todo BlissTracker.',
           'Algunos asistentes (como Grok) guardan la lista de herramientas cuando configurás el conector y no se enteran de las nuevas. No hace falta reconectarlo: el agente puede consultar la lista actual con bliss_tools y usar las nuevas con bliss_run. Si preferís que las vea como herramientas propias, cambiá la URL del conector agregándole algo al final (ej. ?v=2).',
           'Si el agente usa BlissTracker sin tener ninguna tarea en curso, se le recuerda que registre en qué está trabajando, con las tareas que tiene planificadas para hoy, para que arranque una de esas en vez de crear otra. Elegís cada cuánto (o "nunca") en Preferencias → Agentes IA, en cada token.',
           'De fábrica el agente no recibe avisos: solo actúa cuando lo usás. Lo que pasó mientras no estaba le aparece solo al final de la primera respuesta —una tarea que te creó y completaste, una tarea suya que destrabaste, los comentarios que le dejaste—, sin que tenga que acordarse de buscarlo. Si querés que reaccione sin que lo uses, en Preferencias → Agentes IA podés darle un webhook o activar el despertador.',

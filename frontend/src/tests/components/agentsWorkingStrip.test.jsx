@@ -4,7 +4,10 @@ import { MemoryRouter } from 'react-router-dom'
 import AgentsWorkingStrip from '../../components/dashboard/AgentsWorkingStrip'
 
 const project = { id: 1, name: 'Pastiza' }
-const running = (id, label) => ({ id, status: 'IN_PROGRESS', description: `Tarea ${id}`, project, agent: { id: 7, label }, sessions: [{ startedAt: new Date().toISOString(), endedAt: null }] })
+// `isAgentTask` va siempre: la franja se alimenta de `agentTasks`/`agent-queue`, que lo
+// traen por definición (está en el where de la consulta), y el rótulo compartido
+// (AgentTag) no pinta nada sin esa marca.
+const running = (id, label) => ({ id, status: 'IN_PROGRESS', isAgentTask: true, description: `Tarea ${id}`, project, agent: { id: 7, label }, sessions: [{ startedAt: new Date().toISOString(), endedAt: null }] })
 
 function renderStrip(tasks, props = {}) {
   return render(<MemoryRouter><AgentsWorkingStrip tasks={tasks} {...props} /></MemoryRouter>)
