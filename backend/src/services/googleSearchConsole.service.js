@@ -5,6 +5,15 @@ const { getValidAccessToken } = require('./tokenRefresh.service')
 const CACHE     = new Map()
 const CACHE_TTL = 30 * 60 * 1000
 
+// El mensaje de Google es lo único que distingue un 403 por API deshabilitada de un
+// 403 por falta de permisos sobre la propiedad — se preserva tal cual, junto al status.
+function toApiError(err) {
+  const googleMsg = err.response?.data?.error?.message ?? err.message
+  const e = new Error(googleMsg)
+  e.httpStatus = err.response?.status
+  return e
+}
+
 /**
  * Ejecuta una query a la Search Console API.
  * Doc: https://developers.google.com/webmaster-tools/v1/searchanalytics/query
@@ -19,11 +28,70 @@ async function querySearchConsole(accessToken, siteUrl, body) {
     )
     return data.rows ?? []
   } catch (err) {
-    const googleMsg = err.response?.data?.error?.message ?? err.message
-    const e = new Error(googleMsg)
-    e.httpStatus = err.response?.status
-    throw e
+    throw toApiError(err)
   }
+}
+
+/**
+ * Lista las propiedades a las que la cuenta conectada tiene acceso.
+ * Doc: https://developers.google.com/webmaster-tools/v1/sites/list
+ *
+ * `siteUrl` viene con el id EXACTO que espera la API: una propiedad de Dominio se
+ * llama `sc-domain:ejemplo.com` y NO responde al prefijo `https://ejemplo.com/`
+ * (son dos propiedades distintas, y pedir la que no es da 403).
+ */
+async function listSites(accessToken) {
+  try {
+    const { data } = await axios.get(
+      'https://searchconsole.googleapis.com/webmasters/v3/sites',
+      { headers: { Authorization: `Bearer ${accessToken}` } },
+    )
+    return (data.siteEntry ?? []).map(s => ({
+      siteUrl:         s.siteUrl,
+      permissionLevel: s.permissionLevel ?? null,
+    }))
+  } catch (err) {
+    throw toApiError(err)
+  }
+}
+
+// Google lista las propiedades cuya verificación se perdió, pero devuelve el MISMO
+// 403 al consultarlas: hay que mostrarlas marcadas, no ofrecerlas como solución.
+const UNVERIFIED_PERMISSION = 'siteUnverifiedUser'
+
+// Host de una propiedad, sea prefijo de URL o propiedad de Dominio. Sin `www.`, que
+// en Search Console son propiedades distintas pero para el humano es el mismo sitio.
+function siteHost(siteUrl) {
+  if (!siteUrl) return null
+  const raw = siteUrl.startsWith('sc-domain:')
+    ? siteUrl.slice('sc-domain:'.length)
+    : (() => { try { return new URL(siteUrl).hostname } catch { return null } })()
+  return raw ? raw.toLowerCase().replace(/^www\./, '') : null
+}
+
+/**
+ * Ordena las propiedades poniendo adelante la que probablemente busca el usuario y
+ * marca `matchesProject` para que la UI la señale.
+ *
+ * Criterio, en orden: coincide con el sitio del proyecto → verificada → propiedad de
+ * Dominio (cubre todos los subdominios, y es la que más veces falta al configurar) →
+ * alfabético.
+ */
+function rankSites(sites, websiteUrl) {
+  const projectHost = siteHost(websiteUrl)
+  return sites
+    .map(s => ({
+      ...s,
+      isDomainProperty: s.siteUrl.startsWith('sc-domain:'),
+      verified:         s.permissionLevel !== UNVERIFIED_PERMISSION,
+      matchesProject:   !!projectHost && siteHost(s.siteUrl) === projectHost,
+    }))
+    .sort((a, b) => (
+      Number(b.matchesProject)   - Number(a.matchesProject) ||
+      Number(b.verified)         - Number(a.verified) ||
+      Number(b.isDomainProperty) - Number(a.isDomainProperty) ||
+      a.siteUrl.localeCompare(b.siteUrl)
+    ))
 }
 
 /**
@@ -193,4 +261,4 @@ function clearCache(integrationId) {
   }
 }
 
-module.exports = { fetchSearchConsoleData, clearCache, querySearchConsole, fetchQueryPages }
+module.exports = { fetchSearchConsoleData, clearCache, querySearchConsole, fetchQueryPages, listSites, rankSites, siteHost }

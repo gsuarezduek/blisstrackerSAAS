@@ -76,7 +76,7 @@ export default function SeoTab({ projectId, projects, onSelectProject }) {
         const data = err.response?.data ?? {}
         const status = data.status
         const code   = data.code
-        const knownTypes = ['no_site_url', 'no_integration', 'no_access', 'revoked', 'bad_url', 'api_disabled']
+        const knownTypes = ['no_site_url', 'no_integration', 'no_access', 'revoked', 'bad_url', 'api_disabled', 'missing_scope']
         setLiveError({
           type: knownTypes.includes(status) ? status : 'generic',
           code,
@@ -238,6 +238,7 @@ export default function SeoTab({ projectId, projects, onSelectProject }) {
       {/* ── Error (modo live) ────────────────────────────────────────────────── */}
       {isLive && liveError && (
         <GscErrorPanel
+          projectId={projectId}
           error={liveError}
           loading={integLoading.google_search_console}
           saving={integSaving.google_search_console}

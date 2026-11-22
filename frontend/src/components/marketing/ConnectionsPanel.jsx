@@ -107,7 +107,10 @@ export default function ConnectionsPanel({ projectId, websiteUrl, disabledSectio
 
 function ConnectionChip({ c, projectId, onNavigate }) {
   const st = STATE[c.state]
-  const title = c.state === 'active' ? `${c.label}: conectado` : c.state === 'expired' ? `${c.label}: el acceso venció, hay que reconectar` : `${c.label}: sin conectar`
+  // Con qué cuenta: una integración conectada con la cuenta equivocada responde 403
+  // y el chip se ve igual de verde, así que la cuenta va en el tooltip.
+  const account = c.accountEmail ? ` (${c.accountEmail})` : ''
+  const title = c.state === 'active' ? `${c.label}: conectado${account}` : c.state === 'expired' ? `${c.label}: el acceso venció, hay que reconectar${account}` : `${c.label}: sin conectar`
   const content = (
     <>
       {c.network

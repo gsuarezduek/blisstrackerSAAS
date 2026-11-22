@@ -526,6 +526,7 @@ GET    /api/marketing/projects/:id/pagespeed/:resultId      # estado y detalle d
 # Marketing — Search Console (SEO)
 GET    /api/marketing/projects/:id/search-console           # ?startDate=&endDate=&compare=true — datos live GSC
 GET    /api/marketing/projects/:id/search-console/query-pages  # top queries + páginas
+GET    /api/marketing/projects/:id/search-console/sites       # propiedades que la cuenta conectada puede leer (id exacto, ej. sc-domain:x) + accountEmail
 GET    /api/marketing/projects/:id/seo/snapshot/:month      # obtener SEOSnapshot guardado (YYYY-MM)
 POST   /api/marketing/projects/:id/seo/snapshots            # body: { month } — guardar snapshot GSC manualmente
 GET    /api/marketing/projects/:id/seo/ai-insights          # análisis IA SEO del mes

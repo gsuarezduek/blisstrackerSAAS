@@ -357,6 +357,9 @@ async function listIntegrations(req, res, next) {
         type: true, status: true, propertyId: true,
         customerId: true, country: true, scopes: true, connectedAt: true,
         expiresAt: true, // null = token permanente (System User de Business Manager)
+        // Qué cuenta de Google autorizó: una integración "conectada" con la cuenta
+        // equivocada falla con 403 y sin esto a la vista no hay forma de notarlo.
+        accountEmail: true,
         // tokens NO se devuelven al frontend
       },
     })

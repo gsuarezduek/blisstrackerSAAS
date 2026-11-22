@@ -1,13 +1,14 @@
 import { TriangleAlert } from 'lucide-react'
 import { Icon } from '../../ui/Icon'
+import GscSitePicker from './GscSitePicker'
 
 // ─── Panel de error de Search Console (con acciones inline) ──────────────────
-export default function GscErrorPanel({ error, loading, saving, siteUrlInput, setSiteUrlInput, onReconnect, onSaveSiteUrl }) {
+export default function GscErrorPanel({ projectId, error, loading, saving, siteUrlInput, setSiteUrlInput, onReconnect, onSaveSiteUrl }) {
   const code = error.code
   const type = error.type
 
   // Tipos donde mostramos botón de reconectar OAuth
-  const canReconnect = ['no_integration', 'no_access', 'revoked', 'api_disabled'].includes(type)
+  const canReconnect = ['no_integration', 'no_access', 'revoked', 'api_disabled', 'missing_scope'].includes(type)
   // Tipos donde mostramos opción de cambiar Site URL
   const canEditSiteUrl = ['no_access', 'bad_url', 'no_site_url'].includes(type)
 
@@ -18,6 +19,7 @@ export default function GscErrorPanel({ error, loading, saving, siteUrlInput, se
     bad_url:        'URL de sitio inválida',
     no_site_url:    'Falta configurar el Site URL',
     api_disabled:   'API de Search Console deshabilitada',
+    missing_scope:  'El token no incluye Search Console',
     generic:        'Error al cargar Search Console',
   }[type] ?? 'Error al cargar Search Console'
 
@@ -57,12 +59,25 @@ export default function GscErrorPanel({ error, loading, saving, siteUrlInput, se
         )}
       </div>
 
+      {/* Las propiedades que la cuenta SÍ puede leer — en vez de adivinar la variante.
+          Se lista sola, porque es la respuesta a este error nueve de cada diez veces. */}
+      {canEditSiteUrl && projectId && (
+        <div className="pl-8">
+          <GscSitePicker
+            projectId={projectId}
+            current={error.siteUrl}
+            picking={saving}
+            onPick={value => onSaveSiteUrl(value)}
+          />
+        </div>
+      )}
+
       {/* Input inline para Site URL */}
       {siteUrlInput !== null && (
         <div className="pl-8 space-y-2">
           <p className="text-xs text-amber-700 dark:text-amber-300">
-            Probá una variante: con/sin <code className="font-mono">www</code>, con barra final, o como{' '}
-            <code className="font-mono">sc-domain:ejemplo.com</code> (Domain property).
+            O escribila a mano: con/sin <code className="font-mono">www</code>, con barra final, o como{' '}
+            <code className="font-mono">sc-domain:ejemplo.com</code> (propiedad de Dominio).
           </p>
           <div className="flex gap-2">
             <input

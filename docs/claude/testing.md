@@ -20,6 +20,7 @@ backend/
       monthUtils.test.js                  # periodMonths, periodLabel (períodos calendario de objetivos)
       marketingObjectives.service.test.js # computeObjectives: flujo vs stock, posición invertida, orphaned, head-to-head competidor
       marketingSections.test.js           # isMarketingSectionHidden: lo oculto en el código (para todos) + lo apagado por el workspace, y que los ids ocultos existan en el NAV
+      searchConsoleSites.test.js          # rankSites/siteHost: la propiedad de Dominio (sc-domain:) primero, la sin verificar nunca primera, host sin www
       legajoCatalog.test.js               # resolve/sanitize de campos de legajo (builtins blindados, customs, completitud)
       lateNotification.test.js            # lateMinutes (regla de tardanza con tolerancia) + default template
       attendance.test.js                  # inArrivalWindow (ventana ±2h) + laborableDays (regla del >50%) + loginMinsFromMidnight
@@ -76,6 +77,7 @@ backend/
       taskSearch.test.js                  # búsqueda de tareas: filas recortadas, atajo "open", admin para ver las de otra persona, proyectos privados afuera
       cannibalResolution.test.js          # marcar/desmarcar un conflicto como resuelto (persona y agente), el split abierto/resuelto en la lectura del reporte con los conteos recalculados, y los permisos (canWrite)
       connectionsStatus.test.js           # GET /marketing/connections: los tres estados + reconnectUrl, secciones apagadas, vista de todo el workspace y gate de proyectos privados resuelto en el handler
+      searchConsoleSites.test.js          # GET .../search-console/sites: la lista de propiedades con el id exacto (sc-domain primero) + accountEmail, sin integración, token sin scope; y que el 403 de propiedad siga siendo no_access con el Site URL probado (vs. API deshabilitada)
       financeLibroIva.test.js             # exportar Libro IVA Digital: un emisor y un mes, solo responsables inscriptos, el resumen (NC resta, lo sin confirmar queda afuera con aviso, homologación) y el ZIP con los dos .txt en Windows-1252 + CRLF
       financeInvoiceList.test.js          # listado de facturas de Finanzas (pestaña Facturas): rango de emisión inclusive por día, emisor (incluido `none` = informativas), fechas mal formadas o invertidas → 400
       financeInvoiceEdit.test.js          # editar una factura de Finanzas: sólo las informativas (un comprobante de ARCA se rechaza con o sin CAE) y el monto no puede bajar de lo ya cobrado
@@ -103,6 +105,7 @@ frontend/
       monthlyTrendChart.test.jsx        # gráfico de 12 meses de Web → Analytics: un mes sin dato es "s/d" y no una barra en cero, el tooltip con visitas/eventos/variación, el aviso del mes en curso, y el espejo del catálogo GA4 (formato de tasa/duración y valores crudos como "202611")
       laterTabs.test.jsx                # punto de alerta de las pestañas del Dashboard: rojo (true), naranja ('orange') con su texto accesible, y sin punto
       taskChecklist.test.jsx            # subtareas: progreso "1/2" y su color (gris/ámbar/verde), null sin subtareas, tilde optimista + rollback si el servidor falla, agregar deja el campo listo para la siguiente, variant compact sin agregar/convertir, y el badge de TaskCard que despliega la lista
+      gscSitePicker.test.jsx            # elegir la propiedad de Search Console: la de Dominio marcada, el id exacto que se guarda, la que ya está "en uso", la sin verificar y la cuenta sin propiedades
     pages/
       dashboardOrder.test.js            # orden de Para hoy (pausadas primero, por publicación / más nuevas / más antiguas), grupos del Backlog (el proyecto con la publicación más próxima primero) y publishUrgency (rojo/naranja)
     hooks/

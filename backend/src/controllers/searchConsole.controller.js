@@ -1,5 +1,5 @@
 const prisma = require('../lib/prisma')
-const { fetchSearchConsoleData, fetchQueryPages, querySearchConsole } = require('../services/googleSearchConsole.service')
+const { fetchSearchConsoleData, fetchQueryPages, querySearchConsole, listSites, rankSites } = require('../services/googleSearchConsole.service')
 const { getValidAccessToken } = require('../services/tokenRefresh.service')
 const { normalizeSiteUrl } = require('../utils/seo')
 const { saveMonthSnapshot, generateSeoAiInsights } = require('../services/searchConsoleSnapshot.service')
@@ -73,66 +73,135 @@ async function getSearchConsoleData(req, res, next) {
     const data = await fetchSearchConsoleData(integration, siteUrl, startDate, endDate, { device, compare })
     res.json({ ...data, projectName: project.name })
   } catch (err) {
-    const status = err.httpStatus ?? err.response?.status
-    console.error('[searchConsole] error HTTP %s: %s', status ?? '?', err.message)
-
     const projectId = Number(req.params.id)
     const triedSiteUrl = (await prisma.projectIntegration.findUnique({
       where: { projectId_type: { projectId, type: 'google_search_console' } },
       select: { propertyId: true },
     }).catch(() => null))?.propertyId ?? null
 
-    // Token revocado / expirado
+    return respondGscError(err, { res, next, projectId, triedSiteUrl })
+  }
+}
+
+/**
+ * Traduce un error de la API de Google a la respuesta que entiende el frontend.
+ * El panel de error (`GscErrorPanel.jsx`) rutea por `status`: si se agrega un valor
+ * nuevo acá, hay que darle su título y sus acciones allá.
+ */
+async function respondGscError(err, { res, next, projectId, triedSiteUrl = null }) {
+  const status = err.httpStatus ?? err.response?.status
+  console.error('[searchConsole] error HTTP %s: %s', status ?? '?', err.message)
+
+  // Token revocado / expirado
+  if (
+    status === 401 ||
+    err.code === 'TOKEN_EXPIRED' ||
+    err.message?.includes('invalid_grant') ||
+    err.message?.includes('Token has been expired') ||
+    err.message?.includes('UNAUTHENTICATED')
+  ) {
+    await prisma.projectIntegration.update({
+      where: { projectId_type: { projectId, type: 'google_search_console' } },
+      data:  { status: 'expired' },
+    }).catch(e => console.error('[SearchConsole] Error al marcar integración como expirada:', e.message))
+    return res.status(400).json({
+      error: 'El token de Google expiró. Reconectá la integración.',
+      status: 'revoked',
+      code:   'TOKEN_EXPIRED',
+    })
+  }
+
+  // 403: tres sub-casos — API no habilitada, token sin el scope, o sin permisos
+  // sobre la propiedad. Los distingue el mensaje de Google, nada más.
+  if (status === 403) {
     if (
-      status === 401 ||
-      err.code === 'TOKEN_EXPIRED' ||
-      err.message?.includes('invalid_grant') ||
-      err.message?.includes('Token has been expired') ||
-      err.message?.includes('UNAUTHENTICATED')
+      err.message?.includes('has not been used') ||
+      err.message?.includes('is disabled') ||
+      err.message?.includes('API has not been')
     ) {
-      await prisma.projectIntegration.update({
+      return res.status(400).json({
+        error: 'La Google Search Console API no está habilitada en Google Cloud Console. Habilitala en APIs y servicios → Biblioteca.',
+        status: 'api_disabled',
+        code:   'API_DISABLED',
+      })
+    }
+    // Token viejo autorizado sin `webmasters.readonly` (ej. heredado de una conexión
+    // de GA4 anterior al scope combinado): no hay nada que elegir, hay que reautorizar.
+    if (
+      err.message?.includes('insufficient authentication scopes') ||
+      err.message?.includes('ACCESS_TOKEN_SCOPE_INSUFFICIENT')
+    ) {
+      return res.status(400).json({
+        error: 'El token de Google no incluye el permiso de Search Console. Reconectá la integración para autorizarlo.',
+        status: 'missing_scope',
+        code:   'SCOPE_MISSING',
+      })
+    }
+    return res.status(403).json({
+      error: 'Sin acceso a esta propiedad de Search Console. Verificá que la cuenta conectada tiene permisos sobre el sitio o cambiá el Site URL.',
+      status: 'no_access',
+      code:   'NO_ACCESS',
+      siteUrl: triedSiteUrl,
+    })
+  }
+
+  // 400: URL inválida u otro error de request
+  if (status === 400) {
+    return res.status(400).json({
+      error: `URL de sitio inválida para Search Console: ${err.message}`,
+      status: 'bad_url',
+      code:   'BAD_URL',
+      siteUrl: triedSiteUrl,
+    })
+  }
+
+  return next(err)
+}
+
+/**
+ * GET /api/marketing/projects/:id/search-console/sites
+ *
+ * Las propiedades que la cuenta conectada REALMENTE puede leer, con el id exacto que
+ * espera la API. Es el antídoto al 403 "User does not have sufficient permission for
+ * site": en Search Console una propiedad de Dominio se llama `sc-domain:ejemplo.com`
+ * y pedirla como `https://ejemplo.com/` da 403 porque son dos propiedades distintas.
+ * Sin esto, el único camino era adivinar la variante a mano en el Site URL.
+ */
+async function getSearchConsoleSites(req, res, next) {
+  const projectId = Number(req.params.id)
+  try {
+    const workspaceId = req.workspace.id
+
+    const [project, integration] = await Promise.all([
+      prisma.project.findFirst({
+        where:  { id: projectId, workspaceId },
+        select: { id: true, websiteUrl: true },
+      }),
+      prisma.projectIntegration.findUnique({
         where: { projectId_type: { projectId, type: 'google_search_console' } },
-        data:  { status: 'expired' },
-      }).catch(err => console.error('[SearchConsole] Error al marcar integración como expirada:', err.message))
-      return res.status(400).json({
-        error: 'El token de Google expiró. Reconectá la integración.',
-        status: 'revoked',
-        code:   'TOKEN_EXPIRED',
+      }),
+    ])
+    if (!project) return res.status(404).json({ error: 'Proyecto no encontrado' })
+    if (!integration) {
+      return res.status(404).json({
+        error:  'Google Search Console no conectado para este proyecto',
+        status: 'no_integration',
+        code:   'NO_INTEGRATION',
       })
     }
 
-    // 403: dos sub-casos — API no habilitada vs sin permisos sobre la propiedad
-    if (status === 403) {
-      if (
-        err.message?.includes('has not been used') ||
-        err.message?.includes('is disabled') ||
-        err.message?.includes('API has not been')
-      ) {
-        return res.status(400).json({
-          error: 'La Google Search Console API no está habilitada en Google Cloud Console. Habilitala en APIs y servicios → Biblioteca.',
-          status: 'api_disabled',
-          code:   'API_DISABLED',
-        })
-      }
-      return res.status(403).json({
-        error: 'Sin acceso a esta propiedad de Search Console. Verificá que la cuenta conectada tiene permisos sobre el sitio o cambiá el Site URL.',
-        status: 'no_access',
-        code:   'NO_ACCESS',
-        siteUrl: triedSiteUrl,
-      })
-    }
+    const accessToken = await getValidAccessToken(integration)
+    const sites = rankSites(await listSites(accessToken), project.websiteUrl)
 
-    // 400: URL inválida u otro error de request
-    if (status === 400) {
-      return res.status(400).json({
-        error: `URL de sitio inválida para Search Console: ${err.message}`,
-        status: 'bad_url',
-        code:   'BAD_URL',
-        siteUrl: triedSiteUrl,
-      })
-    }
-
-    next(err)
+    res.json({
+      sites,
+      accountEmail: integration.accountEmail ?? null,
+      // Lo que el backend consulta hoy, ya normalizado: es contra esto que se compara
+      // cada propiedad de la lista para marcar la que está en uso.
+      current: normalizeSiteUrl(integration.propertyId || project.websiteUrl) ?? null,
+    })
+  } catch (err) {
+    return respondGscError(err, { res, next, projectId })
   }
 }
 
@@ -387,7 +456,7 @@ async function createSeoAiInsights(req, res, next) {
 }
 
 module.exports = {
-  getSearchConsoleData, getQueryPages,
+  getSearchConsoleData, getQueryPages, getSearchConsoleSites,
   getSeoSnapshot, saveSeoSnapshot,
   getSeoAiInsights, createSeoAiInsights,
   getDomainRating, refreshDomainRating,

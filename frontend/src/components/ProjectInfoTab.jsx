@@ -3,6 +3,7 @@ import api from '../api/client'
 import { useFeatureFlag } from '../hooks/useFeatureFlag'
 import { useGoogleIntegration } from '../hooks/useGoogleIntegration'
 import { clearOAuthResult, waitForOAuthResult } from '../lib/oauthResultBridge'
+import GscSitePicker from './marketing/seo/GscSitePicker'
 import { X } from 'lucide-react'
 import { Icon } from './ui/Icon'
 
@@ -237,6 +238,13 @@ export default function ProjectInfoTab({ project, onSave }) {
             <div className="min-w-0">
               <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{integ.label}</p>
               <p className="text-xs text-gray-400 truncate">{integ.desc}</p>
+              {/* Con qué cuenta se autorizó: conectar con la cuenta equivocada falla
+                  con 403 y, sin esto a la vista, no hay manera de darse cuenta. */}
+              {connected.accountEmail && (
+                <p className="text-xs text-gray-400 truncate mt-0.5">
+                  Cuenta: <span className="text-gray-500 dark:text-gray-300">{connected.accountEmail}</span>
+                </p>
+              )}
             </div>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
@@ -484,6 +492,22 @@ export default function ProjectInfoTab({ project, onSave }) {
               >
                 Usar una URL diferente
               </button>
+            )}
+            {/* Las propiedades reales de la cuenta, con el id exacto que espera la API:
+                una propiedad de Dominio es `sc-domain:ejemplo.com` y no responde al
+                prefijo `https://ejemplo.com/`. Elegir de acá evita el 403 por adivinar. */}
+            {propertyInput[integ.key] !== undefined && (
+              <div className="mt-2">
+                <GscSitePicker
+                  projectId={project.id}
+                  picking={propSaving[integ.key]}
+                  onPick={async value => {
+                    setPropertyInput(prev => ({ ...prev, [integ.key]: value }))
+                    const res = await savePropertyId(integ.key, value)
+                    if (res.ok) setPropertyInput(prev => ({ ...prev, [integ.key]: undefined }))
+                  }}
+                />
+              </div>
             )}
           </div>
         )}
