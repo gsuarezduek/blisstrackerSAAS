@@ -57,26 +57,72 @@ describe('AgentChannels', () => {
   })
 })
 
+const XAI_URL = 'https://api.x.ai/v1/chat/completions'
+const OPENAI_URL = 'https://api.openai.com/v1/chat/completions'
+const PROVIDERS = [
+  { key: 'xai', label: 'xAI (Grok)', apiUrl: XAI_URL, model: 'grok-4' },
+  { key: 'openai', label: 'OpenAI', apiUrl: OPENAI_URL, model: 'gpt-5' },
+  { key: 'custom', label: 'Otro (compatible con OpenAI)', apiUrl: '', model: '' },
+]
+const wakeCfg = (over = {}) => ({
+  configured: false, canEdit: true, model: 'grok-4', defaultModel: 'grok-4',
+  apiUrl: XAI_URL, defaultApiUrl: XAI_URL, providers: PROVIDERS, ...over,
+})
+
 describe('WakeConfigCard', () => {
   beforeEach(() => vi.clearAllMocks())
 
   it('avisa que sin API key el despertador no arranca', async () => {
-    api.get.mockResolvedValue({ data: { configured: false, canEdit: true, model: 'grok-4', defaultModel: 'grok-4' } })
+    api.get.mockResolvedValue({ data: wakeCfg() })
     render(<WakeConfigCard />)
     expect(await screen.findByText(/el despertador no va a poder arrancar/)).toBeTruthy()
   })
 
+  // Es el único canal que gasta plata del cliente, y la gasta sin que nadie lo haya
+  // pedido en el momento: el aviso tiene que estar antes de la API key.
+  it('avisa que tiene un costo aparte que paga el cliente', async () => {
+    api.get.mockResolvedValue({ data: wakeCfg() })
+    render(<WakeConfigCard />)
+    expect(await screen.findByText(/Tiene un costo aparte/)).toBeTruthy()
+    expect(screen.getByText(/la pagás vos con tu API key/)).toBeTruthy()
+  })
+
   it('guarda la API key y la vuelve a pedir desde el backend (no la deja en pantalla)', async () => {
-    api.get.mockResolvedValue({ data: { configured: false, canEdit: true, model: 'grok-4', defaultModel: 'grok-4' } })
+    api.get.mockResolvedValue({ data: wakeCfg() })
     api.put.mockResolvedValue({ data: { ok: true } })
     render(<WakeConfigCard />)
 
-    const input = await screen.findByPlaceholderText(/API key de xAI/)
+    const input = await screen.findByPlaceholderText(/API key del proveedor/)
     fireEvent.change(input, { target: { value: 'xai-secreta' } })
     fireEvent.click(screen.getByRole('button', { name: 'Guardar' }))
 
     await waitFor(() => expect(api.put).toHaveBeenCalledWith('/mcp-tokens/wake-config', { apiKey: 'xai-secreta' }))
     await waitFor(() => expect(input.value).toBe(''))
+  })
+
+  it('elegir otro proveedor completa su URL y su modelo sugerido', async () => {
+    api.get.mockResolvedValue({ data: wakeCfg() })
+    render(<WakeConfigCard />)
+    fireEvent.change(await screen.findByLabelText('Proveedor'), { target: { value: 'openai' } })
+    expect(screen.getByDisplayValue(OPENAI_URL)).toBeTruthy()
+    expect(screen.getByDisplayValue('gpt-5')).toBeTruthy()
+  })
+
+  it('guarda la URL del proveedor por separado de la key', async () => {
+    api.get.mockResolvedValue({ data: wakeCfg() })
+    api.put.mockResolvedValue({ data: { ok: true } })
+    render(<WakeConfigCard />)
+    fireEvent.change(await screen.findByLabelText('Proveedor'), { target: { value: 'openai' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar URL' }))
+    await waitFor(() => expect(api.put).toHaveBeenCalledWith('/mcp-tokens/wake-config', { apiUrl: OPENAI_URL }))
+  })
+
+  it('dice que Claude no entra por acá', async () => {
+    // Su API tiene otra forma de request y de tool calling: pegarle a /v1/messages con
+    // este cuerpo falla, así que el límite tiene que estar escrito donde se elige.
+    api.get.mockResolvedValue({ data: wakeCfg() })
+    render(<WakeConfigCard />)
+    expect(await screen.findByText(/Claude no entra por acá/)).toBeTruthy()
   })
 
   // Sin permiso y sin nada configurado el bloque solo confundiría.

@@ -3,7 +3,7 @@ const prisma = require('../lib/prisma')
 const { generateToken } = require('../lib/mcpTokens')
 const { assertPublicUrl } = require('../lib/safeUrl')
 const { encrypt } = require('../lib/encryption')
-const { DEFAULT_MODEL } = require('../services/agentWake.service')
+const { DEFAULT_MODEL, DEFAULT_API_URL, WAKE_PROVIDERS } = require('../services/agentWake.service')
 
 // Autoadministración de tokens de McpToken desde el propio perfil del usuario
 // (Preferencias → Agentes IA) — a diferencia de backend/scripts/mcp-*-token.js
@@ -34,10 +34,21 @@ async function listMine(req, res, next) {
   try {
     const tokens = await prisma.mcpToken.findMany({
       where: { userId: req.user.userId, workspaceId: req.workspace.id },
-      select: TOKEN_SELECT,
+      select: {
+        ...TOKEN_SELECT,
+        // Cuánto historial quedaría sin nombre si se borra la fila. Las 17 FKs a
+        // McpToken son `SetNull`, así que borrar un agente no borra su trabajo: lo deja
+        // rotulado como "Agente eliminado". Se informan las tres que se ven en la UI
+        // para poder avisar ANTES de borrar, en vez de descubrirlo después en el
+        // historial de un proyecto.
+        _count: { select: { agentTasks: true, createdTasks: true, taskComments: true } },
+      },
       orderBy: { createdAt: 'desc' },
     })
-    res.json(tokens)
+    res.json(tokens.map(t => {
+      const { _count, ...rest } = t
+      return { ...rest, historyCount: _count.agentTasks + _count.createdTasks + _count.taskComments }
+    }))
   } catch (err) { next(err) }
 }
 
@@ -66,6 +77,28 @@ async function revokeMine(req, res, next) {
     if (!row.revokedAt) {
       await prisma.mcpToken.update({ where: { id }, data: { revokedAt: new Date() } })
     }
+    res.json({ ok: true })
+  } catch (err) { next(err) }
+}
+
+// DELETE /api/mcp-tokens/:id — borra la fila del agente. **Solo si está revocado**: un
+// agente activo se revoca primero (dos pasos a propósito, porque esto no se deshace).
+//
+// Lo que se pierde: las 17 FKs a McpToken son `SetNull`, así que el trabajo del agente
+// NO se borra — queda en el historial, en las métricas y en el informe al cliente, pero
+// sin su nombre ("Agente eliminado"). Por eso `listMine` devuelve `historyCount` y la UI
+// avisa con el número antes de pedir confirmación.
+async function destroyMine(req, res, next) {
+  try {
+    const id = Number(req.params.id)
+    const row = await prisma.mcpToken.findUnique({ where: { id }, select: { id: true, userId: true, workspaceId: true, revokedAt: true } })
+    if (!row || row.userId !== req.user.userId || row.workspaceId !== req.workspace.id) {
+      return res.status(404).json({ error: 'Token no encontrado' })
+    }
+    if (!row.revokedAt) {
+      return res.status(400).json({ error: 'Revocá el agente antes de borrarlo: mientras esté activo, su token sigue sirviendo para conectarse.' })
+    }
+    await prisma.mcpToken.delete({ where: { id } })
     res.json({ ok: true })
   } catch (err) { next(err) }
 }
@@ -132,12 +165,15 @@ async function getWakeConfig(req, res, next) {
   try {
     const ws = await prisma.workspace.findUnique({
       where: { id: req.workspace.id },
-      select: { agentWakeApiKey: true, agentWakeModel: true },
+      select: { agentWakeApiKey: true, agentWakeModel: true, agentWakeApiUrl: true },
     })
     res.json({
       configured: !!ws?.agentWakeApiKey,
       model: ws?.agentWakeModel || DEFAULT_MODEL,
       defaultModel: DEFAULT_MODEL,
+      apiUrl: ws?.agentWakeApiUrl || DEFAULT_API_URL,
+      defaultApiUrl: DEFAULT_API_URL,
+      providers: WAKE_PROVIDERS,
       canEdit: ['admin', 'owner'].includes(req.workspaceMember?.role),
     })
   } catch (err) { next(err) }
@@ -157,6 +193,22 @@ async function saveWakeConfig(req, res, next) {
       const m = typeof req.body.model === 'string' ? req.body.model.trim().slice(0, 80) : ''
       data.agentWakeModel = m || null
     }
+    if (req.body?.apiUrl !== undefined) {
+      const raw = typeof req.body.apiUrl === 'string' ? req.body.apiUrl.trim() : ''
+      if (!raw) {
+        data.agentWakeApiUrl = null // vuelve al default en código (xAI)
+      } else {
+        // Se valida como el webhook del agente y por lo mismo: es una request que SALE
+        // del servidor, y acá encima lleva la API key del workspace en el header. Una URL
+        // interna (o un DNS que resuelva a una IP privada) sería SSRF con credencial.
+        try {
+          await assertPublicUrl(raw)
+        } catch (e) {
+          return res.status(400).json({ error: `URL no permitida: ${e.message}` })
+        }
+        data.agentWakeApiUrl = raw.slice(0, 300)
+      }
+    }
     if (!Object.keys(data).length) return res.status(400).json({ error: 'Nada que actualizar' })
 
     await prisma.workspace.update({ where: { id: req.workspace.id }, data })
@@ -166,4 +218,4 @@ async function saveWakeConfig(req, res, next) {
   } catch (err) { next(err) }
 }
 
-module.exports = { listMine, createMine, revokeMine, updateMine, getWakeConfig, saveWakeConfig, WORK_REMINDER_OPTIONS }
+module.exports = { listMine, createMine, revokeMine, destroyMine, updateMine, getWakeConfig, saveWakeConfig, WORK_REMINDER_OPTIONS }

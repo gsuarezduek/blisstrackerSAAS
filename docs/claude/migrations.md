@@ -40,3 +40,6 @@ Identidad del agente IA → `McpToken.color` (TEXT nullable), `.teamRole` (TEXT 
 
 ### `project_agents`
 Tabla `ProjectAgent` (`projectId` + `agentId`, PK compuesta, índice por `agentId`): agentes de IA en el equipo de un proyecto. Espeja `ProjectMember` y, como él, es una **etiqueta y no una barrera** — el agente puede seguir trabajando en cualquier proyecto. `Cascade` en las dos puntas, a diferencia del `Restrict` por default de `ProjectMember`: `McpToken.user` ya es `Cascade` y un `Restrict` acá bloquearía el borrado de un `User`. Sin backfill.
+
+### `agent_wake_provider`
+Despertador de agentes → `Workspace.agentWakeApiUrl` (TEXT nullable). La URL del proveedor estaba hardcodeada en `services/agentWake.service.js` (`api.x.ai`), así que el canal servía solo para Grok. El request que arma el servicio es el de `/v1/chat/completions` de OpenAI, que es lo que implementan xAI, OpenAI, Groq, DeepSeek, Mistral, OpenRouter y cualquier servidor compatible (vLLM/Ollama con Hermes), así que alcanzó con poder cambiar la URL. null = el default en código, para no tocar los workspaces que ya lo usan. Anthropic no entra: `/v1/messages` tiene otra forma de request y de tool calling. Sin backfill.

@@ -126,6 +126,7 @@ export function WakeConfigCard() {
   const [cfg, setCfg] = useState(null)
   const [apiKey, setApiKey] = useState('')
   const [model, setModel] = useState('')
+  const [apiUrl, setApiUrl] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [saved, setSaved] = useState(false)
@@ -134,6 +135,7 @@ export function WakeConfigCard() {
     api.get('/mcp-tokens/wake-config').then(({ data }) => {
       setCfg(data)
       setModel(data.model || '')
+      setApiUrl(data.apiUrl || '')
     }).catch(() => setCfg({ configured: false, canEdit: false }))
   }, [])
 
@@ -145,6 +147,8 @@ export function WakeConfigCard() {
       await api.put('/mcp-tokens/wake-config', patch)
       const { data } = await api.get('/mcp-tokens/wake-config')
       setCfg(data)
+      setModel(data.model || '')
+      setApiUrl(data.apiUrl || '')
       setApiKey('')
       setSaved(true)
       setTimeout(() => setSaved(false), 2000)
@@ -162,9 +166,19 @@ export function WakeConfigCard() {
   return (
     <div className="bg-white dark:bg-gray-800 rounded-2xl border dark:border-gray-700 p-6">
       <h2 className="text-base font-semibold text-gray-900 dark:text-white mb-1">Despertador de agentes</h2>
-      <p className="text-xs text-gray-400 dark:text-gray-500 mb-4 leading-relaxed">
-        Para que BlissTracker pueda invocar a un agente cuando hay novedades para él, hace falta una API key del proveedor (xAI). Es del workspace y la comparten todos los agentes con el despertador activado. Se guarda cifrada y no se puede volver a ver.
+      <p className="text-xs text-gray-400 dark:text-gray-500 mb-3 leading-relaxed">
+        Para que BlissTracker pueda invocar a un agente cuando hay novedades para él, hace falta una API key del proveedor. Es del workspace y la comparten todos los agentes con el despertador activado. Se guarda cifrada y no se puede volver a ver.
       </p>
+
+      {/* El costo es lo primero que hay que saber: es el único canal que gasta plata del
+          cliente, y la gasta sin que nadie lo haya pedido en el momento. */}
+      <div className="mb-4 px-3 py-2.5 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 text-xs text-amber-800 dark:text-amber-300 leading-relaxed">
+        <strong className="font-semibold">Tiene un costo aparte.</strong> Cada despertar es una llamada
+        a la API del proveedor y la pagás vos con tu API key — no entra en el plan de BlissTracker ni en
+        su presupuesto de IA. Se dispara solo cuando hay una novedad para el agente, como mucho una vez
+        cada 5 minutos por agente y con un tope de 8 pasos por despertar, pero conviene empezar con un
+        límite de gasto puesto del lado del proveedor.
+      </div>
 
       <p className={`text-xs mb-4 ${cfg.configured ? 'text-green-600 dark:text-green-400' : 'text-gray-400 dark:text-gray-500'}`}>
         {cfg.configured ? `Configurada · modelo: ${cfg.model}` : 'Sin configurar: el despertador no va a poder arrancar.'}
@@ -172,12 +186,49 @@ export function WakeConfigCard() {
 
       {cfg.canEdit ? (
         <div className="space-y-3">
+          {/* Proveedor. El despertador manda un request con el formato de
+              /v1/chat/completions de OpenAI, así que sirve cualquier proveedor
+              compatible — cambiar de uno a otro es cambiar la URL y el modelo. */}
+          <label className="flex flex-col gap-1">
+            <span className="text-xs text-gray-500 dark:text-gray-400">Proveedor</span>
+            <select
+              value={(cfg.providers ?? []).find(p => p.apiUrl === apiUrl)?.key ?? 'custom'}
+              onChange={e => {
+                const p = (cfg.providers ?? []).find(x => x.key === e.target.value)
+                if (!p) return
+                setApiUrl(p.apiUrl)
+                if (p.model) setModel(p.model)
+              }}
+              className="px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+            >
+              {(cfg.providers ?? []).map(p => <option key={p.key} value={p.key}>{p.label}</option>)}
+            </select>
+          </label>
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              value={apiUrl}
+              onChange={e => setApiUrl(e.target.value)}
+              placeholder={cfg.defaultApiUrl}
+              className="flex-1 px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500 font-mono text-xs"
+            />
+            <button type="button" onClick={() => save({ apiUrl })} disabled={saving || apiUrl === (cfg.apiUrl || '')}
+              className="flex-shrink-0 text-sm px-4 py-2 rounded-xl font-medium bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-40">
+              Guardar URL
+            </button>
+          </div>
+          <p className="text-xs text-gray-400 dark:text-gray-500 leading-relaxed">
+            Sirve cualquier proveedor con la API compatible con OpenAI (xAI, OpenAI, Groq, DeepSeek,
+            Mistral, OpenRouter — por ahí entran los modelos abiertos como Hermes — o un servidor propio).
+            <strong className="font-medium"> Claude no entra por acá</strong>: su API tiene otra forma y
+            necesitaría un adaptador. Acordate de cambiar también el modelo al cambiar de proveedor.
+          </p>
           <div className="flex items-center gap-2">
             <input
               type="password"
               value={apiKey}
               onChange={e => setApiKey(e.target.value)}
-              placeholder={cfg.configured ? 'Reemplazar la API key…' : 'API key de xAI (xai-…)'}
+              placeholder={cfg.configured ? 'Reemplazar la API key…' : 'API key del proveedor'}
               autoComplete="off"
               className="flex-1 px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
             />

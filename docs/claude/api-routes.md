@@ -113,10 +113,11 @@ POST   /api/agents/:id/rotate            # solo el dueño: credencial nueva en l
 # Agentes IA — la CREDENCIAL y sus canales (self-service, cada uno gestiona SOLO los propios)
 GET    /api/mcp-tokens
 POST   /api/mcp-tokens                   # body { label? } — devuelve el token en claro UNA sola vez
-PATCH  /api/mcp-tokens/:id/revoke
+PATCH  /api/mcp-tokens/:id/revoke        # soft-revoke: la fila queda (conserva el historial)
+DELETE /api/mcp-tokens/:id               # borra la fila. SOLO si ya está revocado (400 si está activo). No borra su trabajo: las FKs son SetNull → queda como "Agente eliminado". GET / devuelve `historyCount` para poder avisarlo antes
 PATCH  /api/mcp-tokens/:id               # body { workReminderMins? , webhookUrl? , wakeEnabled? } — campos independientes; webhookUrl '' saca el webhook y su secret
-GET    /api/mcp-tokens/wake-config       # { configured, model, defaultModel, canEdit } — la API key nunca se devuelve
-PUT    /api/mcp-tokens/wake-config       # admin/owner. body { apiKey?, model? } — apiKey '' borra la guardada (se guarda cifrada)
+GET    /api/mcp-tokens/wake-config       # { configured, model, defaultModel, apiUrl, defaultApiUrl, providers, canEdit } — la API key nunca se devuelve
+PUT    /api/mcp-tokens/wake-config       # admin/owner. body { apiKey?, model?, apiUrl? } — apiKey '' borra la guardada (se guarda cifrada); apiUrl '' vuelve al default (xAI) y se valida con assertPublicUrl (sale del servidor con la API key en el header)
 
 GET    /api/projects                     # todos los proyectos activos del workspace (incluye starred del usuario)
 PUT    /api/projects/:id                 # admin: editar nombre, websiteUrl, connections, serviceIds, memberIds, agentIds (agentes de IA del equipo; reemplazo completo, como memberIds)

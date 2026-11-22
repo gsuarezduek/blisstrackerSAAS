@@ -87,6 +87,8 @@ export default function AgentsTab() {
   const [error,      setError]      = useState('')
   const [revokingId, setRevokingId] = useState(null)
   const [rotatingId, setRotatingId] = useState(null)
+  const [deletingId, setDeletingId] = useState(null)
+  const [showRevoked, setShowRevoked] = useState(false)
   const [savingId,   setSavingId]   = useState(null)
 
   function load() {
@@ -142,6 +144,29 @@ export default function AgentsTab() {
     }
   }
 
+  // Borrar la fila del agente. El trabajo que hizo NO se borra (las FKs son SetNull):
+  // queda en el historial, en las métricas y en el informe al cliente, pero sin su
+  // nombre. Por eso se avisa con el número exacto antes de preguntar.
+  async function handleDelete(t) {
+    const nombre = t.label || 'este agente'
+    const n = t.historyCount ?? 0
+    const aviso = n > 0
+      ? `\n\nSu trabajo NO se borra: ${n} ${n === 1 ? 'registro' : 'registros'} (tareas y comentarios) quedan en el historial, pero van a aparecer como "Agente eliminado" en vez de con su nombre.`
+      : '\n\nNo tiene nada cargado, así que no se pierde ningún dato.'
+    if (!confirm(`¿Borrar «${nombre}» de la lista?${aviso}\n\nEsto no se puede deshacer.`)) return
+    setDeletingId(t.id)
+    setError('')
+    try {
+      await api.delete(`/mcp-tokens/${t.id}`)
+      invalidateMyAgents()
+      load()
+    } catch (err) {
+      setError(err.response?.data?.error || 'No se pudo borrar.')
+    } finally {
+      setDeletingId(null)
+    }
+  }
+
   async function handleReminderChange(id, workReminderMins) {
     setSavingId(id)
     try {
@@ -153,6 +178,9 @@ export default function AgentsTab() {
       setSavingId(null)
     }
   }
+
+  const activos   = tokens.filter(t => !t.revokedAt)
+  const revocados = tokens.filter(t => t.revokedAt)
 
   return (
     <>
@@ -171,6 +199,14 @@ export default function AgentsTab() {
         </div>
         <p className="text-xs text-gray-400 dark:text-gray-500 mt-3 leading-relaxed">
           En tu cliente de IA, agregá un conector remoto de tipo MCP con esta URL y, como autenticación, un token <strong className="text-gray-600 dark:text-gray-300">Bearer</strong> — generalo abajo.
+        </p>
+        {/* Es la pregunta que aparece sola la primera vez que alguien vuelve a esta
+            pantalla buscando un token que ya pegó en otro lado. Mejor que la responda
+            acá que dejarlo buscando un botón que no existe. */}
+        <p className="text-xs text-gray-400 dark:text-gray-500 mt-2 leading-relaxed">
+          <strong className="text-gray-600 dark:text-gray-300">¿Perdiste un token?</strong> No se puede volver a ver:
+          guardamos solo un hash, nunca el valor. Usá <strong className="text-gray-600 dark:text-gray-300">Rotar token</strong> en
+          el agente que corresponda — te da uno nuevo y el agente conserva su nombre, sus proyectos y su historial.
         </p>
       </div>
 
@@ -202,7 +238,9 @@ export default function AgentsTab() {
           <p className="text-sm text-gray-400 dark:text-gray-500">Todavía no generaste ningún token.</p>
         ) : (
           <div className="space-y-2">
-            {tokens.map(t => (
+            {/* Los revocados se esconden detrás de un toggle: son historial, no agentes
+                del equipo, y con el tiempo son la mayoría de la lista. */}
+            {activos.map(t => (
               <div key={t.id} className="py-2.5 px-3 rounded-lg bg-gray-50 dark:bg-gray-700/50">
                <div className="flex items-center justify-between gap-3">
                 <div className="min-w-0">
@@ -253,6 +291,52 @@ export default function AgentsTab() {
                 )}
               </div>
             ))}
+
+            {activos.length === 0 && (
+              <p className="text-sm text-gray-400 dark:text-gray-500">
+                No tenés agentes activos. Generá un token arriba para conectar uno.
+              </p>
+            )}
+
+            {revocados.length > 0 && (
+              <div className="pt-1">
+                <button
+                  type="button"
+                  onClick={() => setShowRevoked(v => !v)}
+                  className="text-xs text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+                >
+                  {showRevoked ? 'Ocultar' : 'Ver'} revocados · {revocados.length}
+                </button>
+                {showRevoked && (
+                  <div className="space-y-2 mt-2">
+                    {revocados.map(t => (
+                      <div key={t.id} className="py-2.5 px-3 rounded-lg bg-gray-50 dark:bg-gray-700/50 opacity-70">
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium text-gray-800 dark:text-gray-200 truncate">{t.label || '(sin nombre)'}</p>
+                            <p className="text-xs text-gray-400 dark:text-gray-500">
+                              Creado {fmtDate(t.createdAt)} · Revocado {fmtDate(t.revokedAt)}
+                              {(t.historyCount ?? 0) > 0 && ` · ${t.historyCount} ${t.historyCount === 1 ? 'registro' : 'registros'} en el historial`}
+                            </p>
+                            <TokenAlert token={t} />
+                          </div>
+                          <div className="flex items-center gap-2 flex-shrink-0">
+                            <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400">Revocado</span>
+                            <button onClick={() => handleDelete(t)} disabled={deletingId === t.id}
+                              title={(t.historyCount ?? 0) > 0
+                                ? 'Lo saca de la lista. Su trabajo queda en el historial, pero sin su nombre.'
+                                : 'Lo saca de la lista. No tiene nada cargado.'}
+                              className="text-xs px-2.5 py-1 rounded-lg font-medium bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/50 transition-colors disabled:opacity-50">
+                              {deletingId === t.id ? '...' : 'Borrar'}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -265,7 +349,9 @@ export default function AgentsTab() {
           <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-lg p-6">
             <h3 className="text-base font-semibold text-gray-900 dark:text-white mb-1">Token generado</h3>
             <p className="text-xs text-amber-600 dark:text-amber-400 mb-4">
-              Copialo ahora — por seguridad, no vas a poder volver a verlo.
+              Copialo ahora — por seguridad, <strong className="font-semibold">no vas a poder volver a verlo</strong>:
+              de este token guardamos solo un hash, así que ni nosotros podemos recuperarlo. Si lo perdés,
+              usá "Rotar token" en la lista de abajo y te damos uno nuevo sin perder el agente.
             </p>
             <div className="flex items-center gap-2 bg-gray-50 dark:bg-gray-900/40 border dark:border-gray-700 rounded-xl px-3 py-2 mb-4">
               <code className="flex-1 text-xs text-gray-700 dark:text-gray-300 break-all">{revealed.token}</code>

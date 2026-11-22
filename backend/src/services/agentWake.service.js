@@ -24,8 +24,28 @@ const { createdNewsWhere, inboxNewsWhere } = require('../lib/agentNews')
 // permisos reales y todo lo que haga queda atribuido a él (`createdByAgentId`,
 // `TaskComment.agentId`, etc.) — exactamente como si lo hubiera hecho desde el chat.
 
-const API_URL = 'https://api.x.ai/v1/chat/completions'
+// A qué proveedor se le pega. El request que arma `chat()` es el de
+// `/v1/chat/completions` de OpenAI —`{ model, messages, tools, tool_choice }` con Bearer,
+// leyendo `choices[0].message`—, que es el formato que implementan xAI, OpenAI, Groq,
+// DeepSeek, Mistral, OpenRouter y cualquier servidor compatible (vLLM/Ollama sirviendo
+// un modelo abierto como Hermes). Por eso cambiar de proveedor es cambiar la URL y el
+// nombre del modelo, no escribir otro cliente.
+//
+// **Anthropic queda afuera**: `/v1/messages` manda el system prompt como parámetro
+// aparte, usa bloques de contenido y `tool_use`/`tool_result` en vez de `tool_calls`.
+// Soportarlo pide un adaptador, no una URL distinta.
+const DEFAULT_API_URL = 'https://api.x.ai/v1/chat/completions'
 const DEFAULT_MODEL = 'grok-4'
+
+// Presets que ofrece la UI. `label` es lo que ve el usuario; `model` es una sugerencia
+// que puede cambiar a mano. No es una whitelist: cualquier URL compatible se acepta.
+const WAKE_PROVIDERS = Object.freeze([
+  { key: 'xai',        label: 'xAI (Grok)',            apiUrl: DEFAULT_API_URL,                                 model: 'grok-4' },
+  { key: 'openai',     label: 'OpenAI',                apiUrl: 'https://api.openai.com/v1/chat/completions',    model: 'gpt-5' },
+  { key: 'openrouter', label: 'OpenRouter (Hermes y otros)', apiUrl: 'https://openrouter.ai/api/v1/chat/completions', model: 'nousresearch/hermes-4-405b' },
+  { key: 'groq',       label: 'Groq',                  apiUrl: 'https://api.groq.com/openai/v1/chat/completions', model: 'llama-3.3-70b-versatile' },
+  { key: 'custom',     label: 'Otro (compatible con OpenAI)', apiUrl: '', model: '' },
+])
 const MAX_STEPS = 8           // tool calls encadenadas por despertar
 const STEP_TIMEOUT_MS = 60000
 // Un despertar cada 5 min por agente, como mucho: cada uno gasta tokens de la API key
@@ -165,9 +185,9 @@ async function buildWakeMessage(identity, agentName) {
   return lines.join('\n')
 }
 
-async function chat({ apiKey, model, messages, tools }) {
+async function chat({ apiUrl, apiKey, model, messages, tools }) {
   const res = await axios.post(
-    API_URL,
+    apiUrl || DEFAULT_API_URL,
     { model, messages, tools, tool_choice: 'auto' },
     { headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' }, timeout: STEP_TIMEOUT_MS, validateStatus: () => true },
   )
@@ -181,7 +201,7 @@ async function chat({ apiKey, model, messages, tools }) {
 // Despierta a UN agente. Best-effort: nunca lanza (lo llama el flujo de una request HTTP
 // del usuario, que no tiene que esperarlo ni fallar por esto). Devuelve el estado para
 // los tests.
-async function wakeAgent({ token, workspaceSlug, apiKey, model }) {
+async function wakeAgent({ token, workspaceSlug, apiKey, model, apiUrl }) {
   const identity = { userId: token.userId, workspaceId: token.workspaceId, workspaceSlug, tokenId: token.id }
   const agentName = null // el nombre declarado es del chat; acá el agente es el token
   let status = 'error'
@@ -197,7 +217,7 @@ async function wakeAgent({ token, workspaceSlug, apiKey, model }) {
 
     let steps = 0
     for (; steps < MAX_STEPS; steps++) {
-      const msg = await chat({ apiKey, model, messages, tools })
+      const msg = await chat({ apiUrl, apiKey, model, messages, tools })
       if (!msg) { status = 'respuesta vacía del proveedor'; return status }
       messages.push(msg)
       const calls = msg.tool_calls || []
@@ -229,7 +249,7 @@ async function resolveWake(token) {
 
   const ws = await prisma.workspace.findUnique({
     where: { id: token.workspaceId },
-    select: { slug: true, agentWakeApiKey: true, agentWakeModel: true },
+    select: { slug: true, agentWakeApiKey: true, agentWakeModel: true, agentWakeApiUrl: true },
   })
   if (!ws?.agentWakeApiKey) return { ok: false, reason: 'falta la API key del proveedor (Preferencias → Agentes IA)' }
 
@@ -240,7 +260,7 @@ async function resolveWake(token) {
     return { ok: false, reason: 'la API key guardada no se pudo descifrar' }
   }
   nextWakeAt.set(token.id, now + WAKE_COOLDOWN_MS)
-  return { ok: true, workspaceSlug: ws.slug, apiKey, model: ws.agentWakeModel || DEFAULT_MODEL }
+  return { ok: true, workspaceSlug: ws.slug, apiKey, model: ws.agentWakeModel || DEFAULT_MODEL, apiUrl: ws.agentWakeApiUrl || DEFAULT_API_URL }
 }
 
 async function maybeWakeAgent(token) {
@@ -254,11 +274,11 @@ async function maybeWakeAgent(token) {
       }
       return r.reason ?? 'apagado'
     }
-    return await wakeAgent({ token, workspaceSlug: r.workspaceSlug, apiKey: r.apiKey, model: r.model })
+    return await wakeAgent({ token, workspaceSlug: r.workspaceSlug, apiKey: r.apiKey, model: r.model, apiUrl: r.apiUrl })
   } catch (err) {
     console.error('[agentWake] Error despertando al agente:', err.message)
     return `error: ${err.message}`
   }
 }
 
-module.exports = { maybeWakeAgent, wakeAgent, toolDefs, buildWakeMessage, DEFAULT_MODEL, _nextWakeAt: nextWakeAt }
+module.exports = { maybeWakeAgent, wakeAgent, toolDefs, buildWakeMessage, DEFAULT_MODEL, DEFAULT_API_URL, WAKE_PROVIDERS, _nextWakeAt: nextWakeAt }

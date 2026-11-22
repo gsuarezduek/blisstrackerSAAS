@@ -1,0 +1,11 @@
+-- Despertador de agentes: a qué proveedor se le pega. Antes la URL estaba hardcodeada
+-- en services/agentWake.service.js (api.x.ai), así que el canal servía solo para Grok.
+-- El cuerpo que manda el servicio es el de /v1/chat/completions de OpenAI (model,
+-- messages, tools, tool_choice) y lee choices[0].message, que es justo lo que implementan
+-- xAI, OpenAI, Groq, DeepSeek, Mistral, OpenRouter y cualquier servidor compatible
+-- (vLLM/Ollama con un modelo como Hermes), así que alcanza con poder cambiar la URL.
+-- null = el default en código (xAI), para no tocar los workspaces que ya lo usan.
+--
+-- OJO: Anthropic NO entra por acá — /v1/messages tiene otra forma de request y de tool
+-- calling, y necesitaría un adaptador aparte.
+ALTER TABLE "Workspace" ADD COLUMN "agentWakeApiUrl" TEXT;

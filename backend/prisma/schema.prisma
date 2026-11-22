@@ -46,6 +46,12 @@ model Workspace {
   // y no en el McpToken de cada persona. `agentWakeModel` null = default en código.
   agentWakeApiKey                 String?
   agentWakeModel                  String?
+  // A qué proveedor se le pega. El request que arma el servicio es el de
+  // /v1/chat/completions de OpenAI, que es lo que implementan xAI, OpenAI, Groq,
+  // DeepSeek, Mistral, OpenRouter y cualquier servidor compatible (vLLM/Ollama con
+  // Hermes, por ejemplo) — así que cambiar la URL alcanza para cambiar de proveedor.
+  // null = el default en código (xAI). Anthropic no entra: /v1/messages tiene otra forma.
+  agentWakeApiUrl                 String?
   storageLimitMb                  Int             @default(20480) // Límite de almacenamiento (MB) del workspace (configurable desde SuperAdmin). 0 = ilimitado. INFORMATIVO/de alerta — no bloquea subidas, ver *MaxMbOverride abajo
   // Override puntual por workspace de las cuotas que SÍ bloquean subidas (ver assertWithinQuota
   // en projectFiles/contentAssets/chat controllers). null = usa el default global de PlatformSetting

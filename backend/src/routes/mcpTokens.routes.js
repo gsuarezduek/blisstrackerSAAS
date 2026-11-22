@@ -1,5 +1,5 @@
 const router = require('express').Router()
-const { listMine, createMine, revokeMine, updateMine, getWakeConfig, saveWakeConfig } = require('../controllers/mcpTokens.controller')
+const { listMine, createMine, revokeMine, destroyMine, updateMine, getWakeConfig, saveWakeConfig } = require('../controllers/mcpTokens.controller')
 const { auth } = require('../middleware/auth')
 const { resolveWorkspace, workspaceAdminOnly } = require('../middleware/workspace')
 
@@ -14,5 +14,6 @@ router.get('/',             listMine)
 router.post('/',            createMine)
 router.patch('/:id/revoke', revokeMine)
 router.patch('/:id',        updateMine)
+router.delete('/:id',       destroyMine) // solo un agente ya revocado
 
 module.exports = router
