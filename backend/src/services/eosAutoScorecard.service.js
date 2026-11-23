@@ -20,7 +20,7 @@ const { monthBounds, prevMonthStr } = require('../lib/monthUtils')
 const { EOS_AUTO_METRICS } = require('../lib/eosAutoMetricCatalog')
 const { computeObjectives } = require('./marketingObjectives.service')
 const { inArrivalWindow, laborableDays } = require('../lib/attendance')
-const { HUMAN_TASK_WHERE, formatAgentName } = require('../lib/agentTasks')
+const { HUMAN_TASK_WHERE, agentGroupKey, agentGroupName } = require('../lib/agentTasks')
 
 // Filtro de informes "generados" (no placeholders vacíos) — espejo de GENERATED_WHERE.
 const GENERATED_REPORT_OR = [
@@ -292,7 +292,8 @@ async function computeTareasCompletadasWeekly(workspaceId, tz, offset, rangeStar
 
 // Tareas completadas por agentes de IA por semana — espejo de computeTareasCompletadasWeekly
 // pero rankeando AGENTES en vez de personas (fila separada a propósito: no suma al ranking
-// humano). No depende del horario; agrupa por agente (token + nombre declarado vía agentName).
+// humano). No depende del horario; agrupa por agente con el criterio único de
+// `lib/agentTasks.js` (una fila por token, ver `agentGroupKey`).
 async function computeTareasCompletadasAgentesWeekly(workspaceId, tz, offset, rangeStart, rangeEnd) {
   const out = {}
   const tasks = await prisma.task.findMany({
@@ -315,9 +316,8 @@ async function computeTareasCompletadasAgentesWeekly(workspaceId, tz, offset, ra
     const period = isoWeekPeriodOf(date)
     if (!byWeek.has(period)) byWeek.set(period, new Map())
     const wm = byWeek.get(period)
-    const declared = t.agentName?.trim() || null
-    const key = `${t.agent?.id ?? 0}|${declared ?? ''}`
-    const cur = wm.get(key) || { name: t.agent ? formatAgentName(t.agent, declared) : (declared ? `Agente eliminado · ${declared}` : 'Agente eliminado'), count: 0, minutes: 0 }
+    const key = agentGroupKey(t)
+    const cur = wm.get(key) || { name: agentGroupName(t), count: 0, minutes: 0 }
     cur.count   += 1
     cur.minutes += taskMins(t)
     wm.set(key, cur)

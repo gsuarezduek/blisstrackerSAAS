@@ -7,7 +7,8 @@
  * fila así después aparece en el equipo del proyecto como si nada.
  */
 jest.mock('../../src/lib/prisma', () => ({
-  project:       { findFirst: jest.fn(), update: jest.fn() },
+  project:       { findFirst: jest.fn(), update: jest.fn(), findUnique: jest.fn() },
+  task:          { findMany: jest.fn(), count: jest.fn() },
   projectMember: { findMany: jest.fn(), deleteMany: jest.fn() },
   projectAgent:  { deleteMany: jest.fn() },
   projectService:{ deleteMany: jest.fn() },
@@ -18,6 +19,8 @@ jest.mock('../../src/lib/prisma', () => ({
 
 const prisma = require('../../src/lib/prisma')
 const { update } = require('../../src/controllers/projects/projects.controller')
+const { includeDetails } = require('../../src/controllers/projects/_shared')
+const { projectTasks } = require('../../src/controllers/projects/projectTasks.controller')
 
 function mkRes() {
   const res = { statusCode: 200, body: undefined }
@@ -86,4 +89,32 @@ it('no notifica a nadie por sumar un agente', async () => {
   prisma.mcpToken.findMany.mockResolvedValue([{ id: 2 }])
   await update(mkReq({ agentIds: [2] }), mkRes(), next)
   expect(prisma.notification.createMany).not.toHaveBeenCalled()
+})
+
+// Revocar un agente NO le borra sus ProjectAgent, a propósito: su ficha sigue mostrando
+// dónde trabajó. Por eso el filtro tiene que estar del lado de la LECTURA — y la
+// validación del alta (`revokedAt: null` arriba) no alcanza, porque solo cubre el alta.
+//
+// Sin esto un agente dado de baja seguía apareciendo en el equipo del proyecto mientras
+// desaparecía del roster, así que el primer guardado del equipo —que se arma con el
+// roster— lo borraba en silencio. El filtro, además, arregla las filas que ya están en
+// la base, que un borrado al revocar no habría tocado.
+describe('un agente revocado sale del equipo del proyecto', () => {
+  it('el include compartido de la ficha lo filtra', () => {
+    expect(includeDetails.agents.where).toEqual({ agent: { revokedAt: null } })
+  })
+
+  it('la pestaña Tareas, que tiene su propio select, también', async () => {
+    prisma.project.findUnique.mockResolvedValue({ id: 3, name: 'Bliss', agents: [] })
+    prisma.task.findMany.mockResolvedValue([])
+    prisma.task.count.mockResolvedValue(0)
+    const req = {
+      params: { id: '3' }, query: {}, user: { userId: 7 },
+      workspace: { id: 1, timezone: 'America/Argentina/Buenos_Aires' },
+    }
+    await projectTasks(req, mkRes(), next)
+
+    expect(prisma.project.findUnique.mock.calls[0][0].select.agents.where)
+      .toEqual({ agent: { revokedAt: null } })
+  })
 })

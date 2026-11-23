@@ -10,7 +10,8 @@ import api from '../api/client'
 import { renderRichText } from '../utils/richText'
 import { fmtMins } from '../utils/format'
 import useMembers from '../hooks/useMembers'
-import { Webhook, AlarmClock } from 'lucide-react'
+import { Webhook, AlarmClock, KeyRound } from 'lucide-react'
+import { WAKE_UI_ENABLED } from '../utils/agentWake'
 import { Icon } from '../components/ui/Icon'
 
 // Ficha de un agente de IA — el espejo de /users/:id para la otra mitad del equipo.
@@ -19,7 +20,8 @@ import { Icon } from '../components/ui/Icon'
 // a lo que se puede apuntar: quién es, de quién es, en qué cuentas trabaja, qué hizo y
 // qué tiene trabado. Deliberadamente NO muestra nada de la credencial (ni la URL del
 // webhook ni el token): eso vive en Preferencias → Agentes IA, que es del dueño. Acá los
-// canales son dos booleanos, porque explican por qué el agente reacciona o no reacciona.
+// canales se muestran como booleanos, porque explican por qué el agente reacciona o no
+// reacciona. (El despertador está escondido del producto, ver utils/agentWake.js.)
 
 const STATUS_LABEL = { IN_PROGRESS: 'En curso', PENDING: 'Pendiente', PAUSED: 'Pausada', BLOCKED: 'Bloqueada' }
 const STATUS_CLASS = {
@@ -52,6 +54,46 @@ function fmtDate(d) {
 function fmtDateTime(d) {
   if (!d) return ''
   return new Date(d).toLocaleString('es-AR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+}
+
+// Aviso de credencial — solo aparece cuando hay algo que avisar, y solo lo ve el dueño
+// o un admin (el backend manda `health: null` al resto).
+//
+// Por qué hace falta: "Última conexión" se actualiza únicamente cuando el token
+// autentica BIEN, así que un agente que quedó con el valor viejo después de una rotación
+// se ve igual a uno que está trabajando — con una fecha reciente, congelada en su último
+// éxito. Este bloque es lo único de la pantalla que distingue "está tranquilo" de "está
+// roto y no lo sabés".
+function HealthNotice({ health }) {
+  if (!health) return null
+  const { staleSinceRotation, rotatedAt, rejected } = health
+  if (!staleSinceRotation && !rejected) return null
+
+  return (
+    <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-2xl p-4">
+      <p className="text-sm font-semibold text-amber-900 dark:text-amber-200 inline-flex items-center gap-1.5">
+        <Icon as={KeyRound} size={15} />
+        Revisá su credencial
+      </p>
+      <ul className="mt-2 space-y-1 text-sm text-amber-800 dark:text-amber-200/90">
+        {staleSinceRotation && (
+          <li>
+            Rotaste su token el {fmtDateTime(rotatedAt)} y todavía no se conectó con el nuevo.
+            Hay que pegar ese valor en su cliente MCP: es un paso manual y es el que se olvida.
+          </li>
+        )}
+        {rejected && (
+          <li>
+            {rejected.attempts} {rejected.attempts === 1 ? 'intento' : 'intentos'} de conexión
+            rechazados, el último {fmtDateTime(rejected.lastAt)}
+            {rejected.reason === 'revoked'
+              ? ' — sigue intentando con un token revocado.'
+              : ' — sigue mandando un token que ya no es válido (probablemente el anterior a la rotación).'}
+          </li>
+        )}
+      </ul>
+    </div>
+  )
 }
 
 export default function AgentProfile() {
@@ -92,7 +134,7 @@ export default function AgentProfile() {
     )
   }
 
-  const { agent, summary, active, channels } = data
+  const { agent, summary, active, channels, health } = data
   const totalActive = ACTIVE_SECTIONS.reduce((n, s) => n + (active[s.key]?.length || 0), 0)
 
   return (
@@ -128,6 +170,8 @@ export default function AgentProfile() {
             </p>
           </div>
         </div>
+
+        <HealthNotice health={health} />
 
         {/* Lo que hizo */}
         <div className="grid grid-cols-3 gap-3">
@@ -237,10 +281,12 @@ export default function AgentProfile() {
                 <Icon as={Webhook} size={15} />
                 Webhook: {channels.hasWebhook ? 'configurado' : 'sin configurar'}
               </span>
-              <span className="inline-flex items-center gap-1.5">
-                <Icon as={AlarmClock} size={15} />
-                Despertador: {channels.wakeEnabled ? 'activado' : 'apagado'}
-              </span>
+              {WAKE_UI_ENABLED && (
+                <span className="inline-flex items-center gap-1.5">
+                  <Icon as={AlarmClock} size={15} />
+                  Despertador: {channels.wakeEnabled ? 'activado' : 'apagado'}
+                </span>
+              )}
             </div>
             <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">
               Se configuran en <Link to="/preferences?tab=agents" className="underline hover:text-primary-600 dark:hover:text-primary-400">Preferencias → Agentes IA</Link>.

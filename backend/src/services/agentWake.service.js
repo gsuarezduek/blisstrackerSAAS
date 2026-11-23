@@ -239,10 +239,24 @@ async function wakeAgent({ token, workspaceSlug, apiKey, model, apiUrl }) {
   }
 }
 
+// Interruptor general del despertador — APAGADO (noviembre 2026).
+//
+// Se apagó porque no se está usando y es el único canal que gasta plata del workspace
+// sin que nadie lo pida en el momento. La UI que lo configuraba está escondida
+// (frontend/src/components/preferences/agentChannels.jsx → WAKE_UI_ENABLED), y este
+// guard es la otra mitad del mismo interruptor: sin él, cualquier agente que haya
+// quedado con `wakeEnabled: true` seguiría despertándose y facturando, sin ninguna
+// pantalla donde verlo ni apagarlo.
+//
+// El código queda entero a propósito (funciona y está testeado): para volver a
+// prenderlo, poner esto en `true` y `WAKE_UI_ENABLED` también.
+const WAKE_ENABLED = false
+
 // ¿Se puede despertar a este agente ahora? Resuelve la config del workspace y el
 // cooldown. Devuelve { ok } o { ok: false, reason } (reason queda en wakeLastStatus para
 // que Preferencias muestre por qué no salió).
 async function resolveWake(token) {
+  if (!WAKE_ENABLED) return { ok: false }
   if (!token?.wakeEnabled) return { ok: false }
   const now = Date.now()
   if (now < (nextWakeAt.get(token.id) ?? 0)) return { ok: false, reason: 'en cooldown' }
@@ -281,4 +295,4 @@ async function maybeWakeAgent(token) {
   }
 }
 
-module.exports = { maybeWakeAgent, wakeAgent, toolDefs, buildWakeMessage, DEFAULT_MODEL, DEFAULT_API_URL, WAKE_PROVIDERS, _nextWakeAt: nextWakeAt }
+module.exports = { maybeWakeAgent, wakeAgent, toolDefs, buildWakeMessage, DEFAULT_MODEL, DEFAULT_API_URL, WAKE_PROVIDERS, WAKE_ENABLED, _nextWakeAt: nextWakeAt }

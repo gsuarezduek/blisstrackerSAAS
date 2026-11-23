@@ -11,6 +11,7 @@ vi.mock('../../hooks/useRoles', () => ({ default: () => ({ labelFor: r => r }) }
 
 import api from '../../api/client'
 import AgentProfile from '../../pages/AgentProfile'
+import { WAKE_UI_ENABLED } from '../../utils/agentWake'
 
 const agent = {
   id: 2, label: 'Grok SEO', color: 'violet', teamRole: 'DESIGNER',
@@ -68,7 +69,10 @@ describe('AgentProfile', () => {
     renderFicha()
     await screen.findByText('Grok SEO')
     expect(screen.getByText(/Webhook: configurado/)).toBeTruthy()
-    expect(screen.getByText(/Despertador: apagado/)).toBeTruthy()
+    // El despertador está escondido del producto (utils/agentWake.js): mientras lo esté,
+    // la ficha no lo nombra. Si se vuelve a prender, esta línea lo vuelve a exigir.
+    if (WAKE_UI_ENABLED) expect(screen.getByText(/Despertador: apagado/)).toBeTruthy()
+    else expect(screen.queryByText(/Despertador/)).toBeNull()
   })
 
   it('a quien no puede editar no le muestra el bloque de canales', async () => {

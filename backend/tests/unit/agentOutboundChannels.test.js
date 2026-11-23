@@ -31,7 +31,7 @@ const prisma = require('../../src/lib/prisma')
 const { callApi } = require('../../src/mcp/apiBridge')
 const { maybeNewsNudge, _nextNudgeAt } = require('../../src/mcp/newsNudge')
 const { sendAgentWebhook, sign, buildPayload } = require('../../src/services/agentWebhook.service')
-const { wakeAgent, toolDefs, buildWakeMessage } = require('../../src/services/agentWake.service')
+const { wakeAgent, maybeWakeAgent, toolDefs, buildWakeMessage, WAKE_ENABLED } = require('../../src/services/agentWake.service')
 
 const IDENTITY = { userId: 5, workspaceId: 1, workspaceSlug: 'bliss', tokenId: 7 }
 const NOW = Date.parse('2026-11-01T14:00:00Z')
@@ -280,5 +280,22 @@ describe('sign', () => {
     const body = '{"a":1}'
     const expected = crypto.createHmac('sha256', 's3cret').update(body).digest('hex')
     expect(sign('s3cret', body)).toBe(`sha256=${expected}`)
+  })
+})
+
+// El despertador está apagado del producto (WAKE_ENABLED en el service + WAKE_UI_ENABLED
+// en el frontend). Los tests de arriba siguen cubriendo su mecánica porque llaman a
+// `wakeAgent` directo: el código queda entero para poder volver a prenderlo. Lo que se
+// fija acá es el interruptor, que es lo que impide que un agente con `wakeEnabled: true`
+// de antes siga despertándose —y facturando— sin ninguna pantalla donde apagarlo.
+describe('el interruptor general del despertador', () => {
+  it('con el despertador apagado, nadie se despierta aunque lo tenga activado', async () => {
+    if (WAKE_ENABLED) return // prendido a propósito: este test no aplica
+    axios.post.mockClear()
+    const r = await maybeWakeAgent({ id: 7, workspaceId: 1, wakeEnabled: true })
+    expect(r).toBe('apagado')
+    expect(axios.post).not.toHaveBeenCalled()
+    // Y sin `reason`: no se pisa el `wakeLastStatus` que quedó de cuando funcionaba.
+    expect(prisma.mcpToken.update).not.toHaveBeenCalled()
   })
 })

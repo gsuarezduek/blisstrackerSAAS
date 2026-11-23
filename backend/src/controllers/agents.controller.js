@@ -2,6 +2,7 @@ const prisma = require('../lib/prisma')
 const { taskMins } = require('../lib/timeMetrics')
 const { isAdmin, filterVisibleTasks } = require('../lib/projectAccess')
 const { generateToken } = require('../lib/mcpTokens')
+const { hashPrefixOf, fingerprintOfPrefix } = require('../services/mcpAuthFailure.service')
 const { utcRange, mondayOf, periodBounds, readPeriodQuery, todayIn } = require('../lib/profilePeriods')
 
 // Agentes IA como ENTIDAD del producto, separada de la credencial.
@@ -115,6 +116,7 @@ async function getAgentProfile(req, res, next) {
       ...AGENT_PUBLIC_SELECT,
       workspaceId: true, userId: true, revokedAt: true,
       webhookUrl: true, wakeEnabled: true,
+      rotatedAt: true, prevTokenPrefix: true,
     })
     if (!agent) return res.status(404).json({ error: 'Agente no encontrado' })
 
@@ -163,6 +165,8 @@ async function getAgentProfile(req, res, next) {
       agent: shaped,
       summary,
       active: byStatus,
+      // Salud de la credencial, solo para el dueño o un admin. Ver `agentHealth`.
+      health: canEditAgent(req, agent) ? await agentHealth(agent) : null,
       // Los canales como booleanos y nada más: la URL del webhook y el estado de las
       // entregas son del dueño y viven en Preferencias. Acá solo se responde "¿está
       // enchufado?", que es lo que explica por qué un agente reacciona o no reacciona.
@@ -172,6 +176,57 @@ async function getAgentProfile(req, res, next) {
       canEdit: canEditAgent(req, agent),
     })
   } catch (err) { next(err) }
+}
+
+// Salud de la credencial de un agente — la respuesta a "¿está conectado de verdad?".
+//
+// Existe porque `lastUsedAt` MIENTE por omisión: solo se actualiza cuando el token
+// autentica bien, así que un agente que quedó con el valor viejo después de una rotación
+// muestra "último uso: ayer" y todo verde mientras falla cada request. Rotar implica un
+// paso manual (pegar el token nuevo en el cliente MCP) y es justo el que se olvida.
+//
+// Dos señales, las dos atribuibles a ESTE agente:
+//   staleSinceRotation — se rotó el token y no se volvió a conectar desde entonces.
+//   rejected           — intentos rechazados que son suyos: los del token revocado
+//                        (tienen `tokenId`) y los del valor anterior a la rotación, que
+//                        llegan anónimos y se recuperan por el prefijo que guardamos.
+//
+// Se devuelve solo al dueño o a un admin: es estado de la credencial, no identidad.
+async function agentHealth(agent) {
+  // Los rechazos del token revocado ya tienen dueño en la fila; los del token viejo solo
+  // se pueden encontrar por su fingerprint. Una sola query con las dos condiciones.
+  const prevFingerprint = fingerprintOfPrefix(agent.prevTokenPrefix)
+  const or = [{ tokenId: agent.id }]
+  if (prevFingerprint) or.push({ fingerprint: prevFingerprint })
+  const failures = await prisma.mcpAuthFailure.findMany({
+    where: { OR: or },
+    select: { reason: true, attempts: true, firstAt: true, lastAt: true },
+    orderBy: { lastAt: 'desc' },
+  })
+
+  // Solo lo que pasó DESPUÉS de la última conexión buena. Las filas de rechazo viven
+  // hasta que las limpia el cron de retención, así que sin este corte el aviso quedaba
+  // pegado para siempre después de cualquier tropiezo ya resuelto — y un aviso que
+  // siempre está prendido no avisa nada.
+  //
+  // El corte es por fila y no por intento porque la fila está agregada (un conector
+  // reintenta cada ~40s y se cuenta en `attempts`): si algunos intentos fueron antes y
+  // otros después, se muestra la fila entera. Erra para el lado de mostrar el problema.
+  const live = agent.lastUsedAt ? failures.filter(f => f.lastAt > agent.lastUsedAt) : failures
+
+  const rejected = live.reduce((acc, f) => {
+    acc.attempts += f.attempts
+    if (!acc.lastAt || f.lastAt > acc.lastAt) acc.lastAt = f.lastAt
+    if (!acc.reason) acc.reason = f.reason
+    return acc
+  }, { attempts: 0, lastAt: null, reason: null })
+
+  return {
+    rotatedAt: agent.rotatedAt,
+    // `null` (nunca se conectó) también cuenta como "no se volvió a conectar".
+    staleSinceRotation: !!agent.rotatedAt && (!agent.lastUsedAt || agent.lastUsedAt < agent.rotatedAt),
+    rejected: rejected.attempts ? rejected : null,
+  }
 }
 
 // GET /api/agents/:id/completed?period=day|week|month&date=YYYY-MM-DD
@@ -282,7 +337,9 @@ async function updateAgent(req, res, next) {
 // Solo el dueño: es él quien tiene que pegar el valor nuevo en su cliente MCP.
 async function rotateAgentToken(req, res, next) {
   try {
-    const agent = await findAgent(req, { id: true, workspaceId: true, userId: true, revokedAt: true })
+    const agent = await findAgent(req, {
+      id: true, workspaceId: true, userId: true, revokedAt: true, tokenHash: true,
+    })
     if (!agent) return res.status(404).json({ error: 'Agente no encontrado' })
     if (agent.userId !== req.user.userId) {
       return res.status(403).json({ error: 'Solo el dueño del agente puede rotar su token' })
@@ -294,9 +351,18 @@ async function rotateAgentToken(req, res, next) {
     const { token, tokenHash } = generateToken()
     const updated = await prisma.mcpToken.update({
       where: { id: agent.id },
-      // `revokedNoticeAt` se limpia porque es el antiflood del mail de "tu agente sigue
-      // intentando con un token revocado": el estado anterior ya no describe nada.
-      data: { tokenHash, revokedNoticeAt: null },
+      data: {
+        tokenHash,
+        // `revokedNoticeAt` se limpia porque es el antiflood del mail de "tu agente sigue
+        // intentando con un token revocado": el estado anterior ya no describe nada.
+        revokedNoticeAt: null,
+        // El rastro que hace visible el error más probable de esta operación: pegar el
+        // valor nuevo en el cliente MCP es un paso MANUAL y, si no se hace, el agente
+        // sigue mandando el viejo. Con esto la ficha puede decirlo (ver `health`), en vez
+        // de mostrarlo sano porque `lastUsedAt` quedó congelado en el último éxito.
+        rotatedAt: new Date(),
+        prevTokenPrefix: hashPrefixOf(agent.tokenHash),
+      },
       select: AGENT_PUBLIC_SELECT,
     })
     // El valor en claro se devuelve UNA sola vez, igual que al crear el token.

@@ -40,7 +40,9 @@ describe('computeAgentStats', () => {
     expect(s.porProyecto[0]).toEqual({ projectId: 1, name: 'Pastiza', completed: 2, minutes: 15 })
   })
 
-  it('separa en filas a los agentes que comparten un token por su nombre declarado', () => {
+  // El agente es el TOKEN. Antes la clave era `token|agentName` y el mismo agente salía
+  // partido en una fila por nombre declarado, justo donde se muestran los números.
+  it('junta en UNA fila todo el trabajo de un agente, aunque haya declarado nombres distintos', () => {
     const s = computeAgentStats([
       done('2026-10-02', 10, { agentName: 'Ventas' }),
       done('2026-10-03', 20, { agentName: 'Ventas' }),
@@ -48,9 +50,20 @@ describe('computeAgentStats', () => {
       done('2026-10-05', 1),
     ], period)
     expect(s.porAgente).toEqual([
-      { agentId: 7, agentName: 'Ventas', name: 'Grok · Ventas', completed: 2, minutes: 30 },
-      { agentId: 7, agentName: 'SEO', name: 'Grok · SEO', completed: 1, minutes: 5 },
-      { agentId: 7, agentName: null, name: 'Grok', completed: 1, minutes: 1 },
+      { agentId: 7, agentName: null, name: 'Grok', completed: 4, minutes: 36 },
+    ])
+  })
+
+  // El caso inverso: sin token, `agentName` es lo único que queda para no fundir el
+  // trabajo de varios agentes en un solo "Agente eliminado".
+  it('sin token, separa por nombre declarado', () => {
+    const s = computeAgentStats([
+      done('2026-10-02', 10, { agent: null, agentName: 'Ventas' }),
+      done('2026-10-03', 5,  { agent: null, agentName: 'SEO' }),
+    ], period)
+    expect(s.porAgente).toEqual([
+      { agentId: null, agentName: 'Ventas', name: 'Agente eliminado · Ventas', completed: 1, minutes: 10 },
+      { agentId: null, agentName: 'SEO', name: 'Agente eliminado · SEO', completed: 1, minutes: 5 },
     ])
   })
 
@@ -158,12 +171,12 @@ describe('agentDetail', () => {
     ])
   })
 
-  it('separa agentes que comparten token por su nombre declarado', () => {
+  it('un agente es una fila, cualquiera sea el nombre que declaró', () => {
     const rows = agentDetail([
       { isAgentTask: true, minutesOverride: 20, agent: grok, agentName: 'Ventas' },
       { isAgentTask: true, minutesOverride: 50, agent: grok, agentName: 'SEO' },
     ])
-    expect(rows.map(r => [r.name, r.minutes])).toEqual([['Grok · SEO', 50], ['Grok · Ventas', 20]])
+    expect(rows).toEqual([{ agentId: 7, agentName: null, name: 'Grok', minutes: 70, taskCount: 2 }])
   })
 
   it('un token borrado no pierde su tiempo', () => {

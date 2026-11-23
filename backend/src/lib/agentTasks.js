@@ -74,21 +74,55 @@ function splitByExecutor(tasks) {
   return bucket
 }
 
-// Detalle por agente de una lista de tareas de agente: una fila por token + nombre
-// declarado (varios agentes pueden compartir un token, ver `formatAgentName`).
+// ── Agrupar trabajo "por agente" ───────────────────────────────────────────────
+// Clave de una fila agrupada por agente. Prioriza el TOKEN: cada fila `McpToken` es un
+// agente con identidad propia (nombre, color, rol, ficha en /agentes/:id), así que todo
+// su trabajo va junto aunque se haya autodeclarado con nombres distintos en `agentName`,
+// o no lo haya mandado en algunas tools.
+//
+// Antes la clave era `token|agentName`, de cuando un token lo compartían varios agentes
+// y `agentName` era lo único que los distinguía. Con un token por agente eso se dio
+// vuelta: el MISMO agente salía partido en varias filas en Reportes, en la pestaña Horas
+// y en el Scorecard, mientras en su ficha y en el proyecto era uno solo — y justo en los
+// lugares que le muestran números al cliente. (Además `porAgente` se pinta con
+// `key={a.agentId}`: dos filas del mismo agente son dos keys repetidas de React.)
+//
+// `agentName` sigue siendo la clave cuando NO hay token (`agent` null porque la fila se
+// borró y las 17 FKs son SetNull): ahí es lo único que queda para no fundir el trabajo
+// de varios agentes en un solo "Agente eliminado".
+function agentGroupKey(task) {
+  const declared = task.agentName?.trim() || null
+  return task.agent ? `a:${task.agent.id}` : `d:${declared ?? ''}`
+}
+
+// Nombre visible de esa fila. Con token es el nombre del agente a secas: la fila junta
+// todos sus `agentName`, así que elegir uno para el rótulo sería arbitrario.
+function agentGroupName(task) {
+  if (task.agent) return formatAgentName(task.agent, null)
+  const declared = task.agentName?.trim() || null
+  return declared ? `Agente eliminado · ${declared}` : 'Agente eliminado'
+}
+
+// La identidad de la fila, para spreadear en el bucket del caller (que le agrega sus
+// propios contadores: minutes/taskCount, completed/minutes, count…).
+function agentGroupIdentity(task) {
+  return {
+    agentId: task.agent?.id ?? null,
+    // Sólo cuando ES la identidad (token borrado). Con token no hay un único nombre
+    // declarado que poner acá, porque la fila los junta a todos.
+    agentName: task.agent ? null : (task.agentName?.trim() || null),
+    name: agentGroupName(task),
+  }
+}
+
+// Detalle por agente de una lista de tareas de agente: una fila por agente (ver
+// `agentGroupKey`).
 function agentDetail(tasks) {
   const byKey = {}
   for (const t of tasks) {
     if (!t.isAgentTask) continue
-    const declared = t.agentName?.trim() || null
-    const key = `${t.agent?.id ?? 0}|${declared ?? ''}`
-    byKey[key] ??= {
-      agentId: t.agent?.id ?? null,
-      agentName: declared,
-      name: t.agent ? formatAgentName(t.agent, declared) : (declared ? `Agente eliminado · ${declared}` : 'Agente eliminado'),
-      minutes: 0,
-      taskCount: 0,
-    }
+    const key = agentGroupKey(t)
+    byKey[key] ??= { ...agentGroupIdentity(t), minutes: 0, taskCount: 0 }
     byKey[key].minutes   += taskMins(t)
     byKey[key].taskCount += 1
   }
@@ -116,17 +150,8 @@ function computeAgentStats(tasks, { curStart, curEnd, prevStart, prevEnd }) {
   const byAgent = {}
   const byProject = {}
   for (const t of cur) {
-    // Un token puede ser de varios agentes que se identifican con agentName:
-    // cada combinación es una fila ("grokbot · Ventas", "grokbot · SEO").
-    const declared = t.agentName?.trim() || null
-    const aKey = `${t.agent?.id ?? 0}|${declared ?? ''}`
-    byAgent[aKey] ??= {
-      agentId: t.agent?.id ?? null,
-      agentName: declared,
-      name: t.agent ? formatAgentName(t.agent, declared) : (declared ? `Agente eliminado · ${declared}` : 'Agente eliminado'),
-      completed: 0,
-      minutes: 0,
-    }
+    const aKey = agentGroupKey(t)
+    byAgent[aKey] ??= { ...agentGroupIdentity(t), completed: 0, minutes: 0 }
     byAgent[aKey].completed += 1
     byAgent[aKey].minutes   += taskMins(t)
     byProject[t.projectId] ??= { projectId: t.projectId, name: t.project?.name ?? '', completed: 0, minutes: 0 }
@@ -156,4 +181,5 @@ function formatAgentName(agent, declaredName) {
 module.exports = {
   HUMAN_TASK_WHERE, PRESENCE_WORKDAY_WHERE, isPresenceTask, computeAgentStats, formatAgentName,
   EXECUTOR_TASK_SELECT, emptyExecutorSplit, addExecutorMinutes, splitByExecutor, agentDetail,
+  agentGroupKey, agentGroupName, agentGroupIdentity,
 }

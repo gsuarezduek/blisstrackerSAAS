@@ -26,8 +26,10 @@ async function projectTasks(req, res, next) {
           orderBy: { user: { name: 'asc' } },
         },
         // Agentes del equipo del proyecto: los pinta la tarjeta "Equipo" del Resumen y
-        // alimentan el filtro por agente del historial de completadas.
+        // alimentan el filtro por agente del historial de completadas. Sin agentes
+        // revocados, igual que `includeDetails` de _shared.js (está el por qué ahí).
         agents: {
+          where: { agent: { revokedAt: null } },
           include: { agent: { select: { id: true, label: true, color: true, teamRole: true, user: { select: { id: true, name: true } } } } },
           orderBy: { agent: { label: 'asc' } },
         },

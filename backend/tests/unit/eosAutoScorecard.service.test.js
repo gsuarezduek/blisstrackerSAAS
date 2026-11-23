@@ -359,9 +359,12 @@ describe('computeAutoScorecardYear — semanales nuevas', () => {
     expect(wk.value).toBe(4)
     // Además del conteo, el tiempo que registraron (es trabajo facturable del proyecto).
     expect(wk.totalMinutes).toBe(200)
-    expect(wk.top3[0]).toMatchObject({ name: 'grokbot · Ventas', value: 2, minutes: 90 })
-    expect(wk.top3[1]).toMatchObject({ name: 'grokbot · SEO', value: 1, minutes: 90 })
-    expect(wk.top3[2]).toMatchObject({ name: 'Agente eliminado', value: 1, minutes: 20 })
+    // El ranking es por AGENTE: las tres tareas de grokbot van a una sola fila aunque se
+    // haya autodeclarado con dos nombres distintos (`agentName`). Antes la clave era
+    // `token|agentName` y el mismo agente competía consigo mismo en su propio ranking.
+    expect(wk.top3[0]).toMatchObject({ name: 'grokbot', value: 3, minutes: 180 })
+    expect(wk.top3[1]).toMatchObject({ name: 'Agente eliminado', value: 1, minutes: 20 })
+    expect(wk.top3).toHaveLength(2)
   })
 
   it('propuestas_enviadas: cuenta propuestas generadas por semana y rankea por autor', async () => {

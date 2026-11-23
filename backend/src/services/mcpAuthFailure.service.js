@@ -46,6 +46,13 @@ function hashPrefixOf(tokenHash) {
   return tokenHash ? tokenHash.slice(0, 12) : null
 }
 
+// Clave con la que se busca una fila de rechazo a partir de un prefijo. Vive acá y no
+// en el caller para que "cómo se arma el fingerprint" siga teniendo un solo dueño: la
+// ficha del agente busca por este valor los rechazos de un token que ya rotó.
+function fingerprintOfPrefix(prefix) {
+  return prefix ? `h:${prefix}` : null
+}
+
 function shortUa(req) {
   const ua = req.headers['user-agent']
   return ua ? String(ua).slice(0, 120) : null
@@ -75,7 +82,7 @@ async function recordFailure(req, { reason, tokenHash, row, error }) {
 
   // Agrupa los reintentos del mismo origen en UNA fila. Sin token no hay hash que
   // agrupar, así que cae a la IP.
-  const fingerprint = prefix ? `h:${prefix}` : `n:${ip || 'desconocida'}`
+  const fingerprint = fingerprintOfPrefix(prefix) || `n:${ip || 'desconocida'}`
 
   const identity = row
     ? { tokenId: row.id, workspaceId: row.workspaceId, userId: row.userId }
@@ -127,4 +134,7 @@ function recordFailureAsync(req, info) {
   recordFailure(req, info).catch(err => console.error('[mcpAuth] no se pudo registrar el rechazo:', err.message))
 }
 
-module.exports = { recordFailure, recordFailureAsync, REVOKED_NOTICE_AFTER, NOTICE_COOLDOWN_MS, LOG_FIRST, LOG_EVERY }
+module.exports = {
+  recordFailure, recordFailureAsync, hashPrefixOf, fingerprintOfPrefix,
+  REVOKED_NOTICE_AFTER, NOTICE_COOLDOWN_MS, LOG_FIRST, LOG_EVERY,
+}

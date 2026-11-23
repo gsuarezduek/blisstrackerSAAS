@@ -2,7 +2,7 @@ const prisma = require('../lib/prisma')
 const { buildCompletedAtWhere, monthStringInTz } = require('../lib/timeMetrics')
 const { monthBounds, prevMonthsArr, monthLabel } = require('../lib/monthUtils')
 const { resolveMonthlyHoursByMonth } = require('../lib/monthlyHoursHistory')
-const { emptyExecutorSplit, addExecutorMinutes, formatAgentName } = require('../lib/agentTasks')
+const { emptyExecutorSplit, addExecutorMinutes, agentGroupKey, agentGroupIdentity } = require('../lib/agentTasks')
 
 // Resuelve :id (numérico o name) a un projectId del workspace actual.
 async function resolveProjectId(param, workspaceId) {
@@ -82,13 +82,10 @@ async function hoursHistory(req, res, next) {
       // el % con utils/budget.js. `byUser` sigue siendo el detalle de las personas.
       const { mins, isAgent } = addExecutorMinutes(b, t)
       if (isAgent) {
-        const declared = t.agentName?.trim() || null
-        const aKey = `${t.agent?.id ?? 0}|${declared ?? ''}`
+        const aKey = agentGroupKey(t)
         if (!b.byAgent[aKey]) {
           b.byAgent[aKey] = {
-            agentId: t.agent?.id ?? null,
-            agentName: declared,
-            name: t.agent ? formatAgentName(t.agent, declared) : (declared ? `Agente eliminado · ${declared}` : 'Agente eliminado'),
+            ...agentGroupIdentity(t),
             minutes: 0, tasks: 0, ownerName: t.user?.name ?? null,
           }
         }

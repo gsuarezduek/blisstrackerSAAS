@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { AgentChannels, WakeConfigCard } from '../../components/preferences/agentChannels'
+import { WAKE_UI_ENABLED } from '../../utils/agentWake'
 
 vi.mock('../../api/client', () => ({
   default: { get: vi.fn(), patch: vi.fn(), put: vi.fn() },
@@ -32,10 +33,18 @@ describe('AgentChannels', () => {
     expect(onSaved).toHaveBeenCalled()
   })
 
-  it('el toggle del despertador se guarda solo', async () => {
+  // El despertador está escondido del producto (utils/agentWake.js). Estos tests no se
+  // borran: el código sigue entero y vuelven a correr solos si el flag vuelve a `true`.
+  it.runIf(WAKE_UI_ENABLED)('el toggle del despertador se guarda solo', async () => {
     open()
     fireEvent.click(screen.getByRole('checkbox'))
     await waitFor(() => expect(api.patch).toHaveBeenCalledWith('/mcp-tokens/7', { wakeEnabled: true }))
+  })
+
+  it.skipIf(WAKE_UI_ENABLED)('con el despertador escondido, no ofrece prenderlo', () => {
+    open({ ...token, wakeEnabled: true })
+    expect(screen.queryByRole('checkbox')).toBeNull()
+    expect(screen.queryByText(/[Dd]espert/)).toBeNull()
   })
 
   // El secret no sirve de nada si no se puede copiar: es lo que el receptor usa para
@@ -53,7 +62,9 @@ describe('AgentChannels', () => {
 
   it('el resumen del encabezado dice qué canales están activos', () => {
     render(<AgentChannels token={{ ...token, webhookUrl: 'https://x.example.com', wakeEnabled: true }} onSaved={() => {}} />)
-    expect(screen.getByText(/webhook \+ despertador/)).toBeTruthy()
+    // `wakeEnabled: true` puede venir de antes de esconder el despertador: mientras esté
+    // escondido no se lo nombra, porque no hay dónde apagarlo.
+    expect(screen.getByText(WAKE_UI_ENABLED ? /webhook \+ despertador/ : /webhook/)).toBeTruthy()
   })
 })
 
@@ -69,7 +80,8 @@ const wakeCfg = (over = {}) => ({
   apiUrl: XAI_URL, defaultApiUrl: XAI_URL, providers: PROVIDERS, ...over,
 })
 
-describe('WakeConfigCard', () => {
+// La tarjeta entera no se renderiza mientras el despertador esté escondido.
+describe.runIf(WAKE_UI_ENABLED)('WakeConfigCard', () => {
   beforeEach(() => vi.clearAllMocks())
 
   it('avisa que sin API key el despertador no arranca', async () => {

@@ -2,7 +2,7 @@ const prisma = require('../lib/prisma')
 const { getProductivityPeriod, taskMins, buildCompletedAtWhere } = require('../lib/timeMetrics')
 const { DEFAULT_TZ } = require('../utils/dates')
 const {
-  HUMAN_TASK_WHERE, formatAgentName, emptyExecutorSplit, addExecutorMinutes,
+  HUMAN_TASK_WHERE, formatAgentName, emptyExecutorSplit, addExecutorMinutes, agentGroupKey, agentGroupIdentity,
 } = require('../lib/agentTasks')
 const {
   getWorkspaceStats, getAttendanceStats, getHoursHistory, computeBenchmark, memberStatus, median,
@@ -66,13 +66,10 @@ async function byProject(req, res, next) {
       // `byUser` es el detalle de las horas de PERSONAS (lo que se mira para saber quién
       // puso qué). Lo de los agentes va en su propio detalle, no mezclado en esas filas.
       if (isAgent) {
-        const declared = t.agentName?.trim() || null
-        const aKey = `${t.agent?.id ?? 0}|${declared ?? ''}`
+        const aKey = agentGroupKey(t)
         if (!map[key].byAgent[aKey]) {
           map[key].byAgent[aKey] = {
-            agentId: t.agent?.id ?? null,
-            agentName: declared,
-            name: t.agent ? formatAgentName(t.agent, declared) : (declared ? `Agente eliminado · ${declared}` : 'Agente eliminado'),
+            ...agentGroupIdentity(t),
             minutes: 0, tasks: 0, ownerName: t.user?.name ?? null,
           }
         }

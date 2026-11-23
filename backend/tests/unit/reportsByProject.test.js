@@ -16,6 +16,7 @@ const otro    = { id: 2, name: 'Otro',    hoursEnabled: true, monthlyHours: 5 }
 const ana     = { id: 11, name: 'Ana' }
 const beto    = { id: 12, name: 'Beto' }
 const grok    = { id: 7, label: 'Grok' }
+const otroAgente = { id: 9, label: null } // sin nombre: cae a "Agente #9"
 
 let completed = 0
 function task({ project = pastiza, user = ana, mins, agent = null, agentName = null }) {
@@ -67,14 +68,24 @@ describe('GET /api/reports (byProject) — personas y agentes en el mismo agrega
 
   it('devuelve el detalle por agente, ordenado por tiempo', async () => {
     const r = await run([
-      task({ mins: 30, agent: grok, agentName: 'Ventas' }),
-      task({ mins: 90, agent: grok, agentName: 'SEO' }),
-      task({ mins: 10, agent: grok, agentName: 'Ventas' }),
+      task({ mins: 30, agent: grok }),
+      task({ mins: 90, agent: otroAgente }),
+      task({ mins: 10, agent: grok }),
     ])
     expect(r.projects[0].byAgent.map(a => [a.name, a.minutes, a.tasks])).toEqual([
-      ['Grok · SEO', 90, 1],
-      ['Grok · Ventas', 40, 2],
+      ['Agente #9', 90, 1],
+      ['Grok', 40, 2],
     ])
+  })
+
+  // El detalle que se le informa al cliente es por AGENTE, no por nombre declarado: un
+  // agente con su propio conector no puede salir partido en varias filas de horas.
+  it('un agente es una sola fila aunque haya declarado nombres distintos', async () => {
+    const r = await run([
+      task({ mins: 30, agent: grok, agentName: 'Ventas' }),
+      task({ mins: 90, agent: grok, agentName: 'SEO' }),
+    ])
+    expect(r.projects[0].byAgent.map(a => [a.name, a.minutes, a.tasks])).toEqual([['Grok', 120, 2]])
   })
 
   it('un proyecto donde SOLO trabajaron agentes aparece con 0 tareas de personas', async () => {

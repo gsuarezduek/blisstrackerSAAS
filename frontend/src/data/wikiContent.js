@@ -1387,8 +1387,8 @@ Un agente no es solo un token: tiene **nombre, color, rol de equipo y una ficha 
           'Un token por agente o dispositivo: así podés revocar uno sin cortar los demás, y cada uno aparece con su propio nombre y color en todo BlissTracker.',
           'Algunos asistentes (como Grok) guardan la lista de herramientas cuando configurás el conector y no se enteran de las nuevas. No hace falta reconectarlo: el agente puede consultar la lista actual con bliss_tools y usar las nuevas con bliss_run. Si preferís que las vea como herramientas propias, cambiá la URL del conector agregándole algo al final (ej. ?v=2).',
           'Si el agente usa BlissTracker sin tener ninguna tarea en curso, se le recuerda que registre en qué está trabajando, con las tareas que tiene planificadas para hoy, para que arranque una de esas en vez de crear otra. Elegís cada cuánto (o "nunca") en Preferencias → Agentes IA, en cada token.',
-          'De fábrica el agente no recibe avisos: solo actúa cuando lo usás. Lo que pasó mientras no estaba le aparece solo al final de la primera respuesta —una tarea que te creó y completaste, una tarea suya que destrabaste, los comentarios que le dejaste—, sin que tenga que acordarse de buscarlo. Si querés que reaccione sin que lo uses, en Preferencias → Agentes IA podés darle un webhook o activar el despertador.',
-          'Si varios agentes comparten el mismo conector (por ejemplo, varios agentes de Grok), pediles que pasen su nombre en el parámetro agentName: en BlissTracker vas a ver "nombre del token · nombre del agente" en tareas, comentarios, WhatsApp y Productividad. Es un nombre que declara el propio agente: sirve para ordenar, no como control de seguridad.',
+          'De fábrica el agente no recibe avisos: solo actúa cuando lo usás. Lo que pasó mientras no estaba le aparece solo al final de la primera respuesta —una tarea que te creó y completaste, una tarea suya que destrabaste, los comentarios que le dejaste—, sin que tenga que acordarse de buscarlo. Si querés que reaccione sin que lo uses, en Preferencias → Agentes IA podés darle un webhook.',
+          'Lo normal es un conector por agente: ese token ES su identidad, y es lo que agrupa su trabajo en su ficha, en Productividad y en los informes. Si en cambio varios agentes comparten un conector, pediles que pasen su nombre en el parámetro agentName y vas a ver "nombre del conector · nombre del agente" en tareas, comentarios y WhatsApp. Es un nombre que declara el propio agente: sirve para ordenar, no como control de seguridad.',
         ],
         related: ['agentes-ia-capacidades', 'agentes-ia-seguridad'],
       },
@@ -1429,10 +1429,11 @@ Si lo que le contestaste no le alcanza, vuelve a bloquearla preguntando de nuevo
 
 ### Que no haya que esperar a usarlo
 
-En **Preferencias → Agentes IA**, cada agente tiene abajo "Avisarle cuando hay novedades", con dos opciones:
+En **Preferencias → Agentes IA**, cada agente tiene abajo "Avisarle cuando hay novedades":
 
 - **Webhook** — le mandamos un aviso a una URL tuya cuando hay una novedad. Solo sirve si tenés algo escuchando (n8n, un script, un bot propio) que después vaya a buscar el detalle: el aviso trae el titular y el número de la tarea, no el trabajo en sí. Grok en grok.com no puede recibirlo: es un chat, no tiene dirección.
-- **Despertarlo automáticamente** — BlissTracker invoca al agente y le pasa la novedad, con sus mismas herramientas y permisos. Es el único que funciona sin que lo uses. Necesita una API key de xAI cargada por un admin (abajo en la misma pantalla) y gasta esa key en cada despertar. **Tené en cuenta que el agente que corre así es uno nuevo por API: no tiene la configuración ni la memoria del Grok con el que hablás en grok.com.**
+
+Hubo una segunda opción, el **despertador** (BlissTracker invocaba al agente por la API del proveedor cuando había una novedad). Está apagada: era el único canal que gastaba plata del workspace sin que nadie lo pidiera en el momento, y no se estaba usando. El código sigue en el producto y se puede volver a prender.
 
 Y sin configurar nada: la próxima vez que uses el agente, sus novedades aparecen solas al final de la primera respuesta, sin que tenga que acordarse de buscarlas.
 

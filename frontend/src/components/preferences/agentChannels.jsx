@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import api from '../../api/client'
+import { WAKE_UI_ENABLED } from '../../utils/agentWake'
 
 // Canales de SALIDA hacia un agente de IA — Preferencias → Agentes IA.
 //
@@ -9,7 +10,8 @@ import api from '../../api/client'
 //   · Webhook: le avisamos a una URL tuya (sirve si el agente corre en algún lado que
 //     pueda recibir un POST: n8n, un script, un bot propio).
 //   · Despertador: BlissTracker invoca al agente por la API del proveedor. Es el único
-//     que funciona solo, y consume la API key del workspace.
+//     que funciona solo, y consume la API key del workspace. Hoy está ESCONDIDO, ver
+//     utils/agentWake.js.
 
 function fmtWhen(dateStr) {
   if (!dateStr) return null
@@ -51,7 +53,7 @@ export function AgentChannels({ token, onSaved }) {
     }
   }
 
-  const active = [token.webhookUrl && 'webhook', token.wakeEnabled && 'despertador'].filter(Boolean)
+  const active = [token.webhookUrl && 'webhook', WAKE_UI_ENABLED && token.wakeEnabled && 'despertador'].filter(Boolean)
 
   return (
     <div className="mt-2 border-t border-gray-200 dark:border-gray-600 pt-2">
@@ -93,6 +95,7 @@ export function AgentChannels({ token, onSaved }) {
             )}
           </div>
 
+          {WAKE_UI_ENABLED && (
           <div>
             <label className="flex items-start gap-2 cursor-pointer">
               <input
@@ -111,6 +114,7 @@ export function AgentChannels({ token, onSaved }) {
             </label>
             <DeliveryStatus at={token.wakeLastAt} status={token.wakeLastStatus} okLabel="Despertado" />
           </div>
+          )}
 
           {error && <p className="text-xs text-red-500">{error}</p>}
         </div>
@@ -123,6 +127,11 @@ export function AgentChannels({ token, onSaved }) {
 // admin, a diferencia del resto de esta pantalla que es self-service. La key nunca
 // vuelve del backend — solo si está puesta o no.
 export function WakeConfigCard() {
+  if (!WAKE_UI_ENABLED) return null
+  return <WakeConfigCardInner />
+}
+
+function WakeConfigCardInner() {
   const [cfg, setCfg] = useState(null)
   const [apiKey, setApiKey] = useState('')
   const [model, setModel] = useState('')

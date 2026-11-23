@@ -5289,6 +5289,17 @@ model McpToken {
   // Último aviso por mail de "tu agente sigue intentando con un token revocado".
   // Antiflood: el conector reintenta cada ~40s y sin esto sería un mail por intento.
   revokedNoticeAt   DateTime?
+  // ── Salud de la credencial ─────────────────────────────────────────────────
+  // Cuándo se rotó el token por última vez. Con `lastUsedAt` responde la única pregunta
+  // que importa después de rotar: ¿el agente se volvió a conectar, o quedó con el valor
+  // viejo? Sin esto un agente roto se ve sano en el roster (`lastUsedAt` sólo se
+  // actualiza cuando autentica BIEN, así que se congela en el último éxito).
+  rotatedAt         DateTime?
+  // Primeros 12 caracteres del sha256 del token ANTERIOR — nunca el token. Es el mismo
+  // prefijo que McpAuthFailure.hashPrefix, así que los rechazos del valor viejo, que
+  // llegan anónimos ('unknown_token': su hash ya no coincide con ninguna fila), se le
+  // pueden atribuir a este agente. Ver getAgentProfile → `health`.
+  prevTokenPrefix   String?
 
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)

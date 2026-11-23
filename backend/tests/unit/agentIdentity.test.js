@@ -16,6 +16,7 @@ jest.mock('../../src/lib/prisma', () => ({
   userRole: { findFirst: jest.fn() },
   task:     { findMany: jest.fn() },
   projectMember: { findMany: jest.fn() },
+  mcpAuthFailure: { findMany: jest.fn() },
 }))
 
 const prisma = require('../../src/lib/prisma')
@@ -62,7 +63,10 @@ function agentRow(over = {}) {
   }
 }
 
-beforeEach(() => jest.clearAllMocks())
+beforeEach(() => {
+  jest.clearAllMocks()
+  prisma.mcpAuthFailure.findMany.mockResolvedValue([])
+})
 
 describe('qué sale de un agente hacia el workspace', () => {
   it('AGENT_PUBLIC_SELECT no pide ningún campo de credencial', () => {
@@ -117,6 +121,114 @@ describe('la ficha', () => {
 
     expect(res.body.channels).toEqual({ hasWebhook: true, wakeEnabled: true })
     expect(JSON.stringify(res.body)).not.toContain('hooks.example.com')
+  })
+
+  // `lastUsedAt` solo se actualiza cuando el token autentica BIEN, así que por sí solo
+  // no distingue "tranquilo" de "roto": un agente que quedó con el valor viejo después
+  // de una rotación se congela en su último éxito y se ve sano.
+  describe('salud de la credencial', () => {
+    it('avisa que se rotó el token y el agente no volvió a conectarse', async () => {
+      prisma.mcpToken.findUnique.mockResolvedValue(agentRow({
+        rotatedAt: new Date('2026-11-20'), lastUsedAt: new Date('2026-11-18'),
+      }))
+      prisma.task.findMany.mockResolvedValue([])
+      const res = mkRes()
+      await getAgentProfile(mkReq(), res, next)
+      expect(res.body.health.staleSinceRotation).toBe(true)
+    })
+
+    it('si se conectó después de rotar, no avisa nada', async () => {
+      prisma.mcpToken.findUnique.mockResolvedValue(agentRow({
+        rotatedAt: new Date('2026-11-18'), lastUsedAt: new Date('2026-11-20'),
+      }))
+      prisma.task.findMany.mockResolvedValue([])
+      const res = mkRes()
+      await getAgentProfile(mkReq(), res, next)
+      expect(res.body.health.staleSinceRotation).toBe(false)
+      expect(res.body.health.rejected).toBeNull()
+    })
+
+    it('nunca conectado cuenta como no haberse conectado después de rotar', async () => {
+      prisma.mcpToken.findUnique.mockResolvedValue(agentRow({
+        rotatedAt: new Date('2026-11-20'), lastUsedAt: null,
+      }))
+      prisma.task.findMany.mockResolvedValue([])
+      const res = mkRes()
+      await getAgentProfile(mkReq(), res, next)
+      expect(res.body.health.staleSinceRotation).toBe(true)
+    })
+
+    // Los rechazos del token ANTERIOR llegan anónimos ('unknown_token': su hash ya no
+    // coincide con ninguna fila), así que sin buscarlos por el prefijo guardado no hay
+    // forma de atribuírselos a este agente.
+    it('busca los rechazos por el id del token y por el prefijo del anterior', async () => {
+      prisma.mcpToken.findUnique.mockResolvedValue(agentRow({ prevTokenPrefix: 'abc123def456' }))
+      prisma.task.findMany.mockResolvedValue([])
+      prisma.mcpAuthFailure.findMany.mockResolvedValue([
+        { reason: 'unknown_token', attempts: 12, firstAt: new Date('2026-11-20'), lastAt: new Date('2026-11-21') },
+      ])
+      const res = mkRes()
+      await getAgentProfile(mkReq(), res, next)
+
+      expect(prisma.mcpAuthFailure.findMany.mock.calls[0][0].where).toEqual({
+        OR: [{ tokenId: 5 }, { fingerprint: 'h:abc123def456' }],
+      })
+      expect(res.body.health.rejected).toMatchObject({ attempts: 12, reason: 'unknown_token' })
+    })
+
+    // Un aviso que no se apaga nunca no avisa nada: las filas de rechazo viven hasta que
+    // las limpia el cron de retención, así que un tropiezo ya resuelto seguiría en
+    // pantalla para siempre.
+    it('ignora los rechazos anteriores a la última conexión buena', async () => {
+      prisma.mcpToken.findUnique.mockResolvedValue(agentRow({ lastUsedAt: new Date('2026-11-22') }))
+      prisma.task.findMany.mockResolvedValue([])
+      prisma.mcpAuthFailure.findMany.mockResolvedValue([
+        { reason: 'unknown_token', attempts: 9, firstAt: new Date('2026-11-20'), lastAt: new Date('2026-11-21') },
+      ])
+      const res = mkRes()
+      await getAgentProfile(mkReq(), res, next)
+      expect(res.body.health.rejected).toBeNull()
+    })
+
+    it('pero muestra los posteriores: ahí sí está fallando ahora', async () => {
+      prisma.mcpToken.findUnique.mockResolvedValue(agentRow({ lastUsedAt: new Date('2026-11-20') }))
+      prisma.task.findMany.mockResolvedValue([])
+      prisma.mcpAuthFailure.findMany.mockResolvedValue([
+        { reason: 'revoked', attempts: 9, firstAt: new Date('2026-11-21'), lastAt: new Date('2026-11-22') },
+      ])
+      const res = mkRes()
+      await getAgentProfile(mkReq(), res, next)
+      expect(res.body.health.rejected).toMatchObject({ attempts: 9, reason: 'revoked' })
+    })
+
+    it('un agente que nunca se conectó muestra todos sus rechazos', async () => {
+      prisma.mcpToken.findUnique.mockResolvedValue(agentRow({ lastUsedAt: null }))
+      prisma.task.findMany.mockResolvedValue([])
+      prisma.mcpAuthFailure.findMany.mockResolvedValue([
+        { reason: 'unknown_token', attempts: 4, firstAt: new Date('2026-11-20'), lastAt: new Date('2026-11-21') },
+      ])
+      const res = mkRes()
+      await getAgentProfile(mkReq(), res, next)
+      expect(res.body.health.rejected).toMatchObject({ attempts: 4 })
+    })
+
+    it('sin prefijo anterior, busca solo por el id del token', async () => {
+      prisma.mcpToken.findUnique.mockResolvedValue(agentRow({ prevTokenPrefix: null }))
+      prisma.task.findMany.mockResolvedValue([])
+      const res = mkRes()
+      await getAgentProfile(mkReq(), res, next)
+      expect(prisma.mcpAuthFailure.findMany.mock.calls[0][0].where).toEqual({ OR: [{ tokenId: 5 }] })
+    })
+
+    it('a quien no es dueño ni admin no le dice nada de la credencial', async () => {
+      prisma.mcpToken.findUnique.mockResolvedValue(agentRow({ rotatedAt: new Date('2026-11-20') }))
+      prisma.task.findMany.mockResolvedValue([])
+      const res = mkRes()
+      await getAgentProfile(mkReq({ user: { userId: OTHER_ID } }), res, next)
+      expect(res.body.health).toBeNull()
+      // Y ni siquiera se consulta: es estado de la credencial, no identidad.
+      expect(prisma.mcpAuthFailure.findMany).not.toHaveBeenCalled()
+    })
   })
 
   it('un agente de otro workspace es 404, no 403', async () => {
@@ -207,6 +319,23 @@ describe('rotar el token', () => {
     expect(res.body.id).toBe(5)
     expect(res.body.projects).toEqual([{ id: 3, name: 'Bliss' }])
     expect(res.body.token).toEqual(expect.any(String))  // el valor en claro, una sola vez
+  })
+
+  // El paso que sigue a rotar es MANUAL (pegar el valor nuevo en el cliente MCP) y es el
+  // que se olvida. Sin este rastro el agente roto se ve sano, porque `lastUsedAt` queda
+  // congelado en su último éxito.
+  it('deja el rastro que permite detectar que quedó con el token viejo', async () => {
+    prisma.mcpToken.findUnique.mockResolvedValue(agentRow({ tokenHash: 'a'.repeat(64) }))
+    prisma.mcpToken.update.mockResolvedValue(agentRow())
+    await rotateAgentToken(mkReq(), mkRes(), next)
+
+    const { data } = prisma.mcpToken.update.mock.calls[0][0]
+    expect(data.rotatedAt).toBeInstanceOf(Date)
+    // El prefijo del hash ANTERIOR, en el mismo formato que McpAuthFailure.hashPrefix —
+    // es lo que hace atribuibles los rechazos del valor viejo, que llegan anónimos.
+    expect(data.prevTokenPrefix).toBe('a'.repeat(12))
+    // Y nunca el token en claro ni el hash completo.
+    expect(data.prevTokenPrefix).toHaveLength(12)
   })
 
   it('solo el dueño rota, ni siquiera un admin', async () => {
