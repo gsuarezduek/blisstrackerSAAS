@@ -1,10 +1,24 @@
 {
   "rewrites": [
     { "source": "/report/:token", "destination": "/api/report-og?token=:token" },
-    { "source": "/blog/:slug", "destination": "/api/blog-og?slug=:slug" },
     { "source": "/(.*)", "destination": "/index.html" }
   ],
+  "redirects": [
+    { "source": "/", "has": [{ "type": "host", "value": "app.blisstracker.app" }], "destination": "https://blisstracker.app/", "statusCode": 301 },
+    { "source": "/pricing", "has": [{ "type": "host", "value": "app.blisstracker.app" }], "destination": "https://blisstracker.app/pricing", "statusCode": 301 },
+    { "source": "/blog", "has": [{ "type": "host", "value": "app.blisstracker.app" }], "destination": "https://blisstracker.app/blog", "statusCode": 301 },
+    { "source": "/blog/:path*", "has": [{ "type": "host", "value": "app.blisstracker.app" }], "destination": "https://blisstracker.app/blog/:path*", "statusCode": 301 },
+    { "source": "/soluciones/:path*", "has": [{ "type": "host", "value": "app.blisstracker.app" }], "destination": "https://blisstracker.app/soluciones/:path*", "statusCode": 301 },
+    { "source": "/contacto", "has": [{ "type": "host", "value": "app.blisstracker.app" }], "destination": "https://blisstracker.app/contacto", "statusCode": 301 },
+    { "source": "/condiciones", "has": [{ "type": "host", "value": "app.blisstracker.app" }], "destination": "https://blisstracker.app/condiciones", "statusCode": 301 },
+    { "source": "/privacidad", "has": [{ "type": "host", "value": "app.blisstracker.app" }], "destination": "https://blisstracker.app/privacidad", "statusCode": 301 },
+    { "source": "/eliminar-datos", "has": [{ "type": "host", "value": "app.blisstracker.app" }], "destination": "https://blisstracker.app/eliminar-datos", "statusCode": 301 }
+  ],
   "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }]
+    },
     {
       "source": "/oauth-result",
       "headers": [

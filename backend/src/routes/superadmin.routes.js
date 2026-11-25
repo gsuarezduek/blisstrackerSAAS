@@ -24,6 +24,7 @@ const serp  = require('../controllers/superadmin/serpApiUsage.controller')
 const blog  = require('../controllers/blog.controller')
 const ic    = require('../controllers/superadmin/invitationCodes.controller')
 const mcpTok = require('../controllers/superadmin/mcpTokens.controller')
+const { revalidateAfter } = require('../services/revalidateSite.service')
 
 const AVATAR_MAX_MB = 2
 const upload = multer({
@@ -94,6 +95,17 @@ router.get('/users',                    users.listUsers)
 router.patch('/users/:id/toggle-active',        users.toggleUserActive)
 router.patch('/users/:id/toggle-daily-insight', users.toggleUserDailyInsight)
 router.patch('/users/:id/toggle-superadmin',    users.toggleUserSuperAdmin)
+
+// ─── Revalidación del sitio público ───────────────────────────────────────────
+// Todo lo que se edita acá abajo (contenido de la landing, logos de clientes,
+// testimonios, posts del blog, legales y precios) lo muestra el sitio público, que lo
+// tiene pre-renderizado y cacheado. Estos cuatro `use` le avisan después de cada
+// escritura exitosa, así el cambio se ve al instante en vez de esperar el ISR.
+// Van acá, antes de las rutas, porque un middleware sólo corre si se montó primero.
+router.use('/settings', revalidateAfter({ tags: ['pricing'], paths: ['/', '/pricing'] }))
+router.use('/legal',    revalidateAfter({ tags: ['legal'],   paths: ['/condiciones', '/privacidad'] }))
+router.use('/blog',     revalidateAfter({ tags: ['blog'],    paths: ['/blog'] }))
+router.use('/landing',  revalidateAfter({ tags: ['landing'], paths: ['/'] }))
 
 // Configuración global de la plataforma
 router.get('/settings',                 ps.listSettings)

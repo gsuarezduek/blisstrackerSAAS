@@ -5,10 +5,14 @@ import { isWorkspaceSubdomain, workspaceSlugFromHostname } from '../utils/domain
 // disparado en una de estas páginas (ej: AuthContext validando un JWT viejo/vencido
 // que quedó en localStorage de una sesión anterior) no debe expulsar al visitante al
 // login — la página en sí nunca pidió autenticación.
+//
+// Salieron /pricing, /blog, /soluciones/, /condiciones y /privacidad: esas páginas se
+// fueron al sitio público (otro dominio) y acá ya no existen.
 const PUBLIC_PATH_PREFIXES = [
-  '/report/', '/report-print/', '/login', '/register', '/pricing', '/join', '/oauth', '/auth',
-  '/oauth-result', '/condiciones', '/privacidad', '/forgot-password',
-  '/reset-password', '/verify-email-change', '/soluciones/', '/blog',
+  '/report/', '/report-print/', '/login', '/register', '/join', '/oauth', '/auth',
+  '/oauth-result', '/forgot-password', '/reset-password', '/verify-email',
+  '/proposal/', '/shared-folder/', '/shared-file/', '/baja/', '/suscripcion',
+  '/confirmar-suscripcion/',
 ]
 
 function isPublicPagePath(pathname = window.location.pathname) {

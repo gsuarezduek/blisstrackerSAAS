@@ -9,6 +9,7 @@ backend/
     setup.js          ← define JWT_SECRET, NODE_ENV, RESEND_API_KEY (dummy) para evitar que email.service.js falle al importarse
     unit/
       auth.middleware.test.js
+      publicUrls.test.js                  # criterio único de las tres bases (lib/publicUrls.js): el sitio público es el apex, la app es app.<dominio>, el workspace su subdominio; que sin slug caiga a la app y no al apex (ahí no existe /reset-password ni /oauth-result), y la regla de retorno de OAuth en dev vs producción
       assertNoActiveTask.test.js
       taskChecklist.test.js               # criterio único de las subtareas (lib/taskChecklist.js): parte por líneas y limpia viñetas/tildes de una lista pegada, tope de 20 ítems y 200 caracteres, plantilla de recurrencia que exige un array (un JSON escalar no genera un ítem basura), y nested create undefined si no hay subtareas
       analyticsSnapshot.helpers.test.js   # monthBounds, prevMonth, delta helpers
@@ -113,4 +114,14 @@ frontend/
       dashboardOrder.test.js            # orden de Para hoy (pausadas primero, por publicación / más nuevas / más antiguas), grupos del Backlog (el proyecto con la publicación más próxima primero) y publishUrgency (rojo/naranja)
     hooks/
       useRoles.test.js
+```
+
+```
+web/
+  vitest.config.mjs   ← environment 'node': son tests de datos y de reglas, sin DOM
+  tests/
+    metadata.test.js    # lo que estaba roto antes de separar el sitio: que cada ruta pública tenga title y description PROPIOS (ningún duplicado entre rutas) y que la description mida 150–160 caracteres, más el recorte en palabra entera de la que viene de la DB
+    seo.test.js         # buildMetadata: canonical absoluto y distinto por ruta (el de index.html apuntaba a la home en todas), OG/Twitter completos, y los JSON-LD (Organization, SoftwareApplication, BlogPosting con su fecha y autor, BreadcrumbList numerado desde 1)
+    appRoutes.test.js   # la allowlist de rutas que se redirigen a la app: que incluya las de auth y las públicas con token (un link de baja de mailing viaja en cada campaña), que NO matchee ninguna página pública ni por prefijo incompleto (`/administracion` no es `/admin`), y que una ruta inventada no redirija — tiene que dar 404
+    blog.test.js        # rutas del listado: la página 1 vive sólo en /blog (dos URLs con el mismo contenido es duplicado), las siguientes en /blog/pagina/N, y el tamaño de página no pasa el tope del backend
 ```

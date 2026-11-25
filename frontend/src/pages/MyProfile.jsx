@@ -3,6 +3,7 @@ import Navbar from '../components/Navbar'
 import AvatarLightbox from '../components/AvatarLightbox'
 import LoadingSpinner from '../components/LoadingSpinner'
 import api from '../api/client'
+import { appHost } from '../utils/domain'
 import { useAuth } from '../context/AuthContext'
 import { useWorkspace } from '../context/WorkspaceContext'
 import useLegajoFields from '../hooks/useLegajoFields'
@@ -473,9 +474,13 @@ export default function MyProfile() {
       return
     }
 
+    // El popup se abre SIEMPRE en el host de la app, no en el subdominio del workspace:
+    // así el flujo de OAuth corre en un host fijo. Antes ese host fijo era el dominio
+    // raíz; ahora el raíz es el sitio público, que no tiene la ruta /oauth y la
+    // redirigiría — un salto de más justo en el medio de una ventana de autorización.
     const appDomain = import.meta.env.VITE_APP_DOMAIN || 'blisstracker.app'
     const onAppDomain = window.location.hostname === appDomain || window.location.hostname.endsWith(`.${appDomain}`)
-    const base = onAppDomain ? `https://${appDomain}` : ''
+    const base = onAppDomain ? `https://${appHost()}` : ''
     const oauthUrl = `${base}/oauth?link=${encodeURIComponent(linkToken)}`
 
     const popup = window.open(oauthUrl, 'bliss-google-connect', 'width=500,height=620')

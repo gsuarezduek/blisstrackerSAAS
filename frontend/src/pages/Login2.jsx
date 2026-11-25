@@ -7,7 +7,7 @@ import { useWorkspace } from '../context/WorkspaceContext'
 import BlissLogo from '../components/BlissLogo'
 import PasswordInput from '../components/PasswordInput'
 import MfaCodeInput from '../components/MfaCodeInput'
-import { isWorkspaceSubdomain, isPreviewHost } from '../utils/domain'
+import { isWorkspaceSubdomain, isPreviewHost, appHost } from '../utils/domain'
 import { handoffUrl } from '../utils/authHandoff'
 
 // ── Selector de workspace post-login ──────────────────────────────────────────
@@ -309,8 +309,9 @@ export default function Login2() {
 
   if (!isWorkspaceSubdomain()) return <RootLogin />
 
-  // En subdominio de workspace → redirigir al login central. En local ese
-  // login es localhost, no el dominio de producción.
+  // En subdominio de workspace → redirigir al login central, que vive en el host de la
+  // app (`app.blisstracker.app`). Antes era el dominio raíz; ese ahora es el sitio
+  // público y no tiene login. En local el central sigue siendo localhost pelado.
   const theme = localStorage.getItem('theme') || 'light'
   const previewParam = isPreviewHost() ? '&preview=1' : ''
   if (window.location.hostname.endsWith('.localhost')) {
@@ -318,7 +319,6 @@ export default function Login2() {
     window.location.replace(`http://localhost${port}/login?from=${slug}&theme=${theme}${previewParam}`)
     return null
   }
-  const appDomain = import.meta.env.VITE_APP_DOMAIN || 'blisstracker.app'
-  window.location.replace(`https://${appDomain}/login?from=${slug}&theme=${theme}${previewParam}`)
+  window.location.replace(`https://${appHost()}/login?from=${slug}&theme=${theme}${previewParam}`)
   return null
 }

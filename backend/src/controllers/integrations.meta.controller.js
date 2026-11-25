@@ -6,6 +6,7 @@ const prisma           = require('../lib/prisma')
 const { encrypt }      = require('../lib/encryption')
 const { getMetaAdAccounts, adAccountsOnReconnect } = require('../lib/metaAdAccounts')
 const { getValidFbToken } = require('../services/metaAds.service')
+const { oauthReturnBase } = require('../lib/publicUrls')
 
 /**
  * propertyId + adAccounts para guardar al (re)conectar Meta Ads con una cuenta
@@ -99,11 +100,10 @@ async function getMetaAuthUrl(req, res, next) {
  */
 async function handleMetaCallback(req, res, next) {
   const { code, state, error: oauthError } = req.query
-  const appDomain = process.env.APP_DOMAIN || 'blisstracker.app'
 
   if (oauthError) {
     return res.redirect(
-      `${process.env.FRONTEND_URL || 'http://localhost:5173'}/oauth-result?error=${encodeURIComponent(oauthError)}`
+      `${oauthReturnBase()}/oauth-result?error=${encodeURIComponent(oauthError)}`
     )
   }
 
@@ -112,22 +112,19 @@ async function handleMetaCallback(req, res, next) {
     statePayload = verifyState(state)
   } catch {
     return res.redirect(
-      `${process.env.FRONTEND_URL || 'http://localhost:5173'}/oauth-result?error=invalid_state`
+      `${oauthReturnBase()}/oauth-result?error=invalid_state`
     )
   }
 
   if (!process.env.META_APP_ID || !process.env.META_APP_SECRET) {
     console.error('[MetaOAuth] META_APP_ID o META_APP_SECRET no están configurados')
     return res.redirect(
-      `${process.env.FRONTEND_URL || 'http://localhost:5173'}/oauth-result?error=server_config_error`
+      `${oauthReturnBase()}/oauth-result?error=server_config_error`
     )
   }
 
   const { projectId, workspaceId, slug, userId, codeVerifier } = statePayload
-  const isLocalDev   = process.env.NODE_ENV !== 'production'
-  const frontendBase = isLocalDev
-    ? (process.env.FRONTEND_URL || 'http://localhost:5173')
-    : `https://${slug}.${appDomain}`
+  const frontendBase = oauthReturnBase(slug)
 
   const redirectUri = buildMetaRedirectUri()
 
@@ -254,7 +251,6 @@ async function getMetaAdsAuthUrl(req, res, next) {
  */
 async function handleMetaAdsCallback(req, res, next) {
   const { code, state, error: oauthError } = req.query
-  const appDomain = process.env.APP_DOMAIN || 'blisstracker.app'
 
   if (oauthError) {
     // Facebook devolvió un error en el redirect. Logueamos TODO el detalle para
@@ -267,7 +263,7 @@ async function handleMetaAdsCallback(req, res, next) {
     }, null, 2))
     const detail = req.query.error_description || oauthError
     return res.redirect(
-      `${process.env.FRONTEND_URL || 'http://localhost:5173'}/oauth-result?error=${encodeURIComponent(detail)}`
+      `${oauthReturnBase()}/oauth-result?error=${encodeURIComponent(detail)}`
     )
   }
 
@@ -277,17 +273,14 @@ async function handleMetaAdsCallback(req, res, next) {
   } catch (err) {
     console.error('[MetaAdsOAuth] State inválido o expirado:', err.message, '· code presente:', !!code)
     return res.redirect(
-      `${process.env.FRONTEND_URL || 'http://localhost:5173'}/oauth-result?error=invalid_state`
+      `${oauthReturnBase()}/oauth-result?error=invalid_state`
     )
   }
 
   console.log(`[MetaAdsOAuth] Callback recibido OK · projectId=${statePayload?.projectId} · code presente: ${!!code}`)
 
   const { projectId, workspaceId, slug, userId } = statePayload
-  const isLocalDev   = process.env.NODE_ENV !== 'production'
-  const frontendBase = isLocalDev
-    ? (process.env.FRONTEND_URL || 'http://localhost:5173')
-    : `https://${slug}.${appDomain}`
+  const frontendBase = oauthReturnBase(slug)
 
   const redirectUri = buildMetaAdsRedirectUri()
 
@@ -972,20 +965,18 @@ async function getFacebookAuthUrl(req, res, next) {
  */
 async function handleFacebookCallback(req, res, next) {
   const { code, state, error: oauthError } = req.query
-  const appDomain = process.env.APP_DOMAIN || 'blisstracker.app'
 
   if (oauthError) {
     const detail = req.query.error_description || oauthError
-    return res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:5173'}/oauth-result?error=${encodeURIComponent(detail)}`)
+    return res.redirect(`${oauthReturnBase()}/oauth-result?error=${encodeURIComponent(detail)}`)
   }
 
   let statePayload
   try { statePayload = verifyState(state) }
-  catch { return res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:5173'}/oauth-result?error=invalid_state`) }
+  catch { return res.redirect(`${oauthReturnBase()}/oauth-result?error=invalid_state`) }
 
   const { projectId, workspaceId, slug, userId } = statePayload
-  const isLocalDev   = process.env.NODE_ENV !== 'production'
-  const frontendBase = isLocalDev ? (process.env.FRONTEND_URL || 'http://localhost:5173') : `https://${slug}.${appDomain}`
+  const frontendBase = oauthReturnBase(slug)
   const redirectUri  = buildFacebookRedirectUri()
 
   try {

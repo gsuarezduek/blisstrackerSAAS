@@ -2,6 +2,7 @@ const bcrypt = require('bcryptjs')
 const crypto = require('crypto')
 const jwt = require('jsonwebtoken')
 const prisma = require('../lib/prisma')
+const { workspaceUrl } = require('../lib/publicUrls')
 const { resolveLegajoFields, coerceCustomValue, BUILTIN_KEYS } = require('../lib/legajoCatalog')
 const { sendEmailChangeVerification } = require('../services/email.service')
 const { validatePassword } = require('../lib/passwordPolicy')
@@ -380,11 +381,8 @@ async function requestEmailChange(req, res, next) {
       data: { token, userId: user.id, newEmail: email, expiresAt },
     })
 
-    const domain = process.env.APP_DOMAIN
     const slug = req.headers['x-workspace']
-    const verifyUrl = domain && slug
-      ? `https://${slug}.${domain}/verify-email-change?token=${token}`
-      : `${process.env.FRONTEND_URL}/verify-email-change?token=${token}`
+    const verifyUrl = workspaceUrl(slug, `/verify-email-change?token=${token}`)
 
     await sendEmailChangeVerification(email, user.name, verifyUrl, req.workspace?.id)
 

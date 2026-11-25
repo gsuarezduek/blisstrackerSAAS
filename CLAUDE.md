@@ -21,6 +21,7 @@ El detalle de cada tema vive en `docs/claude/`. **Esos archivos NO se cargan aut
 |---|---|
 | `backend/CLAUDE.md` | Arquitectura backend (Express/Prisma/middleware/servicios compartidos, invariante de los JWT, búsqueda de texto). Se carga solo al trabajar en `backend/` |
 | `frontend/CLAUDE.md` | Arquitectura frontend (tests, íconos, OAuth popup, búsqueda, menú "⋯"). Se carga solo al trabajar en `frontend/` |
+| `docs/claude/sitio-publico.md` | Sitio público (`web/`): por qué se separó de la app, qué host sirve qué, de dónde sale el contenido (todo de la DB, con ISR + revalidación), SEO por página, redirecciones 301 y qué cambió en la app y el backend |
 | `docs/claude/tareas.md` | WorkDay, Dashboard ("qué hago ahora", pestañas, `TaskCard`), máquina de estados, completar directo, destacadas, comentarios, adjuntos, backlog, tareas programadas y recurrentes |
 | `docs/claude/proyectos.md` | Modelo de acceso (equipo = etiqueta), ficha del proyecto, Nube (descargas, miniaturas, vistas, arrastrar), links, accesos/credenciales, secciones por proyecto (Marketing/Contenido/Briefs), Situación, Briefs, Reuniones |
 | `docs/claude/agentes-ia.md` | Tareas de agente: delegar, cola, novedades, desbloqueo, Dashboard, métricas (personas vs agentes), Calendario |
@@ -71,7 +72,14 @@ npm run db:seed      # seed workspace "bliss", admin user, default roles
 npx prisma studio    # visual DB browser
 ```
 
-### Frontend (`cd frontend`)
+### Sitio público (`cd web`)
+```bash
+npm run dev          # Next.js, port 3000
+npm run build        # production build
+npm run test:run     # Vitest single run
+```
+
+### Frontend — la app (`cd frontend`)
 ```bash
 npm run dev          # Vite dev server, port 5173
 npm run build        # production build
@@ -91,7 +99,7 @@ Default credentials after seed: `admin@blissmkt.ar` / `admin123` (workspace slug
 ## Architecture
 
 ### Overview
-Full-stack SaaS task tracker. Multi-tenant: each workspace is a separate subdomain (`slug.blisstracker.app`). Backend is a REST API; frontend is a React SPA. No shared code between them — they communicate only via HTTP.
+Full-stack SaaS task tracker. Multi-tenant: each workspace is a separate subdomain (`slug.blisstracker.app`). Backend is a REST API. Hay **dos** frontends, cada uno su proyecto de Vercel: el **sitio público** (`web/`, Next.js App Router con SSR/ISR) sirve `blisstracker.app` —landing, precios, soluciones, blog y legales, renderizados en el servidor para que Google los lea sin ejecutar JS— y la **app** (`frontend/`, React SPA) sirve `app.blisstracker.app` y los subdominios de las agencias. No comparten código: los dos le hablan al backend por HTTP. → `docs/claude/sitio-publico.md`
 
 ### Multi-tenancy
 

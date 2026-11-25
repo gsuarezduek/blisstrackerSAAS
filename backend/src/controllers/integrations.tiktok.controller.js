@@ -3,6 +3,7 @@ const axios  = require('axios')
 const { signState, verifyState } = require('../lib/oauthState')
 const prisma = require('../lib/prisma')
 const { encrypt } = require('../lib/encryption')
+const { oauthReturnBase } = require('../lib/publicUrls')
 
 const TIKTOK_TOKEN_URL = 'https://open.tiktokapis.com/v2/oauth/token/'
 
@@ -58,12 +59,11 @@ async function getTikTokAuthUrl(req, res, next) {
  */
 async function handleTikTokCallback(req, res, next) {
   const { code, state, error: oauthError, error_description } = req.query
-  const appDomain = process.env.APP_DOMAIN || 'blisstracker.app'
 
   if (oauthError) {
     const msg = error_description || oauthError
     return res.redirect(
-      `${process.env.FRONTEND_URL || 'http://localhost:5173'}/oauth-result?error=${encodeURIComponent(msg)}`
+      `${oauthReturnBase()}/oauth-result?error=${encodeURIComponent(msg)}`
     )
   }
 
@@ -72,15 +72,12 @@ async function handleTikTokCallback(req, res, next) {
     statePayload = verifyState(state)
   } catch {
     return res.redirect(
-      `${process.env.FRONTEND_URL || 'http://localhost:5173'}/oauth-result?error=invalid_state`
+      `${oauthReturnBase()}/oauth-result?error=invalid_state`
     )
   }
 
   const { projectId, workspaceId, slug, userId, codeVerifier } = statePayload
-  const isLocalDev   = process.env.NODE_ENV !== 'production'
-  const frontendBase = isLocalDev
-    ? (process.env.FRONTEND_URL || 'http://localhost:5173')
-    : `https://${slug}.${appDomain}`
+  const frontendBase = oauthReturnBase(slug)
 
   const redirectUri = buildTikTokRedirectUri()
 

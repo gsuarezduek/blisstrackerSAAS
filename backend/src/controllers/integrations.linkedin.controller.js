@@ -3,6 +3,7 @@ const { signState, verifyState } = require('../lib/oauthState')
 const prisma = require('../lib/prisma')
 const { encrypt } = require('../lib/encryption')
 const { listAdminOrganizations } = require('../services/linkedin.service')
+const { oauthReturnBase } = require('../lib/publicUrls')
 
 const LINKEDIN_AUTH_URL  = 'https://www.linkedin.com/oauth/v2/authorization'
 const LINKEDIN_TOKEN_URL = 'https://www.linkedin.com/oauth/v2/accessToken'
@@ -71,7 +72,6 @@ async function getLinkedinAuthUrl(req, res, next) {
  */
 async function handleLinkedinCallback(req, res, next) {
   const { code, state, error: oauthError, error_description } = req.query
-  const appDomain = process.env.APP_DOMAIN || 'blisstracker.app'
 
   if (oauthError) {
     // LinkedIn rechazó la autorización (scope no autorizado, redirect URI no
@@ -79,7 +79,7 @@ async function handleLinkedinCallback(req, res, next) {
     console.error('[LinkedinOAuth] LinkedIn devolvió error en el callback:', JSON.stringify({ error: oauthError, error_description }, null, 2))
     const msg = error_description || oauthError
     return res.redirect(
-      `${process.env.FRONTEND_URL || 'http://localhost:5173'}/oauth-result?error=${encodeURIComponent(msg)}`
+      `${oauthReturnBase()}/oauth-result?error=${encodeURIComponent(msg)}`
     )
   }
 
@@ -88,15 +88,12 @@ async function handleLinkedinCallback(req, res, next) {
     statePayload = verifyState(state)
   } catch {
     return res.redirect(
-      `${process.env.FRONTEND_URL || 'http://localhost:5173'}/oauth-result?error=invalid_state`
+      `${oauthReturnBase()}/oauth-result?error=invalid_state`
     )
   }
 
   const { projectId, workspaceId, slug, userId } = statePayload
-  const isLocalDev   = process.env.NODE_ENV !== 'production'
-  const frontendBase = isLocalDev
-    ? (process.env.FRONTEND_URL || 'http://localhost:5173')
-    : `https://${slug}.${appDomain}`
+  const frontendBase = oauthReturnBase(slug)
 
   const redirectUri = buildLinkedinRedirectUri()
 

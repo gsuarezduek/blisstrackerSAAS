@@ -1,0 +1,46 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* El sitio público NO importa las fuentes manuscritas de Google Fonts que trae
+   frontend/src/index.css: ésas las usan el Wiki y los Docs de la app. Acá se usa el
+   stack de sistema de Tailwind, que no pide ni un byte a la red — es parte de por qué
+   el LCP baja. Si alguna vez hace falta una fuente propia, se carga con `next/font`,
+   que ya aplica font-display: swap. */
+
+@layer base {
+  body {
+    @apply bg-white text-gray-900;
+  }
+}
+
+/* Cursor del typewriter del hero. Se declara acá y no sólo en el theme de Tailwind
+   porque la clase se usa como valor arbitrario (`animate-[blink_1s_step-end_infinite]`)
+   y para esos Tailwind no emite el @keyframes. */
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0; }
+}
+
+/* Contenido de un artículo del blog. Son las mismas reglas que
+   frontend/src/components/situation-editor.css aplica a `.situation-content`, que es
+   la clase con la que la SPA renderizaba el HTML de Tiptap — mismos tamaños y
+   márgenes, para que un post publicado se siga viendo igual. Sin las variantes `.dark`:
+   el sitio público no tiene modo oscuro. */
+.post-content h2 { font-size: 1.1rem;  font-weight: 700; margin: 0.6em 0 0.3em; }
+.post-content h3 { font-size: 0.95rem; font-weight: 600; margin: 0.5em 0 0.25em; }
+.post-content strong { font-weight: 700; }
+.post-content em { font-style: italic; }
+.post-content ul,
+.post-content ol { padding-left: 1.25rem; margin: 0.35em 0; }
+.post-content ul { list-style-type: disc; }
+.post-content ol { list-style-type: decimal; }
+.post-content li { margin: 0.15em 0; }
+.post-content p  { margin: 0.25em 0; }
+.post-content p:first-child { margin-top: 0; }
+.post-content hr { border: none; border-top: 2px solid #e5e7eb; margin: 0.75em 0; }
+.post-content table { border-collapse: collapse; width: 100%; margin: 0.6em 0; table-layout: fixed; }
+.post-content th,
+.post-content td { border: 1px solid #d1d5db; padding: 0.35em 0.6em; text-align: left; vertical-align: top; }
+.post-content th { font-weight: 700; background-color: #f3f4f6; }
+.post-content a  { color: #f97316; text-decoration: underline; }

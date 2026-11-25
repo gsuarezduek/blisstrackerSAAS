@@ -10,6 +10,7 @@ import { VoiceCallProvider } from './context/VoiceCallContext'
 import React from 'react'
 import LoadingSpinner from './components/LoadingSpinner'
 import WorkspaceSuspendedScreen from './components/WorkspaceSuspendedScreen'
+import NotFoundScreen from './components/NotFoundScreen'
 
 class ErrorBoundary extends React.Component {
   state = { error: null }
@@ -71,12 +72,6 @@ function lazyWithReload(importer) {
   )
 }
 
-const Landing          = lazyWithReload(() => import('./pages/Landing'))
-const Pricing          = lazyWithReload(() => import('./pages/Pricing'))
-const Contact          = lazyWithReload(() => import('./pages/Contact'))
-const SolutionMarketing = lazyWithReload(() => import('./pages/SolutionMarketing'))
-const SolutionEos       = lazyWithReload(() => import('./pages/SolutionEos'))
-const SolutionVentas    = lazyWithReload(() => import('./pages/SolutionVentas'))
 const Login2           = lazyWithReload(() => import('./pages/Login2'))
 const Register         = lazyWithReload(() => import('./pages/Register'))
 const Dashboard        = lazyWithReload(() => import('./pages/Dashboard'))
@@ -108,8 +103,6 @@ const Ventas           = lazyWithReload(() => import('./pages/Ventas'))
 const Contenido        = lazyWithReload(() => import('./pages/Contenido'))
 const Calendario       = lazyWithReload(() => import('./pages/Calendario'))
 const Finanzas         = lazyWithReload(() => import('./pages/Finanzas'))
-const LegalPage        = lazyWithReload(() => import('./pages/TermsPage'))
-const DataDeletion     = lazyWithReload(() => import('./pages/DataDeletion'))
 const ReportOrClientPortal = lazyWithReload(() => import('./pages/ReportOrClientPortal'))
 const ReportPrint      = lazyWithReload(() => import('./pages/ReportPrint'))
 const FacturaPrint     = lazyWithReload(() => import('./pages/FacturaPrint'))
@@ -118,8 +111,6 @@ const MailingUnsubscribe = lazyWithReload(() => import('./pages/MailingUnsubscri
 const MailingSubscription = lazyWithReload(() => import('./pages/MailingSubscription'))
 const SharedFolderPublic = lazyWithReload(() => import('./pages/SharedFolderPublic'))
 const SharedFilePublic   = lazyWithReload(() => import('./pages/SharedFilePublic'))
-const Blog              = lazyWithReload(() => import('./pages/Blog'))
-const BlogPost          = lazyWithReload(() => import('./pages/BlogPost'))
 
 // /my-projects/:id → /proyectos/:id, conservando el ?infoTab=, ?task=, ?fileId=… que
 // traen los deep-links de notificaciones, del buscador y de los mails.
@@ -188,8 +179,13 @@ function FinanceRoute({ children }) {
   return children
 }
 
+// La raíz del subdominio de un workspace es el Dashboard. En el host de la app
+// (app.blisstracker.app) no hay workspace en el hostname: antes acá se mostraba la
+// landing, que ahora vive en el sitio público (otro dominio), así que se entra por el
+// login central — que es el que lista los workspaces de la persona y cruza al subdominio
+// que elija (ver utils/authHandoff.js).
 function RootPage() {
-  if (!isWorkspaceSubdomain()) return <Landing />
+  if (!isWorkspaceSubdomain()) return <Navigate to="/login" replace />
   return <PrivateRoute><Dashboard /></PrivateRoute>
 }
 
@@ -208,11 +204,6 @@ export default function App() {
         <Routes>
           <Route path="/login"    element={<Login2     />} />
           <Route path="/register" element={<Register   />} />
-          <Route path="/pricing"  element={<Pricing    />} />
-          <Route path="/contacto" element={<Contact    />} />
-          <Route path="/soluciones/marketing" element={<SolutionMarketing />} />
-          <Route path="/soluciones/eos"       element={<SolutionEos       />} />
-          <Route path="/soluciones/ventas"    element={<SolutionVentas    />} />
           <Route path="/oauth"        element={<OAuthPopup    />} />
           <Route path="/auth"         element={<AuthCallback  />} />
           <Route path="/oauth-result" element={<OAuthResult   />} />
@@ -225,11 +216,6 @@ export default function App() {
           <Route path="/confirmar-suscripcion/:token" element={<MailingSubscription />} />
           <Route path="/shared-folder/:token" element={<SharedFolderPublic />} />
           <Route path="/shared-file/:token" element={<SharedFilePublic />} />
-          <Route path="/blog"         element={<Blog />} />
-          <Route path="/blog/:slug"   element={<BlogPost />} />
-          <Route path="/condiciones"  element={<LegalPage docKey="terms_of_service" />} />
-          <Route path="/privacidad"   element={<LegalPage docKey="privacy_policy"   />} />
-          <Route path="/eliminar-datos" element={<DataDeletion />} />
           <Route path="/join"     element={<JoinWorkspace />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/reset-password" element={<ResetPassword />} />
@@ -269,7 +255,7 @@ export default function App() {
           <Route path="/admin/gamification" element={<AdminRoute><Gamification /></AdminRoute>} />
           <Route path="/ventas"       element={<SalesRoute><Ventas /></SalesRoute>} />
           <Route path="/admin/ventas" element={<AdminRoute><Ventas /></AdminRoute>} />
-          <Route path="*" element={<Navigate to="/" replace />} />
+          <Route path="*" element={<NotFoundScreen />} />
         </Routes>
         </React.Suspense>
         <GlobalShortcuts />

@@ -10,7 +10,10 @@ JWT_SECRET=<long random string>
 RESEND_API_KEY=re_xxxx
 EMAIL_FROM=BlissTracker <noreply@blisstracker.app>
 APP_DOMAIN=blisstracker.app
-FRONTEND_URL=http://localhost:5173
+FRONTEND_URL=http://localhost:5173    # el frontend LOCAL, para los retornos de OAuth/Stripe en desarrollo
+APP_URL=https://app.blisstracker.app  # (opcional) dónde vive la app. Default: https://app.<APP_DOMAIN>
+SITE_URL=https://blisstracker.app     # (opcional) el sitio público. Default: https://<APP_DOMAIN>
+REVALIDATE_SECRET=<long random>       # (opcional) habilita el aviso de revalidación al sitio público al guardar en SuperAdmin; sin ella el sitio se actualiza solo por ISR
 GOOGLE_CLIENT_ID=xxxx.apps.googleusercontent.com
 GOOGLE_CLIENT_SECRET=...              # client secret del OAuth app de Google Cloud
 ANTHROPIC_API_KEY=sk-ant-...
@@ -58,9 +61,25 @@ MCP_WORKSPACE_SLUG=...                 # (legacy, opcional) workspace del token 
 MCP_USER_EMAIL=...                     # (legacy, opcional) usuario del token legacy de arriba
 ```
 
-## Frontend (`frontend/.env.development`)
+## Frontend — la app (`frontend/.env.development`)
 
 ```
 VITE_API_URL=http://localhost:3001
 VITE_GOOGLE_CLIENT_ID=xxxx.apps.googleusercontent.com
+VITE_APP_HOST=app.blisstracker.app     # (opcional) host de la app. Default: app.<VITE_APP_DOMAIN>. Lo usa utils/domain.js appHost(): el rebote al login central y el popup de OAuth
+VITE_APP_DOMAIN=blisstracker.app       # (opcional) dominio base. Default: blisstracker.app
+```
+
+## Frontend — el sitio público (`web/.env.local`)
+
+Las tres primeras son **obligatorias en producción**: definen contra qué backend se
+pre-renderiza y qué hosts se usan para los canonicals y los redirects. Ver
+`sitio-publico.md`.
+
+```
+NEXT_PUBLIC_API_URL=http://localhost:3001       # backend del que se lee el contenido (landing, precios, legales, blog)
+NEXT_PUBLIC_SITE_URL=https://blisstracker.app   # dominio canónico: canonicals, OG, sitemap, llms.txt
+NEXT_PUBLIC_APP_URL=https://app.blisstracker.app # a dónde apuntan "Ingresar"/"Probar gratis" y los 301 de rutas de app
+NEXT_PUBLIC_GA_ID=G-XXXXXXX                     # (opcional) propiedad de GA4. Default: la actual
+REVALIDATE_SECRET=<long random>                 # el mismo valor que en el backend; sin ella /api/revalidate responde 503
 ```

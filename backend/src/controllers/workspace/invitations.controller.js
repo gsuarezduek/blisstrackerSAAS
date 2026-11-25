@@ -10,6 +10,7 @@ const { assertValidMemberRoleAssignment } = require('./_shared')
 const { normalizeEmail } = require('../../lib/normalizeEmail')
 const { hasMfa, verifySecondFactor, countUnusedRecoveryCodes } = require('../../lib/mfa')
 const { assertNotExhausted, registerFailure } = require('../../lib/mfaChallenge')
+const { appUrl } = require('../../lib/publicUrls')
 
 /**
  * POST /api/workspaces/current/invitations
@@ -56,8 +57,10 @@ async function inviteMember(req, res, next) {
       data: { workspaceId, email, token, memberRole, teamRole, invitedById: inviterId, expiresAt },
     })
 
-    const domain = process.env.APP_DOMAIN || 'blisstracker.app'
-    const joinUrl = `https://${domain}/join?token=${token}`
+    // El /join vive en la app, no en el sitio público: la persona invitada todavía no
+    // es miembro de ningún workspace, así que entra por el host central y desde ahí se
+    // la cruza a su subdominio (ver utils/authHandoff.js en el frontend).
+    const joinUrl = appUrl(`/join?token=${token}`)
 
     sendInvitationEmail(email, inviter.name, workspace.name, joinUrl, workspaceId).catch(err =>
       console.error('[sendInvitationEmail] Error:', err.message)

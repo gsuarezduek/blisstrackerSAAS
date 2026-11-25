@@ -4,17 +4,21 @@
 
 La fuente es `frontend/src/App.jsx`.
 
+**Las rutas públicas de marketing ya NO están acá.** La landing, `/pricing`,
+`/soluciones/*`, `/blog`, `/contacto`, `/condiciones`, `/privacidad` y `/eliminar-datos`
+se fueron al sitio público (`web/`, Next.js con SSR/ISR) y la SPA las devuelve con 301 al
+apex — ver `sitio-publico.md`. Esta SPA sirve `app.blisstracker.app` y los subdominios de
+las agencias.
+
 ```
-/                 → Landing.jsx          (pública, sólo en dominio raíz blisstracker.app sin subdominio)
-                  → Dashboard.jsx        (PrivateRoute, en subdominio de workspace)
-/login            → Login2.jsx
-/register         → Register.jsx         (crear workspace)
-/pricing          → Pricing.jsx          (pública) — planes, calculadora interactiva, tabla comparativa de 25+ filas, FAQ específico de pricing
-/join             → JoinWorkspace.jsx    (aceptar invitación, ?token=)
+/                 → Navigate a /login     (en app.blisstracker.app: ya no hay landing acá)
+                  → Dashboard.jsx         (PrivateRoute, en subdominio de workspace)
+/login            → Login2.jsx            (en un subdominio rebota al login central de app.blisstracker.app)
+/register         → Register.jsx          (crear workspace)
+/join             → JoinWorkspace.jsx     (aceptar invitación, ?token=)
 /forgot-password  → ForgotPassword.jsx
 /reset-password   → ResetPassword.jsx
-/condiciones      → TermsPage.jsx        (pública) — Términos de servicio
-/privacidad       → TermsPage.jsx        (pública) — Política de privacidad
+*                 → NotFoundScreen.jsx    (antes redirigía a `/`: era un soft 404)
 /reportes       → Reportes.jsx        (PrivateRoute)
 /proyectos      → Proyectos.jsx       (PrivateRoute)
 /proyectos/:id  → ProjectDetail.jsx    (PrivateRoute)

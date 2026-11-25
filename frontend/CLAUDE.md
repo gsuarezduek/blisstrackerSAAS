@@ -14,6 +14,7 @@ VITE_GOOGLE_CLIENT_ID=xxxx.apps.googleusercontent.com
 - **React 18 + Vite + Tailwind CSS + React Router v6.**
 - **Color palette:** Custom `primary` tokens in `tailwind.config.js` based on orange (#F7931A). Status colors: IN_PROGRESS = primary (orange), PAUSED = gray, BLOCKED = red, COMPLETED = green, PENDING = gray.
 - **Tests:** Vitest + React Testing Library. Test config in `vite.config.js` (`test` block). All tests in `src/tests/`.
+- **Esta SPA sirve SOLO la app**: `app.blisstracker.app` (login central, registro, selector de workspace) y los subdominios de las agencias. La landing, `/pricing`, `/soluciones/*`, `/blog`, `/contacto` y los legales se fueron al sitio público (`web/`, Next.js con SSR/ISR) y acá se devuelven con 301. Todo este host va con `noindex`. El host de la app se arma con `appHost()` de `utils/domain.js` — único lugar, usado por el rebote al login central y por el popup de OAuth. → `../docs/claude/sitio-publico.md`
 - `api/client.js` — Axios instance: reads `VITE_API_URL`, injects JWT from `localStorage`, injects `X-Workspace: <slug>` header (derived from `window.location.hostname`), redirects to `/login` on 401.
 - `context/AuthContext.jsx` — global auth state; validates token on mount via `GET /auth/me`. Exposes `updateUser()` and `switchWorkspace(slug)` (re-issues JWT for the target workspace).
 - `context/WorkspaceContext.jsx` — workspace info (name, slug, status, subscription). Loaded from `GET /api/workspaces/current`. Exposes `trialDaysLeft` (derived from `trialEndsAt`) and `isSubscriptionActive`.

@@ -58,3 +58,22 @@ export function isPreviewHost(hostname = window.location.hostname) {
 export function workspaceHostLabel(slug, preview = false) {
   return preview ? `${slug}${PREVIEW_SUFFIX}` : slug
 }
+
+/**
+ * Host de la app: donde viven el login central, el registro y el selector de workspace.
+ *
+ * Antes era el dominio raíz (`blisstracker.app`), que servía la landing Y la app con el
+ * mismo bundle. Ahora el raíz es el sitio público —otro proyecto, renderizado en el
+ * servidor— y la app vive en `app.blisstracker.app`. Único lugar donde se arma ese host:
+ * lo usa el login de un subdominio al rebotar al login central (Login2.jsx), y también
+ * sirve para cualquier link de la app hacia sí misma en otro host.
+ *
+ * En local no cambia nada: la app sigue en `localhost` pelado (el sitio público corre en
+ * otro puerto), y `<slug>.localhost` sigue siendo un workspace.
+ */
+export function appHost() {
+  const explicit = import.meta.env.VITE_APP_HOST
+  if (explicit) return explicit
+  const appDomain = import.meta.env.VITE_APP_DOMAIN || 'blisstracker.app'
+  return `app.${appDomain}`
+}

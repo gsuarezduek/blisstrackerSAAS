@@ -3,6 +3,7 @@ const jwt              = require('jsonwebtoken')
 const { signState, verifyState } = require('../lib/oauthState')
 const prisma           = require('../lib/prisma')
 const { encrypt }      = require('../lib/encryption')
+const { oauthReturnBase } = require('../lib/publicUrls')
 
 // Conexión OAuth de Google Calendar — POR PERSONA (no por proyecto, a diferencia
 // de integrations.controller.js que gestiona GA4/Ads/GSC/YouTube vía
@@ -51,7 +52,7 @@ async function getAuthUrl(req, res, next) {
 // GET /api/calendar/google/callback — SIN auth, Google redirige acá directo.
 async function handleCallback(req, res, next) {
   const { code, state, error } = req.query
-  const frontendBase = process.env.FRONTEND_URL || 'http://localhost:5173'
+  const frontendBase = oauthReturnBase()
 
   if (error) {
     return res.redirect(`${frontendBase}/oauth-result?error=${encodeURIComponent(error)}`)

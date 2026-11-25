@@ -7,6 +7,7 @@ const { OAuth2Client } = require('google-auth-library')
 const { isSalesUser } = require('../middleware/workspace')
 const { getAllModuleAccess } = require('../lib/moduleAccess')
 const prisma = require('../lib/prisma')
+const { workspaceUrl } = require('../lib/publicUrls')
 const { validatePassword } = require('../lib/passwordPolicy')
 const { createAndSendVerificationEmail, RESEND_COOLDOWN_MS } = require('../lib/emailVerification')
 const { normalizeEmail } = require('../lib/normalizeEmail')
@@ -296,11 +297,10 @@ async function forgotPassword(req, res, next) {
       data: { token, userId: user.id, expiresAt },
     })
 
-    const domain = process.env.APP_DOMAIN
+    // Igual que la verificación de email: al subdominio del workspace si se sabe cuál
+    // es, y al host de la app si no (el dominio raíz ya no sirve la app).
     const slug = req.headers['x-workspace']
-    const resetUrl = domain && slug
-      ? `https://${slug}.${domain}/reset-password?token=${token}`
-      : `${process.env.FRONTEND_URL}/reset-password?token=${token}`
+    const resetUrl = workspaceUrl(slug, `/reset-password?token=${token}`)
 
     await sendPasswordReset(user.email, user.name, resetUrl)
 

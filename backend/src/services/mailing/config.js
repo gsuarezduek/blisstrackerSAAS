@@ -2,16 +2,19 @@
 // forma pública (sin secretos) y helpers de remitente / URLs públicas.
 const prisma = require('../../lib/prisma')
 const { encrypt, decrypt } = require('../../lib/encryption')
+const { appBase } = require('../../lib/publicUrls')
 
 function backendBase() {
   return (process.env.BACKEND_URL || 'http://localhost:3001').replace(/\/$/, '')
 }
 
-// Páginas públicas de la SPA (baja, confirmación de suscripción): dominio raíz.
+// Páginas públicas de la SPA (baja, confirmación de suscripción): host de la app.
+// NO el sitio público — esas pantallas son rutas de la SPA. Un link de baja viaja en
+// cada campaña enviada, así que el host tiene que ser el que las sirve de verdad.
 // En desarrollo, FRONTEND_URL.
 function frontendBase() {
   if (process.env.NODE_ENV !== 'production' && process.env.FRONTEND_URL) return process.env.FRONTEND_URL.replace(/\/$/, '')
-  return `https://${process.env.APP_DOMAIN || 'blisstracker.app'}`
+  return appBase()
 }
 
 function webhookUrlFor(config) {

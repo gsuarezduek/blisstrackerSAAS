@@ -1,33 +1,14 @@
-# BlissTracker robots.txt
-# Permitimos rastreo libre de la landing pública y bloqueamos endpoints internos.
+# Este robots.txt lo sirve el proyecto de la APP: app.blisstracker.app y todos los
+# subdominios de workspace (<agencia>.blisstracker.app).
+#
+# Nada de esto se indexa. No es una preferencia de SEO: son pantallas que requieren
+# sesión, más páginas con token (informes de cliente, propuestas, archivos compartidos,
+# bajas de mailing) que no deberían aparecer en una búsqueda. El proyecto además manda
+# X-Robots-Tag: noindex por header (ver vercel.json), que es lo que vale incluso si un
+# crawler llega a una URL sin pasar por acá.
+#
+# El sitio público —que SÍ se indexa— tiene su propio robots.txt generado, con el
+# sitemap declarado: https://blisstracker.app/robots.txt
 
 User-agent: *
-Allow: /
-Allow: /pricing
-Allow: /blog
-Allow: /condiciones
-Allow: /privacidad
-
-# Bloquear subdominios de workspaces (datos privados, requieren JWT igualmente)
-# La regla de subdominio se aplica per-host, no acá.
-
-# Crawlers de IA — explicitos para evitar dudas (todos permitidos para citation).
-User-agent: GPTBot
-Allow: /
-
-User-agent: ChatGPT-User
-Allow: /
-
-User-agent: ClaudeBot
-Allow: /
-
-User-agent: anthropic-ai
-Allow: /
-
-User-agent: PerplexityBot
-Allow: /
-
-User-agent: Google-Extended
-Allow: /
-
-Sitemap: https://blisstracker.app/sitemap.xml
+Disallow: /

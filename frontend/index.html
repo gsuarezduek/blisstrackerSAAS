@@ -4,27 +4,17 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-    <!-- Meta SEO base — React Helmet sobrescribe por página (Landing, Pricing, etc.) -->
-    <title>BlissTracker — El sistema operativo de tu agencia</title>
-    <meta name="description" content="GEO, SEO, Ads y reportes para clientes integrados con la gestión real de tu equipo. Un dashboard reemplaza Asana + SEMrush + 6 spreadsheets. 14 días gratis, sin tarjeta." />
-    <link rel="canonical" href="https://blisstracker.app/" />
+    <!-- Este HTML sirve SOLO la app: app.blisstracker.app (login, registro, selector de
+         workspace) y los subdominios de cada agencia. Nada de esto va al índice: son
+         pantallas privadas o páginas con token.
 
-    <!-- Open Graph -->
-    <meta property="og:type" content="website" />
-    <meta property="og:site_name" content="BlissTracker" />
-    <meta property="og:title" content="BlissTracker — El sistema operativo de tu agencia" />
-    <meta property="og:description" content="GEO, SEO, Ads y reportes para clientes integrados con la gestión real de tu equipo. Un dashboard reemplaza Asana + SEMrush + 6 spreadsheets." />
-    <meta property="og:url" content="https://blisstracker.app/" />
-    <meta property="og:image" content="https://blisstracker.app/og-image.png" />
-    <meta property="og:image:width" content="1200" />
-    <meta property="og:image:height" content="630" />
-    <meta property="og:locale" content="es_AR" />
-
-    <!-- Twitter Card -->
-    <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="BlissTracker — El sistema operativo de tu agencia" />
-    <meta name="twitter:description" content="GEO, SEO, Ads y reportes para clientes integrados con la gestión real de tu equipo." />
-    <meta name="twitter:image" content="https://blisstracker.app/og-image.png" />
+         El sitio público (landing, precios, soluciones, blog, legales) se fue a su
+         propio proyecto renderizado en el servidor — ver docs/claude/sitio-publico.md.
+         Por eso acá ya no hay title de marketing, ni Open Graph, ni canonical de la
+         home, ni el fallback estático de contenido para crawlers. -->
+    <meta name="robots" content="noindex, nofollow" />
+    <title>BlissTracker</title>
+    <meta name="description" content="Acceso a tu workspace de BlissTracker." />
 
     <!-- Favicon -->
     <link rel="icon" type="image/x-icon" href="/favicon.ico" />
@@ -38,6 +28,7 @@
     <!-- PWA / Android -->
     <link rel="icon" type="image/png" sizes="192x192" href="/logo-192.png" />
     <link rel="icon" type="image/png" sizes="512x512" href="/logo-512.png" />
+
     <!-- Tema oscuro: aplicar ANTES del primer paint para evitar flash blanco -->
     <script>
       (function() {
@@ -56,32 +47,17 @@
       })();
     </script>
 
-    <!-- Políticas — declaradas en HTML estático para bots (Google OAuth verification) -->
+    <!-- Políticas: absolutas al sitio público, que es donde viven y donde Google las
+         verificó para el OAuth. Se declaran en el HTML estático porque el bot de
+         verificación no ejecuta JavaScript. -->
     <link rel="privacy-policy" href="https://blisstracker.app/privacidad" />
     <link rel="terms-of-service" href="https://blisstracker.app/condiciones" />
 
-    <!-- Google Analytics — solo en el dominio raíz (landing), no en workspaces -->
-    <script>
-      (function() {
-        var host = window.location.hostname;
-        var isLanding = host === 'blisstracker.app' || host === 'www.blisstracker.app';
-        if (!isLanding) return;
-        var s = document.createElement('script');
-        s.async = true;
-        s.src = 'https://www.googletagmanager.com/gtag/js?id=G-4QGEYVGY43';
-        document.head.appendChild(s);
-        window.dataLayer = window.dataLayer || [];
-        function gtag(){ window.dataLayer.push(arguments); }
-        window.gtag = gtag;
-        gtag('js', new Date());
-        gtag('config', 'G-4QGEYVGY43');
-      })();
-    </script>
+    <!-- Google Analytics vive en el sitio público, no acá: medir la app con la misma
+         propiedad mezclaba visitas de marketing con uso interno del producto. -->
   </head>
   <body>
-    <!-- Fallback estático para crawlers que no ejecutan JS (ej: bot de verificación Google OAuth).
-         React reemplaza este contenido al montar. -->
-    <div id="root"><footer style="text-align:center;padding:10px;font-size:12px;background:#000;color:#888;position:fixed;bottom:0;width:100%"><a href="/privacidad" style="color:#aaa;margin:0 8px">Política de privacidad</a><a href="/condiciones" style="color:#aaa;margin:0 8px">Condiciones de uso</a></footer></div>
+    <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

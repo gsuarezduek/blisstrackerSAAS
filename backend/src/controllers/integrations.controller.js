@@ -9,6 +9,7 @@ const { clearCache: clearGscCache } = require('../services/googleSearchConsole.s
 const { SOURCES, resolveConnections } = require('../lib/connectionCatalog')
 const { MARKETING_PROJECT_WHERE, isProjectModuleEnabled } = require('../lib/projectModules')
 const { isAdmin } = require('../lib/projectAccess')
+const { oauthReturnBase } = require('../lib/publicUrls')
 
 // GA4 y Search Console comparten el mismo scope set — una sola auth sirve para ambos
 const GOOGLE_COMBINED_SCOPES = [
@@ -207,12 +208,11 @@ async function connectExisting(req, res, next) {
  */
 async function handleCallback(req, res, next) {
   const { code, state, error } = req.query
-  const appDomain  = process.env.APP_DOMAIN || 'blisstracker.app'
 
   if (error) {
     // Redirigir de vuelta al frontend con error
     return res.redirect(
-      `${process.env.FRONTEND_URL || 'http://localhost:5173'}/oauth-result?error=${encodeURIComponent(error)}`
+      `${oauthReturnBase()}/oauth-result?error=${encodeURIComponent(error)}`
     )
   }
 
@@ -223,7 +223,7 @@ async function handleCallback(req, res, next) {
       statePayload = verifyState(state)
     } catch {
       return res.redirect(
-        `${process.env.FRONTEND_URL || 'http://localhost:5173'}/oauth-result?error=invalid_state`
+        `${oauthReturnBase()}/oauth-result?error=invalid_state`
       )
     }
 
@@ -314,25 +314,16 @@ async function handleCallback(req, res, next) {
     }
 
     // Redirigir a la página puente del frontend (en el subdominio del workspace)
-    const isLocalDev = process.env.NODE_ENV !== 'production'
-    const frontendBase = isLocalDev
-      ? (process.env.FRONTEND_URL || 'http://localhost:5173')
-      : `https://${slug}.${appDomain}`
+    const frontendBase = oauthReturnBase(slug)
 
     res.redirect(`${frontendBase}/oauth-result?success=true&type=${encodeURIComponent(type)}`)
   } catch (err) {
     console.error('[integrations.callback] error:', err.message)
-    // Intentar redirigir al workspace si tenemos el slug del state
-    let frontendBase = process.env.FRONTEND_URL || 'http://localhost:5173'
-    try {
-      const payload = jwt.decode(req.query.state)
-      if (payload?.slug) {
-        const appDomain = process.env.APP_DOMAIN || 'blisstracker.app'
-        frontendBase = process.env.NODE_ENV === 'production'
-          ? `https://${payload.slug}.${appDomain}`
-          : frontendBase
-      }
-    } catch { /* ignorar */ }
+    // Intentar redirigir al workspace si tenemos el slug del state; si no se puede
+    // decodificar, oauthReturnBase() cae al host de la app.
+    let slug = null
+    try { slug = jwt.decode(req.query.state)?.slug ?? null } catch { /* ignorar */ }
+    const frontendBase = oauthReturnBase(slug)
     res.redirect(`${frontendBase}/oauth-result?error=${encodeURIComponent(err.message)}`)
   }
 }
