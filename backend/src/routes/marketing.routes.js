@@ -100,6 +100,8 @@ router.post('/projects/:id/integrations/meta-ads/connect-token',   metaIntegrati
 router.post('/projects/:id/integrations/chatgpt-ads/connect-token', chatgptAds.connectChatgptAdsToken)
 router.get('/projects/:id/integrations/meta-ads/pending/:pendingId', metaIntegrations.getMetaAdsPendingAccounts)
 router.post('/projects/:id/integrations/meta-ads/connect-pending', metaIntegrations.connectMetaAdsPending)
+router.get('/projects/:id/integrations/meta-ads/accounts',      metaIntegrations.getMetaAdsAccounts)
+router.put('/projects/:id/integrations/meta-ads/accounts',      metaIntegrations.setMetaAdsAccounts)
 router.post('/projects/:id/integrations/connect-existing',    integrations.connectExisting)
 router.get('/projects/:id/integrations',                      integrations.listIntegrations)
 // Estado de TODAS las fuentes (conectadas, vencidas y sin conectar) + a dónde ir a

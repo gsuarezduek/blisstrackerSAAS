@@ -27,6 +27,8 @@ backend/
       eosAutoScorecard.service.test.js    # métricas automáticas del Scorecard EOS: tardanzas (top 3 días/min, tolerancia), ocupación (ponderada, licencias, sin horario) + mensuales (delta_horas, proyectos nuevos/perdidos, equipo, mes vencido)
       linkedinScrape.test.js              # parseLinkedinCompany (URL/slug/showcase) + computeLinkedinScrapeMetrics (filtro por mes, totales, engagement rate por seguidores, campos null del scraping)
       facebookScrape.test.js              # parseFacebookPage (URL/slug/profile.php) + computeFacebookScrapeMetrics (filtro por mes, totales, engagement rate por seguidores, campos null del scraping)
+      metaAds.multiAccount.test.js        # Meta Ads con varias cuentas: sumas y ratios recalculados desde los totales (no promediados), alcance marcado como suma, compras solo de las cuentas que aplican, filtro por accountId (una ajena da 400 sin consultar a Meta), una cuenta caída no tumba la otra, reconectar conserva la lista
+      metaAds.accountsEndpoints.test.js   # GET/PUT de cuentas publicitarias: marca las elegidas, rechaza cuentas que el token no ve y monedas distintas, una sola cuenta vuelve a adAccounts null, reconectar con token conserva las cuentas
       chatgptAds.test.js                  # ChatGPT Ads: presets → rango de fechas en la tz de la cuenta, CTR ratio → %, estados a mayúscula, conversiones best-effort (null ≠ 0), clasificación de 401/403/429
       mfa.test.js                         # verifyTotp (códigos con espacios, basura, secret inválido), hasMfa (enrolamiento sin confirmar ≠ activo), códigos de recuperación (alfabeto, normalización, un solo uso, carrera entre requests), verifySecondFactor
       agentOutboundChannels.test.js       # canales de salida hacia un agente: el aviso pegado a la respuesta de una tool (no marca visto, throttle), el webhook (firma HMAC, no filtra el trabajo, reintento, SSRF) y el despertador (identidad del agente, args inválidos, tope de pasos — su mecánica se prueba llamando a `wakeAgent` directo, porque el canal está apagado; el interruptor tiene su propio test)
@@ -99,6 +101,7 @@ frontend/
       linkify.test.jsx
       webTabDates.test.js                 # getDateParams, formatDateLabel, currentMonthStr, prevMonthStr
     components/
+      MetaAdAccountsManager.test.jsx    # sumar una segunda cuenta de Meta Ads (la conectada queda primera), bloqueo con monedas distintas y error del backend al guardar
       cardStatementImport.test.jsx      # "+ Cargar" → Tarjeta: pide la clave, muestra recordado/sugerido/crear item, manda lo corregido y respeta los grupos destildados
       taskCommentsModalComplete.test.jsx # "Completar" en el detalle de la tarea: la pendiente pide duración opcional, en curso/pausada en un click, no aparece en ajenas/bloqueadas/completadas
       projectAccesos.test.jsx           # la fila de un acceso: quién lo cargó y quién lo editó, y que un acceso viejo sin autor no se lo invente

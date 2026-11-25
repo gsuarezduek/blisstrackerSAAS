@@ -1,5 +1,5 @@
 const { fetchGoogleAdsData } = require('../../googleAds.service')
-const { fetchMetaAdsData, getValidFbToken } = require('../../metaAds.service')
+const { fetchMetaAdsForIntegration, getValidFbToken } = require('../../metaAds.service')
 const { fetchChatGptAdsData } = require('../../chatgptAds.service')
 const { cacheImagesInArray } = require('../../socialImageCache.service')
 
@@ -23,7 +23,7 @@ async function buildAdsSections({ wants, warn, integrations, dateRange, workspac
       : Promise.resolve(null),
     wants('metaAds') && metaIntegration && metaIntegration.propertyId
       ? getValidFbToken(metaIntegration)
-          .then(token => fetchMetaAdsData(metaIntegration.propertyId, token, 'this_month', dateRange))
+          .then(token => fetchMetaAdsForIntegration(metaIntegration, token, 'this_month', dateRange))
           .catch(err => {
             warn('metaAds', 'Meta Ads', err)
             return null
@@ -56,6 +56,17 @@ async function buildAdsSections({ wants, warn, integrations, dateRange, workspac
     reach:       metaAdsRaw.reach,
     cpm:         metaAdsRaw.cpm,
     websitePurchases: metaAdsRaw.websitePurchases ?? null,
+    // Varias cuentas publicitarias (ej. una por sucursal): desglose por cuenta y aviso
+    // de que el alcance es la suma (no se puede deduplicar entre cuentas). Con una sola
+    // cuenta no vienen y el informe se ve como siempre.
+    ...(metaAdsRaw.accounts?.length > 1 ? {
+      reachIsSum: true,
+      accounts: metaAdsRaw.accounts.map(a => ({
+        id: a.id, name: a.name, spend: a.spend ?? null, reach: a.reach ?? null,
+        impressions: a.impressions ?? null, clicks: a.clicks ?? null, ctr: a.ctr ?? null,
+        websitePurchases: a.websitePurchases ?? null, error: a.error ?? null,
+      })),
+    } : {}),
     campaigns:   (metaAdsRaw.campaigns ?? []).slice(0, 5),
     // Miniaturas del creativo cacheadas (las URLs de Meta vencen)
     topAds:      await cacheImagesInArray((metaAdsRaw.topAds ?? []).slice(0, 5), 'thumbnailUrl', workspaceId),

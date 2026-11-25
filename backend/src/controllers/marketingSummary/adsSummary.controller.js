@@ -6,7 +6,7 @@
 
 const prisma = require('../../lib/prisma')
 const { computeObjectives } = require('../../services/marketingObjectives.service')
-const { getValidFbToken, fetchMetaAdsData } = require('../../services/metaAds.service')
+const { getValidFbToken, fetchMetaAdsForIntegration } = require('../../services/metaAds.service')
 const { fetchGoogleAdsData }                = require('../../services/googleAds.service')
 const { fetchChatGptAdsData }               = require('../../services/chatgptAds.service')
 const { todayString, DEFAULT_TZ } = require('../../utils/dates')
@@ -140,7 +140,7 @@ const ADS_LIVE_PERIODS = {
 async function fetchAdsLiveData(type, ig, datePreset, dateRange = null) {
   if (type === 'meta_ads') {
     const token = await getValidFbToken(ig)
-    const data  = await fetchMetaAdsData(ig.propertyId, token, datePreset, dateRange)
+    const data  = await fetchMetaAdsForIntegration(ig, token, datePreset, dateRange)
     return {
       raw: data,
       row: {

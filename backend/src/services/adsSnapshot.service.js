@@ -1,6 +1,6 @@
 const prisma                         = require('../lib/prisma')
 const { MARKETING_PROJECT_WHERE } = require('../lib/projectModules')
-const { getValidFbToken, fetchMetaAdsData }  = require('./metaAds.service')
+const { getValidFbToken, fetchMetaAdsForIntegration }  = require('./metaAds.service')
 const { fetchGoogleAdsData }         = require('./googleAds.service')
 const { fetchChatGptAdsData }        = require('./chatgptAds.service')
 const { cacheImagesInArray }         = require('./socialImageCache.service')
@@ -39,7 +39,7 @@ async function saveMetaAdsSnapshot(projectId, workspaceId, month) {
   const dateRange = monthRange(month)
 
   const token = await getValidFbToken(integration)
-  const data  = await fetchMetaAdsData(integration.propertyId, token, 'this_month', dateRange)
+  const data  = await fetchMetaAdsForIntegration(integration, token, 'this_month', dateRange)
 
   // Top 5 campañas por gasto
   const topCampaigns = (data.campaigns ?? []).slice(0, 5).map(c => ({

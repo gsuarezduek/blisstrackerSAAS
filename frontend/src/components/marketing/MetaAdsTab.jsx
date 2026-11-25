@@ -12,6 +12,7 @@ import { KpiCard } from './networks/ui'
 import ConnectScreen, { OAuthMethod, TokenMethod, ExpiredNotice } from './networks/ConnectScreen'
 import AccountHeader from './networks/AccountHeader'
 import AdsBrowser from './networks/AdsBrowser'
+import MetaAdAccountsManager from './networks/MetaAdAccountsManager'
 import { DollarSign, Eye, Heart, Image, MousePointerClick } from 'lucide-react'
 import { Icon } from '../ui/Icon'
 
@@ -78,7 +79,7 @@ const DATE_PRESETS = [
 
 // ── Tabla de campañas ─────────────────────────────────────────────────────────
 
-function CampaignsTable({ campaigns }) {
+function CampaignsTable({ campaigns, showAccount = false }) {
   if (!campaigns || campaigns.length === 0) {
     return (
       <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-6 text-center">
@@ -101,6 +102,7 @@ function CampaignsTable({ campaigns }) {
           <thead>
             <tr className="border-b border-gray-100 dark:border-gray-700 text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">
               <th className="text-left px-5 py-3 font-medium">Campaña</th>
+              {showAccount && <th className="text-left px-4 py-3 font-medium">Cuenta</th>}
               <th className="text-right px-4 py-3 font-medium">Gasto</th>
               <th className="text-right px-4 py-3 font-medium">Alcance</th>
               <th className="text-right px-4 py-3 font-medium">Impresiones</th>
@@ -128,6 +130,11 @@ function CampaignsTable({ campaigns }) {
                       </span>
                     </div>
                   </td>
+                  {showAccount && (
+                    <td className="px-4 py-3.5 text-gray-500 dark:text-gray-400 truncate max-w-[160px]" title={c.accountName || c.accountId}>
+                      {c.accountName || c.accountId}
+                    </td>
+                  )}
                   <td className="px-4 py-3.5 text-right font-semibold text-gray-900 dark:text-white whitespace-nowrap">
                     {fmtUSD(c.spend)}
                   </td>
@@ -254,6 +261,9 @@ export default function MetaAdsTab({ projectId, onSelectProject, projects = [] }
   const [disconnecting,  setDisconnecting] = useState(false)
   const [savingSnap,     setSavingSnap]    = useState(false)
   const [snapSaved,      setSnapSaved]     = useState(false)
+  // Varias cuentas publicitarias (ej. una por sucursal): null = todas sumadas
+  const [accountId,      setAccountId]     = useState(null)
+  const [managing,       setManaging]      = useState(false)
 
   const fetchIntegration = useCallback(async () => {
     if (!projectId) return
@@ -272,7 +282,10 @@ export default function MetaAdsTab({ projectId, onSelectProject, projects = [] }
     try {
       const intg = await fetchIntegration()
       if (!intg) { setLoading(false); return }
-      const res = await api.get(`/marketing/projects/${projectId}/meta-ads`, { params: { datePreset: preset } })
+      // Si la cuenta filtrada ya no está en la conexión, volver a "todas"
+      const acct = accountId && (intg.adAccounts ?? []).some(a => a.id === accountId) ? accountId : null
+      if (acct !== accountId) setAccountId(null)
+      const res = await api.get(`/marketing/projects/${projectId}/meta-ads`, { params: { datePreset: preset, ...(acct ? { accountId: acct } : {}) } })
       setData(res.data)
     } catch (err) {
       const code = err.response?.data?.code
@@ -281,22 +294,31 @@ export default function MetaAdsTab({ projectId, onSelectProject, projects = [] }
     } finally {
       setLoading(false)
     }
-  }, [projectId, datePreset, fetchIntegration])
+  }, [projectId, datePreset, accountId, fetchIntegration])
 
   useEffect(() => { fetchData() }, [fetchData])
 
-  async function handlePresetChange(preset) {
-    setDatePreset(preset)
+  async function loadView(preset, acct) {
     setLoading(true)
     setError(null)
     try {
-      const res = await api.get(`/marketing/projects/${projectId}/meta-ads`, { params: { datePreset: preset } })
+      const res = await api.get(`/marketing/projects/${projectId}/meta-ads`, { params: { datePreset: preset, ...(acct ? { accountId: acct } : {}) } })
       setData(res.data)
     } catch (err) {
       setError(err.response?.data?.error || 'Error al cargar datos.')
     } finally {
       setLoading(false)
     }
+  }
+
+  function handlePresetChange(preset) {
+    setDatePreset(preset)
+    loadView(preset, accountId)
+  }
+
+  // Cambiar de cuenta recarga vía el efecto (accountId está en las deps de fetchData)
+  function handleAccountChange(acct) {
+    setAccountId(acct)
   }
 
   async function handleSaveSnapshot() {
@@ -355,13 +377,53 @@ export default function MetaAdsTab({ projectId, onSelectProject, projects = [] }
   )
 
   const presetLabel = DATE_PRESETS.find(p => p.key === datePreset)?.label ?? datePreset
+  const adAccounts  = integration.adAccounts ?? []
+  const multi       = adAccounts.length > 1
+  const accountLabel = a => a.name || a.id
+  const failedAccounts = (data?.accounts ?? []).filter(a => a.error)
 
   return (
     <div className="space-y-4">
 
       <AccountHeader brand={BRAND} integration={integration} name="Meta Ads"
-        subtitle={integration.propertyId ? `Cuenta publicitaria ${integration.propertyId}` : null}
+        subtitle={multi
+          ? `${adAccounts.length} cuentas publicitarias: ${adAccounts.map(accountLabel).join(' · ')}`
+          : integration.propertyId ? `Cuenta publicitaria ${integration.propertyId}` : null}
+        actions={[{ key: 'accounts', label: multi ? 'Cuentas publicitarias' : 'Agregar cuenta', onClick: () => setManaging(m => !m) }]}
         onDisconnect={handleDisconnect} disconnecting={disconnecting} />
+
+      {managing && (
+        <MetaAdAccountsManager projectId={projectId} onClose={() => setManaging(false)}
+          onSaved={() => { setManaging(false); if (accountId) setAccountId(null); else fetchData() }} />
+      )}
+
+      {/* Varias cuentas: ver todas sumadas o una sola */}
+      {multi && (
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-xs text-gray-500 dark:text-gray-400 mr-1">Cuenta:</span>
+          {[{ id: null, label: 'Todas' }, ...adAccounts.map(a => ({ id: a.id, label: accountLabel(a) }))].map(a => (
+            <button key={a.id ?? 'all'} onClick={() => handleAccountChange(a.id)}
+              className={`px-3 py-1.5 text-xs rounded-lg transition-colors max-w-[220px] truncate ${
+                accountId === a.id
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-blue-300 dark:hover:border-blue-700'
+              }`}>
+              {a.label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {data?.mixedCurrencies && (
+        <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-3 text-xs text-amber-700 dark:text-amber-300">
+          Las cuentas tienen monedas distintas: los totales mezclan montos que no se pueden sumar. Mirá cada cuenta por separado.
+        </div>
+      )}
+      {failedAccounts.length > 0 && (
+        <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-3 text-xs text-amber-700 dark:text-amber-300">
+          {failedAccounts.map(a => `No se pudieron traer los datos de ${accountLabel(a)}: ${a.error}`).join(' · ')}. Los totales no la incluyen.
+        </div>
+      )}
 
       {/* Error */}
       {error && (
@@ -411,7 +473,7 @@ export default function MetaAdsTab({ projectId, onSelectProject, projects = [] }
           <KpiCard
  label="Alcance"
             value={fmtK(data.reach)}
-            sub="personas únicas"
+            sub={data.reachIsSum ? 'suma de las cuentas' : 'personas únicas'}
           />
           <KpiCard
  label="Impresiones"
@@ -459,7 +521,7 @@ export default function MetaAdsTab({ projectId, onSelectProject, projects = [] }
       {data && <MetaAds ads={data.ads ?? data.topAds} />}
 
       {/* Tabla de campañas */}
-      {data && <CampaignsTable campaigns={data.campaigns} />}
+      {data && <CampaignsTable campaigns={data.campaigns} showAccount={multi && !accountId} />}
 
       {/* Sin datos */}
       {data && data.spend === 0 && data.campaigns.length === 0 && (

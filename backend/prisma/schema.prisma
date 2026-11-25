@@ -1892,6 +1892,11 @@ model ProjectIntegration {
 
   propertyId String? // GA4: "properties/123456789"
   customerId String? // Google Ads: "123-456-7890"
+  // Meta Ads con más de una cuenta publicitaria (ej. un cliente con dos sucursales,
+  // cada una con su cuenta de ads y el mismo Instagram). JSON [{ id, name, currency }].
+  // null = una sola cuenta, la de propertyId (el caso de siempre). Si está, propertyId
+  // sigue siendo la primera de la lista. Ver lib/metaAdAccounts.js.
+  adAccounts String?
   country    String  @default("arg") // ISO 3166-1 alpha-3 lowercase (arg, mex, esp…) — país de referencia para keywords
 
   // Tokens cifrados (AES-256-GCM, formato "iv:tag:ciphertext" hex)

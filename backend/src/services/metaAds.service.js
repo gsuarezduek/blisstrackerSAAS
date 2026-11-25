@@ -1,6 +1,7 @@
 const axios            = require('axios')
 const { encrypt, decrypt } = require('../lib/encryption')
 const prisma           = require('../lib/prisma')
+const { getMetaAdAccounts } = require('../lib/metaAdAccounts')
 
 const FB_GRAPH = 'https://graph.facebook.com/v21.0'
 
@@ -327,4 +328,142 @@ async function fetchMetaAdsData(adAccountId, accessToken, datePreset = 'this_mon
   }
 }
 
-module.exports = { getValidFbToken, fetchMetaAdsData, extractConversions, buildWebsitePurchases }
+// ── Varias cuentas publicitarias en una conexión ─────────────────────────────
+
+const round = (n, d = 2) => parseFloat(n.toFixed(d))
+
+/**
+ * Junta los datos de varias cuentas publicitarias en el mismo shape que devuelve
+ * `fetchMetaAdsData`, así nadie que lo consuma necesita un caso especial.
+ *
+ * Gasto, impresiones, clicks, resultados y compras se suman. CTR, CPM, CPC y costo
+ * por resultado se RECALCULAN desde los totales (promediar los ratios de cada cuenta
+ * daría cualquier cosa). El alcance es de personas únicas y no se puede deduplicar
+ * entre cuentas: se suma y se marca con `reachIsSum` para que la UI lo aclare.
+ *
+ * @param {{ account: { id, name, currency }, data: object }[]} results — solo las cuentas que respondieron
+ * @param {{ account: object, error: string }[]} failed — las que fallaron (se informan, no tumban el resto)
+ */
+function mergeMetaAdsResults(results, failed = []) {
+  const tag = (account, list) => (list ?? []).map(x => ({ ...x, accountId: account.id, accountName: account.name }))
+  const sum = key => results.reduce((s, r) => s + (Number(r.data[key]) || 0), 0)
+
+  const spend       = sum('spend')
+  const impressions = sum('impressions')
+  const clicks      = sum('clicks')
+  const conversions = sum('conversions')
+
+  const breakdown = new Map()
+  for (const { data } of results) {
+    for (const b of data.resultsBreakdown ?? []) {
+      breakdown.set(b.actionType, (breakdown.get(b.actionType) ?? 0) + (Number(b.value) || 0))
+    }
+  }
+
+  // Compras en el sitio web: solo de las cuentas donde aplica (null = no aplica). El
+  // costo por compra y el ROAS se calculan con el gasto de ESAS cuentas, no del total:
+  // la otra sucursal puede no vender online y su gasto no compró nada en el sitio.
+  const withWp = results.filter(r => r.data.websitePurchases)
+  let websitePurchases = null
+  if (withWp.length > 0) {
+    const purchases = withWp.reduce((s, r) => s + (r.data.websitePurchases.purchases ?? 0), 0)
+    const values    = withWp.map(r => r.data.websitePurchases.value).filter(v => v != null)
+    const value     = values.length > 0 ? round(values.reduce((s, v) => s + v, 0)) : null
+    const wpSpend   = withWp.reduce((s, r) => s + (Number(r.data.spend) || 0), 0)
+    websitePurchases = {
+      purchases,
+      value,
+      costPerPurchase: purchases > 0 ? round(wpSpend / purchases) : null,
+      roas:            value != null && wpSpend > 0 ? round(value / wpSpend) : null,
+      pixel:           withWp.find(r => r.data.websitePurchases.pixel)?.data.websitePurchases.pixel ?? null,
+    }
+  }
+
+  const campaigns = results.flatMap(r => tag(r.account, r.data.campaigns)).sort((a, b) => b.spend - a.spend)
+  const ads       = results.flatMap(r => tag(r.account, r.data.ads)).sort((a, b) => b.reach - a.reach).slice(0, MAX_ADS)
+
+  const currencies = new Set(results.map(r => r.account.currency).filter(Boolean))
+
+  return {
+    spend:             round(spend),
+    reach:             sum('reach'),
+    reachIsSum:        true,
+    impressions,
+    clicks,
+    ctr:               impressions > 0 ? round((clicks / impressions) * 100, 4) : 0,
+    cpm:               impressions > 0 ? round((spend / impressions) * 1000) : 0,
+    cpc:               clicks > 0 ? round(spend / clicks) : 0,
+    conversions,
+    costPerConversion: conversions > 0 ? round(spend / conversions) : null,
+    resultsBreakdown:  [...breakdown].map(([actionType, value]) => ({ actionType, value })),
+    websitePurchases,
+    campaigns,
+    ads,
+    topAds:            ads.slice(0, 10),
+    datePreset:        results[0]?.data.datePreset,
+    // Desglose por cuenta (pestaña e informe). Las que fallaron van con `error`.
+    accounts: [
+      ...results.map(({ account, data }) => ({
+        id: account.id, name: account.name, currency: account.currency,
+        spend: data.spend, reach: data.reach, impressions: data.impressions, clicks: data.clicks,
+        ctr: data.ctr, conversions: data.conversions,
+        websitePurchases: data.websitePurchases?.purchases ?? null,
+        error: null,
+      })),
+      ...failed.map(({ account, error }) => ({ id: account.id, name: account.name, currency: account.currency, error })),
+    ],
+    // Con monedas distintas la suma no significa nada: la UI lo avisa.
+    mixedCurrencies:   currencies.size > 1,
+  }
+}
+
+/**
+ * Punto de entrada para cualquier consumidor que tenga la integración (pestaña,
+ * snapshot, informe, Asesor IA, panel cross-proyecto). Con una sola cuenta devuelve
+ * exactamente lo mismo que `fetchMetaAdsData`; con varias, las pide en paralelo y
+ * las junta con `mergeMetaAdsResults`.
+ *
+ * `accountId` filtra a una sola de las cuentas de la integración (el selector
+ * "Sucursal A / Sucursal B" de la pestaña). Una cuenta que falla no tumba las demás:
+ * queda en `accounts[].error`; solo si fallan todas se tira el error de la primera.
+ */
+async function fetchMetaAdsForIntegration(integration, accessToken, datePreset = 'this_month', dateRange = null, { allAds = false, accountId = null } = {}) {
+  const all = getMetaAdAccounts(integration)
+  if (all.length === 0) throw new Error('La integración de Meta Ads no tiene cuenta publicitaria')
+
+  let accounts = all
+  if (accountId) {
+    accounts = all.filter(a => a.id === accountId)
+    if (accounts.length === 0) {
+      const e = new Error('Esa cuenta publicitaria no está conectada a este proyecto')
+      e.status = 400
+      throw e
+    }
+  }
+
+  if (accounts.length === 1) {
+    return fetchMetaAdsData(accounts[0].id, accessToken, datePreset, dateRange, { allAds })
+  }
+
+  const settled = await Promise.allSettled(
+    accounts.map(a => fetchMetaAdsData(a.id, accessToken, datePreset, dateRange, { allAds })),
+  )
+  const results = []
+  const failed  = []
+  settled.forEach((s, i) => {
+    if (s.status === 'fulfilled') results.push({ account: accounts[i], data: s.value })
+    else {
+      const msg = s.reason?.response?.data?.error?.message || s.reason?.message || 'Error desconocido'
+      console.warn(`[MetaAds] La cuenta ${accounts[i].id} falló (sigue el resto):`, msg)
+      failed.push({ account: accounts[i], error: msg })
+    }
+  })
+  if (results.length === 0) throw settled[0].reason
+
+  return mergeMetaAdsResults(results, failed)
+}
+
+module.exports = {
+  getValidFbToken, fetchMetaAdsData, fetchMetaAdsForIntegration, mergeMetaAdsResults,
+  extractConversions, buildWebsitePurchases,
+}

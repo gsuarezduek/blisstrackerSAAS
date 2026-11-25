@@ -4,6 +4,21 @@ const { signState, verifyState } = require('../lib/oauthState')
 const crypto           = require('crypto')
 const prisma           = require('../lib/prisma')
 const { encrypt }      = require('../lib/encryption')
+const { getMetaAdAccounts, adAccountsOnReconnect } = require('../lib/metaAdAccounts')
+const { getValidFbToken } = require('../services/metaAds.service')
+
+/**
+ * propertyId + adAccounts para guardar al (re)conectar Meta Ads con una cuenta
+ * elegida. Si el proyecto ya tenía varias cuentas y la elegida es una de ellas
+ * (renovar un token vencido), se conservan todas.
+ */
+async function metaAdsAccountFields(projectId, chosenId) {
+  const existing = await prisma.projectIntegration.findUnique({
+    where:  { projectId_type: { projectId, type: 'meta_ads' } },
+    select: { propertyId: true, adAccounts: true },
+  })
+  return adAccountsOnReconnect(existing, chosenId)
+}
 
 // Conexiones OAuth de Meta Ads que encontraron más de una cuenta publicitaria y
 // están esperando que el usuario elija cuál conectar (ver handleMetaAdsCallback).
@@ -305,7 +320,7 @@ async function handleMetaAdsCallback(req, res, next) {
     const expiresAt = new Date(Date.now() + expiresIn * 1000)
 
     // 3. Obtener cuentas publicitarias del usuario (todas las páginas)
-    const accounts = await fetchAllAdAccounts(longToken, 'id,name,account_status')
+    const accounts = await fetchAllAdAccounts(longToken, 'id,name,account_status,currency')
 
     if (accounts.length === 0) {
       console.error(`[MetaAdsOAuth] El token no devolvió ninguna ad account · ${accounts.length} cuentas recibidas`)
@@ -323,7 +338,7 @@ async function handleMetaAdsCallback(req, res, next) {
         projectId, workspaceId, userId,
         accessToken: encrypt(longToken), expiresAt,
         accounts: accounts
-          .map(a => ({ id: a.id, name: a.name, accountStatus: a.account_status ?? null }))
+          .map(a => ({ id: a.id, name: a.name, currency: a.currency ?? null, accountStatus: a.account_status ?? null }))
           .sort((a, b) => (a.accountStatus === 1 ? 0 : 1) - (b.accountStatus === 1 ? 0 : 1)),
         createdAt: Date.now(),
       })
@@ -333,19 +348,20 @@ async function handleMetaAdsCallback(req, res, next) {
 
     const adAccountId = accounts[0].id   // ya incluye el prefijo "act_"
     const accountName = accounts[0].name
+    const accountFields = await metaAdsAccountFields(projectId, adAccountId)
 
     // 4. Upsert en ProjectIntegration
     await prisma.projectIntegration.upsert({
       where:  { projectId_type: { projectId, type: 'meta_ads' } },
       update: {
-        workspaceId, status: 'active', propertyId: adAccountId,
+        workspaceId, status: 'active', ...accountFields,
         accessToken: encrypt(longToken), refreshToken: null,
         expiresAt, scopes: 'ads_read',
         connectedById: userId, connectedAt: new Date(),
       },
       create: {
         projectId, workspaceId, type: 'meta_ads', status: 'active',
-        propertyId: adAccountId, accessToken: encrypt(longToken), refreshToken: null,
+        ...accountFields, accessToken: encrypt(longToken), refreshToken: null,
         expiresAt, scopes: 'ads_read',
         connectedById: userId, connectedAt: new Date(),
       },
@@ -644,19 +660,20 @@ async function connectMetaAdsToken(req, res, next) {
 
     const finalAdAccountId = chosenAccount.id   // formato "act_XXXXXXXXX"
     const accountName      = chosenAccount.name
+    const accountFields    = await metaAdsAccountFields(projectId, finalAdAccountId)
 
     // 3. Upsert en ProjectIntegration — expiresAt: null indica token permanente (System User)
     await prisma.projectIntegration.upsert({
       where:  { projectId_type: { projectId, type: 'meta_ads' } },
       update: {
-        workspaceId: req.workspace.id, status: 'active', propertyId: finalAdAccountId,
+        workspaceId: req.workspace.id, status: 'active', ...accountFields,
         accessToken: encrypt(accessToken), refreshToken: null,
         expiresAt: null, scopes: 'ads_read',
         connectedById: req.user.userId, connectedAt: new Date(),
       },
       create: {
         projectId, workspaceId: req.workspace.id, type: 'meta_ads', status: 'active',
-        propertyId: finalAdAccountId, accessToken: encrypt(accessToken), refreshToken: null,
+        ...accountFields, accessToken: encrypt(accessToken), refreshToken: null,
         expiresAt: null, scopes: 'ads_read',
         connectedById: req.user.userId, connectedAt: new Date(),
       },
@@ -701,18 +718,19 @@ async function connectMetaAdsPending(req, res, next) {
 
     const chosen = pending.accounts.find(a => a.id === adAccountId)
     if (!chosen) return res.status(400).json({ error: 'La cuenta elegida no está entre las encontradas.' })
+    const accountFields = await metaAdsAccountFields(projectId, chosen.id)
 
     await prisma.projectIntegration.upsert({
       where:  { projectId_type: { projectId, type: 'meta_ads' } },
       update: {
-        workspaceId: req.workspace.id, status: 'active', propertyId: chosen.id,
+        workspaceId: req.workspace.id, status: 'active', ...accountFields,
         accessToken: pending.accessToken, refreshToken: null,
         expiresAt: pending.expiresAt, scopes: 'ads_read',
         connectedById: req.user.userId, connectedAt: new Date(),
       },
       create: {
         projectId, workspaceId: req.workspace.id, type: 'meta_ads', status: 'active',
-        propertyId: chosen.id, accessToken: pending.accessToken, refreshToken: null,
+        ...accountFields, accessToken: pending.accessToken, refreshToken: null,
         expiresAt: pending.expiresAt, scopes: 'ads_read',
         connectedById: req.user.userId, connectedAt: new Date(),
       },
@@ -722,6 +740,126 @@ async function connectMetaAdsPending(req, res, next) {
     console.log(`[MetaAdsOAuth] Meta Ads conectado (selección manual): proyecto ${projectId}, cuenta ${chosen.id} (${chosen.name})`)
     res.json({ ok: true, adAccountId: chosen.id, accountName: chosen.name })
   } catch (err) { next(err) }
+}
+
+// ── Varias cuentas publicitarias en una misma conexión ───────────────────────
+// Un cliente con dos sucursales, cada una con su cuenta de ads (y el mismo
+// Instagram): se conecta una vez y se suman las otras cuentas que ve el mismo
+// token, sin volver a loguearse. Ver lib/metaAdAccounts.js.
+
+const MAX_META_AD_ACCOUNTS = 10
+
+async function loadMetaAdsIntegration(req, res) {
+  const projectId = Number(req.params.id)
+  const project = await prisma.project.findFirst({
+    where: { id: projectId, workspaceId: req.workspace.id },
+    select: { id: true },
+  })
+  if (!project) { res.status(404).json({ error: 'Proyecto no encontrado' }); return null }
+  const integration = await prisma.projectIntegration.findUnique({
+    where: { projectId_type: { projectId, type: 'meta_ads' } },
+  })
+  if (!integration) { res.status(404).json({ error: 'Sin integración de Meta Ads', code: 'NOT_CONNECTED' }); return null }
+  return integration
+}
+
+function metaAdsTokenError(err, res) {
+  if (err.code === 'TOKEN_EXPIRED') return res.status(400).json({ error: err.message, code: 'TOKEN_EXPIRED' })
+  const msg = err.response?.data?.error?.message
+  if (msg) return res.status(400).json({ error: `Meta no devolvió las cuentas: ${msg}` })
+  return null
+}
+
+/**
+ * GET /api/marketing/projects/:id/integrations/meta-ads/accounts
+ * Las cuentas publicitarias que ve el token conectado, marcando cuáles están
+ * elegidas para el proyecto. Las elegidas que el token ya no ve igual se listan
+ * (con `available: false`) para que se puedan sacar.
+ */
+async function getMetaAdsAccounts(req, res, next) {
+  try {
+    const integration = await loadMetaAdsIntegration(req, res)
+    if (!integration) return
+
+    const token = await getValidFbToken(integration)
+    const all = await fetchAllAdAccounts(token)
+    const selected = getMetaAdAccounts(integration)
+    const selectedIds = new Set(selected.map(a => a.id))
+
+    const accounts = all
+      .map(a => ({
+        id: a.id, name: a.name ?? null, currency: a.currency ?? null,
+        accountStatus: a.account_status ?? null,
+        selected: selectedIds.has(a.id), available: true,
+      }))
+      .sort((a, b) => (b.selected - a.selected) || ((a.accountStatus === 1 ? 0 : 1) - (b.accountStatus === 1 ? 0 : 1)))
+
+    for (const s of selected) {
+      if (!accounts.some(a => a.id === s.id)) accounts.push({ ...s, accountStatus: null, selected: true, available: false })
+    }
+
+    res.json({ accounts, max: MAX_META_AD_ACCOUNTS })
+  } catch (err) {
+    if (metaAdsTokenError(err, res)) return
+    next(err)
+  }
+}
+
+/**
+ * PUT /api/marketing/projects/:id/integrations/meta-ads/accounts
+ * Body: { accountIds: ['act_1', 'act_2'] } — reemplaza la lista. La primera queda
+ * como principal (propertyId). Cada cuenta tiene que verla el token conectado.
+ */
+async function setMetaAdsAccounts(req, res, next) {
+  try {
+    const raw = req.body?.accountIds
+    if (!Array.isArray(raw) || raw.length === 0) {
+      return res.status(400).json({ error: 'Elegí al menos una cuenta publicitaria' })
+    }
+    const ids = [...new Set(raw.map(String))]
+    if (ids.length > MAX_META_AD_ACCOUNTS) {
+      return res.status(400).json({ error: `Hasta ${MAX_META_AD_ACCOUNTS} cuentas por proyecto` })
+    }
+
+    const integration = await loadMetaAdsIntegration(req, res)
+    if (!integration) return
+
+    const token = await getValidFbToken(integration)
+    const all = await fetchAllAdAccounts(token)
+    const byId = new Map(all.map(a => [a.id, a]))
+    const previous = new Map(getMetaAdAccounts(integration).map(a => [a.id, a]))
+
+    const chosen = []
+    for (const id of ids) {
+      const a = byId.get(id)
+      if (a) chosen.push({ id: a.id, name: a.name ?? null, currency: a.currency ?? null })
+      // Una que ya estaba y el token dejó de ver: se puede conservar (no se agrega una nueva así).
+      else if (previous.has(id)) chosen.push(previous.get(id))
+      else return res.status(400).json({ error: `La cuenta ${id} no está disponible con la conexión actual` })
+    }
+
+    const currencies = new Set(chosen.map(a => a.currency).filter(Boolean))
+    if (currencies.size > 1) {
+      return res.status(400).json({
+        error: `Las cuentas tienen monedas distintas (${[...currencies].join(', ')}) y sus montos no se pueden sumar. Conectá solo cuentas en la misma moneda.`,
+      })
+    }
+
+    const updated = await prisma.projectIntegration.update({
+      where: { id: integration.id },
+      data: {
+        propertyId: chosen[0].id,
+        adAccounts: chosen.length > 1 ? JSON.stringify(chosen) : null,
+      },
+      select: { propertyId: true, adAccounts: true },
+    })
+
+    console.log(`[MetaAds] Proyecto ${integration.projectId}: cuentas publicitarias → ${chosen.map(a => a.id).join(', ')}`)
+    res.json({ ok: true, propertyId: updated.propertyId, adAccounts: chosen })
+  } catch (err) {
+    if (metaAdsTokenError(err, res)) return
+    next(err)
+  }
 }
 
 // ── Facebook Pages (Facebook Login + páginas) ─────────────────────────────────
@@ -1001,4 +1139,4 @@ async function connectFacebookToken(req, res, next) {
   } catch (err) { next(err) }
 }
 
-module.exports = { getMetaAuthUrl, handleMetaCallback, getMetaAdsAuthUrl, handleMetaAdsCallback, connectInstagramToken, connectMetaAdsToken, getMetaAdsPendingAccounts, connectMetaAdsPending, getFacebookAuthUrl, handleFacebookCallback, connectFacebookToken }
+module.exports = { getMetaAuthUrl, handleMetaCallback, getMetaAdsAuthUrl, handleMetaAdsCallback, connectInstagramToken, connectMetaAdsToken, getMetaAdsPendingAccounts, connectMetaAdsPending, getMetaAdsAccounts, setMetaAdsAccounts, getFacebookAuthUrl, handleFacebookCallback, connectFacebookToken }

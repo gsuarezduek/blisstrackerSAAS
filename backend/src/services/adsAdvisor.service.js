@@ -4,7 +4,7 @@ const { parseAIJson } = require('../utils/parseAIJson')
 const { briefLines, briefDump } = require('../lib/briefContext')
 const { createMessage } = require('../lib/claude')
 const { todayString, DEFAULT_TZ } = require('../utils/dates')
-const { getValidFbToken, fetchMetaAdsData } = require('./metaAds.service')
+const { getValidFbToken, fetchMetaAdsForIntegration } = require('./metaAds.service')
 const { fetchGoogleAdsData } = require('./googleAds.service')
 const { fetchChatGptAdsData } = require('./chatgptAds.service')
 const { computeObjectives } = require('./marketingObjectives.service')
@@ -69,7 +69,7 @@ async function resolveIntegration(projectId, workspaceId, platform) {
 async function fetchLiveData(integration, platform, datePreset) {
   if (platform === 'meta_ads') {
     const token = await getValidFbToken(integration)
-    return fetchMetaAdsData(integration.propertyId, token, datePreset)
+    return fetchMetaAdsForIntegration(integration, token, datePreset)
   }
   if (platform === 'chatgpt_ads') {
     return fetchChatGptAdsData(integration, datePreset)

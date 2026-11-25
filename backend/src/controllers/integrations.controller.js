@@ -2,6 +2,7 @@ const { OAuth2Client }     = require('google-auth-library')
 const jwt                  = require('jsonwebtoken')
 const { signState, verifyState } = require('../lib/oauthState')
 const prisma               = require('../lib/prisma')
+const { getMetaAdAccounts } = require('../lib/metaAdAccounts')
 const { encrypt, decrypt } = require('../lib/encryption')
 const { saveCurrentMonthSnapshotSafe } = require('../services/analyticsSnapshot.service')
 const { clearCache: clearGscCache } = require('../services/googleSearchConsole.service')
@@ -360,11 +361,15 @@ async function listIntegrations(req, res, next) {
         // Qué cuenta de Google autorizó: una integración "conectada" con la cuenta
         // equivocada falla con 403 y sin esto a la vista no hay forma de notarlo.
         accountEmail: true,
+        adAccounts: true, // Meta Ads con varias cuentas (JSON) — ver lib/metaAdAccounts.js
         // tokens NO se devuelven al frontend
       },
     })
 
-    res.json(integrations)
+    res.json(integrations.map(i => ({
+      ...i,
+      adAccounts: i.type === 'meta_ads' ? getMetaAdAccounts(i) : undefined,
+    })))
   } catch (err) { next(err) }
 }
 

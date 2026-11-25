@@ -445,6 +445,8 @@ GET    /api/marketing/integrations/tiktok/auth-url          # ?projectId=
 POST   /api/marketing/projects/:id/integrations/connect-existing      # reutiliza tokens vigentes del workspace (mismo type)
 POST   /api/marketing/projects/:id/integrations/instagram/connect-token  # conectar Instagram con token manual
 POST   /api/marketing/projects/:id/integrations/meta-ads/connect-token   # conectar Meta Ads con System User Token
+GET    /api/marketing/projects/:id/integrations/meta-ads/accounts        # cuentas publicitarias que ve el token conectado, con `selected` (las del proyecto) y `available`
+PUT    /api/marketing/projects/:id/integrations/meta-ads/accounts        # { accountIds } — reemplaza las cuentas del proyecto (hasta 10, misma moneda, la primera es la principal)
 POST   /api/marketing/projects/:id/integrations/chatgpt-ads/connect-token # conectar ChatGPT Ads con la API key de Ads Manager (sin OAuth: la key está scopeada a una cuenta)
 GET    /api/marketing/projects/:id/integrations             # lista integraciones del proyecto
 GET    /api/marketing/connections                           # ?projectId= y ?state=all|pending|expired|missing. Estado de TODAS las fuentes (active|expired|missing) + reconnectUrl a la pantalla de la app donde se conecta. Default: `all` con projectId, `pending` sin él. `expiresAt` solo si es futuro (el token con refresh se renueva solo). Resuelve el gate de privados adentro (no cuelga de /projects/:id)
@@ -463,7 +465,7 @@ GET    /api/marketing/projects/:id/health-score             # score compuesto: G
 GET    /api/marketing/projects/:id/google-ads               # ?datePreset= — requiere customerId en integration + GOOGLE_ADS_DEVELOPER_TOKEN
 
 # Marketing — Meta Ads
-GET    /api/marketing/projects/:id/meta-ads                 # ?datePreset= — usa token de ProjectIntegration type=meta_ads
+GET    /api/marketing/projects/:id/meta-ads                 # ?datePreset=&accountId= — usa token de ProjectIntegration type=meta_ads; con varias cuentas las suma (accountId filtra a una)
 
 # Marketing — ChatGPT Ads (OpenAI Advertiser API)
 GET    /api/marketing/projects/:id/chatgpt-ads              # ?datePreset= — usa la API key de ProjectIntegration type=chatgpt_ads

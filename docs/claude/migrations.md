@@ -32,6 +32,9 @@ Canibalización → búsquedas de marca: `Project.cannibalBrandTerms` (JSON arra
 ### `task_checklist`
 Subtareas de una tarea: `TaskChecklistItem` (`taskId` `Cascade`, `text`, `done`, `doneAt`/`doneById` `SetNull`, `order`, índice `(taskId, order)`) y `TaskRecurrence.checklist` (TEXT nullable, JSON de strings: la plantilla que cada ocurrencia copia sin tildar). Solo una tabla nueva y una columna nullable, sin backfill — una tarea sin subtareas se comporta igual que antes. **A propósito no se tocó `Task`:** una subtarea no es una `Task`, para no tener que excluirla de cada consulta que lista o cuenta tareas. Ver `docs/claude/tareas.md`.
 
+### `meta_ads_multi_account`
+Meta Ads con varias cuentas publicitarias en una misma conexión → `ProjectIntegration.adAccounts` (TEXT nullable, JSON `[{ id, name, currency }]`). Una columna nullable, sin backfill: `null` = una sola cuenta, la de `propertyId`, así que toda integración existente se comporta igual que antes. Ver "Varias cuentas publicitarias" en `docs/claude/marketing-anuncios.md`.
+
 ### `cannibal_last_check_evidence`
 Canibalización → `CannibalResolution.lastCheckEvidence` (TEXT nullable, JSON). Por qué la última verificación NO reabrió el conflicto: antes "no reabre" era silencio y una resolución que la verificación nunca podía evaluar (días de datos insuficientes, volumen bajo el piso prorrateado, o el filtro de idioma descartando todas las filas) ocultaba su conflicto para siempre, indistinguible de una bien resuelta. Una columna con default null, sin backfill. Ver `docs/claude/marketing-canibalizacion.md`.
 

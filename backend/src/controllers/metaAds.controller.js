@@ -1,8 +1,8 @@
 const prisma                         = require('../lib/prisma')
-const { getValidFbToken, fetchMetaAdsData } = require('../services/metaAds.service')
+const { getValidFbToken, fetchMetaAdsForIntegration } = require('../services/metaAds.service')
 
 /**
- * GET /api/marketing/projects/:id/meta-ads?datePreset=this_month
+ * GET /api/marketing/projects/:id/meta-ads?datePreset=this_month[&accountId=act_X]
  */
 async function getMetaAdsData(req, res, next) {
   try {
@@ -24,7 +24,9 @@ async function getMetaAdsData(req, res, next) {
     }
 
     const token = await getValidFbToken(integration)
-    const data  = await fetchMetaAdsData(integration.propertyId, token, datePreset, null, { allAds: true })
+    // accountId: una sola de las cuentas (selector de la pestaña); sin él, todas juntas
+    const accountId = req.query.accountId ? String(req.query.accountId) : null
+    const data  = await fetchMetaAdsForIntegration(integration, token, datePreset, null, { allAds: true, accountId })
 
     res.json(data)
   } catch (err) {
@@ -33,6 +35,7 @@ async function getMetaAdsData(req, res, next) {
       const fbErr = err.response.data.error
       return res.status(400).json({ error: fbErr?.message || 'Error en Meta Ads API', code: fbErr?.code })
     }
+    if (err.status === 400) return res.status(400).json({ error: err.message })
     next(err)
   }
 }

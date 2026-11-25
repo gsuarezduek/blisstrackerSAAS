@@ -216,6 +216,46 @@ export function RRSSSection({ s, contextRRSS, canEdit, contextEditing }) {
 }
 
 // ── 3. Publicidad ────────────────────────────────────────────────────────────
+
+// Meta Ads con varias cuentas publicitarias (ej. una por sucursal): cuánto aportó
+// cada una al total. El alcance de cada cuenta es real; el del total es la suma.
+function MetaAdsAccountsBreakdown({ accounts }) {
+  return (
+    <div className="mt-4">
+      <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">Por cuenta publicitaria</p>
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="text-gray-400 dark:text-gray-500 border-b border-gray-100 dark:border-gray-700">
+              <th className="text-left font-medium py-1.5 pr-2">Cuenta</th>
+              <th className="text-right font-medium py-1.5 px-2">Inversión</th>
+              <th className="text-right font-medium py-1.5 px-2">Alcance</th>
+              <th className="text-right font-medium py-1.5 px-2">Clics</th>
+              <th className="text-right font-medium py-1.5 pl-2">CTR</th>
+            </tr>
+          </thead>
+          <tbody>
+            {accounts.map(a => (
+              <tr key={a.id} className="border-b border-gray-50 dark:border-gray-700/50 last:border-b-0 text-gray-700 dark:text-gray-300">
+                <td className="py-1.5 pr-2 truncate max-w-[140px]" title={a.name || a.id}>{a.name || a.id}</td>
+                {a.error ? (
+                  <td colSpan={4} className="py-1.5 pl-2 text-right text-amber-600 dark:text-amber-400">Sin datos</td>
+                ) : (
+                  <>
+                    <td className="py-1.5 px-2 text-right">{a.spend != null ? `$${fmt(a.spend)}` : '—'}</td>
+                    <td className="py-1.5 px-2 text-right">{fmt(a.reach)}</td>
+                    <td className="py-1.5 px-2 text-right">{fmt(a.clicks)}</td>
+                    <td className="py-1.5 pl-2 text-right">{a.ctr != null ? `${Number(a.ctr).toFixed(2)}%` : '—'}</td>
+                  </>
+                )}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
 export function PublicidadSection({ s, contextPublicidad, canEdit, contextEditing }) {
   // Las plataformas presentes en ESTE informe (puede haber 1, 2 o 3).
   const adCards = ['metaAds', 'googleAds', 'chatgptAds'].filter(k => s[k])
@@ -230,11 +270,12 @@ export function PublicidadSection({ s, contextPublicidad, canEdit, contextEditin
           <SectionCard title="Meta Ads" sectionKey="metaAds">
             <KpiGrid items={[
               { label: 'Inversión',    value: s.metaAds.spend != null ? `$${fmt(s.metaAds.spend)}` : '—' },
-              ...(s.metaAds.reach != null && s.metaAds.reach > 0 ? [{ label: 'Alcance', value: fmt(s.metaAds.reach) }] : []),
+              ...(s.metaAds.reach != null && s.metaAds.reach > 0 ? [{ label: s.metaAds.reachIsSum ? 'Alcance (suma)' : 'Alcance', value: fmt(s.metaAds.reach) }] : []),
               { label: 'Impresiones', value: fmt(s.metaAds.impressions) },
               { label: 'Clics',       value: fmt(s.metaAds.clicks) },
               { label: 'CTR',         value: s.metaAds.ctr != null ? `${Number(s.metaAds.ctr).toFixed(2)}%` : '—' },
             ]} />
+            {s.metaAds.accounts?.length > 1 && <MetaAdsAccountsBreakdown accounts={s.metaAds.accounts} />}
             <BestAd ad={s.metaAds.topAds?.[0]} accent="blue" />
             <SectionHistory sectionKey="metaAds" />
           </SectionCard>

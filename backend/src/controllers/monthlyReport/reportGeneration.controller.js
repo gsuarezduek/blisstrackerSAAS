@@ -9,7 +9,7 @@ const { saveYouTubeSnapshot }   = require('../../services/youtubeSnapshot.servic
 const { saveLinkedinSnapshot }  = require('../../services/linkedinSnapshot.service')
 const { saveFacebookSnapshot }  = require('../../services/facebookSnapshot.service')
 const { fetchGoogleAdsData }               = require('../../services/googleAds.service')
-const { fetchMetaAdsData, getValidFbToken } = require('../../services/metaAds.service')
+const { fetchMetaAdsForIntegration, getValidFbToken } = require('../../services/metaAds.service')
 const { fetchChatGptAdsData }              = require('../../services/chatgptAds.service')
 const { SECTION_KEYS, reportPeriod, reportLabel, sanitizeSections, safeParseArr, loadBriefs, loadSignature } = require('./_shared')
 
@@ -74,7 +74,7 @@ async function checkRrssSection(key, cfg, projectId, workspaceId, dataMonth) {
 
 const ADS_CHECKS = {
   googleAds:  { label: 'Google Ads',  probe: (ig, range) => fetchGoogleAdsData(ig, 'this_month', range) },
-  metaAds:    { label: 'Meta Ads',    probe: (ig, range) => getValidFbToken(ig).then(t => fetchMetaAdsData(ig.propertyId, t, 'this_month', range)) },
+  metaAds:    { label: 'Meta Ads',    probe: (ig, range) => getValidFbToken(ig).then(t => fetchMetaAdsForIntegration(ig, t, 'this_month', range)) },
   chatgptAds: { label: 'ChatGPT Ads', probe: (ig, range) => fetchChatGptAdsData(ig, 'this_month', range) },
 }
 
