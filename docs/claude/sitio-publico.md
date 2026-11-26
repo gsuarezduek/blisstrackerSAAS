@@ -82,6 +82,16 @@ El blog **no es Markdown ni MDX**: son filas de `BlogPost` con `contentHtml` de 
 portada en bytes y contador de vistas, editadas en SuperAdmin → Landing → Blog. El
 artículo de ejemplo se carga con `backend/scripts/seed-blog-example.js`.
 
+**El HTML del post se sanitiza con `sanitize-html` (`lib/sanitize.js`), no con
+`isomorphic-dompurify`.** No es preferencia: ese paquete arrastra `jsdom` para tener un
+DOM en el server y en el runtime de Vercel su árbol se rompe (`html-encoding-sniffer`
+hace `require()` de un ESM), así que el módulo de la página no cargaba y **cualquier
+render por demanda de `/blog/:slug` devolvía 500** — tanto un slug inexistente como un
+post real al revalidar. En local con `next start` funcionaba, así que no se ve sin
+desplegar. `sanitize-html` parsea con htmlparser2, sin DOM. La lista de tags permitidos
+es explícita (lo que genera Tiptap) y baja un `h1` del editor a `h2`, para no romper el
+"un solo H1 por página".
+
 ### Revalidación
 
 `export const revalidate` por página (5 min el blog, 10 min landing y precios, 1 h los

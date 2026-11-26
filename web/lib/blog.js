@@ -21,9 +21,16 @@ export async function fetchPostPage(page = 1) {
   }
 }
 
-/** Un post por slug, o null si no existe / no está publicado. */
+/**
+ * Un post por slug, o null si no existe / no está publicado.
+ *
+ * Una sola etiqueta, `blog`, que es la única que manda el backend
+ * (revalidateSite.service.js). Antes había además una por slug (`blog:<slug>`) que nadie
+ * invalidaba nunca: con el slug viniendo de la URL, eso creaba etiquetas de caché
+ * distintas sin tope a partir de input externo.
+ */
 export async function fetchPost(slug) {
-  return apiGet(`/api/public/blog/${encodeURIComponent(slug)}`, { tags: ['blog', `blog:${slug}`] })
+  return apiGet(`/api/public/blog/${encodeURIComponent(slug)}`, { tags: ['blog'] })
 }
 
 /**

@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import Image from 'next/image'
 import { notFound } from 'next/navigation'
-import DOMPurify from 'isomorphic-dompurify'
+import { sanitizePostHtml } from '@/lib/sanitize'
 import BlissLogo from '@/components/BlissLogo'
 import { buildMetadata, breadcrumbSchema, blogPostingSchema, OG_IMAGE } from '@/lib/seo'
 import JsonLd from '@/components/JsonLd'
@@ -86,12 +86,12 @@ export default async function BlogPostPage({ params }) {
         )}
         <p className="text-sm text-gray-400 mb-3">{formatDate(post.publishedAt)} · {post.authorName}</p>
         <h1 className="text-3xl sm:text-4xl font-extrabold text-gray-900 tracking-tight mb-8">{post.title}</h1>
-        {/* El contenido es HTML de Tiptap escrito en SuperAdmin. Se sanitiza igual que en
-            la SPA, pero en el server (isomorphic-dompurify): así el texto del artículo
-            está en el HTML inicial, que es justamente lo que tiene que indexar Google. */}
+        {/* El contenido es HTML de Tiptap escrito en SuperAdmin. Se sanitiza en el
+            server (lib/sanitize.js) así el texto del artículo está en el HTML inicial,
+            que es justamente lo que tiene que indexar Google. */}
         <div
           className="post-content text-gray-700 leading-relaxed"
-          dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(post.contentHtml || '') }}
+          dangerouslySetInnerHTML={{ __html: sanitizePostHtml(post.contentHtml) }}
         />
       </article>
     </div>
