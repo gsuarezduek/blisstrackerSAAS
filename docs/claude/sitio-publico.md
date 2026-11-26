@@ -92,6 +92,27 @@ desplegar. `sanitize-html` parsea con htmlparser2, sin DOM. La lista de tags per
 es explícita (lo que genera Tiptap) y baja un `h1` del editor a `h2`, para no romper el
 "un solo H1 por página".
 
+### Al desplegar: revalidar después
+
+**Un push a `main` redespliega Railway y Vercel al mismo tiempo**, y el build de Vercel
+lee la API para pre-renderizar. Si cae en la ventana en que el backend se está
+reiniciando, los fetch fallan, el respaldo de `lib/landingDefaults.js` entra en su lugar
+y el sitio queda publicado con el copy por default — que se parece lo suficiente al real
+como para que no se note. Pasó en el deploy de la separación: la landing quedó con
+"Hecho para agencias de marketing" (el default) en vez de "Hecho para tu equipo" (la DB),
+y sin el video de demo.
+
+Después de cada deploy que toque `web/`, revalidar y chequear:
+
+```bash
+curl -X POST -H 'Content-Type: application/json' \
+  -d '{"secret":"<REVALIDATE_SECRET>","tags":["landing","pricing","legal","blog"],"paths":["/","/pricing","/condiciones","/privacidad","/blog"]}' \
+  https://blisstracker.app/api/revalidate
+```
+
+La señal de que el contenido es el real y no el respaldo: el badge del hero dice
+"Hecho para tu equipo", y hay un video de demo en vez de la maqueta.
+
 ### Revalidación
 
 `export const revalidate` por página (5 min el blog, 10 min landing y precios, 1 h los
