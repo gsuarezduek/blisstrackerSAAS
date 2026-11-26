@@ -2,6 +2,32 @@
 
 > Parte de la documentación modular de BlissTracker. No se carga automáticamente en cada sesión de Claude Code — este archivo se lee bajo demanda cuando la tarea toca este módulo. Índice completo en `CLAUDE.md` (raíz).
 
+### Orígenes autorizados de JavaScript — el login con Google
+
+**El botón "Entrar con Google" valida el ORIGEN del navegador, no un redirect URI.** Usa
+Google Identity Services (`<GoogleLogin>` de `@react-oauth/google`, en `Login2.jsx` y
+`OAuthPopup.jsx`), y Google **no acepta wildcards**: `*.blisstracker.app` no sirve.
+
+Origen que tiene que estar registrado en el cliente OAuth:
+
+```
+https://app.blisstracker.app
+```
+
+Alcanza con **uno solo** por un detalle de diseño que conviene no romper: `Login2.jsx`
+detecta que estás en un subdominio de agencia y **redirige al login central** en vez de
+dibujar el botón ahí (ver `appHost()` en `utils/domain.js`). Si algún día el botón se
+renderizara directo en `<slug>.blisstracker.app`, habría que registrar el origen de cada
+agencia a mano — imposible de mantener. **El login con Google vive en un host fijo.**
+
+Esto se rompió al separar el sitio público de la app (noviembre 2026): el login central
+pasó del apex a `app.blisstracker.app` y la Consola quedó con el origen viejo →
+`Error 400: origin_mismatch`. `https://blisstracker.app` quedó en la lista pero ya no se
+usa: el apex sirve el sitio público, que no tiene login.
+
+Los **redirect URIs** son otra cosa y no los toca nada de esto: los flujos de GA4,
+Search Console, Ads y Calendar van contra `BACKEND_URL/api/.../callback` (Railway).
+
 ### Google Cloud APIs habilitadas
 
 Proyecto OAuth: el mismo que usa el login con Google (`GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`) — **Bliss Team Tracker**, ID `bliss-team-tracker`, número `306615256468` (el número es el prefijo del Client ID). Ojo: en la misma cuenta de Google Cloud hay otro proyecto ("Mail MDZ") que no tiene nada que ver con BlissTracker.
