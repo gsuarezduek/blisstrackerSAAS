@@ -71,7 +71,7 @@ backend/
       projectModules.test.js              # Marketing/Contenido por proyecto: el gate de las dos secciones (404, no 403, ni para un admin), que el gate de privacidad corre primero, el endpoint que los prende/apaga (una clave ausente no pisa la otra) y las piezas que dejan de aparecer en el buscador global
       projectAccess.test.js               # accesos del proyecto: editar sin revelar el secreto (clave ausente = sin cambios), no inventar cambios al reescribir el mismo valor, y el historial (alta/edición/baja/reveal) sin valores
       vacation.controller.test.js         # usa fechas dinámicas (futureDate) para respetar validación ≥48h
-      chat.controller.test.js             # @everyone/@equipo/menciones individuales, responder=mención (+dedup), canal privado y proyecto privado, permisos de editar/eliminar/fijar
+      chat.controller.test.js             # @everyone/@equipo/menciones individuales, responder=mención (+dedup), canal privado y proyecto privado, permisos de editar/eliminar/fijar, listChannels expone lastReadAt (null si nunca abrí el canal)
       mfaLogin.test.js                    # login con 2FA no entrega sesión, el mfaToken no sirve como Bearer, verify con TOTP/código de recuperación, desafío quemado a los 5 intentos, reset de contraseña exige el código
       mfaSetup.test.js                    # setup/confirm/disable/regenerate: el secret se guarda cifrado y nunca sale en GET /profile, confirm valida el primer código, disable pide contraseña Y código
       agentTasks.test.js                  # tareas de agente: crear/iniciar/delegar/borrar vía MCP, la bandeja de novedades (las dos fuentes), y el desbloqueo desde la app (PAUSED + respuesta como comentario + disparo de los canales de salida), los filtros de la cola (por bot y por fecha) y el cierre con fecha hacia atrás (`logged-at`: jornada + completedAt juntos, tope del mes en curso)
@@ -110,6 +110,7 @@ frontend/
       laterTabs.test.jsx                # punto de alerta de las pestañas del Dashboard: rojo (true), naranja ('orange') con su texto accesible, y sin punto
       taskChecklist.test.jsx            # subtareas: progreso "1/2" y su color (gris/ámbar/verde), null sin subtareas, tilde optimista + rollback si el servidor falla, agregar deja el campo listo para la siguiente, variant compact sin agregar/convertir, y el badge de TaskCard que despliega la lista
       gscSitePicker.test.jsx            # elegir la propiedad de Search Console: la de Dominio marcada, el id exacto que se guarda, la que ya está "en uso", la sin verificar y la cuenta sin propiedades
+      channelSwitcherViews.test.jsx     # selector de canales: "Últimos" ordena por mi participación (lastReadAt) y manda al fondo los que nunca abrí, aplana los grupos (general deja de estar clavado arriba), ordena igual mientras se busca, la vista elegida sobrevive al remonte, "No leídos" vacío ofrece "Ver todos" y un localStorage que tira cae en "Todos"
     pages/
       dashboardOrder.test.js            # orden de Para hoy (pausadas primero, por publicación / más nuevas / más antiguas), grupos del Backlog (el proyecto con la publicación más próxima primero) y publishUrgency (rojo/naranja)
     hooks/

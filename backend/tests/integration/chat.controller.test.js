@@ -3,12 +3,20 @@ jest.mock('../../src/lib/prisma', () => ({
   workspaceMember:      { findUnique: jest.fn(), findMany: jest.fn() },
   projectMember:        { findMany: jest.fn(), findUnique: jest.fn() },
   project:              { findUnique: jest.fn() },
-  chatChannel:          { findFirst: jest.fn() },
-  chatMessage:          { create: jest.fn(), findFirst: jest.fn(), findUnique: jest.fn(), update: jest.fn(), delete: jest.fn() },
-  chatChannelRead:      { upsert: jest.fn(), findUnique: jest.fn() },
+  chatChannel:          { findFirst: jest.fn(), findMany: jest.fn() },
+  chatMessage:          { create: jest.fn(), findFirst: jest.fn(), findUnique: jest.fn(), update: jest.fn(), delete: jest.fn(), count: jest.fn() },
+  chatChannelRead:      { upsert: jest.fn(), findUnique: jest.fn(), findMany: jest.fn() },
+  projectStar:          { findMany: jest.fn() },
   chatMessageReaction:  { findUnique: jest.fn(), create: jest.fn(), delete: jest.fn() },
-  notification:         { createMany: jest.fn(), create: jest.fn(), updateMany: jest.fn() },
+  notification:         { createMany: jest.fn(), create: jest.fn(), updateMany: jest.fn(), groupBy: jest.fn() },
   deviceToken:          { findMany: jest.fn() },
+}))
+
+// materializeChannels crea los canales que falten (#general + uno por proyecto) y eso es
+// DB aparte; el resto del módulo se usa de verdad (channelLabel arma el nombre visible).
+jest.mock('../../src/lib/chatChannels', () => ({
+  ...jest.requireActual('../../src/lib/chatChannels'),
+  materializeChannels: jest.fn().mockResolvedValue(undefined),
 }))
 
 const request = require('supertest')
@@ -487,5 +495,40 @@ describe('PATCH /api/chat/messages/:messageId/pin', () => {
     expect(prisma.chatMessage.update).toHaveBeenCalledWith(expect.objectContaining({
       data: { pinnedAt: null, pinnedById: null },
     }))
+  })
+})
+
+// ── GET /api/chat/channels (listChannels) ─────────────────────────────────────
+
+describe('GET /api/chat/channels', () => {
+  beforeEach(() => {
+    mockWorkspace()
+    prisma.notification.groupBy.mockResolvedValue([])
+    prisma.projectStar.findMany.mockResolvedValue([])
+    prisma.chatMessage.count.mockResolvedValue(0)
+  })
+
+  // `lastReadAt` es lo que ordena la vista "Últimos" del selector de canales (recencia de
+  // uso propio): tiene que llegar al frontend, y llegar null cuando nunca abrí el canal —
+  // ahí el selector cae al segundo nivel de orden (la actividad del canal).
+  it('devuelve lastReadAt por canal, y null en los que nunca abrí', async () => {
+    prisma.chatChannel.findMany.mockResolvedValue([
+      makeChannel({ id: 5, slug: 'general', kind: 'general', messages: [{ id: 100, content: 'Hola', createdAt: new Date('2026-11-20T09:00:00Z') }] }),
+      makeChannel({ id: 6, slug: 'nuevo', kind: 'custom', name: 'Nuevo', messages: [] }),
+    ])
+    prisma.chatChannelRead.findMany.mockResolvedValue([
+      { channelId: 5, userId: 1, lastReadMessageId: 100, lastReadAt: new Date('2026-11-20T10:00:00Z') },
+    ])
+
+    const res = await request(app)
+      .get('/api/chat/channels')
+      .set('Authorization', authHeader())
+      .set('X-Workspace', WORKSPACE_SLUG)
+
+    expect(res.status).toBe(200)
+    expect(res.body.map(c => [c.id, c.lastReadAt])).toEqual([
+      [5, '2026-11-20T10:00:00.000Z'],
+      [6, null],
+    ])
   })
 })

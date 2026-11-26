@@ -112,6 +112,11 @@ async function listChannels(req, res, next) {
       prisma.projectStar.findMany({ where: { userId, projectId: { in: projectIds } }, select: { projectId: true } }),
     ])
     const readMap = new Map(reads.map(r => [r.channelId, r.lastReadMessageId]))
+    // `lastReadAt` es la señal de "mi participación" que usa la vista "Últimos" del
+    // selector de canales: se mueve tanto al escribir un mensaje (sendMessage marca
+    // leído para el autor) como al abrir el canal (markRead), que es exactamente el
+    // "lo estuve usando" que hay que ordenar. Sin row = nunca lo abrí → null.
+    const lastReadAtMap = new Map(reads.map(r => [r.channelId, r.lastReadAt]))
     const mentionMap = new Map(mentionCounts.map(m => [m.channelId, m._count.id]))
     const starredProjectIds = new Set(stars.map(s => s.projectId))
 
@@ -137,6 +142,7 @@ async function listChannels(req, res, next) {
       isPrivate: c.isPrivate,
       starred: c.projectId ? starredProjectIds.has(c.projectId) : false,
       lastMessage: c.messages[0] || null,
+      lastReadAt: lastReadAtMap.get(c.id) || null,
       unreadCount: unreadMap.get(c.id) || 0,
       mentionCount: mentionMap.get(c.id) || 0,
     })))
