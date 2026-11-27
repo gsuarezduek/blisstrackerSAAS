@@ -217,6 +217,90 @@ async function getEntities(req, res, next) {
   } catch (err) { next(err) }
 }
 
+function shiftMonthKey(key, delta) {
+  const [y, m] = key.split('-').map(Number)
+  const d = new Date(Date.UTC(y, m - 1 + delta, 1))
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`
+}
+
+// `issuerId` de un filtro: '' / undefined = todas, 'none' = sin entidad, si no un id.
+function parseIssuerFilter(value) {
+  if (value === undefined || value === '') return undefined
+  if (value === 'none') return null
+  const id = Number(value)
+  if (!Number.isInteger(id)) throw Object.assign(new Error('Entidad inválida'), { status: 400, isOperational: true })
+  return id
+}
+
+/**
+ * GET /api/finanzas/summary/invoicing?month=YYYY-MM&months=12&currency=ARS&issuerId=
+ * Facturado vs. cobrado, mes a mes: los `months` meses que terminan en
+ * `month` (todos, también los vacíos — es un eje de tiempo).
+ *
+ * - Facturado: comprobantes por mes de emisión, en esa moneda, neto (la NC
+ *   resta, la rechazada por ARCA no pesa). Con `issuerId`: los de esa entidad.
+ * - Cobrado: ingresos de clientes que afectan su cuenta corriente
+ *   (`accountApplication` invoice | on_account) por fecha, en cuentas de esa
+ *   moneda, SIN cheques todavía pendientes (no entraron). Con `issuerId`: los
+ *   que entraron en cuentas de esa entidad — mismo criterio que las tarjetas
+ *   por entidad (los cruces se avisan ahí).
+ *
+ * Que el facturado le gane al cobrado varios meses seguidos es la señal de
+ * que la cuenta corriente de los clientes está creciendo.
+ */
+async function getInvoicing(req, res, next) {
+  try {
+    const workspaceId = req.workspace.id
+    const { month, currency = 'ARS' } = req.query
+    if (!/^\d{4}-\d{2}$/.test(month || '')) return res.status(400).json({ error: 'Mes inválido (YYYY-MM)' })
+    const months = Math.min(24, Math.max(1, Number(req.query.months) || 12))
+    const issuerId = parseIssuerFilter(req.query.issuerId)
+
+    const keys = Array.from({ length: months }, (_, i) => shiftMonthKey(month, i - months + 1))
+    const range = { gte: monthBounds(keys[0]).gte, lt: monthBounds(month).lt }
+
+    const [invoices, collections] = await Promise.all([
+      prisma.financeInvoice.findMany({
+        where: { workspaceId, deletedAt: null, currency, issueDate: range, ...(issuerId !== undefined ? { issuerId } : {}) },
+        select: { issueDate: true, amount: true, kind: true, arcaStatus: true },
+      }),
+      prisma.financeMovement.findMany({
+        where: {
+          workspaceId, deletedAt: null, type: 'income', date: range,
+          accountApplication: { in: ['invoice', 'on_account'] },
+          NOT: { check: { status: 'pending' } },
+          account: { currency, ...(issuerId !== undefined ? { issuerId } : {}) },
+        },
+        select: { date: true, amount: true },
+      }),
+    ])
+
+    const byMonth = new Map(keys.map(k => [k, { invoiced: toDecimal(0), collected: toDecimal(0) }]))
+    for (const inv of invoices) {
+      const e = byMonth.get(inv.issueDate.toISOString().slice(0, 7))
+      if (e) e.invoiced = e.invoiced.plus(signedInvoiceAmount(inv))
+    }
+    for (const mv of collections) {
+      const e = byMonth.get(mv.date.toISOString().slice(0, 7))
+      if (e) e.collected = e.collected.plus(toDecimal(mv.amount))
+    }
+
+    let totalInvoiced = toDecimal(0)
+    let totalCollected = toDecimal(0)
+    const series = keys.map(k => {
+      const e = byMonth.get(k)
+      totalInvoiced = totalInvoiced.plus(e.invoiced)
+      totalCollected = totalCollected.plus(e.collected)
+      return { month: k, invoiced: e.invoiced.toString(), collected: e.collected.toString(), diff: e.invoiced.minus(e.collected).toString() }
+    })
+
+    res.json({
+      currency, issuerId: issuerId === undefined ? '' : (issuerId ?? 'none'), series,
+      totals: { invoiced: totalInvoiced.toString(), collected: totalCollected.toString(), diff: totalInvoiced.minus(totalCollected).toString() },
+    })
+  } catch (err) { next(err) }
+}
+
 /**
  * GET /api/finanzas/first-month?source=movements|invoices — el mes ("YYYY-MM")
  * del primer movimiento (por fecha) o la primera factura (por emisión) vivos
@@ -241,4 +325,4 @@ async function getFirstMonth(req, res, next) {
   } catch (err) { next(err) }
 }
 
-module.exports = { getBreakdown, getChart, getEntities, getFirstMonth }
+module.exports = { getBreakdown, getChart, getEntities, getInvoicing, getFirstMonth }

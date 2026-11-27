@@ -1,6 +1,6 @@
 const prisma = require('../../lib/prisma')
-const { toDecimal } = require('../../lib/financeMoney')
-const { parseDate, computeInvoiceStatus } = require('./_shared')
+const { Decimal, toDecimal } = require('../../lib/financeMoney')
+const { parseDate, computeInvoiceStatus, todayUTCNoon } = require('./_shared')
 const { buildTextSearchFilters } = require('../../lib/textSearch')
 
 const INVOICE_WITH_COLLECTIONS = {
@@ -224,4 +224,125 @@ async function getLedger(req, res, next) {
   } catch (err) { next(err) }
 }
 
-module.exports = { listCustomers, getCustomer, getLedger, shapeInvoice }
+// ─── Antigüedad de saldos ───────────────────────────────────────────────
+const AGING_BUCKETS = [
+  { key: 'current',  label: 'Al día',         maxDays: 0 },
+  { key: 'd1_30',    label: '1–30 días',      maxDays: 30 },
+  { key: 'd31_60',   label: '31–60 días',     maxDays: 60 },
+  { key: 'd61_90',   label: '61–90 días',     maxDays: 90 },
+  { key: 'd90_plus', label: 'Más de 90 días', maxDays: Infinity },
+]
+const DAY_MS = 24 * 60 * 60 * 1000
+
+/**
+ * Reparte lo que debe cada cliente por antigüedad de vencimiento. Pura (la
+ * usa el endpoint y se testea sola).
+ *
+ * Por cliente y moneda: cada factura/ND aporta su pendiente (monto − lo
+ * cobrado imputado a ella); las notas de crédito, los cobros "a cuenta" y lo
+ * cobrado de más en una factura son crédito sin factura, y se aplican **a lo
+ * más viejo primero** (FIFO por vencimiento) — así la suma de los tramos da
+ * el saldo del cliente, no el bruto de facturas impagas. Un cliente con saldo
+ * a favor no aparece. Las rechazadas por ARCA no pesan (mismo criterio que
+ * `signedAmount`). Lo cobrado incluye cheques pendientes, igual que el saldo.
+ *
+ * @param {Array} items   clientes con `invoices[{ amount, kind, arcaStatus, currency, dueDate, collections[{amount}] }]`
+ * @param {Array} onAccount cobros a cuenta `{ itemId, amount, currency }`
+ * @param {Date} today   hoy a mediodía UTC
+ */
+function computeAging(items, onAccount, today) {
+  const onAccountByItem = new Map()
+  for (const mv of onAccount) {
+    const key = `${mv.itemId}|${mv.currency}`
+    onAccountByItem.set(key, (onAccountByItem.get(key) || toDecimal(0)).plus(toDecimal(mv.amount)))
+  }
+
+  const byCurrency = new Map()
+  const bucketsFor = (currency) => {
+    if (!byCurrency.has(currency)) {
+      byCurrency.set(currency, AGING_BUCKETS.map(b => ({ key: b.key, label: b.label, amount: toDecimal(0), customers: new Map() })))
+    }
+    return byCurrency.get(currency)
+  }
+
+  for (const item of items) {
+    const perCurrency = new Map()
+    const slot = (cur) => {
+      if (!perCurrency.has(cur)) perCurrency.set(cur, { debits: [], credit: onAccountByItem.get(`${item.id}|${cur}`) || toDecimal(0) })
+      return perCurrency.get(cur)
+    }
+    for (const [key, amount] of onAccountByItem) if (key.startsWith(`${item.id}|`)) slot(key.split('|')[1]).credit = amount
+    for (const inv of item.invoices) {
+      if (inv.arcaStatus === 'rejected') continue
+      const c = slot(inv.currency || 'ARS')
+      const amount = toDecimal(inv.amount)
+      if (inv.kind === 'credit_note') { c.credit = c.credit.plus(amount); continue }
+      const collected = (inv.collections || []).reduce((t, m) => t.plus(toDecimal(m.amount)), toDecimal(0))
+      const pending = amount.minus(collected)
+      if (pending.greaterThan(0)) c.debits.push({ dueDate: new Date(inv.dueDate), pending })
+      else c.credit = c.credit.plus(pending.negated())
+    }
+
+    for (const [currency, c] of perCurrency) {
+      c.debits.sort((a, b) => a.dueDate - b.dueDate)
+      let credit = c.credit
+      const buckets = bucketsFor(currency)
+      for (const d of c.debits) {
+        let pending = d.pending
+        if (credit.greaterThan(0)) {
+          const used = Decimal.min(credit, pending)
+          pending = pending.minus(used)
+          credit = credit.minus(used)
+        }
+        if (pending.lessThanOrEqualTo(0)) continue
+        const days = Math.floor((today - d.dueDate) / DAY_MS)
+        const idx = AGING_BUCKETS.findIndex(b => days <= b.maxDays)
+        const bucket = buckets[idx]
+        bucket.amount = bucket.amount.plus(pending)
+        const prev = bucket.customers.get(item.id)
+        bucket.customers.set(item.id, { id: item.id, name: item.name, amount: (prev?.amount || toDecimal(0)).plus(pending) })
+      }
+    }
+  }
+
+  return [...byCurrency.entries()]
+    .map(([currency, buckets]) => {
+      const total = buckets.reduce((t, b) => t.plus(b.amount), toDecimal(0))
+      return {
+        currency, total: total.toString(),
+        buckets: buckets.map(b => ({
+          key: b.key, label: b.label, amount: b.amount.toString(),
+          customers: [...b.customers.values()].sort((x, y) => y.amount.comparedTo(x.amount)).map(x => ({ ...x, amount: x.amount.toString() })),
+        })),
+      }
+    })
+    .filter(c => Number(c.total) > 0)
+    .sort((a, b) => (a.currency === 'ARS' ? -1 : b.currency === 'ARS' ? 1 : a.currency.localeCompare(b.currency)))
+}
+
+// GET /api/finanzas/customers/aging — antigüedad de lo que deben los clientes
+// activos, por moneda y por tramo de vencimiento (ver computeAging).
+async function getAging(req, res, next) {
+  try {
+    const workspaceId = req.workspace.id
+    const items = await prisma.financeItem.findMany({
+      where: { workspaceId, tracksAccount: true, active: true },
+      select: {
+        id: true, name: true,
+        invoices: {
+          where: { deletedAt: null },
+          select: { amount: true, kind: true, arcaStatus: true, currency: true, dueDate: true, collections: { where: { deletedAt: null }, select: { amount: true } } },
+        },
+      },
+    })
+    const onAccount = await prisma.financeMovement.findMany({
+      where: { workspaceId, type: 'income', accountApplication: 'on_account', deletedAt: null, itemId: { in: items.map(i => i.id) } },
+      select: { itemId: true, amount: true, account: { select: { currency: true } } },
+    })
+    const today = todayUTCNoon()
+    const currencies = computeAging(items, onAccount.map(m => ({ itemId: m.itemId, amount: m.amount, currency: m.account?.currency || 'ARS' })), today)
+    res.json({ asOf: today.toISOString().slice(0, 10), currencies })
+  } catch (err) { next(err) }
+}
+
+module.exports = { listCustomers, getCustomer, getLedger, getAging, computeAging, AGING_BUCKETS, shapeInvoice }

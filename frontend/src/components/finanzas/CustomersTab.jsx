@@ -5,6 +5,7 @@ import { customerStatusMeta, STATUS_BADGE } from './financeCatalog'
 import CustomerDetail from './CustomerDetail'
 import NewCustomerModal from './NewCustomerModal'
 import NewInvoiceModal from './NewInvoiceModal'
+import AgingBar from './charts/AgingBar'
 
 const input = 'border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500'
 
@@ -29,6 +30,10 @@ export default function CustomersTab({ accounts, categories, items, taxes, issue
   // Facturar sin entrar al cliente: el botón de la fila abre el mismo modal
   // del detalle, ya con ese cliente elegido.
   const [invoiceFor, setInvoiceFor] = useState(null)
+  // Antigüedad de saldos (GET /customers/aging): un tramo elegido filtra la lista.
+  const [aging, setAging] = useState(null)
+  const [agingCurrency, setAgingCurrency] = useState(null)
+  const [agingBucket, setAgingBucket] = useState(null)
 
   const load = useCallback(async () => {
     const params = {}
@@ -46,6 +51,14 @@ export default function CustomersTab({ accounts, categories, items, taxes, issue
 
   useEffect(() => { load() }, [load, refreshKey])
 
+  const loadAging = useCallback(async () => {
+    try {
+      const res = await api.get('/finanzas/customers/aging')
+      setAging(res.data)
+    } catch { setAging(null) }
+  }, [])
+  useEffect(() => { loadAging() }, [loadAging, refreshKey])
+
   if (openId) {
     return (
       // `key`: lo que se carga o se factura desde el encabezado de la página
@@ -53,9 +66,14 @@ export default function CustomersTab({ accounts, categories, items, taxes, issue
       // el detalle no quede mostrando el saldo viejo.
       <CustomerDetail key={refreshKey} itemId={openId} accounts={accounts} categoriesList={categories} items={items} taxes={taxes} issuers={issuers} financeIvaMode={financeIvaMode}
         onDataChange={onDataChange}
-        onBack={() => { setOpenId(null); load(); onDataChange?.() }} />
+        onBack={() => { setOpenId(null); load(); loadAging(); onDataChange?.() }} />
     )
   }
+
+  const agingData = aging?.currencies.find(c => c.currency === agingCurrency) || aging?.currencies[0] || null
+  const bucket = agingData && agingBucket ? agingData.buckets.find(b => b.key === agingBucket) : null
+  const bucketIds = bucket ? new Set(bucket.customers.map(c => c.id)) : null
+  const visibleCustomers = bucketIds ? (customers || []).filter(c => bucketIds.has(c.id)) : (customers || [])
 
   const totalToCollect = (customers || []).reduce((s, c) => s + Number(c.saldo), 0)
   const totalOverdue = (customers || []).filter(c => c.status === 'overdue').reduce((s, c) => s + Number(c.saldo), 0)
@@ -73,7 +91,27 @@ export default function CustomersTab({ accounts, categories, items, taxes, issue
         </div>
       </div>
 
+      {agingData && (
+        <>
+          {aging.currencies.length > 1 && (
+            <div className="flex justify-end mb-2">
+              <select className={`${input} py-1`} aria-label="Moneda de la antigüedad" value={agingData.currency}
+                onChange={e => { setAgingCurrency(e.target.value); setAgingBucket(null) }}>
+                {aging.currencies.map(c => <option key={c.currency} value={c.currency}>{c.currency}</option>)}
+              </select>
+            </div>
+          )}
+          <AgingBar data={agingData} selected={agingBucket} onSelect={setAgingBucket} />
+        </>
+      )}
+
       <div className="flex flex-wrap items-center gap-3 mb-4">
+        {bucket && (
+          <span className="inline-flex items-center gap-1.5 text-xs bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-300 rounded-full pl-3 pr-1 py-1">
+            Deben: {bucket.label}
+            <button type="button" onClick={() => setAgingBucket(null)} aria-label="Quitar filtro de antigüedad" className="rounded-full w-5 h-5 hover:bg-primary-100 dark:hover:bg-primary-900/40">✕</button>
+          </span>
+        )}
         <input className={`${input} flex-1 max-w-xs`} placeholder="Buscar cliente…" value={search} onChange={e => setSearch(e.target.value)} />
         <label className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
           <input type="checkbox" checked={onlyWithBalance} onChange={e => setOnlyWithBalance(e.target.checked)} /> Solo con saldo
@@ -100,7 +138,7 @@ export default function CustomersTab({ accounts, categories, items, taxes, issue
             </tr>
           </thead>
           <tbody>
-            {(customers || []).map(c => {
+            {visibleCustomers.map(c => {
               const meta = customerStatusMeta(c.status)
               return (
                 <tr key={c.id} onClick={() => setOpenId(c.id)} className="border-b border-gray-50 dark:border-gray-700/50 hover:bg-gray-50 dark:hover:bg-gray-900/30 cursor-pointer">

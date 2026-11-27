@@ -118,6 +118,7 @@ router.get('/audit',             audit.listAudit)
 // Saldos (4.2) + acreditación/rechazo de cheques (3.4, 4.8) + valuación de
 // fondos (4.8) — operación del día a día, abierto a cualquiera con acceso.
 router.get('/balances',              balances.getBalances)
+router.get('/balances/history',      balances.getBalanceHistory)
 router.get('/checks',                checks.listChecks)
 router.patch('/checks/:id/credit',   checks.creditCheck)
 router.patch('/checks/:id/reject',   checks.rejectCheck)
@@ -133,10 +134,12 @@ router.delete('/adjustments/:id',    adjustments.deleteAdjustment)
 router.get('/summary/breakdown',     summary.getBreakdown)
 router.get('/summary/chart',         summary.getChart)
 router.get('/summary/entities',      summary.getEntities)
+router.get('/summary/invoicing',     summary.getInvoicing)
 router.get('/first-month',           summary.getFirstMonth)
 
 // Clientes (4.4/4.5) — abierto a cualquiera con acceso al módulo.
 router.get('/customers',             customers.listCustomers)
+router.get('/customers/aging',       customers.getAging)
 router.get('/customers/:id',         customers.getCustomer)
 router.get('/customers/:id/ledger',  customers.getLedger)
 

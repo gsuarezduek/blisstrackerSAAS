@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react'
 import api from '../../api/client'
 import { fmtMoney } from '../../utils/format'
 import AccountBalanceCard from './AccountBalanceCard'
+import BalanceHistoryChart from './charts/BalanceHistoryChart'
 import AccountDetailPanel from './AccountDetailPanel'
 import CreditCheckModal from './CreditCheckModal'
 import { checkInvoiceLabel } from './financeCatalog'
@@ -18,6 +19,45 @@ function SummaryCard({ label, value, sub, dark, highlight }) {
       <p className={`text-xs ${dark ? 'text-gray-300' : 'text-gray-400'}`}>{label}</p>
       <p className={`text-lg font-bold ${dark ? 'text-white' : highlight ? 'text-orange-700 dark:text-orange-400' : 'text-gray-900 dark:text-white'}`}>{value}</p>
       {sub && <p className={`text-[11px] ${dark ? 'text-gray-400' : 'text-gray-400'}`}>{sub}</p>}
+    </div>
+  )
+}
+
+// "Evolución del disponible": plegada por defecto (los números de arriba son
+// lo del día a día; esto es para mirar tendencia) y se pide recién al abrirla.
+// Abierta/cerrada se recuerda por navegador.
+const HISTORY_OPEN_KEY = 'bliss_finanzas_balance_history_open'
+function BalanceHistoryCard() {
+  const [open, setOpen] = useState(() => { try { return localStorage.getItem(HISTORY_OPEN_KEY) === '1' } catch { return false } })
+  const [data, setData] = useState(null)
+  const [error, setError] = useState(false)
+
+  useEffect(() => {
+    if (!open || data) return
+    api.get('/finanzas/balances/history', { params: { months: 12 } })
+      .then(res => setData(res.data))
+      .catch(() => setError(true))
+  }, [open, data])
+
+  function toggle() {
+    setOpen(v => {
+      try { localStorage.setItem(HISTORY_OPEN_KEY, v ? '0' : '1') } catch { /* sin storage */ }
+      return !v
+    })
+  }
+
+  return (
+    <div className="mt-6 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl">
+      <button type="button" onClick={toggle} aria-expanded={open}
+        className="w-full flex items-center justify-between px-4 py-3 text-left">
+        <span className="text-sm font-semibold text-gray-900 dark:text-white">Evolución del disponible <span className="font-normal text-gray-400">· últimos 12 meses</span></span>
+        <span className="text-xs text-primary-600 dark:text-primary-400">{open ? 'Ocultar' : 'Ver'}</span>
+      </button>
+      {open && (
+        <div className="px-4 pb-4">
+          {error ? <p className="text-sm text-red-500 py-4">No se pudo cargar la evolución.</p> : <BalanceHistoryChart data={data} />}
+        </div>
+      )}
     </div>
   )
 }
@@ -116,6 +156,8 @@ export default function BalancesTab({ accounts: accountsCatalog, taxes }) {
           <AccountBalanceCard key={account.id} account={account} onClick={() => setDetailAccountId(account.id)} />
         ))}
       </div>
+      <BalanceHistoryCard />
+
       {/* Inversión va al final, separada, con sus propios totales: a propósito
           no queda a la vista junto al disponible — es plata de largo plazo y
           verla arriba la hacía parecer disponible. */}

@@ -6,6 +6,8 @@ import CategoryBreakdownCard from './CategoryBreakdownCard'
 import IncomeExpenseBarChart from './IncomeExpenseBarChart'
 import EntitySummaryCards from './EntitySummaryCards'
 import EditMovementModal from './EditMovementModal'
+import InvoicedCollectedChart from './charts/InvoicedCollectedChart'
+import { fmtMoney } from '../../utils/format'
 import { currentMonthKey, shiftMonth, monthLabel } from './financeMonths'
 
 const input = 'border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500'
@@ -29,6 +31,10 @@ export default function SummaryTab({ accounts, categories = [], items = [], taxe
   const [breakdown, setBreakdown] = useState(null)
   const [entities, setEntities] = useState(null)
   const [editing, setEditing] = useState(null)
+  // Facturado vs. cobrado: 12 meses que terminan en el mes elegido, todas las
+  // entidades o una ('none' = sin entidad).
+  const [invoicingIssuer, setInvoicingIssuer] = useState('')
+  const [invoicing, setInvoicing] = useState(null)
 
   const [chartFrom, setChartFrom] = useState(dateMonthsAgo(5))
   const [chartTo, setChartTo] = useState(new Date().toISOString().slice(0, 10))
@@ -49,6 +55,11 @@ export default function SummaryTab({ accounts, categories = [], items = [], taxe
     setEntities(res.data)
   }, [month, currency])
 
+  const loadInvoicing = useCallback(async () => {
+    const res = await api.get('/finanzas/summary/invoicing', { params: { month, currency, months: 12, issuerId: invoicingIssuer } })
+    setInvoicing(res.data)
+  }, [month, currency, invoicingIssuer])
+
   async function openMovement(id) {
     const res = await api.get(`/finanzas/movements/${id}`)
     setEditing(res.data)
@@ -56,12 +67,13 @@ export default function SummaryTab({ accounts, categories = [], items = [], taxe
 
   function handleMovementSaved() {
     setEditing(null)
-    loadEntities(); loadBreakdown(); loadChart()
+    loadEntities(); loadBreakdown(); loadChart(); loadInvoicing()
     onDataChange?.()
   }
 
   useEffect(() => { loadBreakdown() }, [loadBreakdown])
   useEffect(() => { loadEntities() }, [loadEntities])
+  useEffect(() => { loadInvoicing() }, [loadInvoicing])
   useEffect(() => { loadChart() }, [loadChart])
 
   return (
@@ -80,6 +92,26 @@ export default function SummaryTab({ accounts, categories = [], items = [], taxe
       </div>
 
       <EntitySummaryCards data={entities} currency={currency} onOpenMovement={openMovement} />
+
+      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-4">
+        <div className="flex items-start justify-between mb-4 flex-wrap gap-2">
+          <div>
+            <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Facturado vs. cobrado</h3>
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              Últimos 12 meses hasta {monthLabel(month)}
+              {invoicing && Number(invoicing.totals.diff) > 0 && <> · quedó por cobrar <span className="font-semibold text-gray-900 dark:text-white">{fmtMoney(invoicing.totals.diff, currency)}</span></>}
+              {invoicing && Number(invoicing.totals.diff) < 0 && <> · se cobró <span className="font-semibold text-gray-900 dark:text-white">{fmtMoney(Math.abs(invoicing.totals.diff), currency)}</span> más de lo facturado</>}
+            </p>
+          </div>
+          <select className={`${input} py-1.5`} aria-label="Entidad de facturación" value={invoicingIssuer} onChange={e => setInvoicingIssuer(e.target.value)}>
+            <option value="">Todas las entidades</option>
+            {(entities?.entities || []).map(e => (
+              <option key={e.issuerId ?? 'none'} value={e.issuerId ?? 'none'}>{e.name}</option>
+            ))}
+          </select>
+        </div>
+        {invoicing ? <InvoicedCollectedChart series={invoicing.series} currency={currency} /> : <p className="text-sm text-gray-400 text-center py-10">Cargando…</p>}
+      </div>
 
       {breakdown ? (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
