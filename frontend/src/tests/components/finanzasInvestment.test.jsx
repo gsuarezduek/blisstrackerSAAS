@@ -75,3 +75,26 @@ describe('Saldos: Inversión aparte', () => {
     expect(screen.getByText('Efectivo')).toBeTruthy()
   })
 })
+
+describe('Saldos: una moneda con solo cuentas de Inversión', () => {
+  it('no muestra la tarjeta de disponible de esa moneda, solo la de Inversión', async () => {
+    const base = { type: 'crypto_wallet', hasInvestments: false, incomePeriod: '0', expensePeriod: '0', internalPeriod: '0',
+      adjustmentsPeriod: '0', fondos: null, pendingChecks: { amount: '0', count: 0 } }
+    const totals = (over) => ({ disponible: '0', fondos: '0', total: '0', inversion: '0', investmentAccounts: 0, pendingChecks: { amount: '0', count: 0 }, ...over })
+    get.mockReset()
+    get.mockImplementation(url => Promise.resolve({ data: url === '/finanzas/balances' ? {
+      accounts: [
+        { ...base, id: 1, name: 'Galicia', type: 'bank', currency: 'ARS', balanceGroup: 'available', disponible: '100' },
+        { ...base, id: 2, name: 'Ledger', currency: 'BTC', balanceGroup: 'investment', disponible: '0.49502452' },
+      ],
+      totalsByCurrency: {
+        ARS: totals({ disponible: '100', total: '100' }),
+        BTC: totals({ inversion: '0.49502452', investmentAccounts: 1 }),
+      },
+    } : [] }))
+    render(<BalancesTab accounts={[]} taxes={[]} />)
+    expect(await screen.findByText('Inversión en BTC')).toBeTruthy()
+    expect(screen.queryByText('Bitcoin')).toBeNull()
+    expect(screen.getByText('Total en pesos')).toBeTruthy()
+  })
+})

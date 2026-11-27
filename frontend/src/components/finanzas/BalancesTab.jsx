@@ -53,12 +53,17 @@ export default function BalancesTab({ accounts: accountsCatalog, taxes }) {
   // Se deriva de `data` (no se guarda el objeto) para que el panel vea el
   // disponible actualizado después de un ajuste o valuación.
   const detailAccount = data.accounts.find(a => a.id === detailAccountId) || null
-  const ars = data.totalsByCurrency.ARS
-  const otherCurrencies = Object.keys(data.totalsByCurrency).filter(c => c !== 'ARS')
-  // Inversión (cuentas a largo plazo) va aparte, una tarjeta por moneda que tenga alguna.
-  const investmentCurrencies = Object.keys(data.totalsByCurrency).filter(c => data.totalsByCurrency[c].investmentAccounts > 0)
   const operatingAccounts = data.accounts.filter(a => a.balanceGroup !== 'investment')
   const investmentAccounts = data.accounts.filter(a => a.balanceGroup === 'investment')
+  // La tarjeta de disponible de una moneda sale solo si hay alguna cuenta
+  // operativa en ella: una moneda que solo tiene cuentas de Inversión (ej. una
+  // wallet BTC de largo plazo) mostraba un "Bitcoin $0" que no significa nada.
+  const operatingCurrencies = new Set(operatingAccounts.map(a => a.currency))
+  const ars = data.totalsByCurrency.ARS
+  const showArs = ars && operatingCurrencies.has('ARS')
+  const otherCurrencies = Object.keys(data.totalsByCurrency).filter(c => c !== 'ARS' && operatingCurrencies.has(c))
+  // Inversión (cuentas a largo plazo) va aparte, una tarjeta por moneda que tenga alguna.
+  const investmentCurrencies = Object.keys(data.totalsByCurrency).filter(c => data.totalsByCurrency[c].investmentAccounts > 0)
 
   return (
     <div>
@@ -69,7 +74,7 @@ export default function BalancesTab({ accounts: accountsCatalog, taxes }) {
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
-        {ars && (
+        {showArs && (
           <>
             <SummaryCard dark label="Total en pesos" value={fmtMoney(ars.total, 'ARS')} sub="Disponible + fondos" />
             <SummaryCard label="Disponible en pesos" value={fmtMoney(ars.disponible, 'ARS')} />
@@ -80,7 +85,7 @@ export default function BalancesTab({ accounts: accountsCatalog, taxes }) {
           <SummaryCard key={cur} label={cur === 'USD' ? 'Dólares' : cur === 'BTC' ? 'Bitcoin' : cur} value={fmtMoney(data.totalsByCurrency[cur].total, cur)} />
         ))}
         {investmentCurrencies.map(cur => (
-          <SummaryCard key={`inv-${cur}`} label={`Inversión en ${cur === 'ARS' ? 'pesos' : cur}`} value={fmtMoney(data.totalsByCurrency[cur].inversion, cur)} sub="Largo plazo · aparte del disponible" />
+          <SummaryCard key={`inv-${cur}`} label={`Inversión en ${cur === 'ARS' ? 'pesos' : cur}`} value={fmtMoney(data.totalsByCurrency[cur].inversion, cur)} sub="Largo plazo" />
         ))}
         <SummaryCard highlight label="Cheques en cartera"
           value={fmtMoney(ars?.pendingChecks.amount ?? 0, 'ARS')}
