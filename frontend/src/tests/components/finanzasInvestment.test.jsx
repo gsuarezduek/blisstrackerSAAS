@@ -74,6 +74,18 @@ describe('Saldos: Inversión aparte', () => {
     expect(screen.getByRole('heading', { name: 'Inversión' })).toBeTruthy()
     expect(screen.getByText('Efectivo')).toBeTruthy()
   })
+
+  it('los totales de Inversión van abajo, en su sección, no junto al disponible', async () => {
+    render(<BalancesTab accounts={[]} taxes={[]} />)
+    const card = await screen.findByText('Inversión en USD')
+    const section = screen.getByRole('region', { name: 'Inversión' })
+    expect(section.contains(card)).toBe(true)
+    expect(section.contains(screen.getByText('Dólares'))).toBe(false)
+    expect(section.contains(screen.getByText('Broker'))).toBe(true)
+    // El bloque de Inversión queda después de las cuentas operativas.
+    const operating = screen.getByText('Cuentas operativas')
+    expect(operating.compareDocumentPosition(section) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
 })
 
 describe('Saldos: una moneda con solo cuentas de Inversión', () => {
