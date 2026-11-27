@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
-import { Plus, Pencil, Search, Landmark } from 'lucide-react'
+import { Plus, Pencil, Search, Landmark, GripVertical } from 'lucide-react'
 import { Icon } from '../ui/Icon'
 import { Card, CardHeader, TextButton } from '../../pages/project-detail/ui.jsx'
 import ConfirmModal from '../ConfirmModal'
@@ -65,11 +65,47 @@ export default function FinanzasConfiguracion({ onBack }) {
   )
 }
 
+// Mueve `dragId` al lugar de `targetId`: arrastrada hacia abajo queda debajo
+// del destino, hacia arriba queda encima.
+export function moveAccount(list, dragId, targetId) {
+  const from = list.findIndex(a => a.id === dragId)
+  const to = list.findIndex(a => a.id === targetId)
+  if (from === -1 || to === -1 || from === to) return list
+  const next = [...list]
+  const [moved] = next.splice(from, 1)
+  next.splice(to, 0, moved)
+  return next
+}
+
 // ─── Cuentas ──────────────────────────────────────────────────────────────
+// El orden se cambia arrastrando la tarjeta (drag & drop nativo, mismo patrón
+// que los avatares de SuperAdmin) y manda en todo listado de cuentas: Saldos,
+// los selectores de "+ Cargar", los filtros y el Resumen.
 function AccountsPanel({ accounts, taxes, issuers, onChanged }) {
   const [modalAccount, setModalAccount] = useState(undefined) // undefined = cerrado, null = nueva, obj = editar
   const [toDelete, setToDelete] = useState(null)
   const [deleting, setDeleting] = useState(false)
+  const [order, setOrder] = useState(accounts)
+  const [dragId, setDragId] = useState(null)
+  const [overId, setOverId] = useState(null)
+
+  useEffect(() => { setOrder(accounts) }, [accounts])
+
+  function endDrag() { setDragId(null); setOverId(null) }
+
+  async function handleDrop(targetId) {
+    const next = moveAccount(order, dragId, targetId)
+    endDrag()
+    if (next === order) return
+    const previous = order
+    setOrder(next) // optimista: la tarjeta queda donde se soltó mientras guarda
+    try {
+      await api.put('/finanzas/accounts/reorder', { orderedIds: next.map(a => a.id) })
+    } catch (err) {
+      setOrder(previous)
+      alert(err.response?.data?.error || 'No se pudo guardar el orden')
+    }
+  }
 
   async function handleDelete() {
     setDeleting(true)
@@ -88,9 +124,21 @@ function AccountsPanel({ accounts, taxes, issuers, onChanged }) {
         <TextButton onClick={() => setModalAccount(null)}><Icon as={Plus} size={14} className="inline -mt-0.5 mr-0.5" />Agregar</TextButton>
       } />
       <div className="px-4 pb-4 space-y-2">
-        {accounts.length === 0 && <p className="text-sm text-gray-400 py-4 text-center">Sin cuentas todavía.</p>}
-        {accounts.map(a => (
-          <div key={a.id} className={`flex items-center justify-between gap-2 rounded-xl border border-gray-200 dark:border-gray-700 px-3 py-2 ${!a.active ? 'opacity-50' : ''}`}>
+        {order.length === 0 && <p className="text-sm text-gray-400 py-4 text-center">Sin cuentas todavía.</p>}
+        {order.length > 1 && <p className="text-[11px] text-gray-400 -mt-1">Arrastrá una cuenta para cambiar el orden.</p>}
+        {order.map((a, idx) => {
+          // Línea guía del lugar donde va a caer: arriba del destino si se sube, abajo si se baja.
+          const dragIdx = order.findIndex(x => x.id === dragId)
+          const isTarget = overId === a.id && dragId != null && dragId !== a.id
+          const guide = isTarget ? (dragIdx > idx ? 'border-t-primary-500 border-t-2' : 'border-b-primary-500 border-b-2') : ''
+          return (
+          <div key={a.id} data-testid={`account-row-${a.id}`} draggable
+            onDragStart={e => { setDragId(a.id); e.dataTransfer.effectAllowed = 'move' }}
+            onDragOver={e => { e.preventDefault(); if (overId !== a.id) setOverId(a.id) }}
+            onDrop={e => { e.preventDefault(); handleDrop(a.id) }}
+            onDragEnd={endDrag}
+            className={`flex items-center justify-between gap-2 rounded-xl border border-gray-200 dark:border-gray-700 px-3 py-2 bg-white dark:bg-gray-800 ${!a.active ? 'opacity-50' : ''} ${dragId === a.id ? 'opacity-40' : ''} ${guide}`}>
+            <span className="text-gray-300 dark:text-gray-600 cursor-grab active:cursor-grabbing shrink-0 -ml-1" aria-hidden="true"><Icon as={GripVertical} size={14} /></span>
             <button onClick={() => setModalAccount(a)} className="text-left flex-1 min-w-0">
               <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{a.name}</p>
               <p className="text-xs text-gray-500 dark:text-gray-400">
@@ -102,7 +150,8 @@ function AccountsPanel({ accounts, taxes, issuers, onChanged }) {
             <span className="text-xs font-medium text-gray-400 shrink-0">{a.currency}</span>
             <button onClick={() => setModalAccount(a)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 shrink-0"><Icon as={Pencil} size={14} /></button>
           </div>
-        ))}
+          )
+        })}
       </div>
 
       {modalAccount !== undefined && (

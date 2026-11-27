@@ -13,6 +13,9 @@ const ACCOUNT_FIELD_LABELS = {
   active:         { label: 'Activa', format: 'boolean' },
 }
 
+// Orden manual de Configuración (arrastrar); el nombre desempata.
+const ACCOUNT_ORDER = [{ sortOrder: 'asc' }, { name: 'asc' }]
+
 const LIST_INCLUDE = {
   issuer: { select: { id: true, name: true, active: true } },
   taxes: { include: { tax: { select: { id: true, name: true, percentage: true } } } },
@@ -50,7 +53,7 @@ async function listAccounts(req, res, next) {
     const { active } = req.query
     const where = { workspaceId }
     if (active !== undefined) where.active = active === 'true'
-    const accounts = await prisma.financeAccount.findMany({ where, orderBy: { name: 'asc' }, include: LIST_INCLUDE })
+    const accounts = await prisma.financeAccount.findMany({ where, orderBy: ACCOUNT_ORDER, include: LIST_INCLUDE })
     res.json(accounts)
   } catch (err) { next(err) }
 }
@@ -75,6 +78,8 @@ async function createAccount(req, res, next) {
     if (!name || !name.trim()) return res.status(400).json({ error: 'Nombre requerido' })
     if (!isValidAccountType(type)) return res.status(400).json({ error: 'Tipo de cuenta inválido' })
     const issuerId = await resolveIssuerId(req.body.issuerId, req.workspace.id)
+    // Una cuenta nueva va al final de la lista.
+    const last = await prisma.financeAccount.aggregate({ where: { workspaceId: req.workspace.id }, _max: { sortOrder: true } })
 
     const account = await prisma.financeAccount.create({
       data: {
@@ -85,6 +90,7 @@ async function createAccount(req, res, next) {
         initialBalance: toDecimalInput(initialBalance ?? 0, 'Saldo inicial') ?? '0',
         hasInvestments: !!hasInvestments,
         issuerId: issuerId ?? null,
+        sortOrder: (last._max.sortOrder ?? -1) + 1,
         createdById: req.user.userId,
       },
       include: LIST_INCLUDE,
@@ -163,6 +169,29 @@ async function deleteAccount(req, res, next) {
   } catch (err) { next(err) }
 }
 
+// PUT /api/finanzas/accounts/reorder — body { orderedIds: number[] }: el orden
+// nuevo, de arriba hacia abajo. Solo se tocan cuentas del workspace; las que
+// no vengan en la lista quedan después, en el orden que tenían.
+async function reorderAccounts(req, res, next) {
+  try {
+    const workspaceId = req.workspace.id
+    if (!Array.isArray(req.body?.orderedIds)) return res.status(400).json({ error: 'orderedIds debe ser un array' })
+    const ids = [...new Set(req.body.orderedIds.map(Number).filter(Number.isInteger))]
+
+    const all = await prisma.financeAccount.findMany({ where: { workspaceId }, orderBy: ACCOUNT_ORDER, select: { id: true } })
+    const owned = new Set(all.map(a => a.id))
+    const listed = ids.filter(id => owned.has(id))
+    const rest = all.map(a => a.id).filter(id => !listed.includes(id))
+    const finalOrder = [...listed, ...rest]
+
+    // Sin auditoría a propósito: el orden es de presentación, no cambia ningún dato
+    // de la cuenta (y el log es por entidad, no hay una a la cual atribuirlo).
+    await prisma.$transaction(finalOrder.map((id, i) => prisma.financeAccount.update({ where: { id }, data: { sortOrder: i } })))
+    const accounts = await prisma.financeAccount.findMany({ where: { workspaceId }, orderBy: ACCOUNT_ORDER, include: LIST_INCLUDE })
+    res.json(accounts)
+  } catch (err) { next(err) }
+}
+
 // PUT /api/finanzas/accounts/:id/taxes — body { taxIds: number[] } — reemplaza el set completo (atómico)
 async function syncAccountTaxes(req, res, next) {
   try {
@@ -193,4 +222,4 @@ async function syncAccountTaxes(req, res, next) {
   } catch (err) { next(err) }
 }
 
-module.exports = { listAccounts, getAccount, createAccount, updateAccount, deleteAccount, syncAccountTaxes }
+module.exports = { listAccounts, getAccount, createAccount, updateAccount, deleteAccount, syncAccountTaxes, reorderAccounts }

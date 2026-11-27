@@ -121,7 +121,7 @@ async function getEntities(req, res, next) {
 
     const [issuers, accounts, invoices, movements, collections] = await Promise.all([
       prisma.financeIssuer.findMany({ where: { workspaceId }, select: { id: true, name: true, cuit: true, active: true }, orderBy: { name: 'asc' } }),
-      prisma.financeAccount.findMany({ where: { workspaceId, currency }, select: { id: true, name: true, issuerId: true, active: true }, orderBy: { name: 'asc' } }),
+      prisma.financeAccount.findMany({ where: { workspaceId, currency }, select: { id: true, name: true, issuerId: true, active: true }, orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }] }),
       prisma.financeInvoice.findMany({
         where: { workspaceId, deletedAt: null, currency, issueDate: range },
         select: { issuerId: true, amount: true, kind: true, arcaStatus: true },

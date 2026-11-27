@@ -119,7 +119,9 @@ export default function Finanzas() {
       <Navbar />
       <main className="max-w-6xl mx-auto px-4 py-8">
         {showConfig ? (
-          <FinanzasConfiguracion onBack={() => setShowConfig(false)} />
+          // Al volver se recargan cuentas/categorías/items/impuestos: lo que se
+          // cambió en Configuración (orden de las cuentas incluido) tiene que verse ya.
+          <FinanzasConfiguracion onBack={() => { setShowConfig(false); loadShared() }} />
         ) : (
           <>
             <div className="mb-6 flex items-start justify-between gap-4">

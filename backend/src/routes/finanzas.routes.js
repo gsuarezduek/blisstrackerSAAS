@@ -45,6 +45,7 @@ router.use(moduleAccessGuard('finanzas'))
 // financiera del workspace — cualquiera con acceso al módulo puede LEER (la
 // necesita el modal "+ Cargar"), pero solo admin/owner puede escribir.
 router.get('/accounts',          accounts.listAccounts)
+router.put('/accounts/reorder',   workspaceAdminOnly, accounts.reorderAccounts)
 router.get('/accounts/:id',      accounts.getAccount)
 router.post('/accounts',         workspaceAdminOnly, accounts.createAccount)
 router.patch('/accounts/:id',    workspaceAdminOnly, accounts.updateAccount)

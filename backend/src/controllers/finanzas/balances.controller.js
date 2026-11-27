@@ -32,7 +32,7 @@ async function getBalances(req, res, next) {
       ? { date: { ...(fromDate ? { gte: fromDate } : {}), ...(toDate ? { lte: toDate } : {}) } }
       : {}
 
-    const accounts = await prisma.financeAccount.findMany({ where: { workspaceId, active: true }, orderBy: { name: 'asc' } })
+    const accounts = await prisma.financeAccount.findMany({ where: { workspaceId, active: true }, orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }] })
 
     const accountResults = await Promise.all(accounts.map(async (account) => {
       const [

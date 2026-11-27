@@ -5406,6 +5406,7 @@ model FinanceAccount {
   // sola. Alimenta "Resumen → por entidad" (facturado vs. ingresos/egresos).
   issuerId       Int?
   issuer         FinanceIssuer? @relation(fields: [issuerId], references: [id], onDelete: SetNull)
+  sortOrder      Int            @default(0) // orden manual (Configuración → arrastrar); manda en todo listado de cuentas
   active         Boolean        @default(true) // no se borra si tiene movimientos: se desactiva
   createdById    Int?
   createdBy      User?          @relation("FinanceAccountCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)

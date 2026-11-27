@@ -52,3 +52,6 @@ Salud de la credencial de un agente → `McpToken.rotatedAt` (TIMESTAMP nullable
 
 ### `finanzas_cuenta_entidad`
 Finanzas → `FinanceAccount.issuerId` (INTEGER nullable, FK a `FinanceIssuer` con `ON DELETE SET NULL`, indexado): la entidad de facturación dueña de la cuenta, opcional y una sola. Una columna nullable, sin backfill: toda cuenta existente queda "Sin entidad" hasta que se la asocie en Configuración. Alimenta "Resumen → por entidad" (ver `docs/claude/finanzas.md` → "Resumen").
+
+### `finanzas_cuentas_orden`
+Finanzas → `FinanceAccount.sortOrder` (INTEGER NOT NULL DEFAULT 0): orden manual de las cuentas (Configuración → arrastrar). **Con backfill**: `ROW_NUMBER()` por workspace ordenado por nombre, el orden alfabético que se veía hasta ahora, así nada cambia de lugar hasta que alguien reordene.
