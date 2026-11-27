@@ -57,7 +57,7 @@ describe('GET /api/calendar/google/status', () => {
       .get('/api/calendar/google/status')
       .set('Authorization', makeToken())
       .set('X-Workspace', WORKSPACE_SLUG)
-    expect(res.body).toEqual({ connected: false, accountEmail: null, status: null })
+    expect(res.body).toEqual({ connected: false, accountEmail: null, status: null, needsReconnect: false })
   })
 
   it('connected:true con el email de la cuenta conectada', async () => {
@@ -68,7 +68,7 @@ describe('GET /api/calendar/google/status', () => {
       .get('/api/calendar/google/status')
       .set('Authorization', makeToken())
       .set('X-Workspace', WORKSPACE_SLUG)
-    expect(res.body).toEqual({ connected: true, accountEmail: 'yo@gmail.com', status: 'active' })
+    expect(res.body).toEqual({ connected: true, accountEmail: 'yo@gmail.com', status: 'active', needsReconnect: false })
   })
 
   it('un status expired no cuenta como conectado', async () => {
@@ -80,6 +80,19 @@ describe('GET /api/calendar/google/status', () => {
       .set('Authorization', makeToken())
       .set('X-Workspace', WORKSPACE_SLUG)
     expect(res.body.connected).toBe(false)
+    // Hay conexión pero caída: la UI muestra el aviso con "Reconectar".
+    expect(res.body.needsReconnect).toBe(true)
+  })
+
+  it('conectada sin el permiso del calendario también pide reconectar', async () => {
+    prisma.googleCalendarConnection.findUnique.mockResolvedValue({
+      accountEmail: 'yo@gmail.com', status: 'missing_scope', connectedAt: new Date(),
+    })
+    const res = await request(app)
+      .get('/api/calendar/google/status')
+      .set('Authorization', makeToken())
+      .set('X-Workspace', WORKSPACE_SLUG)
+    expect(res.body).toMatchObject({ connected: false, status: 'missing_scope', needsReconnect: true })
   })
 })
 

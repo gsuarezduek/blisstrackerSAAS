@@ -94,7 +94,11 @@ export default function CollaborativeRichTextEditor({
 
   const editor = useEditor(provider ? {
     extensions: [
-      StarterKit.configure({ history: false }), // el undo lo maneja Yjs (y-undo, vía Collaboration)
+      // El undo lo maneja Yjs (y-undo, vía Collaboration). En Tiptap v3 la opción se
+      // llama `undoRedo` — el `history: false` de v2 se ignoraba en silencio y quedaban
+      // dos historiales a la vez. `link: false` porque StarterKit v3 ya trae Link y acá
+      // se agrega aparte con su configuración (dos extensiones con el mismo nombre).
+      StarterKit.configure({ undoRedo: false, link: false }),
       TextStyle,
       Color,
       Highlight.configure({ multicolor: true }),

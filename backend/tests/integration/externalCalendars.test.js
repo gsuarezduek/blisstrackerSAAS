@@ -34,7 +34,9 @@ jest.mock('../../src/lib/safeUrl', () => {
   return { assertPublicUrl, fetchPublicUrl }
 })
 jest.mock('../../src/services/googleCalendarToken.service', () => ({
+  ...jest.requireActual('../../src/services/googleCalendarToken.service'),
   getValidAccessToken: jest.fn().mockResolvedValue('access-token'),
+  markNeedsReconnect: jest.fn(),
 }))
 
 const request = require('supertest')

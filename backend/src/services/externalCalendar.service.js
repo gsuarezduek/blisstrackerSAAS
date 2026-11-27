@@ -3,7 +3,7 @@ const ical = require('node-ical')
 const prisma = require('../lib/prisma')
 const { decrypt } = require('../lib/encryption')
 const { fetchPublicUrl } = require('../lib/safeUrl')
-const { getValidAccessToken } = require('./googleCalendarToken.service')
+const { getValidAccessToken, markNeedsReconnect, isMissingScopeError, reconnectError, NEEDS_RECONNECT } = require('./googleCalendarToken.service')
 const { addDaysYMD } = require('./recurrence.service')
 const { todayString, DEFAULT_TZ } = require('../utils/dates')
 const { mapGoogleEvent, mapIcsEvent, dedupeExternalRows } = require('../lib/externalCalendar')
@@ -72,19 +72,32 @@ async function fetchGoogleEvents(cal, { from, to, tz }) {
   let pageToken
 
   for (let page = 0; page < GOOGLE_MAX_PAGES; page++) {
-    const res = await axios.get(`${CAL_BASE}/calendars/${calendarId}/events`, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-      params: {
-        timeMin: new Date(`${from}T00:00:00Z`).toISOString(),
-        timeMax: new Date(`${addDaysYMD(to, 1)}T00:00:00Z`).toISOString(),
-        singleEvents: true,
-        orderBy: 'startTime',
-        maxResults: GOOGLE_PAGE_SIZE,
-        showDeleted: false,
-        ...(pageToken ? { pageToken } : {}),
-      },
-      timeout: 20000,
-    })
+    let res
+    try {
+      res = await axios.get(`${CAL_BASE}/calendars/${calendarId}/events`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+        params: {
+          timeMin: new Date(`${from}T00:00:00Z`).toISOString(),
+          timeMax: new Date(`${addDaysYMD(to, 1)}T00:00:00Z`).toISOString(),
+          singleEvents: true,
+          orderBy: 'startTime',
+          maxResults: GOOGLE_PAGE_SIZE,
+          showDeleted: false,
+          ...(pageToken ? { pageToken } : {}),
+        },
+        timeout: 20000,
+      })
+    } catch (err) {
+      // Conectada sin el permiso del calendario: reintentar cada 15 min no lo
+      // arregla (en producción eran ~100 líneas de log por día y por persona, y la
+      // persona no se enteraba). Se marca la conexión, se le avisa una vez y el
+      // cron deja de intentarlo hasta que reconecte.
+      if (isMissingScopeError(err)) {
+        await markNeedsReconnect(connection, 'missing_scope')
+        throw reconnectError('missing_scope')
+      }
+      throw err
+    }
     for (const ev of res.data?.items || []) {
       const row = mapGoogleEvent(ev, tz)
       if (row) rows.push(row)
@@ -235,15 +248,19 @@ async function syncCalendar(cal, { tz }) {
     ])
     return { ok: true, count: keep.length }
   } catch (err) {
-    const message = err.code === 'TOKEN_EXPIRED'
-      ? 'Hay que volver a conectar Google Calendar'
+    const needsReconnect = err.code === 'TOKEN_EXPIRED'
+    const message = needsReconnect
+      ? err.message
       : (err.response?.data?.error?.message || err.message || 'Error desconocido')
     await prisma.externalCalendar.update({
       where: { id: cal.id },
       data: { lastSyncAt: new Date(), lastSyncError: String(message).slice(0, 300) },
     }).catch(() => {})
-    console.error(`[ExternalCalendar] Sync falló (cal ${cal.id}, ${cal.source}):`, message)
-    return { ok: false, error: String(message) }
+    // Una conexión caída no se loguea acá: la transición ya dejó su línea (una sola
+    // vez, en markNeedsReconnect) y hasta que la persona reconecte es un estado, no
+    // un error nuevo en cada refresco.
+    if (!needsReconnect) console.error(`[ExternalCalendar] Sync falló (cal ${cal.id}, ${cal.source}):`, message)
+    return { ok: false, error: String(message), needsReconnect }
   }
 }
 
@@ -317,8 +334,19 @@ async function syncIfStale({ workspaceId, userId, tz, deadlineMs = INTERACTIVE_D
 
 /** Cron: refresca todos los calendarios activos que ya están vencidos. */
 async function syncAllDue({ limit = 200 } = {}) {
+  // Los de Google cuya conexión está caída se saltean: sin reconectar, cada intento
+  // falla igual (antes eran ~1400 líneas de log en 5 días con 3 conexiones caídas).
+  // Se filtran en la query y no en el loop para que no ocupen los lugares del
+  // `take` — van primero por `lastSyncAt asc`.
+  const down = await prisma.googleCalendarConnection.findMany({
+    where:  { status: { in: NEEDS_RECONNECT } },
+    select: { userId: true, workspaceId: true },
+  })
   const cals = await prisma.externalCalendar.findMany({
-    where: { active: true },
+    where: {
+      active: true,
+      ...(down.length ? { NOT: down.map(d => ({ source: 'google', userId: d.userId, workspaceId: d.workspaceId })) } : {}),
+    },
     include: { workspace: { select: { timezone: true } } },
     orderBy: { lastSyncAt: 'asc' },
     take: limit,

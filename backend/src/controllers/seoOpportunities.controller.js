@@ -3,6 +3,7 @@ const { querySearchConsole } = require('../services/googleSearchConsole.service'
 const { getValidAccessToken } = require('../services/tokenRefresh.service')
 const { normalizeSiteUrl } = require('../utils/seo')
 const { computeSeoActionItems } = require('../services/seoActionPlan.service')
+const { respondGscError } = require('./searchConsole.controller')
 
 // ─── Helpers de fechas ────────────────────────────────────────────────────────
 
@@ -106,22 +107,6 @@ async function resolveGsc(projectId, workspaceId) {
   return { project, integration, siteUrl }
 }
 
-// Marca la integración GSC como expirada cuando el token fue revocado
-async function markExpiredIfTokenError(projectId, err) {
-  const status = err.httpStatus ?? err.response?.status
-  const isTokenErr = status === 401 ||
-    err.code === 'TOKEN_EXPIRED' ||
-    err.message?.includes('invalid_grant') ||
-    err.message?.includes('Token has been expired') ||
-    err.message?.includes('UNAUTHENTICATED')
-  if (!isTokenErr) return false
-  await prisma.projectIntegration.update({
-    where: { projectId_type: { projectId, type: 'google_search_console' } },
-    data:  { status: 'expired' },
-  }).catch(() => {})
-  return true
-}
-
 /**
  * GET /api/marketing/projects/:id/seo/opportunities
  * Oportunidades accionables derivadas de GSC (sin persistir, sin IA):
@@ -132,10 +117,12 @@ async function markExpiredIfTokenError(projectId, err) {
 async function getOpportunities(req, res, next) {
   const projectId   = Number(req.params.id)
   const workspaceId = req.workspace.id
+  let siteUrlForError = null
   try {
     const resolved = await resolveGsc(projectId, workspaceId)
     if (resolved.error) return res.status(resolved.error.status).json(resolved.error.body)
     const { integration, siteUrl, project } = resolved
+    siteUrlForError = siteUrl
 
     const cur  = defaultDates(28)
     const prev = previousPeriod(cur.startDate, cur.endDate)
@@ -186,10 +173,10 @@ async function getOpportunities(req, res, next) {
       },
     })
   } catch (err) {
-    if (await markExpiredIfTokenError(projectId, err)) {
-      return res.status(400).json({ error: 'El token de Google expiró. Reconectá Search Console.', code: 'TOKEN_EXPIRED' })
-    }
-    next(err)
+    // Mismo traductor que la pestaña SEO: token vencido, API apagada, sin el scope o
+    // sin permiso sobre la propiedad. Antes acá solo se miraba el token vencido y un
+    // 403 de "sin permiso sobre el sitio" llegaba al usuario como "Internal server error".
+    return respondGscError(err, { res, next, projectId, triedSiteUrl: siteUrlForError })
   }
 }
 

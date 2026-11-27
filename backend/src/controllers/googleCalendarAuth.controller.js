@@ -4,6 +4,7 @@ const { signState, verifyState } = require('../lib/oauthState')
 const prisma           = require('../lib/prisma')
 const { encrypt }      = require('../lib/encryption')
 const { oauthReturnBase } = require('../lib/publicUrls')
+const { NEEDS_RECONNECT } = require('../services/googleCalendarToken.service')
 
 // Conexión OAuth de Google Calendar — POR PERSONA (no por proyecto, a diferencia
 // de integrations.controller.js que gestiona GA4/Ads/GSC/YouTube vía
@@ -15,11 +16,13 @@ const { oauthReturnBase } = require('../lib/publicUrls')
 // re-verificación de Google. Hasta que esté aprobado, la conexión solo funciona
 // para la cuenta del desarrollador o hasta ~100 usuarios de prueba agregados a
 // mano en el OAuth Consent Screen (Testing users).
+const CALENDAR_SCOPE = 'https://www.googleapis.com/auth/calendar.events'
 const SCOPES = [
-  'https://www.googleapis.com/auth/calendar.events',
+  CALENDAR_SCOPE,
   'openid',
   'email',
 ]
+const MISSING_SCOPE_MESSAGE = 'No diste permiso al calendario. Volvé a conectar y dejá tildada la casilla del calendario ("Ver y editar eventos en todos tus calendarios").'
 
 function buildRedirectUri() {
   const base = process.env.BACKEND_URL || 'http://localhost:3001'
@@ -70,6 +73,16 @@ async function handleCallback(req, res, next) {
     const client = buildOAuthClient()
     const { tokens } = await client.getToken(code)
 
+    // La pantalla de Google deja destildar el permiso del calendario y la conexión
+    // "anda" igual (el token sirve para openid/email), pero cada pedido al
+    // calendario da 403. Si no vino el scope, no se guarda nada: se le dice ahí
+    // mismo qué pasó, en vez de que se entere semanas después por un evento que no
+    // aparece. Si ya tenía una conexión, queda como estaba.
+    const granted = String(tokens.scope || '').split(/\s+/)
+    if (tokens.scope && !granted.includes(CALENDAR_SCOPE)) {
+      return res.redirect(`${frontendBase}/oauth-result?error=${encodeURIComponent(MISSING_SCOPE_MESSAGE)}&type=google_calendar`)
+    }
+
     const encAccessToken  = tokens.access_token  ? encrypt(tokens.access_token)  : null
     const encRefreshToken = tokens.refresh_token ? encrypt(tokens.refresh_token) : undefined
     const expiresAt       = tokens.expiry_date   ? new Date(tokens.expiry_date)  : null
@@ -81,6 +94,20 @@ async function handleCallback(req, res, next) {
       update: { accessToken: encAccessToken, refreshToken: encRefreshToken, expiresAt, accountEmail, status: 'active' },
       create: { userId, workspaceId, accessToken: encAccessToken, refreshToken: encRefreshToken, expiresAt, accountEmail, status: 'active' },
     })
+
+    // Reconectó: el aviso de "se desconectó" ya no aplica, y su calendario de Google
+    // se refresca en el próximo pedido en vez de esperar a que venza la frescura
+    // (el último intento fallido había dejado lastSyncAt recién puesto).
+    await Promise.all([
+      prisma.notification.updateMany({
+        where: { userId, workspaceId, type: 'CALENDAR_CONNECTION', read: false },
+        data:  { read: true },
+      }),
+      prisma.externalCalendar.updateMany({
+        where: { userId, workspaceId, source: 'google' },
+        data:  { lastSyncAt: null },
+      }),
+    ]).catch(err => console.error('[GoogleCalendarAuth] Limpieza post-reconexión falló:', err.message))
 
     res.redirect(`${frontendBase}/oauth-result?success=true&type=google_calendar`)
   } catch (err) {
@@ -96,9 +123,12 @@ async function getStatus(req, res, next) {
       select: { accountEmail: true, status: true, connectedAt: true },
     })
     res.json({
-      connected:    !!connection && connection.status === 'active',
-      accountEmail: connection?.accountEmail ?? null,
-      status:       connection?.status ?? null,
+      connected:      !!connection && connection.status === 'active',
+      accountEmail:   connection?.accountEmail ?? null,
+      status:         connection?.status ?? null,
+      // Hay conexión pero está caída (`expired` | `missing_scope`): la UI muestra
+      // el aviso con "Reconectar" en Calendario y en Mis calendarios.
+      needsReconnect: !!connection && NEEDS_RECONNECT.includes(connection.status),
     })
   } catch (err) { next(err) }
 }

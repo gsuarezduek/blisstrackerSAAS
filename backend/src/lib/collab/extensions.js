@@ -11,7 +11,9 @@ const Link = require('@tiptap/extension-link').default
 const Highlight = require('@tiptap/extension-highlight').default
 
 const collabExtensions = [
-  StarterKit,
+  // StarterKit v3 ya trae Link: se apaga ahí porque va aparte con su configuración
+  // (dos extensiones con el mismo nombre → "Duplicate extension names found: ['link']").
+  StarterKit.configure({ link: false }),
   TextStyle,
   Color,
   Highlight.configure({ multicolor: true }),

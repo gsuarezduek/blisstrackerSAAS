@@ -132,13 +132,16 @@ async function listAdminOrganizations(accessToken) {
 async function fetchFollowersCount(orgId, accessToken) {
   try {
     const urn = encodeURIComponent(`urn:li:organization:${orgId}`)
+    // La REST API versionada usa el enum en mayúsculas; el CamelCase es el de la v2
+    // vieja (el fallback de abajo). Con CamelCase acá respondía 400 "is not an enum
+    // symbol" en cada snapshot y los seguidores salían siempre por el fallback.
     const res = await axios.get(`${REST_BASE}/networkSizes/${urn}`, {
-      params:  { edgeType: 'CompanyFollowedByMember' },
+      params:  { edgeType: 'COMPANY_FOLLOWED_BY_MEMBER' },
       headers: restHeaders(accessToken),
     })
     return res.data?.firstDegreeSize ?? null
   } catch (err) {
-    console.warn(`[Linkedin] fetchFollowersCount fallback v2:`, liErrDetail(err))
+    console.warn(`[Linkedin] fetchFollowersCount REST falló, probando v2:`, liErrDetail(err))
     // Fallback v2 (algunas apps están en API antigua)
     try {
       const urn = encodeURIComponent(`urn:li:organization:${orgId}`)

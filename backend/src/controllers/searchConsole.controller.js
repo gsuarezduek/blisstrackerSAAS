@@ -460,4 +460,5 @@ module.exports = {
   getSeoSnapshot, saveSeoSnapshot,
   getSeoAiInsights, createSeoAiInsights,
   getDomainRating, refreshDomainRating,
+  respondGscError,
 }

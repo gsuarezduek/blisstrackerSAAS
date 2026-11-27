@@ -93,7 +93,9 @@ const { isAllowedOrigin } = require('./lib/corsOrigins')
 const appCors = cors({
   origin: (origin, callback) => {
     if (isAllowedOrigin(origin)) return callback(null, true)
-    callback(new Error('Not allowed by CORS'))
+    // 403 y no 500: es un rechazo nuestro, no una falla. El origen va en el error
+    // para que el log diga QUIÉN fue (antes solo quedaba el stack, sin el origen).
+    callback(Object.assign(new Error('Not allowed by CORS'), { status: 403, isOperational: true, origin }))
   },
   credentials: true,
 })
@@ -314,11 +316,21 @@ app.use((err, req, res, next) => {
   const isProd = process.env.NODE_ENV === 'production'
   const message = isUpstreamError(err)
     ? 'Un servicio externo no está disponible en este momento. Intentá de nuevo más tarde.'
-    : isProd && !err.isOperational
+    : isProd && !err.isOperational && !err.expose
       ? 'Internal server error'
       : (err.message || 'Internal server error')
-  console.error('[error]', err.code ?? err.message, '\n', err.stack ?? '')
-  res.status(httpStatusFor(err)).json({ error: message })
+  const status = httpStatusFor(err)
+  // Solo un 5xx es un error del servidor y merece stack por stderr (Railway pinta
+  // de rojo todo lo que sale por ahí). Un 4xx es una respuesta esperable —"ya tenés
+  // una tarea en curso", un origen fuera de CORS, un JSON mal formado— y va en una
+  // línea por stdout: antes cada uno dejaba 15 líneas de stack y tapaba los errores
+  // de verdad.
+  if (status >= 500) {
+    console.error('[error]', err.code ?? err.message, '\n', err.stack ?? '')
+  } else {
+    console.log(`[http ${status}] ${req.method} ${req.originalUrl?.split('?')[0]} · ${err.message}${err.origin ? ` · origin ${err.origin}` : ''}`)
+  }
+  res.status(status).json({ error: message })
 })
 
 module.exports = app

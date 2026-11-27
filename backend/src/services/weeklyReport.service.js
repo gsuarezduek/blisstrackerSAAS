@@ -522,34 +522,6 @@ function buildWeeklyEmailHtml(user, data, analysis) {
 </html>`
 }
 
-// Presupuesto SEMANAL de tokens de IA por workspace (Project.aiWeeklyTokenLimit,
-// guardado en el primer proyecto — mismo patrón que emailFrom en getGlobalSettings
-// de projects.controller.js). 0 = ilimitado, igual que Workspace.monthlyTokenLimit.
-async function hasWeeklyTokenBudget(workspaceId, tz) {
-  const firstProject = await prisma.project.findFirst({
-    where:   { workspaceId },
-    select:  { aiWeeklyTokenLimit: true },
-    orderBy: { id: 'asc' },
-  })
-  const limit = firstProject?.aiWeeklyTokenLimit ?? 500000
-  if (!limit) return true
-
-  const { from, to } = getWeekBounds(0, tz)
-  const offset = tzOffsetStr(tz)
-  const agg = await prisma.aiTokenLog.aggregate({
-    where: {
-      workspaceId,
-      createdAt: {
-        gte: new Date(from + 'T00:00:00' + offset),
-        lte: new Date(to   + 'T23:59:59' + offset),
-      },
-    },
-    _sum: { inputTokens: true, outputTokens: true },
-  })
-  const used = (agg._sum.inputTokens ?? 0) + (agg._sum.outputTokens ?? 0)
-  return used < limit
-}
-
 // user: { id, name, email, role (teamRole), workspaceId, insightMemoryEnabled }
 // workspace: { id, name, timezone }
 async function sendWeeklyReportForUser(user, workspace) {
@@ -560,10 +532,11 @@ async function sendWeeklyReportForUser(user, workspace) {
       console.log(`[WeeklyReport] Workspace ${workspaceId} superó el límite mensual de tokens — omitiendo usuario ${user.id}`)
       return
     }
-    if (!(await hasWeeklyTokenBudget(workspaceId, workspace.timezone))) {
-      console.log(`[WeeklyReport] Workspace ${workspaceId} superó su límite semanal de tokens (Project.aiWeeklyTokenLimit) — omitiendo usuario ${user.id}`)
-      return
-    }
+    // Solo el tope MENSUAL del workspace. Hubo además un tope semanal
+    // (Project.aiWeeklyTokenLimit, 500k por defecto) que contaba TODO el uso de IA
+    // de la semana: como el informe corre al cierre de la semana, era siempre lo
+    // primero que se quedaba sin presupuesto, y en silencio — el 27/11/2026 se
+    // salteó a 15 personas de Bliss sin que nadie se enterara. Se sacó a propósito.
     const [data, roleExpectation, memory] = await Promise.all([
       getWeeklyData(user.id, workspace),
       user.role

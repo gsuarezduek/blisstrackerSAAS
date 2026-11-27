@@ -74,23 +74,32 @@ async function handleInboundMessage(account, event) {
       })
     : null
 
-  const message = await prisma.whatsappMessage.create({
-    data: {
-      workspaceId: account.workspaceId,
-      conversationId: conversation.id,
-      direction: 'in',
-      // Para media, `text` viene null y el caption (si vino) es lo que se
-      // muestra como contenido del mensaje — mismo campo que un texto plano.
-      // Para una reacción, content queda null (no es texto real, ver campos
-      // reactionEmoji/reactionToId más abajo).
-      content: isReaction ? null : (event.mediaId ? (event.mediaCaption || null) : event.text),
-      waMessageId: event.waMessageId,
-      senderType: 'contact',
-      status: 'delivered',
-      ...(isReaction ? { reactionEmoji: event.reactionEmoji, reactionToId: reactionTarget?.id ?? null } : {}),
-    },
-    include: { media: true, reactionTo: { select: { id: true, content: true, direction: true } } },
-  })
+  // El findUnique de arriba no alcanza solo: dos entregas del mismo mensaje que
+  // llegan juntas pasan las dos el chequeo, y la segunda choca acá con el @unique
+  // de waMessageId. Esa es justamente la entrega duplicada: se descarta en silencio.
+  let message
+  try {
+    message = await prisma.whatsappMessage.create({
+      data: {
+        workspaceId: account.workspaceId,
+        conversationId: conversation.id,
+        direction: 'in',
+        // Para media, `text` viene null y el caption (si vino) es lo que se
+        // muestra como contenido del mensaje — mismo campo que un texto plano.
+        // Para una reacción, content queda null (no es texto real, ver campos
+        // reactionEmoji/reactionToId más abajo).
+        content: isReaction ? null : (event.mediaId ? (event.mediaCaption || null) : event.text),
+        waMessageId: event.waMessageId,
+        senderType: 'contact',
+        status: 'delivered',
+        ...(isReaction ? { reactionEmoji: event.reactionEmoji, reactionToId: reactionTarget?.id ?? null } : {}),
+      },
+      include: { media: true, reactionTo: { select: { id: true, content: true, direction: true } } },
+    })
+  } catch (err) {
+    if (err.code === 'P2002') return
+    throw err
+  }
 
   // Adjunto (Fase 3 del plan) — best-effort: si falla la descarga, el mensaje
   // ya está guardado (con su caption si tenía), solo queda sin el archivo.

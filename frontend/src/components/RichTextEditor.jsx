@@ -175,7 +175,8 @@ export function Toolbar({ editor }) {
 export default function RichTextEditor({ defaultContent = '', onChange, onBlur, minHeight = 140, autoFocus = true, resizable = false, editable = true }) {
   const editor = useEditor({
     extensions: [
-      StarterKit,
+      // StarterKit v3 ya trae Link: se apaga ahí porque va aparte con su configuración.
+      StarterKit.configure({ link: false }),
       TextStyle,
       Color,
       Highlight.configure({ multicolor: true }),

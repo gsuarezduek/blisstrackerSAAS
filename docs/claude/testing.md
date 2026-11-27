@@ -22,6 +22,7 @@ backend/
       marketingObjectives.service.test.js # computeObjectives: flujo vs stock, posición invertida, orphaned, head-to-head competidor
       marketingSections.test.js           # isMarketingSectionHidden: lo oculto en el código (para todos) + lo apagado por el workspace, y que los ids ocultos existan en el NAV
       searchConsoleSites.test.js          # rankSites/siteHost: la propiedad de Dominio (sc-domain:) primero, la sin verificar nunca primera, host sin www
+      googleAds.dateCondition.test.js     # gaqlDateCondition: last_90d va como BETWEEN de los 90 días completos antes de hoy (LAST_90_DAYS no existe en GAQL y rompía la query entera), cruce de año, rango explícito y preset desconocido
       legajoCatalog.test.js               # resolve/sanitize de campos de legajo (builtins blindados, customs, completitud)
       lateNotification.test.js            # lateMinutes (regla de tardanza con tolerancia) + default template
       attendance.test.js                  # inArrivalWindow (ventana ±2h) + laborableDays (regla del >50%) + loginMinsFromMidnight
@@ -62,6 +63,7 @@ backend/
       emailReportSection.test.js          # Mailing en el informe al cliente: tasas, deltas en puntos, nada sin campañas, y ningún email, contacto, base ni nombre interno de campaña
       mailingProviders.test.js            # Mailing: qué errores de Resend/SMTP se reintentan o invalidan la config, y el SMTP no puede apuntar a la red interna (SSRF)
       externalCalendar.test.js            # calendarios traídos de afuera: instante UTC → hora de pared del workspace, y el mapeo de lo que devuelven Google y un ICS (fin EXCLUSIVO del día completo, el evento de las 22:00 que en UTC cae al día siguiente, series expandidas con EXDATE, lo rechazado y los carteles de Google que no son citas)
+      googleCalendarReconnect.test.js     # Google Calendar caído: markNeedsReconnect pasa activa→caída de forma atómica y avisa UNA vez (campana CALENDAR_CONNECTION + socket), el 403 de scope insuficiente se reconoce y marca missing_scope sin log de error, una conexión ya caída no le pega a Google, syncAllDue la saltea en la query, y el callback de OAuth no guarda sin calendar.events (con el scope: marca leídos los avisos y fuerza el refresco)
     integration/
       auth.test.js
       starTask.test.js
@@ -82,6 +84,8 @@ backend/
       cannibalResolution.test.js          # marcar/desmarcar un conflicto como resuelto (persona y agente), el split abierto/resuelto en la lectura del reporte con los conteos recalculados, y los permisos (canWrite)
       connectionsStatus.test.js           # GET /marketing/connections: los tres estados + reconnectUrl, secciones apagadas, vista de todo el workspace y gate de proyectos privados resuelto en el handler
       searchConsoleSites.test.js          # GET .../search-console/sites: la lista de propiedades con el id exacto (sc-domain primero) + accountEmail, sin integración, token sin scope; y que el 403 de propiedad siga siendo no_access con el Site URL probado (vs. API deshabilitada)
+      seoOpportunitiesErrors.test.js      # GET .../seo/opportunities pasa por respondGscError: 403 sin permiso sobre el sitio → NO_ACCESS (antes 500 genérico), 401 → TOKEN_EXPIRED marcando la integración, API apagada → API_DISABLED
+      errorHandlerLogging.test.js         # handler global: CORS rechazado → 403 con el origen en el log y sin stack; JSON mal formado → 400 con mensaje del parser también en producción; solo los 5xx van por stderr
       financeLibroIva.test.js             # exportar Libro IVA Digital: un emisor y un mes, solo responsables inscriptos, el resumen (NC resta, lo sin confirmar queda afuera con aviso, homologación) y el ZIP con los dos .txt en Windows-1252 + CRLF
       financeInvoiceList.test.js          # listado de facturas de Finanzas (pestaña Facturas): rango de emisión inclusive por día, emisor (incluido `none` = informativas), fechas mal formadas o invertidas → 400
       financeInvoiceEdit.test.js          # editar una factura de Finanzas: sólo las informativas (un comprobante de ARCA se rechaza con o sin CAE) y el monto no puede bajar de lo ya cobrado
@@ -118,6 +122,7 @@ frontend/
       taskChecklist.test.jsx            # subtareas: progreso "1/2" y su color (gris/ámbar/verde), null sin subtareas, tilde optimista + rollback si el servidor falla, agregar deja el campo listo para la siguiente, variant compact sin agregar/convertir, y el badge de TaskCard que despliega la lista
       gscSitePicker.test.jsx            # elegir la propiedad de Search Console: la de Dominio marcada, el id exacto que se guarda, la que ya está "en uso", la sin verificar y la cuenta sin propiedades
       channelSwitcherViews.test.jsx     # selector de canales: "Últimos" ordena por mi participación (lastReadAt) y manda al fondo los que nunca abrí, aplana los grupos (general deja de estar clavado arriba), ordena igual mientras se busca, la vista elegida sobrevive al remonte, "No leídos" vacío ofrece "Ver todos" y un localStorage que tira cae en "Todos"
+      googleCalendarReconnectBanner.test.jsx # aviso de Google Calendar caído: nada si está bien o no hay conexión, texto según expired/missing_scope, "Reconectar" llama a onReconnected, muestra el error si vuelve sin permiso, cancelar no es error
     pages/
       dashboardOrder.test.js            # orden de Para hoy (pausadas primero, por publicación / más nuevas / más antiguas), grupos del Backlog (el proyecto con la publicación más próxima primero) y publishUrgency (rojo/naranja)
     hooks/

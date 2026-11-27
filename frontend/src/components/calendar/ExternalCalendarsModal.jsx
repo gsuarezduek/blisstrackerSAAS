@@ -3,6 +3,7 @@ import { X, RefreshCw, Trash2, TriangleAlert, Link2, Eye, EyeOff } from 'lucide-
 import { Icon } from '../ui/Icon'
 import api from '../../api/client'
 import GoogleCalendarConnectButton from './GoogleCalendarConnectButton'
+import GoogleCalendarReconnectBanner from './GoogleCalendarReconnectBanner'
 
 // "Mis calendarios": lo que BlissTracker trae de AFUERA para mostrar (y para que
 // tape huecos al buscar un horario) — ver ExternalCalendar en el backend. Dos
@@ -177,6 +178,14 @@ export default function ExternalCalendarsModal({ onClose, onChanged }) {
     finally { setConfirmRemove(null) }
   }
 
+  // Recién reconectado: se refresca ya, para que el error viejo de la fila se vaya
+  // junto con el aviso en vez de quedar hasta el próximo refresco.
+  async function resyncGoogle() {
+    await Promise.all(googleCals.map(c => api.post(`/calendar/external-calendars/${c.id}/sync`, {}).catch(() => null)))
+    load()
+    onChanged?.()
+  }
+
   const googleCals = (cals || []).filter(c => c.source === 'google')
   const urlCals = (cals || []).filter(c => c.source === 'ics')
 
@@ -212,9 +221,12 @@ export default function ExternalCalendarsModal({ onClose, onChanged }) {
                     <GoogleCalendarConnectButton />
                   </div>
                 ) : (
-                  <ul className="divide-y divide-gray-100 dark:divide-gray-700">
-                    {googleCals.map(c => <CalendarRow key={c.id} cal={c} onChange={replace} onRemove={setConfirmRemove} />)}
-                  </ul>
+                  <>
+                    <GoogleCalendarReconnectBanner className="mb-3" onReconnected={resyncGoogle} />
+                    <ul className="divide-y divide-gray-100 dark:divide-gray-700">
+                      {googleCals.map(c => <CalendarRow key={c.id} cal={c} onChange={replace} onRemove={setConfirmRemove} />)}
+                    </ul>
+                  </>
                 )}
               </section>
 

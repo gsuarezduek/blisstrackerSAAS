@@ -1,5 +1,6 @@
 const axios                  = require('axios')
 const { getValidAccessToken } = require('./tokenRefresh.service')
+const { todayString }        = require('../utils/dates')
 
 // Google Ads API pasó a releases mensuales en 2026; cada versión mayor se sunsetea
 // a los ~meses. Si la API responde UNSUPPORTED_VERSION, subir esta versión (ver release notes).
@@ -13,7 +14,35 @@ const GAQL_DATE_CLAUSE = {
   last_30d:   'LAST_30_DAYS',
   this_month: 'THIS_MONTH',
   last_month: 'LAST_MONTH',
-  last_90d:   'LAST_90_DAYS',
+}
+
+// Presets que GAQL NO tiene como literal de DURING (los válidos son una lista
+// cerrada: LAST_7_DAYS, LAST_14_DAYS, LAST_30_DAYS, ... — no existe LAST_90_DAYS,
+// y mandarlo hacía fallar la query ENTERA con INVALID_VALUE_WITH_DURING_OPERATOR).
+// Se arman como BETWEEN con el mismo criterio que LAST_N_DAYS de Google: los N días
+// completos anteriores a hoy, sin contar hoy.
+const RELATIVE_DAYS = {
+  last_90d: 90,
+}
+
+function shiftYMD(ymd, days) {
+  const d = new Date(`${ymd}T12:00:00Z`)
+  d.setUTCDate(d.getUTCDate() + days)
+  return d.toISOString().slice(0, 10)
+}
+
+/**
+ * Condición de fecha para el WHERE de GAQL (lo que va después de `segments.date`).
+ * `today` es inyectable para los tests.
+ */
+function gaqlDateCondition(datePreset, dateRange = null, today = todayString()) {
+  if (dateRange) return `BETWEEN '${dateRange.startDate}' AND '${dateRange.endDate}'`
+  const days = RELATIVE_DAYS[datePreset]
+  if (days) {
+    const end = shiftYMD(today, -1)
+    return `BETWEEN '${shiftYMD(end, -(days - 1))}' AND '${end}'`
+  }
+  return `DURING ${GAQL_DATE_CLAUSE[datePreset] ?? 'THIS_MONTH'}`
 }
 
 const CHANNEL_LABEL = {
@@ -53,9 +82,7 @@ function normalizeCustomerId(id) {
 async function fetchGoogleAdsData(integration, datePreset = 'this_month', dateRange = null, { allAds = false } = {}) {
   const accessToken = await getValidAccessToken(integration)
   const customerId  = normalizeCustomerId(integration.customerId)
-  const dateClause  = dateRange
-    ? `BETWEEN '${dateRange.startDate}' AND '${dateRange.endDate}'`
-    : (GAQL_DATE_CLAUSE[datePreset] ?? 'THIS_MONTH')
+  const dateWhere   = gaqlDateCondition(datePreset, dateRange)
   const devToken    = process.env.GOOGLE_ADS_DEVELOPER_TOKEN
 
   const query = `
@@ -72,7 +99,7 @@ async function fetchGoogleAdsData(integration, datePreset = 'this_month', dateRa
       metrics.conversions,
       metrics.average_cpc
     FROM campaign
-    WHERE segments.date ${dateRange ? dateClause : `DURING ${dateClause}`}
+    WHERE segments.date ${dateWhere}
       AND campaign.status != 'REMOVED'
     ORDER BY metrics.cost_micros DESC
     LIMIT 50
@@ -111,7 +138,7 @@ async function fetchGoogleAdsData(integration, datePreset = 'this_month', dateRa
       metrics.conversions,
       metrics.interactions
     FROM ad_group_ad
-    WHERE segments.date ${dateRange ? dateClause : `DURING ${dateClause}`}
+    WHERE segments.date ${dateWhere}
       AND ad_group_ad.status != 'REMOVED'
     ORDER BY metrics.impressions DESC
     LIMIT ${allAds ? MAX_ADS : 25}
@@ -210,4 +237,4 @@ async function fetchGoogleAdsData(integration, datePreset = 'this_month', dateRa
   }
 }
 
-module.exports = { fetchGoogleAdsData }
+module.exports = { fetchGoogleAdsData, gaqlDateCondition }

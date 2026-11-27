@@ -732,7 +732,7 @@ model Project {
   isPrivate             Boolean   @default(false) // ver concepto "Proyectos privados": solo ProjectMember + admin/owner ven la ficha completa
   monthlyHours          Int?
   emailFrom             String?
-  aiWeeklyTokenLimit    Int       @default(500000)
+  aiWeeklyTokenLimit    Int       @default(500000) // sin uso desde 27/11/2026: era el tope semanal del informe semanal, que ahora respeta solo el tope mensual del workspace
   websiteUrl            String?
   connections           String    @default("{}") // JSON: { instagram, facebook, ... }
   integrationDefaults   String    @default("{}") // JSON: IDs recordados por tipo para reconexión, ej { google_ads: { customerId, propertyId, country }, google_analytics: { propertyId } }
@@ -1393,6 +1393,7 @@ enum NotificationType {
   LEGAJO_UPDATED
   LEGAJO_REQUESTED
   WHATSAPP_CONNECTION
+  CALENDAR_CONNECTION
 }
 
 model Notification {
@@ -3246,7 +3247,7 @@ model GoogleCalendarConnection {
   refreshToken String? // cifrado
   expiresAt    DateTime?
   accountEmail String? // cuenta de Google conectada, informativo
-  status       String    @default("active") // "active" | "expired"
+  status       String    @default("active") // "active" | "expired" | "missing_scope" (conectó sin el permiso del calendario) — ver googleCalendarToken.service#markNeedsReconnect
   connectedAt  DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 

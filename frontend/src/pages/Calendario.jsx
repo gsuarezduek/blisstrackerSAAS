@@ -16,6 +16,7 @@ import { useCalendarSocket } from '../components/calendar/useCalendarSocket'
 import { useFeatureFlag } from '../hooks/useFeatureFlag'
 import ExternalCalendarsModal from '../components/calendar/ExternalCalendarsModal'
 import ExternalEventModal from '../components/calendar/ExternalEventModal'
+import GoogleCalendarReconnectBanner from '../components/calendar/GoogleCalendarReconnectBanner'
 import { Lock, CalendarPlus } from 'lucide-react'
 import { Icon } from '../components/ui/Icon'
 
@@ -333,6 +334,11 @@ export default function Calendario() {
             </div>
           )}
         </div>
+
+        {/* Conexión de Google caída: el backend ya dejó de reintentar y avisó en la
+            campana; acá está el botón para arreglarlo. Al reconectar se recarga, y
+            el refresco de los propios calendarios trae los eventos de Google. */}
+        {moduleAllowed && <GoogleCalendarReconnectBanner className="mb-4" onReconnected={load} />}
 
         {!moduleAllowed ? (
           <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-10 text-center">
