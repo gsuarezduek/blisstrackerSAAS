@@ -57,7 +57,7 @@ describe('Cargar → Entre cuentas', () => {
   it('sin cuentas con inversiones explica dónde activarlo', () => {
     const { reason } = renderForm([caja])
     fireEvent.change(reason, { target: { value: 'fund_redemption' } })
-    expect(screen.getByText(/Ninguna cuenta tiene inversiones/)).toBeTruthy()
+    expect(screen.getByText(/Ninguna cuenta tiene fondos/)).toBeTruthy()
   })
 
   it('entre cuentas con la misma cuenta avisa antes de guardar', () => {

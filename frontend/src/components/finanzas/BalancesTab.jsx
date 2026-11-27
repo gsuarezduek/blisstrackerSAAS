@@ -55,6 +55,10 @@ export default function BalancesTab({ accounts: accountsCatalog, taxes }) {
   const detailAccount = data.accounts.find(a => a.id === detailAccountId) || null
   const ars = data.totalsByCurrency.ARS
   const otherCurrencies = Object.keys(data.totalsByCurrency).filter(c => c !== 'ARS')
+  // Inversión (cuentas a largo plazo) va aparte, una tarjeta por moneda que tenga alguna.
+  const investmentCurrencies = Object.keys(data.totalsByCurrency).filter(c => data.totalsByCurrency[c].investmentAccounts > 0)
+  const operatingAccounts = data.accounts.filter(a => a.balanceGroup !== 'investment')
+  const investmentAccounts = data.accounts.filter(a => a.balanceGroup === 'investment')
 
   return (
     <div>
@@ -74,6 +78,9 @@ export default function BalancesTab({ accounts: accountsCatalog, taxes }) {
         )}
         {otherCurrencies.map(cur => (
           <SummaryCard key={cur} label={cur === 'USD' ? 'Dólares' : cur === 'BTC' ? 'Bitcoin' : cur} value={fmtMoney(data.totalsByCurrency[cur].total, cur)} />
+        ))}
+        {investmentCurrencies.map(cur => (
+          <SummaryCard key={`inv-${cur}`} label={`Inversión en ${cur === 'ARS' ? 'pesos' : cur}`} value={fmtMoney(data.totalsByCurrency[cur].inversion, cur)} sub="Largo plazo · aparte del disponible" />
         ))}
         <SummaryCard highlight label="Cheques en cartera"
           value={fmtMoney(ars?.pendingChecks.amount ?? 0, 'ARS')}
@@ -99,11 +106,24 @@ export default function BalancesTab({ accounts: accountsCatalog, taxes }) {
         </div>
       )}
 
+      {investmentAccounts.length > 0 && (
+        <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">Cuentas operativas</h3>
+      )}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {data.accounts.map(account => (
+        {operatingAccounts.map(account => (
           <AccountBalanceCard key={account.id} account={account} onClick={() => setDetailAccountId(account.id)} />
         ))}
       </div>
+      {investmentAccounts.length > 0 && (
+        <>
+          <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mt-6 mb-3">Inversión</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {investmentAccounts.map(account => (
+              <AccountBalanceCard key={account.id} account={account} onClick={() => setDetailAccountId(account.id)} />
+            ))}
+          </div>
+        </>
+      )}
 
       {detailAccount && (
         <AccountDetailPanel account={detailAccount} accounts={accountsCatalog} taxes={taxes} onClose={() => setDetailAccountId(null)} onChanged={handleChanged} />

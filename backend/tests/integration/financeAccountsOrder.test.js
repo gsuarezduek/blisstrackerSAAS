@@ -90,3 +90,30 @@ describe('POST /api/finanzas/accounts — orden', () => {
     expect(prisma.financeAccount.create.mock.calls[0][0].data.sortOrder).toBe(0)
   })
 })
+
+describe('cuentas — En Saldos cuenta como', () => {
+  beforeEach(() => {
+    jest.clearAllMocks(); mockAccess()
+    prisma.financeAccount.aggregate.mockResolvedValue({ _max: { sortOrder: 0 } })
+    prisma.financeAccount.create.mockImplementation(async ({ data }) => ({ id: 9, ...data }))
+  })
+  const create = body => request(app).post('/api/finanzas/accounts')
+    .set('Authorization', authHeader()).set('X-Workspace', 'bliss').send(body)
+
+  it('por defecto es disponible', async () => {
+    await create({ name: 'Brubank', type: 'bank', currency: 'ARS' })
+    expect(prisma.financeAccount.create.mock.calls[0][0].data.balanceGroup).toBe('available')
+  })
+
+  it('acepta inversión en cualquier tipo de cuenta', async () => {
+    const res = await create({ name: 'Plazo fijo', type: 'bank', currency: 'USD', balanceGroup: 'investment' })
+    expect(res.status).toBe(201)
+    expect(prisma.financeAccount.create.mock.calls[0][0].data.balanceGroup).toBe('investment')
+  })
+
+  it('400 con un grupo que no existe', async () => {
+    const res = await create({ name: 'X', type: 'bank', currency: 'ARS', balanceGroup: 'largo_plazo' })
+    expect(res.status).toBe(400)
+    expect(prisma.financeAccount.create).not.toHaveBeenCalled()
+  })
+})

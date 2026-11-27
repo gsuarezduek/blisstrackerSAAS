@@ -21,6 +21,11 @@ const { parseDate, transfersAfterValuation } = require('./_shared')
  * Fondos (3.1) = el `value` de la última FinanceFundValuation registrada (es
  * un snapshot absoluto, no un delta) + aportes − rescates posteriores a ella.
  * Si todavía no hay ninguna, aportes − rescates acumulados.
+ *
+ * Totales por moneda: las cuentas `balanceGroup: 'investment'` (largo plazo)
+ * NO suman al disponible/fondos/total — van a `inversion` (su disponible +
+ * fondos), con `investmentAccounts` = cuántas hay. Los cheques pendientes
+ * cuentan en su moneda sea cual sea la cuenta.
  */
 async function getBalances(req, res, next) {
   try {
@@ -79,6 +84,7 @@ async function getBalances(req, res, next) {
 
       return {
         id: account.id, name: account.name, type: account.type, currency: account.currency, hasInvestments: account.hasInvestments,
+        balanceGroup: account.balanceGroup || 'available',
         incomePeriod: toDecimal(incomePeriodAgg._sum.amount || 0).toString(),
         expensePeriod: toDecimal(expensePeriodAgg._sum.amount || 0).toString(),
         internalPeriod: toDecimal(transfersInPeriodAgg._sum.toAmount || 0).minus(toDecimal(transfersOutPeriodAgg._sum.fromAmount || 0)).toString(),
@@ -93,9 +99,17 @@ async function getBalances(req, res, next) {
     // conversión de FX entre monedas: cada una se totaliza por separado.
     const byCurrency = {}
     for (const r of accountResults) {
-      const bucket = byCurrency[r.currency] || { disponible: toDecimal(0), fondos: toDecimal(0), pendingChecksAmount: toDecimal(0), pendingChecksCount: 0 }
-      bucket.disponible = bucket.disponible.plus(r.disponible)
-      if (r.fondos != null) bucket.fondos = bucket.fondos.plus(r.fondos)
+      const bucket = byCurrency[r.currency] || {
+        disponible: toDecimal(0), fondos: toDecimal(0), inversion: toDecimal(0), investmentAccounts: 0,
+        pendingChecksAmount: toDecimal(0), pendingChecksCount: 0,
+      }
+      if (r.balanceGroup === 'investment') {
+        bucket.inversion = bucket.inversion.plus(r.disponible).plus(r.fondos ?? 0)
+        bucket.investmentAccounts++
+      } else {
+        bucket.disponible = bucket.disponible.plus(r.disponible)
+        if (r.fondos != null) bucket.fondos = bucket.fondos.plus(r.fondos)
+      }
       bucket.pendingChecksAmount = bucket.pendingChecksAmount.plus(r.pendingChecks.amount)
       bucket.pendingChecksCount += r.pendingChecks.count
       byCurrency[r.currency] = bucket
@@ -104,6 +118,8 @@ async function getBalances(req, res, next) {
       disponible: b.disponible.toString(),
       fondos: b.fondos.toString(),
       total: b.disponible.plus(b.fondos).toString(),
+      inversion: b.inversion.toString(),
+      investmentAccounts: b.investmentAccounts,
       pendingChecks: { amount: b.pendingChecksAmount.toString(), count: b.pendingChecksCount },
     }]))
 

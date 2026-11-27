@@ -10,6 +10,17 @@ export const ACCOUNT_TYPES = [
   { key: 'wallet',        label: 'Billetera' },
   { key: 'cash',          label: 'Caja' },
   { key: 'crypto_wallet', label: 'Wallet cripto' },
+  { key: 'investment',    label: 'Cuenta de inversión' }, // broker, cuenta comitente
+]
+
+// Cómo cuenta la plata de una cuenta en Saldos (FinanceAccount.balanceGroup) —
+// independiente del tipo: el tipo describe QUÉ es la cuenta, esto decide en
+// qué total cae. 'investment' = largo plazo, va a "Inversión en <moneda>" y
+// no se suma al disponible. Elegir el tipo 'investment' lo preselecciona
+// (en el formulario), pero cualquier cuenta puede ser de inversión.
+export const BALANCE_GROUPS = [
+  { key: 'available',  label: 'Disponible' },
+  { key: 'investment', label: 'Inversión' },
 ]
 
 // Condición fiscal del EMISOR (FinanceIssuer.taxCondition) — mismo vocabulario
@@ -146,6 +157,7 @@ function metaOf(list, key, fallbackLabel) {
 }
 
 export function accountTypeLabel(key)        { return metaOf(ACCOUNT_TYPES, key).label }
+export function balanceGroupLabel(key)       { return metaOf(BALANCE_GROUPS, key || 'available').label }
 export function issuerTaxConditionLabel(key) { return metaOf(ISSUER_TAX_CONDITIONS, key).label }
 export function issuerEnvironmentLabel(key)  { return metaOf(ISSUER_ENVIRONMENTS, key).label }
 export function itemIvaConditionLabel(key)   { return key ? metaOf(ITEM_IVA_CONDITIONS, key).label : '—' }

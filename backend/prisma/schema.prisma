@@ -5398,7 +5398,8 @@ model FinanceAccount {
   workspaceId    Int
   workspace      Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   name           String
-  type           String // 'bank' | 'wallet' | 'cash' | 'crypto_wallet'
+  type           String // 'bank' | 'wallet' | 'cash' | 'crypto_wallet' | 'investment' — solo describe la cuenta
+  balanceGroup   String         @default("available") // 'available' | 'investment' — en qué total de Saldos cae (financeCatalog BALANCE_GROUPS)
   currency       String // 'ARS' | 'USD' | 'BTC' — abierto a futuro, no enum
   initialBalance Decimal        @default(0) @db.Decimal(20, 8) // se carga una sola vez (regla de negocio en el controller, no constraint de DB)
   hasInvestments Boolean        @default(false)

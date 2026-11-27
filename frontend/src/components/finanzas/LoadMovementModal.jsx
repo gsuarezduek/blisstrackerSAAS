@@ -377,7 +377,7 @@ function TransferForm({ accounts, taxes, prefill, onClose, onSaved }) {
               <input type="number" step="any" className={input} placeholder="Monto" value={fromAmount} onChange={e => setFromAmount(e.target.value)} />
             </div>
           ) : (
-            <p className="text-sm text-gray-500 dark:text-gray-400">Ninguna cuenta tiene inversiones. Activá "Tiene inversiones" en la cuenta, desde Configuración.</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400">Ninguna cuenta tiene fondos. Activá "Tiene fondos" en la cuenta, desde Configuración.</p>
           )}
         </div>
       ) : (

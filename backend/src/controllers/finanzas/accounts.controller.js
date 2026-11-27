@@ -1,6 +1,6 @@
 const prisma = require('../../lib/prisma')
 const { logFinanceAudit } = require('../../lib/financeAudit')
-const { isValidAccountType } = require('../../lib/financeCatalog')
+const { isValidAccountType, isValidBalanceGroup, BALANCE_GROUPS } = require('../../lib/financeCatalog')
 const { businessError, toDecimalInput, trimmedOrNull } = require('./_shared')
 
 const ACCOUNT_FIELD_LABELS = {
@@ -10,6 +10,7 @@ const ACCOUNT_FIELD_LABELS = {
   initialBalance: { label: 'Saldo inicial', format: 'money' },
   hasInvestments: { label: 'Tiene inversiones', format: 'boolean' },
   issuerName:     { label: 'Entidad de facturación' },
+  balanceGroupLabel: { label: 'En Saldos cuenta como' },
   active:         { label: 'Activa', format: 'boolean' },
 }
 
@@ -41,9 +42,11 @@ async function resolveIssuerId(value, workspaceId) {
   return id
 }
 
-// Para el diff del historial: el nombre de la entidad, no su id.
+// Para el diff del historial: el nombre de la entidad y la etiqueta del
+// grupo de saldo, no su id/key.
 function withIssuerName(account) {
-  return { ...account, issuerName: account.issuer?.name ?? null }
+  const group = BALANCE_GROUPS.find(g => g.key === account.balanceGroup)
+  return { ...account, issuerName: account.issuer?.name ?? null, balanceGroupLabel: group?.label ?? account.balanceGroup ?? null }
 }
 
 // GET /api/finanzas/accounts?active=true
@@ -78,6 +81,8 @@ async function createAccount(req, res, next) {
     if (!name || !name.trim()) return res.status(400).json({ error: 'Nombre requerido' })
     if (!isValidAccountType(type)) return res.status(400).json({ error: 'Tipo de cuenta inválido' })
     const issuerId = await resolveIssuerId(req.body.issuerId, req.workspace.id)
+    const balanceGroup = req.body.balanceGroup ?? 'available'
+    if (!isValidBalanceGroup(balanceGroup)) return res.status(400).json({ error: 'Grupo de saldo inválido' })
     // Una cuenta nueva va al final de la lista.
     const last = await prisma.financeAccount.aggregate({ where: { workspaceId: req.workspace.id }, _max: { sortOrder: true } })
 
@@ -90,6 +95,7 @@ async function createAccount(req, res, next) {
         initialBalance: toDecimalInput(initialBalance ?? 0, 'Saldo inicial') ?? '0',
         hasInvestments: !!hasInvestments,
         issuerId: issuerId ?? null,
+        balanceGroup,
         sortOrder: (last._max.sortOrder ?? -1) + 1,
         createdById: req.user.userId,
       },
@@ -132,6 +138,10 @@ async function updateAccount(req, res, next) {
     if (active !== undefined) data.active = !!active
     const issuerId = await resolveIssuerId(req.body.issuerId, workspaceId)
     if (issuerId !== undefined) data.issuerId = issuerId
+    if (req.body.balanceGroup !== undefined) {
+      if (!isValidBalanceGroup(req.body.balanceGroup)) return res.status(400).json({ error: 'Grupo de saldo inválido' })
+      data.balanceGroup = req.body.balanceGroup
+    }
     if (initialBalance !== undefined) {
       const used = existing._count.movements + existing._count.transfersFrom + existing._count.transfersTo + existing._count.fundValuations
       if (used > 0) return res.status(409).json({ error: 'El saldo inicial se carga una sola vez — esta cuenta ya tiene movimientos.' })

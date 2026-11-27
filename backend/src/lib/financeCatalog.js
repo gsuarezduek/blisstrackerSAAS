@@ -14,6 +14,17 @@ const ACCOUNT_TYPES = [
   { key: 'wallet',        label: 'Billetera' },
   { key: 'cash',          label: 'Caja' },
   { key: 'crypto_wallet', label: 'Wallet cripto' },
+  { key: 'investment',    label: 'Cuenta de inversión' }, // broker, cuenta comitente
+]
+
+// Cómo cuenta la plata de una cuenta en Saldos (FinanceAccount.balanceGroup) —
+// independiente del tipo: el tipo describe QUÉ es la cuenta, esto decide en
+// qué total cae. 'investment' = largo plazo, va a "Inversión en <moneda>" y
+// no se suma al disponible. Elegir el tipo 'investment' lo preselecciona
+// (en el formulario), pero cualquier cuenta puede ser de inversión.
+const BALANCE_GROUPS = [
+  { key: 'available',  label: 'Disponible' },
+  { key: 'investment', label: 'Inversión' },
 ]
 
 // Condición fiscal del EMISOR (FinanceIssuer.taxCondition) — mismo vocabulario
@@ -189,6 +200,7 @@ const AUDIT_ACTIONS = ['create', 'update', 'delete', 'restore']
 function keysOf(list) { return list.map(x => x.key) }
 
 const ACCOUNT_TYPE_KEYS          = keysOf(ACCOUNT_TYPES)
+const BALANCE_GROUP_KEYS         = keysOf(BALANCE_GROUPS)
 const ISSUER_TAX_CONDITION_KEYS  = keysOf(ISSUER_TAX_CONDITIONS)
 const ISSUER_ENVIRONMENT_KEYS    = keysOf(ISSUER_ENVIRONMENTS)
 const ITEM_IVA_CONDITION_KEYS    = keysOf(ITEM_IVA_CONDITIONS)
@@ -208,6 +220,7 @@ const TASK_STATUS_KEYS           = keysOf(TASK_STATUSES)
 const TASK_ORIGIN_KEYS = [...new Set(keysOf(TASK_ORIGINS))]
 
 function isValidAccountType(key)        { return ACCOUNT_TYPE_KEYS.includes(key) }
+function isValidBalanceGroup(key)       { return BALANCE_GROUP_KEYS.includes(key) }
 function isValidIssuerTaxCondition(key) { return ISSUER_TAX_CONDITION_KEYS.includes(key) }
 function isValidIssuerEnvironment(key)  { return ISSUER_ENVIRONMENT_KEYS.includes(key) }
 function isValidItemIvaCondition(key)   { return key == null || ITEM_IVA_CONDITION_KEYS.includes(key) }
@@ -234,6 +247,7 @@ function isValidInvoiceIvaMode(key)     { return INVOICE_IVA_MODE_KEYS.includes(
 
 module.exports = {
   ACCOUNT_TYPES, ACCOUNT_TYPE_KEYS, isValidAccountType,
+  BALANCE_GROUPS, BALANCE_GROUP_KEYS, isValidBalanceGroup,
   ISSUER_TAX_CONDITIONS, ISSUER_TAX_CONDITION_KEYS, isValidIssuerTaxCondition,
   ISSUER_ENVIRONMENTS, ISSUER_ENVIRONMENT_KEYS, isValidIssuerEnvironment,
   ITEM_IVA_CONDITIONS, ITEM_IVA_CONDITION_KEYS, isValidItemIvaCondition,

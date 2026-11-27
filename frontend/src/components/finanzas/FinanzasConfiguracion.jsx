@@ -143,7 +143,8 @@ function AccountsPanel({ accounts, taxes, issuers, onChanged }) {
               <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{a.name}</p>
               <p className="text-xs text-gray-500 dark:text-gray-400">
                 {accountTypeLabel(a.type)} · {a._count?.movements ?? 0} movimiento{a._count?.movements === 1 ? '' : 's'} · {a.taxes?.length || 0} impuesto{a.taxes?.length === 1 ? '' : 's'}
-                {a.hasInvestments && ' · Con inversiones'}
+                {a.hasInvestments && ' · Con fondos'}
+                {a.balanceGroup === 'investment' && ' · Inversión'}
                 {a.issuer && ` · ${a.issuer.name}`}
               </p>
             </button>

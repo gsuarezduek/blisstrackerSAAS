@@ -3,9 +3,12 @@ import { accountTypeLabel } from './financeCatalog'
 
 // Una tarjeta por cuenta (sección 4.2): nombre, moneda, ingresos, egresos,
 // movimientos internos, ajustes de saldo (si hubo), disponible, y "En fondos"
-// solo si tiene_inversiones.
+// solo si tiene fondos. En una cuenta de Inversión (largo plazo) el
+// "disponible" es el efectivo dentro de la cuenta y se muestra el total.
+
 // Clickeable → drill-down (AccountDetailPanel, con las transferencias).
 export default function AccountBalanceCard({ account, onClick }) {
+  const isInvestment = account.balanceGroup === 'investment'
   return (
     <button onClick={onClick} className="text-left bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-4 hover:border-primary-300 dark:hover:border-primary-700 transition-colors">
       <div className="flex items-center justify-between mb-3">
@@ -37,13 +40,19 @@ export default function AccountBalanceCard({ account, onClick }) {
 
       <div className="border-t border-gray-100 dark:border-gray-700 mt-3 pt-3 space-y-1">
         <div className="flex justify-between">
-          <dt className="text-xs text-gray-500 dark:text-gray-400">Disponible</dt>
+          <dt className="text-xs text-gray-500 dark:text-gray-400">{isInvestment ? 'Efectivo' : 'Disponible'}</dt>
           <dd className="text-sm font-semibold text-gray-900 dark:text-white">{fmtMoney(account.disponible, account.currency)}</dd>
         </div>
         {account.hasInvestments && (
           <div className="flex justify-between">
             <dt className="text-xs text-gray-500 dark:text-gray-400">En fondos</dt>
             <dd className="text-sm font-semibold text-gray-900 dark:text-white">{fmtMoney(account.fondos, account.currency)}</dd>
+          </div>
+        )}
+        {isInvestment && account.hasInvestments && (
+          <div className="flex justify-between">
+            <dt className="text-xs text-gray-500 dark:text-gray-400">Total</dt>
+            <dd className="text-sm font-semibold text-gray-900 dark:text-white">{fmtMoney(Number(account.disponible) + Number(account.fondos || 0), account.currency)}</dd>
           </div>
         )}
       </div>

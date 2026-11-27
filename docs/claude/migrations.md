@@ -55,3 +55,6 @@ Finanzas → `FinanceAccount.issuerId` (INTEGER nullable, FK a `FinanceIssuer` c
 
 ### `finanzas_cuentas_orden`
 Finanzas → `FinanceAccount.sortOrder` (INTEGER NOT NULL DEFAULT 0): orden manual de las cuentas (Configuración → arrastrar). **Con backfill**: `ROW_NUMBER()` por workspace ordenado por nombre, el orden alfabético que se veía hasta ahora, así nada cambia de lugar hasta que alguien reordene.
+
+### `finanzas_cuenta_inversion`
+Finanzas → `FinanceAccount.balanceGroup` (TEXT NOT NULL DEFAULT `'available'`): en qué total de Saldos cae la plata de la cuenta — `available` (disponible, lo de siempre) o `investment` (Inversión, largo plazo, total aparte). Sin backfill: toda cuenta existente queda como disponible, nada cambia hasta que alguien marque una. El tipo `investment` ("Cuenta de inversión") es solo una entrada nueva del catálogo de código, no necesita migración.
