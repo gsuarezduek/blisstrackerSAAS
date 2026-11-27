@@ -22,3 +22,19 @@ export function monthRange(key) {
   const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate()
   return { from: `${key}-01`, to: `${key}-${String(lastDay).padStart(2, '0')}` }
 }
+
+// Meses del selector de período: del mes actual hacia atrás hasta el primer
+// mes con datos (`firstMonth`, "YYYY-MM" o null si todavía no hay nada),
+// como mucho `max`. Ofrecer 24 meses vacíos era ruido; para ir más atrás
+// están "Todas las fechas" y "Fecha personalizada".
+export const MAX_MONTHS_IN_SELECT = 12
+
+export function selectableMonths(firstMonth, current = currentMonthKey(), max = MAX_MONTHS_IN_SELECT) {
+  const months = [current]
+  let m = current
+  while (months.length < max && firstMonth && shiftMonth(m, -1) >= firstMonth) {
+    m = shiftMonth(m, -1)
+    months.push(m)
+  }
+  return months
+}

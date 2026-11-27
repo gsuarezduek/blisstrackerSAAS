@@ -6,13 +6,14 @@ import { ACCOUNT_TYPES, CURRENCIES } from './financeCatalog'
 const input = 'w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500'
 const label = 'block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1'
 
-export default function AccountModal({ account, allTaxes, onClose, onSaved, onDelete }) {
+export default function AccountModal({ account, allTaxes, issuers = [], onClose, onSaved, onDelete }) {
   const isNew = account === null
   const [name, setName] = useState(account?.name || '')
   const [type, setType] = useState(account?.type || ACCOUNT_TYPES[0].key)
   const [currency, setCurrency] = useState(account?.currency || CURRENCIES[0].key)
   const [initialBalance, setInitialBalance] = useState(account ? String(account.initialBalance) : '0')
   const [hasInvestments, setHasInvestments] = useState(account?.hasInvestments || false)
+  const [issuerId, setIssuerId] = useState(account?.issuerId ? String(account.issuerId) : '')
   const [taxIds, setTaxIds] = useState(new Set((account?.taxes || []).map(t => t.taxId)))
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -32,7 +33,7 @@ export default function AccountModal({ account, allTaxes, onClose, onSaved, onDe
     setSaving(true); setError('')
     try {
       let id = account?.id
-      const body = { name: name.trim(), type, currency, hasInvestments }
+      const body = { name: name.trim(), type, currency, hasInvestments, issuerId: issuerId ? Number(issuerId) : null }
       if (!balanceLocked) body.initialBalance = Number(initialBalance) || 0
       if (isNew) {
         const res = await api.post('/finanzas/accounts', body)
@@ -72,6 +73,18 @@ export default function AccountModal({ account, allTaxes, onClose, onSaved, onDe
                 {CURRENCIES.map(c => <option key={c.key} value={c.key}>{c.key}</option>)}
               </select>
             </div>
+          </div>
+
+          <div>
+            <label htmlFor="account-issuer" className={label}>Entidad de facturación</label>
+            <select id="account-issuer" className={input} value={issuerId} onChange={e => setIssuerId(e.target.value)}>
+              <option value="">Sin entidad</option>
+              {/* Las desactivadas solo si esta cuenta ya era de una: no se le asigna una cuenta nueva a quien ya no factura. */}
+              {issuers.filter(i => i.active || String(i.id) === issuerId).map(i => (
+                <option key={i.id} value={i.id}>{i.name}{i.active ? '' : ' (desactivada)'}</option>
+              ))}
+            </select>
+            <p className="text-xs text-gray-400 mt-1">Opcional. La razón social dueña de la cuenta: en Resumen se compara lo que facturó con lo que entró en sus cuentas.</p>
           </div>
 
           <div>

@@ -52,7 +52,7 @@ export default function FinanzasConfiguracion({ onBack }) {
       ) : (
         <div className="space-y-6">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-            <AccountsPanel accounts={accounts} taxes={taxes} onChanged={loadAll} />
+            <AccountsPanel accounts={accounts} taxes={taxes} issuers={issuers} onChanged={loadAll} />
             <CategoriesPanel categories={categories} onChanged={loadAll} />
             <ItemsPanel items={items} categories={categories} onChanged={loadAll} />
           </div>
@@ -66,7 +66,7 @@ export default function FinanzasConfiguracion({ onBack }) {
 }
 
 // ─── Cuentas ──────────────────────────────────────────────────────────────
-function AccountsPanel({ accounts, taxes, onChanged }) {
+function AccountsPanel({ accounts, taxes, issuers, onChanged }) {
   const [modalAccount, setModalAccount] = useState(undefined) // undefined = cerrado, null = nueva, obj = editar
   const [toDelete, setToDelete] = useState(null)
   const [deleting, setDeleting] = useState(false)
@@ -96,6 +96,7 @@ function AccountsPanel({ accounts, taxes, onChanged }) {
               <p className="text-xs text-gray-500 dark:text-gray-400">
                 {accountTypeLabel(a.type)} · {a._count?.movements ?? 0} movimiento{a._count?.movements === 1 ? '' : 's'} · {a.taxes?.length || 0} impuesto{a.taxes?.length === 1 ? '' : 's'}
                 {a.hasInvestments && ' · Con inversiones'}
+                {a.issuer && ` · ${a.issuer.name}`}
               </p>
             </button>
             <span className="text-xs font-medium text-gray-400 shrink-0">{a.currency}</span>
@@ -105,7 +106,7 @@ function AccountsPanel({ accounts, taxes, onChanged }) {
       </div>
 
       {modalAccount !== undefined && (
-        <AccountModal account={modalAccount} allTaxes={taxes}
+        <AccountModal account={modalAccount} allTaxes={taxes} issuers={issuers}
           onClose={() => setModalAccount(undefined)}
           onSaved={() => { setModalAccount(undefined); onChanged() }}
           onDelete={modalAccount ? () => { setToDelete(modalAccount); setModalAccount(undefined) } : undefined}

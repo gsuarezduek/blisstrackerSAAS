@@ -161,7 +161,7 @@ export default function Finanzas() {
             ) : tab === 'saldos' ? (
               <BalancesTab key={refreshKey} accounts={accounts} taxes={taxes} />
             ) : tab === 'resumen' ? (
-              <SummaryTab key={refreshKey} accounts={accounts} />
+              <SummaryTab key={refreshKey} accounts={accounts} categories={categories} items={items} taxes={taxes} onDataChange={loadShared} />
             ) : tab === 'clientes' ? (
               <CustomersTab accounts={accounts} categories={categories} items={items} taxes={taxes} issuers={issuers} financeIvaMode={financeIvaMode} refreshKey={refreshKey} onDataChange={loadShared} />
             ) : tab === 'facturas' ? (

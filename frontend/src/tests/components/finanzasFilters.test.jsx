@@ -7,7 +7,8 @@ vi.mock('../../api/client', () => ({ default: { get: (...a) => get(...a), post: 
 
 import MovementsTab from '../../components/finanzas/MovementsTab'
 import { movementDateParams } from '../../components/finanzas/MovementsFilterBar'
-import { currentMonthKey, monthRange, shiftMonth } from '../../components/finanzas/financeMonths'
+import { currentMonthKey, monthRange, shiftMonth, selectableMonths } from '../../components/finanzas/financeMonths'
+import MovementsTable, { sortMovements } from '../../components/finanzas/MovementsTable'
 import ItemPicker from '../../components/finanzas/ItemPicker'
 import LoadMovementModal from '../../components/finanzas/LoadMovementModal'
 import AccountDetailPanel from '../../components/finanzas/AccountDetailPanel'
@@ -34,9 +35,46 @@ describe('movementDateParams', () => {
   })
 })
 
+describe('selectableMonths', () => {
+  it('va del mes actual hacia atrás hasta el primer mes con datos', () => {
+    expect(selectableMonths('2026-10', '2026-11')).toEqual(['2026-11', '2026-10'])
+  })
+
+  it('sin datos ofrece solo el mes actual', () => {
+    expect(selectableMonths(null, '2026-11')).toEqual(['2026-11'])
+  })
+
+  it('como mucho 12 meses', () => {
+    const months = selectableMonths('2020-01', '2026-11')
+    expect(months).toHaveLength(12)
+    expect(months[0]).toBe('2026-11')
+    expect(months.at(-1)).toBe('2025-12')
+  })
+
+  it('cruza el cambio de año', () => {
+    expect(selectableMonths('2026-12', '2027-02')).toEqual(['2027-02', '2027-01', '2026-12'])
+  })
+
+  it('un primer mes en el futuro deja solo el actual', () => {
+    expect(selectableMonths('2027-03', '2026-11')).toEqual(['2026-11'])
+  })
+})
+
 describe('Ingresos/Egresos: filtro de fecha', () => {
-  beforeEach(() => { get.mockReset(); get.mockResolvedValue({ data: [] }) })
-  const lastParams = () => get.mock.calls.at(-1)[1].params
+  const firstMonth = shiftMonth(currentMonthKey(), -2)
+  beforeEach(() => {
+    get.mockReset()
+    get.mockImplementation(url => Promise.resolve({ data: url === '/finanzas/first-month' ? { month: firstMonth } : [] }))
+  })
+  const lastParams = () => get.mock.calls.filter(c => c[0] === '/finanzas/movements').at(-1)[1].params
+
+  it('el selector arranca en el primer mes con movimientos', async () => {
+    const select = renderTab()
+    await waitFor(() => expect(select.querySelectorAll('option')).toHaveLength(3 + 2))
+    expect(get).toHaveBeenCalledWith('/finanzas/first-month', { params: { source: 'movements' } })
+    const values = [...select.querySelectorAll('option')].map(o => o.value)
+    expect(values).toEqual([currentMonthKey(), shiftMonth(currentMonthKey(), -1), firstMonth, 'all', 'custom'])
+  })
 
   function renderTab() {
     render(<MovementsTab type="income" accounts={[]} categories={[]} items={[]} taxes={[]} refreshKey={0} />)
@@ -52,6 +90,7 @@ describe('Ingresos/Egresos: filtro de fecha', () => {
   it('elegir otro mes pide ese mes', async () => {
     const select = renderTab()
     const previous = shiftMonth(currentMonthKey(), -1)
+    await waitFor(() => expect(select.querySelector(`option[value="${previous}"]`)).toBeTruthy())
     fireEvent.change(select, { target: { value: previous } })
     await waitFor(() => expect(lastParams()).toMatchObject(monthRange(previous)))
   })
@@ -201,5 +240,64 @@ describe('Saldos: detalle de la cuenta', () => {
     await screen.findByText('Pastiza')
     expect(screen.queryByRole('button', { name: 'Rescate' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Aporte' })).toBeNull()
+  })
+})
+
+describe('Ingresos/Egresos: tabla', () => {
+  const ars = { id: 1, name: 'Galicia', currency: 'ARS' }
+  const usd = { id: 2, name: 'Wise', currency: 'USD' }
+  const mv = (id, date, amount, item, account, category = 'Fees') => ({
+    id, date: `${date}T12:00:00Z`, amount, item: item ? { name: item } : null, category: { name: category }, account,
+  })
+  const movements = [
+    mv(1, '2026-11-03', '50000', 'Pastiza', ars),
+    mv(2, '2026-11-10', '500', 'Árbol', usd),
+    mv(3, '2026-11-05', '120000', 'zeta', ars, 'Servicios'),
+    mv(4, '2026-11-01', '20', null, usd),
+  ]
+  const ids = list => list.map(m => m.id)
+
+  it('por monto agrupa por moneda (ARS primero) y ordena dentro de cada una', () => {
+    expect(ids(sortMovements(movements, { key: 'amount', dir: 'desc' }))).toEqual([3, 1, 2, 4])
+    expect(ids(sortMovements(movements, { key: 'amount', dir: 'asc' }))).toEqual([1, 3, 4, 2])
+  })
+
+  it('por texto ignora tildes y mayúsculas, y deja los vacíos al final', () => {
+    expect(ids(sortMovements(movements, { key: 'item', dir: 'asc' }))).toEqual([2, 1, 3, 4])
+    expect(ids(sortMovements(movements, { key: 'item', dir: 'desc' }))).toEqual([3, 1, 2, 4])
+  })
+
+  it('por fecha', () => {
+    expect(ids(sortMovements(movements, { key: 'date', dir: 'desc' }))).toEqual([2, 3, 1, 4])
+    expect(ids(sortMovements(movements, { key: 'date', dir: 'asc' }))).toEqual([4, 1, 3, 2])
+  })
+
+  it('sin orden elegido respeta el del servidor', () => {
+    expect(sortMovements(movements, null)).toBe(movements)
+  })
+
+  function itemColumn() {
+    return screen.getAllByRole('row').slice(1).map(r => r.querySelectorAll('td')[1].textContent)
+  }
+
+  it('tocar Monto ordena de mayor a menor y otra vez de menor a mayor', () => {
+    render(<MovementsTable movements={movements} onEdit={vi.fn()} />)
+    const header = screen.getByRole('button', { name: 'Monto' })
+    fireEvent.click(header)
+    expect(itemColumn()).toEqual(['zeta', 'Pastiza', 'Árbol', '—'])
+    expect(header.closest('th').getAttribute('aria-sort')).toBe('descending')
+    fireEvent.click(header)
+    expect(itemColumn()).toEqual(['Pastiza', 'zeta', '—', 'Árbol'])
+    expect(header.closest('th').getAttribute('aria-sort')).toBe('ascending')
+  })
+
+  it('el click en la fila abre el movimiento; el lápiz lo abre una sola vez', () => {
+    const onEdit = vi.fn()
+    render(<MovementsTable movements={movements} onEdit={onEdit} />)
+    fireEvent.click(screen.getByText('Pastiza'))
+    expect(onEdit).toHaveBeenCalledWith(movements[0])
+    onEdit.mockClear()
+    fireEvent.click(screen.getAllByTitle('Editar')[0])
+    expect(onEdit).toHaveBeenCalledTimes(1)
   })
 })

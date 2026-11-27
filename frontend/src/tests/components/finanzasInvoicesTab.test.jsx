@@ -68,6 +68,18 @@ describe('Pestaña Facturas', () => {
     expect(await screen.findByText('Pastiza', { selector: 'td' })).toBeInTheDocument()
   })
 
+  it('el selector de emisión arranca en el mes de la primera factura', async () => {
+    const first = shiftMonth(currentMonthKey(), -1)
+    get.mockImplementation(url => Promise.resolve({
+      data: url === '/finanzas/first-month' ? { month: first } : url === '/finanzas/issuers' ? issuers : [inv()],
+    }))
+    render(<InvoicesTab items={items} financeIvaMode="add" refreshKey={0} />)
+    const select = screen.getByLabelText('Emisión')
+    await waitFor(() => expect(select.querySelector(`option[value="${first}"]`)).toBeTruthy())
+    expect(get).toHaveBeenCalledWith('/finanzas/first-month', { params: { source: 'invoices' } })
+    expect([...select.querySelectorAll('option')].map(o => o.value)).toEqual([currentMonthKey(), first, 'all', 'custom'])
+  })
+
   it('filtra por emisor, también los desactivados y las informativas', async () => {
     render(<InvoicesTab items={items} financeIvaMode="add" refreshKey={0} />)
     const select = await screen.findByLabelText('Emisor')

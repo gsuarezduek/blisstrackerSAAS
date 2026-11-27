@@ -131,6 +131,8 @@ router.delete('/adjustments/:id',    adjustments.deleteAdjustment)
 // Resumen (4.3): breakdown por categoría del mes + gráfico mensual.
 router.get('/summary/breakdown',     summary.getBreakdown)
 router.get('/summary/chart',         summary.getChart)
+router.get('/summary/entities',      summary.getEntities)
+router.get('/first-month',           summary.getFirstMonth)
 
 // Clientes (4.4/4.5) — abierto a cualquiera con acceso al módulo.
 router.get('/customers',             customers.listCustomers)

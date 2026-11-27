@@ -5394,19 +5394,23 @@ model McpAuthFailure {
 // cuenta corriente de clientes, tareas generadas por reglas).
 
 model FinanceAccount {
-  id             Int       @id @default(autoincrement())
+  id             Int            @id @default(autoincrement())
   workspaceId    Int
-  workspace      Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspace      Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   name           String
   type           String // 'bank' | 'wallet' | 'cash' | 'crypto_wallet'
   currency       String // 'ARS' | 'USD' | 'BTC' — abierto a futuro, no enum
-  initialBalance Decimal   @default(0) @db.Decimal(20, 8) // se carga una sola vez (regla de negocio en el controller, no constraint de DB)
-  hasInvestments Boolean   @default(false)
-  active         Boolean   @default(true) // no se borra si tiene movimientos: se desactiva
+  initialBalance Decimal        @default(0) @db.Decimal(20, 8) // se carga una sola vez (regla de negocio en el controller, no constraint de DB)
+  hasInvestments Boolean        @default(false)
+  // Entidad de facturación (razón social) dueña de la cuenta — opcional, una
+  // sola. Alimenta "Resumen → por entidad" (facturado vs. ingresos/egresos).
+  issuerId       Int?
+  issuer         FinanceIssuer? @relation(fields: [issuerId], references: [id], onDelete: SetNull)
+  active         Boolean        @default(true) // no se borra si tiene movimientos: se desactiva
   createdById    Int?
-  createdBy      User?     @relation("FinanceAccountCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  createdBy      User?          @relation("FinanceAccountCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
 
   taxes          FinanceAccountTax[]
   movements      FinanceMovement[]
@@ -5420,6 +5424,7 @@ model FinanceAccount {
 
   @@index([workspaceId])
   @@index([workspaceId, active])
+  @@index([issuerId])
 }
 
 // Catálogo de impuestos. `baseTaxId` permite un impuesto calculado sobre OTRO
@@ -5517,6 +5522,7 @@ model FinanceIssuer {
 
   items    FinanceItem[]
   invoices FinanceInvoice[]
+  accounts FinanceAccount[]
 
   @@index([workspaceId])
   @@index([workspaceId, active])

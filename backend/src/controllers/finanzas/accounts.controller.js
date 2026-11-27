@@ -9,10 +9,12 @@ const ACCOUNT_FIELD_LABELS = {
   currency:       { label: 'Moneda' },
   initialBalance: { label: 'Saldo inicial', format: 'money' },
   hasInvestments: { label: 'Tiene inversiones', format: 'boolean' },
+  issuerName:     { label: 'Entidad de facturación' },
   active:         { label: 'Activa', format: 'boolean' },
 }
 
 const LIST_INCLUDE = {
+  issuer: { select: { id: true, name: true, active: true } },
   taxes: { include: { tax: { select: { id: true, name: true, percentage: true } } } },
   _count: { select: { movements: true } },
 }
@@ -21,6 +23,24 @@ function normalizeCurrency(value) {
   const t = String(value || '').trim().toUpperCase()
   if (t.length < 2 || t.length > 6) throw businessError(400, 'Moneda inválida')
   return t
+}
+
+// `issuerId` del body: null/'' = sin entidad; si no, un emisor del workspace
+// (activo o no — una cuenta vieja puede seguir siendo de una razón social que
+// ya no factura). `undefined` = no se toca.
+async function resolveIssuerId(value, workspaceId) {
+  if (value === undefined) return undefined
+  if (value === null || value === '') return null
+  const id = Number(value)
+  if (!Number.isInteger(id)) throw businessError(400, 'Entidad de facturación inválida')
+  const issuer = await prisma.financeIssuer.findFirst({ where: { id, workspaceId }, select: { id: true } })
+  if (!issuer) throw businessError(400, 'La entidad de facturación no existe en este workspace')
+  return id
+}
+
+// Para el diff del historial: el nombre de la entidad, no su id.
+function withIssuerName(account) {
+  return { ...account, issuerName: account.issuer?.name ?? null }
 }
 
 // GET /api/finanzas/accounts?active=true
@@ -54,6 +74,7 @@ async function createAccount(req, res, next) {
     const { name, type, currency, initialBalance, hasInvestments } = req.body
     if (!name || !name.trim()) return res.status(400).json({ error: 'Nombre requerido' })
     if (!isValidAccountType(type)) return res.status(400).json({ error: 'Tipo de cuenta inválido' })
+    const issuerId = await resolveIssuerId(req.body.issuerId, req.workspace.id)
 
     const account = await prisma.financeAccount.create({
       data: {
@@ -63,8 +84,10 @@ async function createAccount(req, res, next) {
         currency: normalizeCurrency(currency),
         initialBalance: toDecimalInput(initialBalance ?? 0, 'Saldo inicial') ?? '0',
         hasInvestments: !!hasInvestments,
+        issuerId: issuerId ?? null,
         createdById: req.user.userId,
       },
+      include: LIST_INCLUDE,
     })
     await logFinanceAudit({
       workspaceId: req.workspace.id, entityType: 'account', entityId: account.id, action: 'create',
@@ -81,7 +104,10 @@ async function updateAccount(req, res, next) {
     const id = Number(req.params.id)
     const existing = await prisma.financeAccount.findFirst({
       where: { id, workspaceId },
-      include: { _count: { select: { movements: true, transfersFrom: true, transfersTo: true, fundValuations: true } } },
+      include: {
+        issuer: { select: { name: true } },
+        _count: { select: { movements: true, transfersFrom: true, transfersTo: true, fundValuations: true } },
+      },
     })
     if (!existing) return res.status(404).json({ error: 'Cuenta no encontrada' })
 
@@ -98,16 +124,18 @@ async function updateAccount(req, res, next) {
     if (currency !== undefined) data.currency = normalizeCurrency(currency)
     if (hasInvestments !== undefined) data.hasInvestments = !!hasInvestments
     if (active !== undefined) data.active = !!active
+    const issuerId = await resolveIssuerId(req.body.issuerId, workspaceId)
+    if (issuerId !== undefined) data.issuerId = issuerId
     if (initialBalance !== undefined) {
       const used = existing._count.movements + existing._count.transfersFrom + existing._count.transfersTo + existing._count.fundValuations
       if (used > 0) return res.status(409).json({ error: 'El saldo inicial se carga una sola vez — esta cuenta ya tiene movimientos.' })
       data.initialBalance = toDecimalInput(initialBalance, 'Saldo inicial') ?? '0'
     }
 
-    const account = await prisma.financeAccount.update({ where: { id }, data })
+    const account = await prisma.financeAccount.update({ where: { id }, data, include: LIST_INCLUDE })
     await logFinanceAudit({
       workspaceId, entityType: 'account', entityId: id, action: 'update', userId: req.user.userId,
-      entityLabel: `cuenta "${existing.name}"`, before: existing, after: account, fieldLabels: ACCOUNT_FIELD_LABELS,
+      entityLabel: `cuenta "${existing.name}"`, before: withIssuerName(existing), after: withIssuerName(account), fieldLabels: ACCOUNT_FIELD_LABELS,
     })
     res.json(account)
   } catch (err) { next(err) }

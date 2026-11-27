@@ -4,6 +4,8 @@ import { Icon } from '../ui/Icon'
 import api from '../../api/client'
 import CategoryBreakdownCard from './CategoryBreakdownCard'
 import IncomeExpenseBarChart from './IncomeExpenseBarChart'
+import EntitySummaryCards from './EntitySummaryCards'
+import EditMovementModal from './EditMovementModal'
 import { currentMonthKey, shiftMonth, monthLabel } from './financeMonths'
 
 const input = 'border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500'
@@ -14,15 +16,19 @@ function dateMonthsAgo(n) {
   return d.toISOString().slice(0, 10)
 }
 
-// Pestaña Resumen (sección 4.3): breakdown por categoría del mes + gráfico de
-// ingresos vs. egresos por mes (con su propio filtro de fechas), todo por
-// moneda. `accounts` llega ya cargado desde Finanzas.jsx para armar el
-// selector de moneda con las que realmente existen.
-export default function SummaryTab({ accounts }) {
+// Pestaña Resumen (sección 4.3): tarjetas por entidad de facturación del mes,
+// breakdown por categoría del mes + gráfico de ingresos vs. egresos por mes
+// (con su propio filtro de fechas), todo por moneda. `accounts` llega ya
+// cargado desde Finanzas.jsx para armar el selector de moneda con las que
+// realmente existen; categories/items/taxes, para abrir un movimiento desde
+// el aviso de cobros cruzados.
+export default function SummaryTab({ accounts, categories = [], items = [], taxes = [], onDataChange }) {
   const currencies = [...new Set(accounts.map(a => a.currency))]
   const [currency, setCurrency] = useState(currencies.includes('ARS') ? 'ARS' : (currencies[0] || 'ARS'))
   const [month, setMonth] = useState(currentMonthKey())
   const [breakdown, setBreakdown] = useState(null)
+  const [entities, setEntities] = useState(null)
+  const [editing, setEditing] = useState(null)
 
   const [chartFrom, setChartFrom] = useState(dateMonthsAgo(5))
   const [chartTo, setChartTo] = useState(new Date().toISOString().slice(0, 10))
@@ -38,7 +44,24 @@ export default function SummaryTab({ accounts }) {
     setChart(res.data)
   }, [chartFrom, chartTo, currency])
 
+  const loadEntities = useCallback(async () => {
+    const res = await api.get('/finanzas/summary/entities', { params: { month, currency } })
+    setEntities(res.data)
+  }, [month, currency])
+
+  async function openMovement(id) {
+    const res = await api.get(`/finanzas/movements/${id}`)
+    setEditing(res.data)
+  }
+
+  function handleMovementSaved() {
+    setEditing(null)
+    loadEntities(); loadBreakdown(); loadChart()
+    onDataChange?.()
+  }
+
   useEffect(() => { loadBreakdown() }, [loadBreakdown])
+  useEffect(() => { loadEntities() }, [loadEntities])
   useEffect(() => { loadChart() }, [loadChart])
 
   return (
@@ -55,6 +78,8 @@ export default function SummaryTab({ accounts }) {
           </select>
         )}
       </div>
+
+      <EntitySummaryCards data={entities} currency={currency} onOpenMovement={openMovement} />
 
       {breakdown ? (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -76,6 +101,11 @@ export default function SummaryTab({ accounts }) {
         </div>
         {chart ? <IncomeExpenseBarChart series={chart.series} currency={currency} /> : <p className="text-sm text-gray-400 text-center py-10">Cargando…</p>}
       </div>
+
+      {editing && (
+        <EditMovementModal movement={editing} accounts={accounts} categories={categories} items={items} taxes={taxes}
+          onClose={() => setEditing(null)} onSaved={handleMovementSaved} />
+      )}
     </div>
   )
 }

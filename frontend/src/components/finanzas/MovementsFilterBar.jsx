@@ -1,8 +1,8 @@
-import { currentMonthKey, shiftMonth, monthLabel, monthRange } from './financeMonths'
+import { currentMonthKey, monthLabel, monthRange, selectableMonths } from './financeMonths'
+import { useFirstDataMonth } from './useFirstDataMonth'
 
 const input = 'border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500'
 
-const MONTHS_IN_SELECT = 24
 const PERIOD_ALL = 'all'
 const PERIOD_CUSTOM = 'custom'
 
@@ -23,8 +23,9 @@ export function movementDateParams({ period, from, to }) {
 export default function MovementsFilterBar({ filters, onChange, categories, accounts }) {
   function set(patch) { onChange({ ...filters, ...patch }) }
   const thisMonth = currentMonthKey()
+  const firstMonth = useFirstDataMonth('movements')
   const isDefault = filters.period === thisMonth && !filters.search && !filters.categoryId && !filters.accountId
-  const months = Array.from({ length: MONTHS_IN_SELECT }, (_, i) => shiftMonth(thisMonth, -i))
+  const months = selectableMonths(firstMonth, thisMonth)
 
   function handlePeriodChange(period) {
     // Al pasar a personalizada arranca del período que se estaba viendo, para ajustarlo.

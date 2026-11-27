@@ -1,7 +1,8 @@
 import { useEffect, useState, useCallback } from 'react'
 import api from '../../api/client'
 import { fmtMoney } from '../../utils/format'
-import { currentMonthKey, shiftMonth, monthLabel } from './financeMonths'
+import { currentMonthKey, monthLabel, selectableMonths } from './financeMonths'
+import { useFirstDataMonth } from './useFirstDataMonth'
 import { movementDateParams } from './MovementsFilterBar'
 import { invoiceTotals } from './financeCatalog'
 import InvoicesTable from './InvoicesTable'
@@ -10,7 +11,6 @@ import LibroIvaModal from './LibroIvaModal'
 const input = 'border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500'
 const label = 'block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1'
 
-const MONTHS_IN_SELECT = 24
 const PERIOD_ALL = 'all'
 const PERIOD_CUSTOM = 'custom'
 // Valor del selector de emisor para las facturas informativas (sin emisor de
@@ -33,6 +33,7 @@ export default function InvoicesTab({ items, financeIvaMode, refreshKey }) {
   // que son los que sirven para emitir).
   const [allIssuers, setAllIssuers] = useState([])
   const [showLibroIva, setShowLibroIva] = useState(false)
+  const firstMonth = useFirstDataMonth('invoices')
 
   useEffect(() => {
     api.get('/finanzas/issuers').then(res => setAllIssuers(res.data)).catch(() => setAllIssuers([]))
@@ -64,7 +65,7 @@ export default function InvoicesTab({ items, financeIvaMode, refreshKey }) {
   }
 
   const thisMonth = currentMonthKey()
-  const months = Array.from({ length: MONTHS_IN_SELECT }, (_, i) => shiftMonth(thisMonth, -i))
+  const months = selectableMonths(firstMonth, thisMonth)
   const defaults = emptyFilters()
   const isDefault = Object.keys(defaults).every(k => filters[k] === defaults[k])
   // Los clientes inactivos también: pueden tener facturas en el período.
