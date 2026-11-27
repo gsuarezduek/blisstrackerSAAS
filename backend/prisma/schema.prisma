@@ -1392,6 +1392,7 @@ enum NotificationType {
   CALENDAR_RESPONSE
   LEGAJO_UPDATED
   LEGAJO_REQUESTED
+  WHATSAPP_CONNECTION
 }
 
 model Notification {
@@ -4800,12 +4801,22 @@ model WhatsappAccount {
   accessToken   String?
   webhookSecret String? // valida X-Chakra-Signature-256 en el webhook entrante
 
-  status        String   @default("active") // active | disconnected | error
-  connectedById Int?
-  connectedBy   User?    @relation(fields: [connectedById], references: [id], onDelete: SetNull)
-  connectedAt   DateTime @default(now())
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  status                  String    @default("active") // active | disconnected | error
+  // Salud del webhook (services/whatsappWebhookHealth.service.js). `status` dice
+  // que la cuenta se conectó, no que lleguen mensajes: si Chakra deja de mandar
+  // el webhook, nada lo cambia. Esto sí: último evento válido recibido y estado
+  // detectado — ok | silent (silencio raro para el tráfico habitual) |
+  // unconfirmed (lo que mandamos no recibe confirmación de entrega) |
+  // bad_signature (llegan eventos pero con firma inválida y se rechazan).
+  lastWebhookAt           DateTime?
+  webhookHealth           String    @default("ok")
+  webhookHealthSince      DateTime?
+  webhookHealthNotifiedAt DateTime?
+  connectedById           Int?
+  connectedBy             User?     @relation(fields: [connectedById], references: [id], onDelete: SetNull)
+  connectedAt             DateTime  @default(now())
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
 
   conversations WhatsappConversation[]
   templates     WhatsappTemplate[]

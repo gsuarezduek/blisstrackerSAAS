@@ -24,7 +24,7 @@ const FILTERS = [
   { key: 'TASK_MENTION', icon: AtSign, title: 'Asignaciones y menciones',  match: n => n.type === 'TASK_MENTION' || n.type === 'LEAD_ASSIGNED' || n.type === 'CHAT_MENTION' || n.type === 'CONTENT_MENTION' || n.type === 'WHATSAPP_MESSAGE' || n.type === 'CALENDAR_INVITE' },
   { key: 'TASK_COMMENT', icon: MessageSquare, title: 'Comentarios',               match: n => n.type === 'TASK_COMMENT' },
   { key: 'FOLLOWED',     icon: Eye, title: 'Seguidas y delegadas',      match: n => isFollowedCompleted(n) || n.type === 'STARTED' || n.type === 'TASK_DELETED' },
-  { key: 'OTHER',        icon: Bell, title: 'Otras',                     match: n => ['VACATION_REQUEST', 'ADDED_TO_PROJECT', 'VACATION_REVIEWED', 'GAME_LAUNCHED', 'BENEFIT_REQUEST', 'BENEFIT_REVIEWED', 'CALENDAR_RESPONSE', 'LEGAJO_UPDATED', 'LEGAJO_REQUESTED', 'LEAD_CREATED'].includes(n.type) },
+  { key: 'OTHER',        icon: Bell, title: 'Otras',                     match: n => ['VACATION_REQUEST', 'ADDED_TO_PROJECT', 'VACATION_REVIEWED', 'GAME_LAUNCHED', 'BENEFIT_REQUEST', 'BENEFIT_REVIEWED', 'CALENDAR_RESPONSE', 'LEGAJO_UPDATED', 'LEGAJO_REQUESTED', 'LEAD_CREATED', 'WHATSAPP_CONNECTION'].includes(n.type) },
   { key: 'COMPLETED',    icon: Check, title: 'Completadas',               match: n => n.type === 'COMPLETED' && !isFollowedCompleted(n), muted: true },
 ]
 
@@ -249,10 +249,12 @@ export default function NotificationBell({ buttonClassName, panelClassName } = {
                 const isCompleted      = n.type === 'COMPLETED'
                 const isStarted        = n.type === 'STARTED'
                 const isTaskDeleted    = n.type === 'TASK_DELETED'
+                // El WhatsApp del workspace dejó de recibir mensajes (services/whatsappWebhookHealth.service.js).
+                const isWhatsappConnection = n.type === 'WHATSAPP_CONNECTION'
                 const isAssignment     = isMention || isLeadAssigned || isChatMention || isContentMention || isWhatsappMessage
                 const isAmberFamily    = isVacation || isBenefit || isGameLaunched || isContentChanges || isLeadCreated
                 // Aviso de tarea delegada eliminada: misma urgencia visual que un bloqueo.
-                const isRedFamily      = isBlocked || isTaskDeleted
+                const isRedFamily      = isBlocked || isTaskDeleted || isWhatsappConnection
 
                 const isGreenFamily = isUnblocked || isAddedProject || isContentApproved
 
@@ -301,6 +303,8 @@ export default function NotificationBell({ buttonClassName, panelClassName } = {
                   // abre esa conversación en la bandeja.
                   : (isWhatsappMessage && n.whatsappConversationId)
                     ? `${ventasBase}?tab=whatsapp&conversation=${n.whatsappConversationId}`
+                  : isWhatsappConnection
+                    ? `${ventasBase}?tab=whatsapp`
                   : n.calendarEvent
                     ? `/calendario?view=semana&date=${n.calendarEvent.date}`
                     : n.type === 'VACATION_REQUEST'
@@ -358,7 +362,7 @@ export default function NotificationBell({ buttonClassName, panelClassName } = {
                           />
                         ) : (
                           <div className="w-7 h-7 rounded-full bg-gray-100 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 flex items-center justify-center text-gray-500 dark:text-gray-400">
-                            <Icon as={isContentApproved ? Check : isContentChanges ? Pencil : isPortalLogin ? UserRound : isWhatsappMessage ? Smartphone : isLeadCreated ? Briefcase : (isBlocked || n.type === 'TASK_COMMENT') ? Bot : Handshake} size={14} />
+                            <Icon as={isContentApproved ? Check : isContentChanges ? Pencil : isPortalLogin ? UserRound : (isWhatsappMessage || isWhatsappConnection) ? Smartphone : isLeadCreated ? Briefcase : (isBlocked || n.type === 'TASK_COMMENT') ? Bot : Handshake} size={14} />
                           </div>
                         )}
                         {isBlocked && (

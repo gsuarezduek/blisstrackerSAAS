@@ -14,6 +14,7 @@ import WhatsappBotToggle from './WhatsappBotToggle'
 import WhatsappBotConfigModal from './WhatsappBotConfigModal'
 import WhatsappTemplateManager from './WhatsappTemplateManager'
 import WhatsappAutomationManager from './WhatsappAutomationManager'
+import WhatsappHealthBanner from './WhatsappHealthBanner'
 import HowToButton from '../HowToButton'
 import { Ban, MessageCircle, Search, X } from 'lucide-react'
 import { Icon } from '../ui/Icon'
@@ -32,6 +33,9 @@ export default function WhatsappTab({ onOpenLead }) {
   const { user } = useAuth()
   const [loadingAccount, setLoadingAccount] = useState(true)
   const [account, setAccount] = useState(null)
+  // Salud del webhook aparte de `account`: varios efectos dependen de `account` y
+  // actualizarlo con cada `whatsapp:health` recargaría las conversaciones.
+  const [health, setHealth] = useState(null)
   const [showConnectForm, setShowConnectForm] = useState(false)
   const [botConfig, setBotConfig] = useState(null)
   const [showBotConfig, setShowBotConfig] = useState(false)
@@ -72,6 +76,7 @@ export default function WhatsappTab({ onOpenLead }) {
     try {
       const { data } = await api.get('/whatsapp/account')
       setAccount(data)
+      setHealth(data ? { webhookHealth: data.webhookHealth, lastWebhookAt: data.lastWebhookAt } : null)
     } finally {
       setLoadingAccount(false)
     }
@@ -263,7 +268,11 @@ export default function WhatsappTab({ onOpenLead }) {
     socket.on('whatsapp:status', onStatus)
     socket.on('whatsapp:bot', onBot)
     socket.on('whatsapp:read', onRead)
+    // El backend detectó que el webhook se cayó o volvió (services/whatsappWebhookHealth.service.js).
+    function onHealth({ webhookHealth, lastWebhookAt }) { setHealth({ webhookHealth, lastWebhookAt }) }
+    socket.on('whatsapp:health', onHealth)
     return () => {
+      socket.off('whatsapp:health', onHealth)
       socket.off('whatsapp:message', onMessage)
       socket.off('whatsapp:status', onStatus)
       socket.off('whatsapp:bot', onBot)
@@ -353,6 +362,7 @@ export default function WhatsappTab({ onOpenLead }) {
           )}
         </div>
       </div>
+      <WhatsappHealthBanner account={health} />
       {showConnectForm && (
         <WhatsappConnectForm
           initialAccount={account}

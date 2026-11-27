@@ -23,6 +23,7 @@
 | `*/15 * * * *` (cada 15 min) | ART | Refresca los calendarios traídos de afuera (Google ya conectado + URLs iCal) — mantiene fresco el cache que la vista Equipo y el buscador de huecos leen de OTRAS personas; los propios se refrescan al abrir el Calendario (ver `docs/claude/calendario.md`) |
 | `* * * * *` (cada minuto) | — | Envío de campañas de Mailing (`mailingDispatch`): lanza las programadas vencidas y manda el próximo lote de cada proyecto respetando su ventana horaria y su tope diario (ver `docs/claude/mailing.md`) |
 | `* * * * *` (cada minuto) | — | Respuestas del bot de WhatsApp en espera (`runDueBotReplies`: prioridad a los agentes de IA, `WhatsappBotConfig.agentWaitMins`, ver `docs/claude/whatsapp.md`) |
+| `*/15 * * * *` (cada 15 min) | ART | Salud del webhook de WhatsApp (`checkAllWebhookHealth`): marca la cuenta `silent`/`unconfirmed` si Chakra dejó de mandar eventos y avisa a admins/owners una vez por episodio. Solo empeora el estado; volver a `ok` lo hace el webhook (ver `docs/claude/whatsapp.md`) |
 
 Los jobs con lógica pesada usan in-memory locks (`let jobRunning = false`) para evitar solapamiento del mismo job consigo mismo. Los **11 jobs mensuales del día 1°** ya **no son crons sueltos**: corren en una **única cadena secuencial** (`MONTHLY_CHAIN`, un solo cron + un solo lock `monthlyChainRunning`), así que no se pisan entre sí (resuelve el problema de PageSpeed solapando a los siguientes).
 

@@ -7,6 +7,7 @@ const { downloadInboundMedia } = require('../services/whatsappMedia.service')
 const { handleInboundForBot } = require('../services/whatsappBot.service')
 const { notifyWhatsappConversation } = require('../services/whatsappNotify.service')
 const { normalizePhone } = require('../lib/phone')
+const { markWebhookAlive, markBadSignature } = require('../services/whatsappWebhookHealth.service')
 
 /**
  * Matchea contra un Contact existente. `Contact.phone` ya se normaliza al
@@ -363,11 +364,18 @@ async function handleChakraWebhook(req, res) {
       const sigValid = chakra.verifyWebhookSignature(req.body.toString('utf8'), sig, decrypted.webhookSecret)
       if (!sigValid) {
         console.warn('[WhatsApp Webhook] Firma inválida — evento rechazado. Header recibido:', sig || '(ninguno)')
+        await markBadSignature(account)
         return res.status(401).json({ error: 'Firma inválida' })
       }
     } else {
       console.warn('[WhatsApp Webhook] Cuenta sin Webhook Secret configurado — no se puede verificar la firma del evento entrante.')
     }
+
+    // Cualquier evento válido (mensaje, eco o confirmación de entrega, incluso uno
+    // que después se ignora) prueba que el webhook anda — ver
+    // services/whatsappWebhookHealth.service.js. Antes de procesarlo, así un error
+    // más abajo no se lee como "no llegó nada".
+    await markWebhookAlive(account)
 
     if (event.kind === 'message') {
       await handleInboundMessage(account, event)

@@ -397,6 +397,16 @@ cron.schedule('* * * * *', () => runCron('whatsappBotDue', 5 * 60 * 1000, async 
   catch (err) { console.error('[WhatsApp Bot] Error en cron de respuestas en espera:', err.message) }
 }), { timezone: DEFAULT_TZ })
 
+// Cron: salud del webhook de WhatsApp — cada 15 min. Detecta que Chakra dejó de
+// mandar eventos (envíos sin confirmación, silencio raro para la cuenta), marca la
+// cuenta y avisa a los admins una vez por episodio. Volver a 'ok' lo hace el
+// propio webhook al recibir algo. Ver services/whatsappWebhookHealth.service.js.
+cron.schedule('*/15 * * * *', () => runCron('whatsappWebhookHealth', 10 * 60 * 1000, async () => {
+  const { checkAllWebhookHealth } = require('./services/whatsappWebhookHealth.service')
+  try { await checkAllWebhookHealth() }
+  catch (err) { console.error('[WhatsApp Health] Error en cron:', err.message) }
+}), { timezone: DEFAULT_TZ })
+
 // Cron: envío de campañas de Mailing (Marketing → Mailing) — cada minuto. Lanza
 // las programadas que vencieron y manda el próximo lote de cada proyecto
 // respetando su ventana horaria y su tope diario. Sin campañas en curso son dos
